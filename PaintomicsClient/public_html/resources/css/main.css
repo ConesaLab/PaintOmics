@@ -6087,6 +6087,41 @@ div.lateralOptionsPanel-header .toolbarOption:hover {
 	background: rgba(0, 0, 0, 0.06);
 	color: #27272A;
 }
+/* The icon-only controls take the disc a window's close tool wears, so "close"
+   looks the same wherever it appears. They were a chip: `padding: 5px 8px`
+   around a 15px glyph, which is 31x25 -- a rounded rectangle wider than it is
+   tall, and an 8px radius on those proportions reads as neither a square nor a
+   circle. Next to the discs that landed on every window it looked like a
+   leftover, because it was one.
+
+   22px is the size the window tools reach (a 15px box plus a 3.5px shadow
+   spread on each side), and the fills are the same Apple system greys at the
+   same three states, so the two controls are the same object in two places
+   rather than two designs. Explicit width and height rather than padding: a
+   disc has to be square, and padding on a glyph that changes width between
+   times, compress and expand would not keep it that way.
+
+   .downloadTool is excluded: it carries a label, so it stays a labelled button
+   and a disc would not fit it. */
+div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	font-size: 13px;
+	border-radius: 50%;
+	background-color: rgba(120, 120, 128, 0.16);
+	color: #5F5F66;
+}
+div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool):hover {
+	background-color: rgba(120, 120, 128, 0.28);
+	color: #3F3F46;
+}
+div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool):active {
+	background-color: rgba(120, 120, 128, 0.36);
+}
 /* The download control keeps a label, so it stays a button - just a quiet one. */
 div.lateralOptionsPanel-header .toolbarOption.downloadTool {
 	border-color: var(--pa-border);
