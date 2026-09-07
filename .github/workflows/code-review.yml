@@ -15,13 +15,6 @@
 # stays out of shell history). Until the secret exists every run of this
 # workflow fails at the action step. Setting it needs admin on the repository.
 #
-# The SAME secret must also exist in the Dependabot store, or the review cannot
-# run on a Dependabot pull request: GitHub serves those runs from a separate
-# store (the job log says `Secret source: Dependabot`) and
-# `secrets.CLAUDE_CODE_OAUTH_TOKEN` expands to "" there, so the action fails on
-# an empty token even with `allowed_bots` set. Same command plus `--app
-# dependabot`. Both copies expire together; see the 365-day note below.
-#
 # `pull-requests: write` rather than the `read` in the upstream example: the
 # only tool this run is allowed is create_inline_comment, and creating a review
 # comment on a pull request is a write to the pull-requests scope. With `read`
@@ -86,7 +79,7 @@ jobs:
       issues: read
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@v1
@@ -107,23 +100,6 @@ jobs:
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Dependabot opens its pull requests as `dependabot[bot]`, and the
-          # action refuses any actor of GitHub type Bot unless it is named
-          # here -- "Workflow initiated by non-human actor: dependabot (type:
-          # Bot)", a hard failure, which is why every Dependabot pull request
-          # has carried a red "Claude review" since this workflow was added.
-          # NOT '*': the repository is public and this job holds
-          # pull-requests: write plus a subscription token, so the set of
-          # actors that can spend it stays enumerated.
-          #
-          # A Dependabot run is served from the DEPENDABOT secret store, not
-          # the Actions one (the job log says `Secret source: Dependabot`), so
-          # this input alone is not enough -- CLAUDE_CODE_OAUTH_TOKEN has to
-          # exist in both, or it expands to "" here and the action fails on an
-          # empty token instead. Set the second copy with:
-          #   gh secret set CLAUDE_CODE_OAUTH_TOKEN --app dependabot \
-          #     --repo ConesaLab/PaintOmics
-          allowed_bots: "dependabot"
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
