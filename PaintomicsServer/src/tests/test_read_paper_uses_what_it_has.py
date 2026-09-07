@@ -26,7 +26,7 @@ import tempfile as _tempfile
 from src.conf import serverconf as _serverconf
 _serverconf.CLIENT_TMP_DIR = _tempfile.mkdtemp(prefix="tracetest-")
 
-from src.tests.agent_tool_call import invokeTool
+from src.tests.agent_tool_call import invokeTool       # noqa: E402
 from src.classes.AIInterpret import agent_loop as L      # noqa: E402
 
 _PASSED, _FAILED = [], []
