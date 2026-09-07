@@ -355,6 +355,17 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
     return stats
 
 
+# scipy returns a numpy scalar from every kendalltau path, the degenerate ones
+# included; `np.nan` is the Python builtin float. Under numpy 1.x both repr()'d
+# as "nan", so returning the wrong one of the two was invisible -- and scipy
+# 1.13 itself returned a bare float there, so the mismatch cost nothing. numpy 2
+# prints numpy scalars as "np.float64(nan)" and scipy 1.17 returns np.float64 on
+# those paths, which is what made it visible. str() is "nan" for both on both
+# versions, so run()'s `str(score)` output file is unchanged either way; this is
+# about honouring the type contract test_returns_the_same_type_as_scipy states.
+_NAN = np.float64(np.nan)
+
+
 def kendallTauB(x, y):
     """
     scipy.stats.kendalltau(x, y).correlation for the short numeric rows this
@@ -385,10 +396,10 @@ def kendallTauB(x, y):
             return scipy.stats.kendalltau(x, y).correlation
     for value in x:
         if value != value:  # NaN propagates, as scipy's nan_policy does
-            return np.nan
+            return _NAN
     for value in y:
         if value != value:
-            return np.nan
+            return _NAN
     tot = (n * (n - 1)) // 2
     xtie = ytie = con = dis = 0
     for i in range(n - 1):
@@ -408,7 +419,7 @@ def kendallTauB(x, y):
             else:
                 dis += 1
     if xtie == tot or ytie == tot:
-        return np.nan
+        return _NAN
     con_minus_dis = con - dis
     tau = con_minus_dis / np.sqrt(tot - xtie) / np.sqrt(tot - ytie)
     return np.minimum(1., max(-1., tau))

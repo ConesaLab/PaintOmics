@@ -4,11 +4,22 @@ Statistics.calculateStoufferCombinedPvalue used scipy.stats.combine_pvalues
 (~145 us per call, mostly the axis/nan-policy wrapper) and
 calculateCombinedFisher used chi2.sf (~20 us); both run a few times per
 matched pathway. They now call the special functions those reduce to
-(ndtri/ndtr, chdtrc) with the same numpy operations and dtypes. This test
-pins the equality bit for bit -- not "close" -- over random cases that cover
-int, float, mixed and absent weights, extreme p-values and the exact clamps
-the callers apply (1e-300 floor, 0.9999999999 ceiling), plus the public
-functions themselves against the old formulae.
+(ndtri/ndtr, chdtrc) with the same numpy operations and dtypes, over random
+cases that cover int, float, mixed and absent weights, extreme p-values and
+the exact clamps the callers apply (1e-300 floor, 0.9999999999 ceiling), plus
+the public functions themselves against the old formulae.
+
+The Fisher half is pinned bit for bit. The Stouffer half is pinned to a
+relative 1e-12 instead, because scipy's own accumulation order there is not a
+stable contract and moved under us: 1.13 computed dot(w, Zi)/np.linalg.norm(w),
+1.14+ computes sum(w*Zi) over an axis-wise vector norm. np.linalg.norm's 1-D
+path is sqrt(x.dot(x)) -- BLAS ddot -- so it also varied with which BLAS the
+numpy wheel shipped (OpenBLAS on the 1.26 macOS arm64 wheels, Apple Accelerate
+on the 2.x ones). Either reordering moves Z by one ulp and ndtr's far tail
+amplifies that to ~5e-13 relative at p ~ 1e-300, so an exact assertion here
+pins the build, not the mathematics. 1e-12 is about ten times the widest drift
+observed and about eleven orders tighter than any real formula error --
+test_the_tolerance_rejects_what_a_real_bug_would_do keeps that honest.
 
 Usage:
     cd PaintomicsServer
@@ -49,16 +60,60 @@ def _randomCase(rng):
     return pvalues, weights
 
 
+#: Widest Stouffer drift observed between scipy 1.13.1 and 1.17.1 over this
+#: file's own corpus is ~5e-13 relative. Ten times that leaves room for one
+#: more reordering without hiding anything a person would call a bug.
+_STOUFFER_TOLERANCE = 1e-12
+
+
+def matchesScipy(got, want, tolerance=_STOUFFER_TOLERANCE):
+    """`got` is scipy's answer to within `tolerance` relative.
+
+    Not repr() equality: see the module docstring for why scipy's Stouffer
+    accumulation is not something a test can pin exactly across releases.
+    """
+    got = float(got)
+    want = float(want)
+    if got == want:                      # covers +-0.0 and both infinities
+        return True
+    if math.isnan(got) or math.isnan(want):
+        return math.isnan(got) and math.isnan(want)
+    if math.isinf(got) or math.isinf(want):
+        return False
+    return abs(got - want) <= tolerance * max(abs(got), abs(want))
+
+
 class StoufferKernelTest(unittest.TestCase):
 
-    def test_bit_identical_to_combine_pvalues(self):
+    def test_matches_combine_pvalues(self):
         rng = random.Random(20260817)
         for _ in range(8000):
             pvalues, weights = _randomCase(rng)
             want = combine_pvalues(pvalues, "stouffer", weights)[1]
             got = Statistics._stoufferPvalue(pvalues, weights)
-            self.assertEqual(repr(float(got)), repr(float(want)), (pvalues, weights))
+            self.assertTrue(matchesScipy(got, want), (pvalues, weights, got, want))
             self.assertIsInstance(got, np.floating)
+
+    def test_the_tolerance_rejects_what_a_real_bug_would_do(self):
+        """The relaxed assertion above is not a rubber stamp.
+
+        A kernel that had genuinely drifted -- a wrong weight normalisation, a
+        dropped term, the one-sided/two-sided confusion -- moves a p-value by
+        parts in a thousand or more. This walks the same corpus and confirms
+        that a perturbation a thousand times SMALLER than that, and still a
+        thousand times larger than the cross-version noise, is caught.
+        """
+        rng = random.Random(20260817)
+        checked = 0
+        for _ in range(2000):
+            pvalues, weights = _randomCase(rng)
+            want = float(combine_pvalues(pvalues, "stouffer", weights)[1])
+            if want == 0.0 or not math.isfinite(want):
+                continue
+            self.assertFalse(matchesScipy(want * (1 + 1e-9), want),
+                             "tolerance let a 1e-9 relative error through at %r" % want)
+            checked += 1
+        self.assertGreater(checked, 1000, "corpus degenerated; nothing was checked")
 
     def test_public_function_matches_the_old_formula(self):
         rng = random.Random(4)
@@ -70,7 +125,7 @@ class StoufferKernelTest(unittest.TestCase):
             if not math.isfinite(want):
                 want = 1.0
             got = Statistics.calculateStoufferCombinedPvalue(pvalues, weights)
-            self.assertEqual(repr(float(got)), repr(float(want)))
+            self.assertTrue(matchesScipy(got, want), (pvalues, weights, got, want))
 
     def test_degenerate_inputs_keep_their_old_answers(self):
         self.assertEqual(Statistics.calculateStoufferCombinedPvalue([], None), 1.0)

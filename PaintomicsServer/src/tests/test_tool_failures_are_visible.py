@@ -20,9 +20,7 @@ run journal and tells the model what broke.
 from __future__ import annotations
 
 import ast
-import asyncio
 import inspect
-import json
 import os
 import sys
 import time
@@ -37,7 +35,7 @@ import tempfile as _tempfile
 from src.conf import serverconf as _serverconf
 _serverconf.CLIENT_TMP_DIR = _tempfile.mkdtemp(prefix="tracetest-")
 
-from agents import RunContextWrapper                      # noqa: E402
+from src.tests.agent_tool_call import invokeTool                # noqa: E402
 from src.classes.AIInterpret import agent_loop as L       # noqa: E402
 
 
@@ -69,8 +67,7 @@ def _context():
 
 
 def _invoke(tool, ctx, **kwargs):
-    return asyncio.new_event_loop().run_until_complete(
-        tool.on_invoke_tool(RunContextWrapper(context=ctx), json.dumps(kwargs)))
+    return invokeTool(tool, ctx, **kwargs)
 
 
 def _breaking(fn):

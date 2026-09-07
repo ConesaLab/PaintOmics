@@ -256,17 +256,27 @@ def adjustPvalues(pvaluesList):
 def _stoufferPvalue(pvalues, weights):
     """
     scipy.stats.combine_pvalues(pvalues, 'stouffer', weights).pvalue, computed
-    the way scipy computes it -- Zi = norm.isf(p); Z = dot(w, Zi)/||w||;
+    the way scipy computes it -- Zi = norm.isf(p); Z = sum(w*Zi)/||w||_2;
     p = norm.sf(Z) -- but calling the special functions those distribution
     methods reduce to (norm.isf is -ndtri, norm.sf is ndtr(-x)) instead of
     going through combine_pvalues' axis/nan-policy wrapper and two
     rv_continuous method calls, which cost ~145 us per call against ~3 us
-    here. This runs a few times per matched pathway. Same numpy operations,
-    same dtypes (weights stay integer when the caller passed integers, as
-    scipy's np.atleast_1d keeps them), same C functions: bit-identical to
-    combine_pvalues over 80,000 random cases including int/float/None weights
-    and the 1e-300 / 0.9999999999 clamps -- pinned in
-    test_combined_pvalue_kernels_match_scipy.
+    here. This runs a few times per matched pathway. Weights stay integer when
+    the caller passed integers, as scipy's np.atleast_1d keeps them.
+
+    The two reductions are written out rather than called as np.dot and
+    np.linalg.norm ON PURPOSE, and this is load-bearing. np.linalg.norm's 1-D
+    path is sqrt(x.dot(x)) -- BLAS ddot -- and the BLAS is a property of the
+    wheel, not of numpy: the 1.26 macOS arm64 wheels link OpenBLAS and the 2.x
+    ones link Apple Accelerate. That made the same input produce different last
+    digits on two installs of the same pinned version, and ndtr's far tail turns
+    one ulp of Z into ~5e-13 relative at p ~ 1e-300. sum and sqrt touch no BLAS
+    and agree everywhere. scipy 1.14+ moved combine_pvalues off np.linalg.norm
+    for the same reason, so this is also the arrangement that tracks it.
+
+    Agreement with combine_pvalues is checked to a relative tolerance rather
+    than bit for bit -- see test_combined_pvalue_kernels_match_scipy, which
+    explains why scipy's own accumulation order is not a stable contract.
     """
     p = np.atleast_1d(pvalues)
     if weights is None:
@@ -274,7 +284,7 @@ def _stoufferPvalue(pvalues, weights):
     else:
         w = np.atleast_1d(weights)
     Zi = -_special.ndtri(p)
-    statistic = np.dot(w, Zi) / np.linalg.norm(w)
+    statistic = np.sum(w * Zi) / np.sqrt(np.sum(w * w))
     # A numpy float64, as combine_pvalues returned (a float subclass, so
     # every consumer -- isfinite, JSON, BSON -- sees the same value).
     return _special.ndtr(-statistic)

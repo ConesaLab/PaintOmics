@@ -21,8 +21,6 @@ and those become redactions that delete their sentences.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import sys
 import time
@@ -37,7 +35,7 @@ import tempfile as _tempfile
 from src.conf import serverconf as _serverconf
 _serverconf.CLIENT_TMP_DIR = _tempfile.mkdtemp(prefix="tracetest-")
 
-from agents import RunContextWrapper                      # noqa: E402
+from src.tests.agent_tool_call import invokeTool                # noqa: E402
 from src.classes.AIInterpret import agent_loop as L       # noqa: E402
 
 L._archive_trace = lambda ctx: None        # keep tests out of the trace corpus
@@ -58,9 +56,7 @@ def _context():
 
 
 def _submit(c, text):
-    out = asyncio.new_event_loop().run_until_complete(
-        L.submit_report.on_invoke_tool(RunContextWrapper(context=c),
-                                       json.dumps({"report_markdown": text})))
+    out = invokeTool(L.submit_report, c, report_markdown=text)
     assert "An error occurred while running the tool" not in str(out), out
     return str(out)
 
@@ -131,10 +127,8 @@ def test_check_my_citations_records_what_it_flagged():
     M._collect_cited_quotes = (lambda client, text, index, job, known=None:
                                {1: "a quote"})
     try:
-        asyncio.new_event_loop().run_until_complete(
-            L.check_my_citations.on_invoke_tool(
-                RunContextWrapper(context=c),
-                json.dumps({"draft": "Claim one [1]. Claim two [2]."})))
+        invokeTool(L.check_my_citations, c,
+                   draft="Claim one [1]. Claim two [2].")
     finally:
         M._collect_cited_quotes = original
     assert c.flagged_citations == {2}, (
@@ -216,10 +210,7 @@ def test_check_my_citations_checks_the_delegated_text_too():
         return {1: "a quote"}
     M._collect_cited_quotes = _fake
     try:
-        out = asyncio.new_event_loop().run_until_complete(
-            L.check_my_citations.on_invoke_tool(
-                RunContextWrapper(context=c),
-                json.dumps({"draft": "My own claim [1]."})))
+        out = invokeTool(L.check_my_citations, c, draft="My own claim [1].")
     finally:
         M._collect_cited_quotes = original
     assert "[2]" in seen.get("text", ""), (
