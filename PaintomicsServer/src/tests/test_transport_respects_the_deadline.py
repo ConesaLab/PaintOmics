@@ -80,8 +80,12 @@ async def _leaf():
 
 def test_the_shim_stops_retrying_when_the_run_is_due():
     """The behaviour itself, driven through the real _paced_create."""
-    import httpx
     from src.classes.AIInterpret import agent as A
+    # The module openai actually raises from, taken from the code under test
+    # rather than imported by name: openai 2.x raises httpx.*, 3.x raises
+    # httpx2.*, and the two share no base class. Hard-coding `import httpx`
+    # here made this suite exercise a path production could not take, and pass.
+    httpx = A._transport
 
     A._sdk_configured = False
     A.configure_sdk()
@@ -138,7 +142,7 @@ def test_a_cancellation_is_never_retried():
     assert "except asyncio.CancelledError:" in source, (
         "no explicit cancellation clause in the retry shim")
     assert source.index("except asyncio.CancelledError:") < \
-           source.index("except (_oai.APIError, httpx.HTTPError"), (
+           source.index("except (_oai.APIError, *_TRANSPORT_ERRORS"), (
         "the cancellation clause must come FIRST or the broad clause wins")
 
 

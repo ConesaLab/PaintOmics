@@ -9,11 +9,25 @@
 # Keeping this file outside that glob keeps both the guard and the docs build
 # honest. It also means nothing updates these pins automatically; bump them by
 # hand when the docs build needs it.
+#
+# VERIFYING A BUMP. `mkdocs build --strict` only proves mkdocs did not error --
+# Material drops an unknown theme feature silently, so strict mode cannot catch
+# a renamed one. Build the site under the old and the new pins into two
+# directories and diff the <article> body of every page. The 9.5.49 -> 9.7.7 /
+# 10.21.3 -> 11.0.2 bump was cleared that way: across all 29 pages the only
+# rendered difference is a `rel="edit"` attribute added to the "Edit this page"
+# anchor, which has no visual effect.
 mkdocs==1.6.1
 # The theme. Material carries the navigation, the search index and the
 # light/dark toggle the rebuilt guide is written against; the built-in
 # `readthedocs` theme has none of them. `mkdocs build --strict` fails on an
 # unknown theme name, so this pin is load-bearing, not cosmetic.
+#
+# 9.7.x prints a red multi-line "Warning from the Material for MkDocs team"
+# block about the unrelated MkDocs 2.0 project on every build. It is upstream
+# advocacy, it exits 0, and it says nothing about this configuration -- mkdocs
+# itself stays at 1.6.1 here. Not a build problem; do not pin back to silence
+# it.
 mkdocs-material==9.7.7
 # The five `pymdownx.*` extensions mkdocs.yml configures live here. It
 # arrives as a mkdocs-material dependency, but unpinned it floats, and a

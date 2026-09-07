@@ -39,14 +39,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
-# pip is upgraded but setuptools deliberately is not: requirements.txt pins
-# setuptools<81 because APScheduler 3.6.3 imports pkg_resources, which
-# setuptools 82 removed. Upgrading it here would install 82 and then let the
-# pinned version win only by luck of ordering.
+# pip is upgraded but setuptools deliberately is not: requirements.txt bounds
+# it, and upgrading here would install a newer one and let the bound win only
+# by luck of ordering.
+#
+# The import check used to be `import pkg_resources, apscheduler`, from when
+# APScheduler 3.6.3 imported pkg_resources at module load and setuptools 82 had
+# removed it. APScheduler 3.11.3 uses importlib.metadata and nothing in the
+# tree imports pkg_resources, so asserting it here would test a requirement the
+# application no longer has -- and would start failing the build the day
+# setuptools stops being seeded into the venv. Check what the app actually
+# needs instead: that the scheduler and the two heaviest wheels import.
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel \
     && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt \
-    && /opt/venv/bin/python -c "import pkg_resources, apscheduler; print('pkg_resources OK')"
+    && /opt/venv/bin/python -c "import apscheduler, numpy, pandas; print('runtime imports OK')"
 
 # ---------------------------------------------------------------------------
 # Stage 2: R dependencies

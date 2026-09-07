@@ -22,8 +22,6 @@ that against a tool that edits the request without a word.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import os
 import sys
 import time
@@ -31,7 +29,7 @@ import traceback
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from agents import RunContextWrapper                          # noqa: E402
+from src.tests.agent_tool_call import invokeTool                # noqa: E402
 from src.classes.AIInterpret import agent_loop as L           # noqa: E402
 
 L._archive_trace = lambda ctx: None
@@ -63,8 +61,7 @@ def _context(n=40):
 
 
 def _call(tool, ctx, **kwargs):
-    out = asyncio.new_event_loop().run_until_complete(
-        tool.on_invoke_tool(RunContextWrapper(context=ctx), json.dumps(kwargs)))
+    out = invokeTool(tool, ctx, **kwargs)
     assert "An error occurred while running the tool" not in str(out), (
         "the tool raised and the SDK swallowed it: %s" % str(out)[:300])
     return out

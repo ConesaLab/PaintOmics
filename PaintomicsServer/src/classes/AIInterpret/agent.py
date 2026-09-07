@@ -34,6 +34,22 @@ from agents import (
     set_tracing_disabled,
 )
 import httpx
+# openai 3.x moved its HTTP transport off `httpx` onto `httpx2`, a SEPARATE
+# distribution whose exception tree is unrelated: issubclass(httpx2.HTTPError,
+# httpx.HTTPError) is False. openai wraps only the INITIAL request, so a
+# connection dropped -- or a read that times out between tokens -- while
+# ITERATING a completion stream still surfaces as a raw transport error, and
+# that is the case the retry shim below exists for. Catching `httpx.HTTPError`
+# alone leaves the shim dead on openai 3.x, silently: an isinstance() that
+# stops matching logs nothing, so a fault that used to cost one 2 s retry ends
+# the whole run instead. Bind the module once here, and list both names, so
+# this works on either SDK generation and the three uses cannot drift apart.
+try:                                    # openai >= 3
+    import httpx2 as _transport
+except ImportError:                     # openai 2.x
+    _transport = httpx
+_TRANSPORT_ERRORS = ((httpx.HTTPError,) if _transport is httpx
+                     else (httpx.HTTPError, _transport.HTTPError))
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
@@ -400,8 +416,8 @@ def configure_sdk():
     client = _CLIENT = AsyncOpenAI(
         base_url=provider["api_base"], api_key=provider["api_key"],
         max_retries=0,
-        timeout=httpx.Timeout(connect=30.0, read=SDK_HTTP_READ_TIMEOUT,
-                              write=60.0, pool=30.0))
+        timeout=_transport.Timeout(connect=30.0, read=SDK_HTTP_READ_TIMEOUT,
+                                   write=60.0, pool=30.0))
 
     # Honour the same pacing knob as LLMClient. Applied at the transport
     # method the SDK actually calls, so every agent turn and tool round-trip
@@ -426,7 +442,7 @@ def configure_sdk():
         if isinstance(e, (_oai.InternalServerError, _oai.APIConnectionError,
                           _oai.APITimeoutError, _oai.RateLimitError)):
             return True
-        if isinstance(e, (httpx.HTTPError, _EmptyStream)):
+        if isinstance(e, _TRANSPORT_ERRORS + (_EmptyStream,)):
             # Raised while *iterating* a stream (openai wraps only the initial
             # request): a dropped connection, a read timeout between tokens,
             # or a stream that closed empty. All as transient as a 5xx.
@@ -478,7 +494,7 @@ def configure_sdk():
                 # transient test below would answer True for those -- turning
                 # "the run is over" into "sleep, then try again".
                 raise
-            except (_oai.APIError, httpx.HTTPError, _EmptyStream) as e:
+            except (_oai.APIError, *_TRANSPORT_ERRORS, _EmptyStream) as e:
                 if not _transient(e):
                     raise
                 attempt += 1

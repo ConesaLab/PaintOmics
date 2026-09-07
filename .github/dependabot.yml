@@ -59,6 +59,18 @@ updates:
       python:
         patterns:
           - "*"
+    ignore:
+      # chardet 6 and 7 replaced the 5.x scoring model, and the new one guesses
+      # a Central-European or hp-roman8 codec at ~0.05 confidence where 5.2.0
+      # guessed ISO-8859-1 at 0.73. Util.ensure_utf8 trusts the guess and those
+      # codecs accept every byte, so it never reaches its cp1252/latin-1
+      # fallback: a latin-1 omics upload is rewritten in place as mojibake and
+      # the function reports success. Six of seventeen accented rows corrupted
+      # in the measurement recorded on the pin in requirements.txt. No suite
+      # catches it, so without this the group would re-propose it every week.
+      # Drop this entry together with a detection test for latin-1 tables.
+      - dependency-name: "chardet"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps"
 
