@@ -844,6 +844,18 @@ def _plainTextReportBody(message):
         if end < 0:                      # a bare "<" is text, not a tag
             pieces.append(text[start:])
             break
+        nextOpen = text.find("<", start + 1)
+        if 0 <= nextOpen < end:
+            # Another "<" reaches this one before any ">" does, so it opens no
+            # tag: it is a comparison somebody typed, and "<2000 genes" is an
+            # ordinary thing to write here. Pairing it with the next ">" in the
+            # string swallowed the real closing tag after it, which then
+            # reached the maintainer as a literal "</p>" with its line break
+            # lost. Emit the character and carry on from just after it, so the
+            # genuine tag further along is still read as one.
+            pieces.append("<")
+            index = start + 1
+            continue
         name = text[start + 1:end].strip().lower()
         if name in breaks:
             pieces.append("\n")

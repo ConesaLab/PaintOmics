@@ -316,6 +316,35 @@ class LegacyReportBodyTest(unittest.TestCase):
         self.assertEqual("From: Ada Lovelace<ada@example.org>\nMessage: Hi there",
                          AdminServlet._plainTextReportBody(body))
 
+    def test_a_typed_comparison_does_not_swallow_the_tag_after_it(self):
+        """The old client concatenated the textarea raw, so a bare "<" is easy.
+
+        "<2000 genes" and "padj<0.05" are ordinary things to write in this
+        domain. Pairing that "<" with the next ">" anywhere later in the string
+        matched the ">" of the real closing tag, so the tag was emitted as text
+        -- the maintainer read a literal "</p>" and lost the line break, and
+        with another field after it the two ran together.
+
+        The first version of this test used "&lt;2000", which is what an
+        escaping client would send. This one does not escape, because the
+        client that still posts this shape does not either.
+        """
+        self.assertEqual(
+            "Comments: We use <2000 genes",
+            AdminServlet._plainTextReportBody(
+                "<p><b>Comments:</b>We use <2000 genes</p>"))
+
+        self.assertEqual(
+            "Specie: Bos taurus\nComments: only <2000 genes, padj<0.05",
+            AdminServlet._plainTextReportBody(
+                "<p><b>Specie:</b> Bos taurus</p>"
+                "<p><b>Comments:</b>only <2000 genes, padj<0.05</p>"))
+
+    def test_both_comparison_directions_survive(self):
+        self.assertEqual(
+            "a: 3 < 4 and 5 > 2",
+            AdminServlet._plainTextReportBody("<p><b>a:</b>3 < 4 and 5 > 2</p>"))
+
     def test_a_plain_text_report_is_returned_untouched(self):
         """Error reports are plain text and carry <module> in a traceback.
 
