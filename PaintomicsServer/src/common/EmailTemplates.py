@@ -36,7 +36,7 @@ file looks the way it does rather than like anything in ``public_html``.
 
 * **Images are blocked by default** in most clients, so the wordmark is live
   text and the one image in the message is decorative with an empty ``alt``.
-  Its cell is a fixed 64px either way, so blocked and loaded are the same box.
+  Its cell is a fixed 64x52 box, so blocked and loaded occupy the same space.
 
 THE ANIMATION INVARIANT
 -----------------------
@@ -107,7 +107,12 @@ OMIC_COLOURS = (
 # at render time from a stylesheet a mail client may have thrown away.
 _INK = "#1F2933"
 _BODY = "#48535F"
-_MUTED = "#78838F"
+#: Secondary text. #78838F was 3.86:1 on the card and 3.59:1 on the panel --
+#: under the 4.5:1 this file darkened _AI_BLUE_DEEP to reach, and it labels
+#: the address you sign in with and the temporary password. Darkened until
+#: it clears 4.5:1 on all four surfaces the message uses (card #FFFFFF 4.96,
+#: panel #F5F7F9 4.62, AI tint #F1F6FC 4.57, page #F4F5F7 4.55).
+_MUTED = "#67717C"
 _CARD = "#FFFFFF"
 _PAGE = "#F4F5F7"
 _HAIRLINE = "#E3E6EA"
@@ -134,6 +139,43 @@ def _escape(value):
     if value is None:
         return ""
     return html.escape(str(value), quote=True)
+
+
+#: The retired wordmark, by basename. ``serverconf.py`` is gitignored and
+#: written once at install time, so an installation that predates the mark
+#: still names this file -- and older templates named it without a suffix, so
+#: the URL 404'd and every message showed a broken image. Deploying a new
+#: default cannot reach those boxes, and the mark is part of the message
+#: design rather than a per-machine setting, so a configured value that still
+#: points at the wordmark is treated as unset.
+_RETIRED_MARK = "paintomics_white_300x66"
+
+#: The mark itself, as a path under PAINTOMICS_BASE_URL.
+_EMAIL_MARK_PATH = "/resources/images/paintomics-mark-email.png"
+
+
+def _markURL():
+    """The absolute URL of the mark every message loads.
+
+    Follows ``PAINTOMICS_LOGO_URL`` -- an operator branding a private
+    deployment sets ``PAINTOMICS_LOGO_PATH`` and gets their own mark -- unless
+    that value is the wordmark this release retired, in which case the
+    configured host is kept and only the file is replaced.
+    """
+    configured = str(PAINTOMICS_LOGO_URL or "")
+    if _RETIRED_MARK not in configured:
+        return configured
+    base = configured.split("/resources/", 1)[0] if "/resources/" in configured else ""
+    return base + _EMAIL_MARK_PATH
+
+
+#: The three configured strings that reach the markup. They are fixed at
+#: import and identical in every message, so they are escaped once here rather
+#: than on each render -- which is also what stops PAINTOMICS_LOGIN_URL being
+#: escaped separately in two different functions.
+_LOGIN_HREF = _escape(PAINTOMICS_LOGIN_URL)
+_LOGO_SRC = _escape(_markURL())
+_CONTACT = _escape(EMAIL_FROM_ADDRESS)
 
 
 def _enhancementStyles():
@@ -201,11 +243,17 @@ def _header():
     the one thing Word renders exactly as asked. Nothing is nested inside them:
     a bulletproof cell with a fragile child in it is not bulletproof.
 
-    The mark's cell is pinned in BOTH dimensions. Width alone was not enough --
+    The mark's CELL is pinned in both dimensions. Width alone was not enough --
     with the image gone the row fell back to the height of the two text lines,
     about 6px shorter, and every row beneath it moved up. Nothing looked broken,
     but "blocked and loaded are the same box" was not true until the height was
     pinned too.
+
+    The IMAGE inside it is sized by width alone. Pinning both axes there does
+    something different and worse: it squashes any mark that is not square, and
+    an installation whose gitignored serverconf still names the retired 300x66
+    wordmark got exactly that -- a 4.55:1 aspect change. The cell holds the
+    layout; the image scales inside it.
     """
     cells = ""
     for index, (colour, label) in enumerate(OMIC_COLOURS):
@@ -222,9 +270,15 @@ def _header():
             <tr>
               <td width="64" height="52"
                   style="width:64px;height:52px;padding-right:14px;" valign="middle">
+                <!-- The cell above is a fixed 64x52 so blocked and loaded
+                     images occupy the same box. The image itself is sized
+                     by width alone: pinning both axes squashed any mark
+                     that is not square, which is what an installation
+                     still configured for the 300x66 wordmark would get. -->
                 <a href="%(login)s" target="_blank" style="text-decoration:none;"><img
-                  src="%(logo)s" width="52" height="52" alt=""
-                  style="display:block;width:52px;height:52px;border:0;outline:none;"></a>
+                  src="%(logo)s" width="52" alt=""
+                  style="display:block;width:52px;height:auto;border:0;
+                  outline:none;"></a>
               </td>
               <td valign="middle">
                 <div class="po-ink" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
@@ -248,8 +302,8 @@ def _header():
         </td>
       </tr>
 """ % {
-        "login": html.escape(PAINTOMICS_LOGIN_URL, quote=True),
-        "logo": html.escape(PAINTOMICS_LOGO_URL, quote=True),
+        "login": _LOGIN_HREF,
+        "logo": _LOGO_SRC,
         "ink": _INK,
         "blue": _AI_BLUE,
         "muted": _MUTED,
@@ -259,7 +313,7 @@ def _header():
 
 def _footer(legalNote=""):
     """Support address and, for the reminder mail, its lawful-basis note."""
-    contact = html.escape(EMAIL_FROM_ADDRESS, quote=True)
+    contact = _CONTACT
     extra = ""
     if legalNote:
         extra = (
@@ -291,21 +345,27 @@ def _footer(legalNote=""):
     }
 
 
-def renderEmail(bodyRows, preheader="", legalNote=""):
+def renderEmail(bodyRows, preheaderText="", legalNote=""):
     """Wrap ``bodyRows`` -- ``<tr>`` markup -- in the shared chrome.
 
     Callers build only their own middle; the document, the header and the
-    footer come from here. ``preheader`` is the line a client shows next to the
-    subject in the message list. It is hidden in the body itself, and padded
+    footer come from here. ``preheaderText`` is the line a client shows next to
+    the subject in the message list. It is hidden in the body itself, and padded
     with zero-width spaces so the client does not pull the first paragraph in
     behind it.
+
+    ``preheaderText`` is PLAIN TEXT and is escaped here -- unlike ``bodyRows``
+    and ``legalNote``, and unlike every other helper in this file, all of which
+    take markup. Write an em dash, not ``&mdash;``: an entity written here is
+    escaped into the six literal characters a reader then sees in the inbox
+    preview line.
     """
     hiddenPreheader = ""
-    if preheader:
+    if preheaderText:
         hiddenPreheader = (
             '<div style="display:none;font-size:1px;color:%s;line-height:1px;max-height:0;'
             'max-width:0;opacity:0;overflow:hidden;mso-hide:all;">%s%s</div>'
-        ) % (_PAGE, _escape(preheader), "&#847;&zwnj;&nbsp;" * 60)
+        ) % (_PAGE, _escape(preheaderText), "&#847;&zwnj;&nbsp;" * 60)
 
     return """<!DOCTYPE html>
 <html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -466,7 +526,6 @@ def welcomeEmail(userName, userEmail):
     """
     name = _escape(userName)
     greeting = ("Thanks for joining, %s." % name) if name else "Thanks for joining."
-    login = html.escape(PAINTOMICS_LOGIN_URL, quote=True)
 
     inner = (
         _heading("Welcome to %s" % PRODUCT_NAME)
@@ -481,7 +540,7 @@ def welcomeEmail(userName, userEmail):
             "than your own files. Pick one on Step 1, and you will have painted "
             "pathways in a couple of minutes."
         )
-        + _button(login, "Open %s" % PRODUCT_NAME)
+        + _button(_LOGIN_HREF, "Open %s" % PRODUCT_NAME)
         + _aiCallout(
             "Your pathways, interpreted",
             "Once an analysis finishes, the AI assistant reads the enriched pathways "
@@ -497,7 +556,7 @@ def welcomeEmail(userName, userEmail):
     )
     return renderEmail(
         _bodyRow(inner),
-        preheader="Your account is ready &mdash; start from an example dataset.",
+        preheaderText="Your account is ready \u2014 start from an example dataset.",
     )
 
 
@@ -517,6 +576,11 @@ def passwordResetEmail(userName, resetLink, temporaryPassword):
             "If that was not you, ignore this message and nothing changes."
             % (opening, PRODUCT_NAME)
         )
+        # html.escape, not _escape, and deliberately so at both link sites:
+        # _escape turns None into "", which would ship a message whose only
+        # action is href="". A missing link must raise here so the caller's
+        # "except Exception: logging.error(...)" fires and no mail with a
+        # dead button is delivered.
         + _button(html.escape(resetLink, quote=True), "Reset my password")
         + _paragraph("Then sign in with this temporary password and change it:")
         + _panel(
@@ -526,14 +590,20 @@ def passwordResetEmail(userName, resetLink, temporaryPassword):
                 "%s</strong>" % _escape(temporaryPassword),
             )
         )
+        # Says only what the code does. The token is cleared on use
+        # (userManagementResetPassword), so "works once" is true -- but it is
+        # stored with no timestamp and never expires, so the earlier draft's
+        # "if it has already expired" promised a protection that does not
+        # exist. Copy must not describe a control the server does not have.
         + _paragraph(
-            "The link works once. If it has already expired, request a new one from "
-            "the sign-in page."
+            "The link works once: following it is what makes the temporary "
+            "password above active. If you need another, ask for one from the "
+            "sign-in page."
         )
     )
     return renderEmail(
         _bodyRow(inner),
-        preheader="A link to reset your %s password." % PRODUCT_NAME,
+        preheaderText="A link to reset your %s password." % PRODUCT_NAME,
     )
 
 
@@ -541,7 +611,11 @@ def jobExpiryEmail(userName, jobID, reminderLink):
     """The week's notice before a stored job is deleted."""
     name = _escape(userName)
     opening = ("Hello %s," % name) if name else "Hello,"
-    job = _escape(jobID)
+    # Two forms of the same identifier: the body interpolates markup and needs
+    # the escaped one, while renderEmail escapes the preheader itself and needs
+    # the plain one. Escaping twice is what put "&amp;" in the preview line.
+    jobText = "" if jobID is None else str(jobID)
+    job = _escape(jobText)
     inner = (
         _heading("A job is about to expire")
         + _paragraph(
@@ -549,6 +623,7 @@ def jobExpiryEmail(userName, jobID, reminderLink):
             "Opening it resets the clock &mdash; you do not have to re-run anything."
             % (opening, job)
         )
+        # Fail loud on a missing link, as in passwordResetEmail above.
         + _button(html.escape(reminderLink, quote=True), "Keep this job")
         + _paragraph(
             "If you no longer need it, do nothing and it will be removed on schedule."
@@ -556,7 +631,7 @@ def jobExpiryEmail(userName, jobID, reminderLink):
     )
     return renderEmail(
         _bodyRow(inner),
-        preheader="Job %s will be deleted in one week." % job,
+        preheaderText="Job %s will be deleted in one week." % jobText,
         legalNote=(
             "You are receiving this because you accepted the %s terms when the job was "
             "created. Your address is stored only to tell you about actions affecting "
@@ -598,4 +673,4 @@ def reportNotificationEmail(title, userName, userEmail, reportBody, accent):
 """ % {"accent": accent, "panel": "#F5F7F9", "ink": _BODY, "body": body}
         + _paragraph("&mdash; the %s team" % PRODUCT_NAME)
     )
-    return renderEmail(_bodyRow(inner), preheader=title)
+    return renderEmail(_bodyRow(inner), preheaderText=title)

@@ -287,6 +287,59 @@ class ReportRoutesTest(unittest.TestCase):
         self.assertIn("adminServletDeleteReport", source)
 
 
+class LegacyReportBodyTest(unittest.TestCase):
+    """The request dialogs used to post an HTML fragment as `message`.
+
+    The maintainer notification escapes the body now, because /dm_sendReport
+    takes no session and `message` is free-form input. The dialogs post plain
+    text since this release, but the endpoint cannot assume that: a tab open
+    across a deploy keeps posting the fragment, and no session expires it.
+    """
+
+    def test_the_legacy_fragment_becomes_labelled_lines(self):
+        body = ("<p><b>Specie:</b> Bos taurus (cow)</p>"
+                "<p><b>Comments:</b>We use Ensembl IDs &amp; &lt;2000 genes</p>")
+        self.assertEqual(
+            "Specie: Bos taurus (cow)\nComments: We use Ensembl IDs & <2000 genes",
+            AdminServlet._plainTextReportBody(body))
+
+    def test_an_address_in_angle_brackets_survives(self):
+        """The contact form wrote it bare, so HTML ate it as an unknown tag.
+
+        Only the five tags that fragment was built from are treated as markup;
+        anything else between angle brackets is text. That makes the converted
+        mail better than the one a client used to render, where the maintainers
+        never saw who had written in.
+        """
+        body = ("<p><b>From:</b> Ada Lovelace<ada@example.org></p>"
+                "<p><b>Message:</b>Hi there</p>")
+        self.assertEqual("From: Ada Lovelace<ada@example.org>\nMessage: Hi there",
+                         AdminServlet._plainTextReportBody(body))
+
+    def test_a_plain_text_report_is_returned_untouched(self):
+        """Error reports are plain text and carry <module> in a traceback.
+
+        Converting unconditionally would eat it, which is why this is keyed on
+        the fragment's own opening rather than applied to every body.
+        """
+        for body in ('Oops..Internal error!\nTraceback (most recent call last):\n'
+                     '  File "<module>", line 3\nKeyError',
+                     "Specie: Bos taurus\n\nComments: none",
+                     "", None):
+            expected = "" if body is None else body
+            self.assertEqual(expected, AdminServlet._plainTextReportBody(body))
+
+    def test_markup_inside_the_fragment_is_kept_as_text_not_dropped(self):
+        """Whatever survives is escaped downstream, so keeping it is safe.
+
+        Dropping it would be the dangerous direction: it hides from the
+        maintainer what the reporter actually sent.
+        """
+        converted = AdminServlet._plainTextReportBody(
+            "<p><b>Specie:</b> x</p><p><b>C:</b><script>alert(1)</script></p>")
+        self.assertIn("<script>alert(1)</script>", converted)
+
+
 class EmailTemplateTest(unittest.TestCase):
     """The report email rendered a broken logo and named the wrong mailbox.
 

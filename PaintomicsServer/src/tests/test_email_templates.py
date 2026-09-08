@@ -82,12 +82,24 @@ class BrandTest(unittest.TestCase):
 
         The old template's wordmark WAS the raster, so a blocked image left an
         unbranded message. The mark is now decorative and the name is text.
+
+        Scoped to the header's own wordmark element rather than to the whole
+        message. Searching the message for "Omics" cannot fail: <title> carries
+        the product name, and so does the body copy ("PaintOmics AI runs in the
+        browser"). Replacing the live-text wordmark with an <img> -- the exact
+        regression named above -- passed that version of this test.
         """
         message = T.welcomeEmail("Ada", "ada@example.org")
-        withoutImages = re.sub(r"<img[^>]*>", "", message)
-        self.assertIn("Omics", withoutImages,
-                      "the product name survives only inside an <img>, so a client "
-                      "with images blocked shows an unbranded message")
+        wordmark = re.search(r'<div class="po-ink"[^>]*>(.*?)</div>', message, flags=re.S)
+        self.assertIsNotNone(wordmark, "the header wordmark element is gone or was renamed")
+        text = re.sub(r"<[^>]*>", "", wordmark.group(1))
+        text = text.replace("&nbsp;", " ")
+        self.assertIn("Paint", text,
+                      "the header wordmark holds no live text, so a client with "
+                      "images blocked shows an unbranded message")
+        self.assertIn("Omics", text,
+                      "the header wordmark holds no live text, so a client with "
+                      "images blocked shows an unbranded message")
 
 
 class EscapingTest(unittest.TestCase):
@@ -117,6 +129,32 @@ class EscapingTest(unittest.TestCase):
         message = T.reportNotificationEmail("t", "Ada", "a@b.org", self.HOSTILE, "#333333")
         self.assertNotIn("<script>", self._bodyOf(message))
 
+    def _preheaderOf(self, message):
+        """The hidden line a client shows beside the subject, as text."""
+        div = re.search(r'<div style="display:none;.*?</div>', message, flags=re.S)
+        self.assertIsNotNone(div, "the message carries no preheader")
+        return div.group(0)
+
+    def test_a_preheader_is_escaped_once_and_only_once(self):
+        """`preheaderText` is plain text; every other helper here takes markup.
+
+        Written as an entity -- `&mdash;` -- it is escaped into `&amp;mdash;`
+        and the reader sees the six literal characters in the message list.
+        That shipped: every welcome mail's preview line read "Your account is
+        ready &mdash; start from an example dataset."
+        """
+        for name, message in _allMessages().items():
+            preheader = self._preheaderOf(message)
+            self.assertNotIn("&amp;", preheader,
+                             "the %s email's preheader is escaped twice, so its "
+                             "inbox preview shows a literal entity" % name)
+
+    def test_an_ampersand_in_a_job_id_is_escaped_once(self):
+        """The body needs the escaped id and the preheader needs the plain one."""
+        message = T.jobExpiryEmail("Ada", "a&b", "https://x/")
+        self.assertIn("Job a&amp;b will", self._preheaderOf(message))
+        self.assertNotIn("&amp;amp;", message)
+
     def test_a_missing_name_does_not_become_the_string_none(self):
         """adaptBSON turns an absent field into the *text* "None"."""
         message = T.welcomeEmail(None, "a@b.org")
@@ -145,10 +183,17 @@ class AnimationInvariantTest(unittest.TestCase):
         return re.findall(r"([^{}@]+)\{([^{}]*)\}", withoutKeyframes)
 
     def test_an_animation_rule_declares_nothing_else(self):
+        """Any `animation-*` longhand attaches motion, not only the shorthand.
+
+        Keyed on the shorthand alone, this skipped every delay rule -- so
+        `.po-b3 { opacity: 0; animation-delay: .4s; }` passed, and that is
+        precisely the shape the invariant forbids: Gmail webmail keeps the
+        stylesheet, drops @keyframes, and the band cell rests invisible.
+        """
         for selector, body in self._rules(self._styleBlock()):
             declarations = [d.strip() for d in body.split(";") if d.strip()]
             properties = [d.split(":", 1)[0].strip() for d in declarations]
-            if not any(p == "animation" for p in properties):
+            if not any(p == "animation" or p.startswith("animation-") for p in properties):
                 continue
             extra = [p for p in properties if not p.startswith("animation")]
             self.assertEqual(
@@ -158,6 +203,85 @@ class AnimationInvariantTest(unittest.TestCase):
                 "those with nothing to animate them, and will not match a client that "
                 "drops the stylesheet entirely (Outlook)."
                 % (selector.strip(), ", ".join(extra)))
+
+    #: Resting values that need no inline declaration, because they already ARE
+    #: the CSS initial value: a client that never runs the keyframe renders
+    #: them anyway. Anything else in a resting frame must be inline, or the
+    #: animation is the only thing carrying it -- which is the invariant broken.
+    INITIAL_RESTING = {
+        ("opacity", "1"),
+        ("transform", "none"),
+        ("transform", "translateY(0)"),
+    }
+
+    def _keyframes(self, css):
+        """``{name: {step: {property: value}}}`` for every @keyframes block."""
+        blocks = {}
+        for name, body in re.findall(
+                r"@keyframes\s+(\w+)\s*\{((?:[^{}]|\{[^{}]*\})*)\}", css):
+            steps = {}
+            for selector, declarations in re.findall(r"([^{}]+)\{([^{}]*)\}", body):
+                properties = {}
+                for declaration in declarations.split(";"):
+                    if ":" in declaration:
+                        prop, value = declaration.split(":", 1)
+                        properties[prop.strip()] = value.strip()
+                steps[selector.strip()] = properties
+            blocks[name] = steps
+        return blocks
+
+    def _inlineStyleOf(self, message, className):
+        element = re.search(
+            r'<[a-z]+[^>]*class="[^"]*\b%s\b[^"]*"[^>]*>' % re.escape(className), message)
+        self.assertIsNotNone(element, "no element carries class %r" % className)
+        style = re.search(r'style="([^"]*)"', element.group(0))
+        return re.sub(r"\s+", "", style.group(1)) if style else ""
+
+    def test_a_resting_frame_declares_nothing_the_element_does_not(self):
+        """The other half of the invariant, and the one that already broke.
+
+        `poGlow` rests on a box-shadow. While that shadow lived only inside the
+        keyframe, a client that ran the animation came to rest with it and a
+        client that did not came to rest without it -- 4913 pixels and 46 grey
+        levels apart when the two were rendered and differenced. The structural
+        rule is that whatever a resting frame sets, the element must already
+        set inline, unless the value is the property's CSS initial value.
+
+        This is the assertion the class docstring claimed and did not make:
+        deleting that inline box-shadow passed every other test here.
+        """
+        message = T.welcomeEmail("Ada", "a@b.org")
+        css = self._styleBlock()
+        keyframes = self._keyframes(css)
+        checked = 0
+        for selector, body in self._rules(css):
+            for declaration in body.split(";"):
+                if not declaration.strip().startswith("animation:"):
+                    continue
+                animation = declaration.split(":", 1)[1].split()[0].strip()
+                steps = keyframes.get(animation, {})
+                resting = {}
+                for step, properties in steps.items():
+                    if "100%" in step or step.strip() == "to":
+                        resting.update(properties)
+                self.assertTrue(resting,
+                                "@keyframes %s has no resting (100%%/to) step, so "
+                                "there is no state for a client that drops it to "
+                                "agree with" % animation)
+                className = selector.strip().lstrip(".").split()[0]
+                inline = self._inlineStyleOf(message, className)
+                for prop, value in sorted(resting.items()):
+                    if (prop, value.replace(" ", "")) in {
+                            (p, v.replace(" ", "")) for p, v in self.INITIAL_RESTING}:
+                        continue
+                    checked += 1
+                    self.assertIn("%s:%s" % (prop, value.replace(" ", "")), inline,
+                                  "@keyframes %s rests on %s:%s, but .%s does not "
+                                  "declare it inline. A client that drops @keyframes "
+                                  "(Gmail webmail) or the whole stylesheet (Outlook) "
+                                  "then rests somewhere the others do not."
+                                  % (animation, prop, value, className))
+        self.assertTrue(checked, "no resting declaration was examined")
 
     def test_every_animation_names_a_keyframe_that_exists(self):
         css = self._styleBlock()
@@ -179,9 +303,21 @@ class AnimationInvariantTest(unittest.TestCase):
         "working". Nothing is working when a welcome mail is open.
         """
         css = self._styleBlock()
-        for declaration in re.findall(r"animation:\s*([^;]+);", css):
-            self.assertNotIn("infinite", declaration,
-                             "%r loops forever" % declaration.strip())
+        checked = 0
+        for _selector, body in self._rules(css):
+            for declaration in body.split(";"):
+                if ":" not in declaration:
+                    continue
+                name, value = declaration.split(":", 1)
+                # The longhand counts too: `animation-iteration-count: infinite`
+                # loops just as forever as the shorthand, and reading only the
+                # shorthand let that spelling through.
+                if not name.strip().startswith("animation"):
+                    continue
+                checked += 1
+                self.assertNotIn("infinite", value,
+                                 "%r loops forever" % declaration.strip())
+        self.assertTrue(checked, "no animation declaration was examined")
 
 
 class ClientCompatibilityTest(unittest.TestCase):
@@ -197,6 +333,46 @@ class ClientCompatibilityTest(unittest.TestCase):
                 self.assertFalse(source.lower().split("?")[0].endswith(".svg"),
                                  "the %s email loads %s; SVG does not render in "
                                  "Gmail or Outlook" % (name, source))
+
+    #: Every surface a body colour is set on in this file.
+    SURFACES = ("#FFFFFF", "#F5F7F9", "#F1F6FC", "#F4F5F7")
+
+    @staticmethod
+    def _contrast(foreground, background):
+        def channel(value):
+            value = value / 255.0
+            return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+        def luminance(colour):
+            colour = colour.lstrip("#")
+            red, green, blue = (int(colour[i:i + 2], 16) for i in (0, 2, 4))
+            return 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue)
+
+        first, second = luminance(foreground), luminance(background)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+
+    def test_every_text_colour_is_legible_on_every_surface(self):
+        """The file darkens _AI_BLUE for 4.5:1 and then set _MUTED at 3.6:1.
+
+        _MUTED is not decoration: it labels the address you sign in with and
+        the temporary password. A standard the file applies to one token and
+        not the others is not a standard, so it is checked here rather than
+        argued in a comment.
+        """
+        for name in ("_INK", "_BODY", "_MUTED"):
+            colour = getattr(T, name)
+            for surface in self.SURFACES:
+                ratio = self._contrast(colour, surface)
+                self.assertGreaterEqual(
+                    round(ratio, 2), 4.5,
+                    "%s (%s) is %.2f:1 on %s, under the 4.5:1 body text needs"
+                    % (name, colour, ratio, surface))
+
+    def test_white_text_is_legible_on_the_call_to_action(self):
+        ratio = self._contrast("#FFFFFF", T._AI_BLUE_DEEP)
+        self.assertGreaterEqual(round(ratio, 2), 4.5,
+                                "white on the button (%s) is %.2f:1"
+                                % (T._AI_BLUE_DEEP, ratio))
 
     def test_the_message_stays_under_the_gmail_clip_threshold(self):
         """Gmail truncates around 102 kB and hides the rest behind a link."""
@@ -236,6 +412,12 @@ class SharedChromeTest(unittest.TestCase):
         Four handlers each concatenated their own <html><body> chrome, and the
         copies had already drifted apart in the logo alt text and the <img>
         geometry before anyone noticed.
+
+        Detected by the outcome rather than by one spelling. Keyed on the
+        literal `'<html><body>'`, this only ever matched the four handlers it
+        was written against: a fifth message opening with `'<table ...>'` would
+        restart the duplication with every test still green. What actually
+        defines the offence is sending HTML this module did not render.
         """
         roots = [os.path.join(REPO, "PaintomicsServer", "src", "servlets"),
                  os.path.join(REPO, "PaintomicsServer", "src", "AdminTools", "scripts")]
@@ -244,17 +426,90 @@ class SharedChromeTest(unittest.TestCase):
             if not os.path.isdir(root):
                 continue
             for directory, _subdirs, files in os.walk(root):
-                for filename in files:
+                for filename in sorted(files):
                     if not filename.endswith(".py"):
                         continue
                     path = os.path.join(directory, filename)
                     with open(path, encoding="utf-8") as handle:
-                        for number, line in enumerate(handle, 1):
-                            if "'<html><body>'" in line or '"<html><body>"' in line:
-                                offenders.append("%s:%d" % (os.path.relpath(path, REPO), number))
+                        source = handle.read()
+                    if "isHTML=True" not in source:
+                        continue
+                    if "src.common.EmailTemplates" in source:
+                        continue
+                    offenders.append(os.path.relpath(path, REPO))
         self.assertEqual(offenders, [],
-                         "these build email HTML by hand instead of calling "
-                         "src.common.EmailTemplates: %s" % ", ".join(offenders))
+                         "these send HTML mail without rendering it through "
+                         "src.common.EmailTemplates, so the chrome is being built "
+                         "by hand again: %s" % ", ".join(offenders))
+
+    def test_only_the_unsolicited_message_carries_the_lawful_basis_note(self):
+        """The expiry reminder is the one message nobody asked for.
+
+        It is sent because a job is about to be deleted, not because the reader
+        did anything, so it states why it is allowed to reach them. The branch
+        that renders it had no assertion at all: turning `if legalNote:` into
+        `if False:` left every test green and the note gone.
+        """
+        messages = _allMessages()
+        marker = "You are receiving this because you accepted"
+        self.assertIn(marker, messages["expiry"],
+                      "the job-expiry reminder is unsolicited and carries no "
+                      "lawful-basis note")
+        for name in ("welcome", "reset", "report"):
+            self.assertNotIn(marker, messages[name],
+                             "the %s email is a reply to something the reader did "
+                             "and should not carry the reminder's note" % name)
+
+    def test_a_deployment_still_set_to_the_retired_wordmark_gets_the_mark(self):
+        """serverconf.py is gitignored, so a new default cannot reach a box.
+
+        paintomics.uv.es was installed before the mark existed: its
+        PAINTOMICS_LOGO_PATH still names the 300x66 wordmark, and an older
+        template named it with no suffix at all, so the URL 404'd. Changing the
+        template default does nothing there. The mark is part of the message
+        design rather than a per-machine setting, so a configured value that
+        still points at the retired file is treated as unset -- and only the
+        file is replaced, so a deployment's own host survives.
+        """
+        original = T.PAINTOMICS_LOGO_URL
+        try:
+            for configured, expected in (
+                    ("https://paintomics.uv.es/resources/images/paintomics_white_300x66",
+                     "https://paintomics.uv.es" + T._EMAIL_MARK_PATH),
+                    ("https://paintomics.uv.es/resources/images/paintomics_white_300x66.png",
+                     "https://paintomics.uv.es" + T._EMAIL_MARK_PATH),
+                    # A deliberate override is left alone: this is still a knob.
+                    ("https://example.org/resources/images/house-brand.png",
+                     "https://example.org/resources/images/house-brand.png"),
+            ):
+                T.PAINTOMICS_LOGO_URL = configured
+                self.assertEqual(expected, T._markURL(),
+                                 "configured %s" % configured)
+        finally:
+            T.PAINTOMICS_LOGO_URL = original
+
+    def test_no_message_loads_the_retired_wordmark(self):
+        for name, message in _allMessages().items():
+            self.assertNotIn("paintomics_white_300x66", message,
+                             "the %s email still loads the pre-AI wordmark" % name)
+
+    def test_the_mark_is_sized_by_width_so_it_cannot_be_squashed(self):
+        """Pinning both axes squashed anything that is not square.
+
+        A deployment configured for the 300x66 wordmark rendered it into a
+        52x52 box -- a 4.55:1 aspect change. The cell stays a fixed 64x52 so a
+        blocked image occupies the same space; the image itself scales.
+        """
+        message = T.welcomeEmail("Ada", "a@b.org")
+        tag = re.search(r"<img[^>]*>", message)
+        self.assertIsNotNone(tag, "the header image is gone")
+        markup = re.sub(r"\s+", " ", tag.group(0))
+        self.assertNotRegex(markup, r'height="\d',
+                            "the mark pins a height attribute, so a non-square "
+                            "logo is squashed rather than scaled")
+        self.assertNotRegex(markup, r"height:\s*\d+px",
+                            "the mark pins a height, so a non-square logo is "
+                            "squashed rather than scaled")
 
     def test_the_email_logo_is_a_raster_that_exists(self):
         """The template default, which is what a fresh deploy installs."""

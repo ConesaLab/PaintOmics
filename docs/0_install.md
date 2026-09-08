@@ -199,6 +199,7 @@ welcome mail never arrives and nobody can reset a forgotten password.
 | `SMTP_USERNAME` | `apikey` (the literal string SendGrid expects) |
 | `SMTP_PASSWORD` | empty — this is the secret |
 | `EMAIL_REPORT_RECIPIENTS` | empty; a comma-separated list of the addresses that receive error reports, contact-form messages and organism requests. When it is empty they go to `EMAIL_FROM_ADDRESS` |
+| `PAINTOMICS_LOGO_PATH` | `/resources/images/paintomics-mark-email.png` — the mark every outgoing message loads, as a path under `PAINTOMICS_BASE_URL`. It must be a raster: Gmail and every Outlook refuse an SVG in an `<img>`, so this cannot be pointed at `paintomics-mark.svg`, the file the application itself uses |
 
 Nothing here is hashed. Older documentation described an `smtp_host` /
 `smpt_pass` block; the template carries no such block, and `sendEmail` reads

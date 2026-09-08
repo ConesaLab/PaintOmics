@@ -5,7 +5,7 @@
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="t1" value="PaintOmics 4 — how the AI interpretation framework fits together" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+        <mxCell id="t1" value="PaintOmics AI — how the AI interpretation framework fits together" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="120" y="-110" width="1400" height="40" as="geometry"/>
         </mxCell>
         <mxCell id="t1b" value="Page 1 of 4 · Architecture: which file does what, and where a job's data travels" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#666666;" vertex="1" parent="1">

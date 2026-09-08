@@ -796,6 +796,70 @@ def _normaliseOrganismName(name):
     return " ".join(str(name or "").split()).lower()
 
 
+#: How the two request dialogs opened the HTML fragment they used to post as
+#: `message`. Read to recognise that shape and nothing else.
+_LEGACY_BODY_PREFIX = "<p><b>"
+
+
+def _plainTextReportBody(message):
+    """A report body as text, converting the fragment old clients still post.
+
+    The maintainer notification escapes the body -- it is free-form input from
+    an endpoint that takes no session -- and turns newlines into ``<br>``. The
+    request dialogs now post text, but this endpoint cannot assume they do: a
+    tab left open across a deploy keeps posting the fragment for as long as it
+    lives, and there is no session to expire it. Without this, those reports
+    arrive as literal ``<p><b>Specie:</b>`` tags.
+
+    Conditional on the fragment's own opening, because error reports are
+    already plain text and carry things like ``<module>`` in a traceback that
+    must survive verbatim. What is stored is untouched; only the mail is
+    converted.
+
+    Only the five tags that fragment was ever built from are treated as markup.
+    Anything else between angle brackets is kept as text, which is better than
+    a browser managed: the contact form wrote the address as bare
+    ``<ada@example.org>``, so rendering the fragment as HTML swallowed it as an
+    unknown tag and the maintainers never saw who wrote in.
+
+    Linear: each character is passed once, and both searches inside the loop
+    advance ``index``. No regex, for the reason ``_specieFromMessage`` gives
+    above.
+    """
+    text = str(message or "")
+    if text[:64].lstrip()[:len(_LEGACY_BODY_PREFIX)].lower() != _LEGACY_BODY_PREFIX:
+        return text
+
+    breaks = ("/p", "br", "br/")
+    dropped = ("p", "b")
+    pieces = []
+    index = 0
+    while True:
+        start = text.find("<", index)
+        if start < 0:
+            pieces.append(text[index:])
+            break
+        pieces.append(text[index:start])
+        end = text.find(">", start + 1)
+        if end < 0:                      # a bare "<" is text, not a tag
+            pieces.append(text[start:])
+            break
+        name = text[start + 1:end].strip().lower()
+        if name in breaks:
+            pieces.append("\n")
+        elif name == "/b":
+            # The fragment ran the label straight into its value
+            # (<b>Comments:</b>text), so the close has to separate them.
+            pieces.append(" ")
+        elif name not in dropped:
+            pieces.append(text[start:end + 1])
+        index = end + 1
+
+    lines = [" ".join(line.split())
+             for line in html.unescape("".join(pieces)).splitlines()]
+    return "\n".join(line for line in lines if line).strip()
+
+
 def installedOrganisms():
     """The organisms the step 1 combo offers: KEGG_DATA_DIR/current/species.json.
 
@@ -910,7 +974,8 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         # the report body is rendered IN that colour. Darkened to 5.1:1 and
         # 5.4:1; the hue is unchanged, so the two report kinds still read apart
         # at a glance.
-        message = reportNotificationEmail(title, userName, userEmail, _message, color)
+        message = reportNotificationEmail(title, userName, userEmail,
+                                          _plainTextReportBody(_message), color)
 
         #****************************************************************
         # Step 2.PERSIST THE REPORT BEFORE ATTEMPTING DELIVERY

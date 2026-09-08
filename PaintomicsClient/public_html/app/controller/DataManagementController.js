@@ -419,7 +419,12 @@ this.requestNewSpecieHandler = function(){
 						return;
 					}
 					var type = "specie_request";
-					var message= "<p><b>Specie:</b> " + specie + "</p><p><b>Comments:</b>" +  messageDialog.queryById('commentsTextArea').getValue() + "</p>";
+					/* Plain text, not HTML. The maintainer notification escapes
+					   this body and turns newlines into <br>, so markup sent
+					   from here arrives as literal tags -- and the admin panel
+					   has always had to strip them back out to show the report. */
+					var message = "Specie: " + specie + "\n\nComments: " +
+						messageDialog.queryById('commentsTextArea').getValue();
 					messageDialog.close();
 					sendReportMessage(type, message, undefined, undefined, {specie: specie, specieCode: specieCode});
 				}
@@ -457,7 +462,12 @@ this.sendReportHandler = function(){
 					var type = "other";
 					var userName = messageDialog.queryById('nameTextField').getValue();
 					var userEmail = messageDialog.queryById('emailTextField').getValue();
-					var message= "<p><b>From:</b> " + userName + "<" + userEmail +">" + "</p><p><b>Message:</b>" +  messageDialog.queryById('commentsTextArea').getValue() + "</p>";
+					/* Plain text, as in requestNewSpecieHandler above. The old
+					   markup wrapped the address in bare angle brackets, so a
+					   client rendering it as HTML read "<ada@example.org>" as an
+					   unknown tag and dropped the address entirely. */
+					var message = "From: " + userName + " <" + userEmail + ">\n\nMessage: " +
+						messageDialog.queryById('commentsTextArea').getValue();
 					messageDialog.close();
 					sendReportMessage(type, message, userEmail, userName);
 				}

@@ -225,7 +225,13 @@ PUBLISHED = {
     # itself red on master -- caught by run_all on this branch, fixed here.
     # 0.6 -- the three browser-support warnings and the stale-analysis
     # message named the product "Paintomics"; they now say "PaintOmics AI".
-    "app.js": ("0.6", None),
+    # Digest, not None. app.js is an application script edited in place, not a
+    # vendored library replaced wholesale, so "record the version and trust it"
+    # leaves the one thing this table exists to catch uncaught: an edit that
+    # skips the bump. Recorded as None, an edit to the boot copy or to
+    # `this.controllers` passed every check here.
+    "app.js": (
+        "0.6", "4969e8969606e5c3974f05371bc32a76a607add43a7e28f24ec54a1401639d23"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')
@@ -298,6 +304,22 @@ class VersionedAssetTest(unittest.TestCase):
                 "index.html serves %s at v=%s but this test records v=%s. If "
                 "you bumped the marker, update PUBLISHED (version and digest) "
                 "to match." % (path, self.markers[path], version))
+
+    def test_every_recorded_asset_still_carries_its_marker(self):
+        """Deleting a ?v= must fail, not pass quietly.
+
+        test_recorded_versions_match_index_html skips any path missing from
+        index.html, and test_every_script_tag_asset_can_be_cache_busted only
+        looks at `src="app/..."`. Between them, `src="app.js?v=0.6"` could be
+        changed to `src="app.js"` with all five tests green -- and the same for
+        resources/ServerConfiguration.js, whose own note above records that
+        this guard once caught precisely that omission.
+        """
+        vanished = sorted(set(PUBLISHED) - set(self.markers))
+        self.assertEqual(vanished, [],
+                         "these are recorded in PUBLISHED but index.html no longer "
+                         "cache-busts them, so a change to one is unbustable and "
+                         "returning browsers keep the old copy: %s" % vanished)
 
     def test_content_matches_the_published_version(self):
         """Every application script, pinned by digest."""
