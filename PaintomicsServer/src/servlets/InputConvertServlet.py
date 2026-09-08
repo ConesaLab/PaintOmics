@@ -46,12 +46,38 @@ def _converter_enabled():
     See the note on adding a serverconf setting: the value goes in the local
     config, in example_serverconf.py for fresh installs, AND behind a fallback
     here for every server already running.
+
+    And in deploy/compose.yaml. Its environment block is an allowlist: a key
+    that is set in deploy/.env but not listed there never reaches the
+    container, and the template's os.getenv() then reads the default. That is
+    how paintomics.org ran with the converter off after every deploy while the
+    operator believed it on -- the Docker image was rebuilt from a compose file
+    that had never carried AI_INPUT_CONVERTER (2026-09-08, thirteen refused
+    turns from one user before the email arrived). deploy/smoke-test.sh now
+    checks that every .env key reaches the container.
     """
     try:
         from src.conf.serverconf import AI_INPUT_CONVERTER
         return bool(AI_INPUT_CONVERTER)
     except ImportError:
         return os.getenv("AI_INPUT_CONVERTER", "false").lower() == "true"
+
+
+def converter_enabled():
+    """The gate, for other modules: /ai_provider reports it to the browser.
+
+    Delegates rather than aliases so a test that swaps `_converter_enabled`
+    changes what the status route says too -- the two must never disagree,
+    because the browser trusts the status to decide whether to start at all.
+    """
+    return _converter_enabled()
+
+
+# The refusal a switched-off server gives. convert-drawer.js recognises this
+# wording ("not enabled on this server") to show the explanation instead of a
+# retry box, and format-panel.js prints the same sentence on the upload strip,
+# so the three stay one sentence.
+NOT_ENABLED_MESSAGE = "AI file conversion is not enabled on this server."
 
 # At most this many conversions may be in flight across the whole server. Each
 # holds a queue slot and a share of the gateway's rate limit, which is shared
@@ -160,7 +186,7 @@ def inputConvertTurn(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID):
         UserSessionManager().isValidUser(userID, sessionToken)
 
         if not _converter_enabled():
-            raise Exception("AI file conversion is not enabled on this server.")
+            raise Exception(NOT_ENABLED_MESSAGE)
 
         state = REQUEST.get_json(force=True, silent=True) or {}
 

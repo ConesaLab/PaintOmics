@@ -57,7 +57,16 @@ Everything lives in `deploy/.env`. Nothing is baked into the image, and
 | `PAINTOMICS_BASE_URL` | **Container refuses to start.** It is embedded in activation emails, so a wrong value silently breaks registration. |
 | `SMTP_PASSWORD` | App starts; registration and password-reset email cannot be sent, so **new users cannot activate accounts**. Logged as a warning at start-up. |
 | `AI_CSIC_API_KEY` | App starts; AI interpretation requests fail. Set `AI_INTERPRETATION_ENABLED=false` to disable the feature cleanly. |
+| `AI_INPUT_CONVERTER` | Defaults to `false`: every spreadsheet a user uploads, and every file the format check rejects, ends in *"AI file conversion is not enabled on this server"*. Set it to `true` on any deployment that has a gateway key. |
 | `AI_PUBMED_API_KEY` | Works, but NCBI rate-limits to 3 req/s instead of 10. |
+
+**Every setting must be listed in `compose.yaml`.** The app service's `environment`
+block is an allowlist. A variable that is set in `deploy/.env` but not named there is
+silently dropped: the container never sees it, `serverconf.py` reads its default, and
+the only symptom is a feature that stays off after a deploy that was supposed to turn
+it on. Adding a setting means adding it to `env.example`, to `compose.yaml` **and** to
+the template; `smoke-test.sh` checks that every key in `.env` reaches the container,
+and `test_input_converter_survives_deploy` checks the same for `env.example`.
 
 ## Two constraints that must not be relaxed
 
@@ -166,6 +175,23 @@ the HSTS header, and `docker compose restart nginx`.
 ## Troubleshooting
 
 **A job never finishes.** Check `processes` in `uwsgi.ini` is still 1.
+
+**"AI file conversion is not enabled on this server."** `AI_INPUT_CONVERTER` is off in the
+container. Set `AI_INPUT_CONVERTER=true` in `deploy/.env` and recreate the app
+(`docker compose -f deploy/compose.yaml up -d`); environment changes need a recreate,
+not a restart. If it is already `true` in `.env`, check it is listed in `compose.yaml`
+-- `deploy/smoke-test.sh` reports every `.env` key the container does not see.
+
+**"The AI service did not answer" / interpretation never finishes.** Ask the gateway
+directly, with the container's own configuration:
+
+```bash
+docker compose -f deploy/compose.yaml exec -T app \
+  python /app/PaintomicsServer/src/AdminTools/check_llm_gateway.py
+```
+
+It prints one line -- `OK`, `FAIL` with the error, or `SKIP` when no key is set -- and
+exits non-zero on anything but `OK`. The smoke test runs it too.
 
 **Reactome install fails on a species.** Expected for species Reactome does not
 cover. The error names the species; reinstall with `--reactome=0`.

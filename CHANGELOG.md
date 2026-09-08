@@ -51,6 +51,7 @@ merged them where one exists.
 
 ### Fixed
 
+- The AI input converter was off on every Docker deployment whatever `deploy/.env` said: `compose.yaml` never passed `AI_INPUT_CONVERTER` to the container, so each rebuild shipped the code default and every conversion ended, after the sandbox had read the file, in "AI file conversion is not enabled on this server" over a disabled box. The switch is now passed through and documented, the upload strip and the sheet ask the server before starting and say so up front with the manual route, a refused or unanswered turn offers Try again, and the smoke test reports any `.env` setting the container does not see and asks the LLM gateway one question; a nightly job asks it the same question with the key held as a repository secret.
 - Enrichment counting inflated `totalMatched`, changing which pathways were reported as significant.
 - Step 3's hub scorer used the enrichment denominator instead of its own, and Benjamini-Hochberg is now applied across the whole p-value vector rather than piecewise.
 - Non-finite p-values were carried into the FDR correction and into the combination step, where a single NaN produced a NaN result; they are now dropped first, and the combining statistics were checked against SciPy.

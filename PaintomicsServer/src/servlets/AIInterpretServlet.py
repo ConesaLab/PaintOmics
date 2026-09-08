@@ -106,9 +106,21 @@ def getAIProviderInfo():
         host = ""
 
     known = _PROVIDER_OPERATORS.get(host, {})
+
+    # Whether the AI input converter is switched on here, read through the
+    # converter's own gate so this answer and the one /input_convert/turn
+    # gives can never differ. The browser asks BEFORE it boots a sandbox and
+    # profiles the file: on a switched-off server the first turn is refused,
+    # and learning that at the end left the user with a timeline, a disabled
+    # box and nothing to click (paintomics.org, 2026-09-08). Imported here
+    # rather than at module level: the converter module pulls in its agent
+    # code, which this status route has no other reason to load.
+    from src.servlets.InputConvertServlet import converter_enabled
+
     return {
         "enabled": bool(AI_INTERPRETATION_ENABLED),
         "configured": bool(provider.get("api_key")),
+        "inputConverter": bool(converter_enabled()),
         "provider": AI_LLM_PROVIDER,
         "host": host,
         "model": provider.get("model", ""),

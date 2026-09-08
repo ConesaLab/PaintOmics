@@ -241,9 +241,16 @@
         };
     }
 
+    /* The server's refusal when the converter is switched off there
+       (InputConvertServlet.NOT_ENABLED_MESSAGE). Recognised so the sheet
+       explains and stops, instead of offering a retry that cannot help. */
+    var CONVERTER_OFF = /not enabled on this server/i;
+
     /* Who is on the other end of the transport. The same gateway the AI
        interpretation uses, so the same endpoint answers; shown in the
-       anatomy card because "your data goes to a model" should name which. */
+       anatomy card because "your data goes to a model" should name which.
+       It also says whether the converter is switched on (`inputConverter`),
+       which the sheet reads BEFORE it boots a sandbox. */
     var providerPromise = null;
     function provider() {
         if (!providerPromise) {
@@ -974,7 +981,9 @@
             setComposerState("busy");
             actions.innerHTML = "";
             reviewHost.innerHTML = "";
-            var result = await api().runAgent(Object.assign({
+            var result;
+            try {
+            result = await api().runAgent(Object.assign({
                 api: api(),
                 sandbox: sandbox,
                 transport: serverTransport(),
@@ -1064,7 +1073,9 @@
                 ask: askUser,
                 onEvent: onEvent
             }, extra || {}));
-            running = false;
+            } finally {
+                running = false;
+            }
             if (cancelled) return result;
             last = result;
             if (result.profile && !profileShown) onEvent({ type: "profile", profile: result.profile });
@@ -1074,17 +1085,20 @@
         }
 
         async function revise(instruction) {
-            if (!last) return;
+            // `last` is null when no run has finished yet -- the first turn
+            // was refused, or the gateway did not answer. The instruction is
+            // still a start: the profile is kept, the script is written fresh.
+            var base = last || {};
             addStep({ phase: "user", title: "Your instruction", detail: instruction });
             setStage("plan", "current");
-            setNow("Revising with your instruction");
-            var instructions = (last.instructions || []).concat([instruction]);
-            await runOnce({
-                profile: last.profile,
-                inputProfiles: last.inputProfiles || undefined,
+            setNow(last ? "Revising with your instruction" : "Starting again with your instruction");
+            var instructions = (base.instructions || []).concat([instruction]);
+            await attempt({
+                profile: base.profile || profileShown || undefined,
+                inputProfiles: base.inputProfiles || undefined,
                 instructions: instructions,
-                answers: last.answers || {},
-                accepted: last.code ? { code: last.code, manifest: last.manifest } : null
+                answers: base.answers || {},
+                accepted: base.code ? { code: base.code, manifest: base.manifest } : null
             });
         }
 
@@ -1109,6 +1123,18 @@
             try {
                 setComposerState("busy");
                 setStage("read", "current");
+                // Ask before booting. A server with the converter switched off
+                // refuses the first TURN, and finding that out after the
+                // sandbox had started and the file had been read left the user
+                // with a timeline, a disabled box and nothing to click:
+                // thirteen attempts on paintomics.org on 2026-09-08, then an
+                // email. A status that cannot be fetched is not "off" -- the
+                // turn itself says so if it must.
+                var info = await provider();
+                if (info && info.success && info.inputConverter === false) {
+                    renderUnavailable(null);
+                    return { ok: false, stage: "disabled" };
+                }
                 // The boot is a real step that takes a few seconds; a blank
                 // timeline for that long reads as nothing happening.
                 addStep({ phase: "profiling", title: "Starting the Python sandbox",
@@ -1119,20 +1145,50 @@
                     targets[t].bytes = new Uint8Array(await targets[t].file.arrayBuffer());
                 }
                 bytes = new Uint8Array(await file.arrayBuffer());
-                return await runOnce();
+                return await attempt();
             } catch (err) {
-                if (!cancelled) {
-                    addStep({ phase: "failed", title: "The conversion could not finish",
-                              detail: String(err && err.message || err) });
-                    var lit = STAGES.filter(function (s) { return stageEls[s.key].dataset.state === "current"; })[0];
-                    setStage(lit ? lit.key : "plan", "failed");
-                    setNow("Stopped");
-                    renderFailure(null);
-                    setComposerState(last ? "idle" : "busy");
-                }
+                if (!cancelled) failed(err);
                 return { ok: false };
             }
         })();
+
+        /* ---- one attempt, however it ends ----------------------------- */
+
+        /*
+         * Every way into the agent -- the first run, a revision from the box,
+         * Try again -- goes through here, so a transport error ends in the
+         * same card each time instead of in an unhandled rejection that
+         * leaves the sheet frozen mid-stage.
+         */
+        async function attempt(extra) {
+            try {
+                return await runOnce(extra);
+            } catch (err) {
+                if (!cancelled) failed(err);
+                return { ok: false };
+            }
+        }
+
+        /*
+         * Something other than the agent's own judgement stopped the run:
+         * the server refused the turn, the gateway did not answer, the
+         * sandbox would not boot. The file is not known to be wrong. Two
+         * cases: a server with no converter, which no retry can change, and
+         * everything else, which one click can.
+         */
+        function failed(err) {
+            var message = String(err && err.message || err);
+            if (CONVERTER_OFF.test(message)) { renderUnavailable(message); return; }
+            addStep({ phase: "failed", title: "The conversion could not finish", detail: message });
+            // renderFailure marks the stage that was lit; marking it here
+            // first left none lit, and its fallback then failed Check for a
+            // turn that died in Plan.
+            renderFailure(null, message);
+            // Idle, not busy: the box is one of the two ways to try again.
+            // It used to stay disabled whenever the FIRST run failed, under a
+            // card that said "tell the agent in the box below".
+            setComposerState("idle");
+        }
 
         /* ---- review ---------------------------------------------------- */
 
@@ -1499,7 +1555,14 @@
             body.scrollTop = review.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 10;
         }
 
-        function renderFailure(result) {
+        /*
+         * `result` is the agent's own verdict after its attempts; `message`
+         * is what stopped a run from outside -- the server's refusal, the
+         * gateway's silence. They read differently: after five real
+         * attempts the file needs explaining, after a refused turn nothing
+         * about the file is known and the honest offer is to try again.
+         */
+        function renderFailure(result, message) {
             finished = true;
             freezeCurrent();
             var lit = STAGES.filter(function (s) { return stageEls[s.key].dataset.state === "current"; })[0];
@@ -1510,10 +1573,17 @@
             head.appendChild(el("h3", "pa-convert-review-title", "Could not finish this one"));
             if (result && result.attempts) head.appendChild(el("span", "pa-convert-review-count", plural(result.attempts, "attempt") + " used"));
             review.appendChild(head);
-            review.appendChild(el("p", "pa-convert-summary",
-                "Tell the agent what the file contains in the box below and it will try again — " +
-                "which sheet matters, what the columns are, what the identifiers are. " +
-                "The script it wrote is in the timeline above; a colleague who knows pandas can take it from there."));
+            if (message) {
+                review.appendChild(el("p", "pa-convert-summary", message));
+                review.appendChild(el("p", "pa-convert-summary",
+                    "Nothing is known to be wrong with your file: the agent never got to read it. " +
+                    "Try again, or tell it what the file contains in the box below and it will start from that."));
+            } else {
+                review.appendChild(el("p", "pa-convert-summary",
+                    "Tell the agent what the file contains in the box below and it will try again — " +
+                    "which sheet matters, what the columns are, what the identifiers are. " +
+                    "The script it wrote is in the timeline above; a colleague who knows pandas can take it from there."));
+            }
             if (result && result.outputs) {
                 var out = describeOutputs(result);
                 if (out.files.length) {
@@ -1531,6 +1601,65 @@
             }
             reviewHost.innerHTML = "";
             reviewHost.appendChild(review);
+            actions.innerHTML = "";
+            if (message) {
+                var again = el("button", "pa-convert-accept", "Try again");
+                again.type = "button";
+                again.addEventListener("click", function () {
+                    if (running) return;
+                    addStep({ phase: "user", title: "Trying again" });
+                    setStage("plan", "current");
+                    setNow("Trying again");
+                    attempt({ profile: profileShown || undefined });
+                });
+                actions.appendChild(again);
+            }
+            var dismiss = el("button", "pa-convert-dismiss", "Close");
+            dismiss.type = "button";
+            dismiss.addEventListener("click", cancel);
+            actions.appendChild(dismiss);
+            body.scrollTop = body.scrollHeight;
+        }
+
+        /*
+         * The server runs no converter. Not a failure of the file or of the
+         * agent -- nothing ran -- so no retry and no box, which would both be
+         * promises the server cannot keep: what the user can do instead, and
+         * Close. Reached before the sandbox boots when /ai_provider says so,
+         * and from the turn's refusal on an older page.
+         */
+        function renderUnavailable(message) {
+            finished = true;
+            running = false;
+            freezeCurrent();
+            var lit = STAGES.filter(function (s) { return stageEls[s.key].dataset.state === "current"; })[0];
+            setStage(lit ? lit.key : "read", "failed");
+            setNow("Not available on this server");
+            addStep({ phase: "failed", title: "AI conversion is not enabled on this server",
+                      detail: message || "The server reports the converter as switched off, so nothing was started and nothing left this computer." });
+            var review = el("section", "pa-convert-review pa-convert-review-failed");
+            var head = el("div", "pa-convert-review-head");
+            head.appendChild(el("h3", "pa-convert-review-title", "AI conversion is not enabled on this server"));
+            review.appendChild(head);
+            review.appendChild(el("p", "pa-convert-summary",
+                "Nothing is wrong with your file. This server's administrator has not switched the " +
+                "converter on (AI_INPUT_CONVERTER in its deployment settings), so no conversion can run " +
+                "here and trying again will not change that."));
+            var how = el("p", "pa-convert-summary");
+            how.appendChild(el("b", null, "What you can do now: "));
+            how.appendChild(document.createTextNode(
+                "save the table as tab-separated text and upload that instead. PaintOmics reads one row " +
+                "per feature with the identifier in the first column and one numeric column per sample " +
+                "or condition; a relevant-features list is a single column of identifiers; an " +
+                "experimental design is two columns, sample then condition. In Excel: File → Save As → " +
+                "Text (Tab delimited)."));
+            review.appendChild(how);
+            reviewHost.innerHTML = "";
+            reviewHost.appendChild(review);
+            // A box that says "tell the agent" under a server that runs no
+            // agent is the dead end this replaces.
+            composer.hidden = true;
+            composerHint.hidden = true;
             actions.innerHTML = "";
             var dismiss = el("button", "pa-convert-dismiss", "Close");
             dismiss.type = "button";

@@ -47,6 +47,17 @@ if [ "${AI_INTERPRETATION_ENABLED:-true}" = "true" ]; then
     fi
 fi
 
+# Said out loud at every start so a deploy that lost the switch is visible in
+# `docker compose logs` rather than in a user's inbox. The converter is a
+# feature the interface offers on every upload strip; a server that has it off
+# refuses each attempt at the last step.
+if [ "${AI_INPUT_CONVERTER:-false}" = "true" ]; then
+    log "AI input converter: on"
+else
+    log "AI input converter: OFF (AI_INPUT_CONVERTER is not 'true'). Spreadsheets and"
+    log "  rejected uploads will end in 'AI file conversion is not enabled on this server'."
+fi
+
 if [ -z "${SMTP_PASSWORD:-}" ]; then
     log "WARNING: SMTP_PASSWORD is unset. Registration and password-reset email cannot be sent,"
     log "WARNING: so new users will not be able to activate their accounts."
