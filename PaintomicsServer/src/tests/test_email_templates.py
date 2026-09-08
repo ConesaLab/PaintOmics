@@ -20,9 +20,9 @@ away from Outlook.
 
 Run:  PYTHONPATH=PaintomicsServer python3 PaintomicsServer/src/tests/test_email_templates.py
 """
+import importlib.util
 import os
 import re
-import shutil
 import sys
 import unittest
 
@@ -32,14 +32,27 @@ sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..")))
 
 
 def _ensureServerConfig():
-    """serverconf.py is gitignored, so a clean checkout has none."""
-    conf = os.path.join(HERE, "..", "conf")
-    target = os.path.join(conf, "serverconf.py")
-    if not os.path.isfile(target):
-        shutil.copyfile(os.path.join(HERE, "..", "resources", "example_serverconf.py"), target)
-        init = os.path.join(conf, "__init__.py")
-        if not os.path.isfile(init):
-            open(init, "a").close()
+    """Make src.conf.serverconf importable on a checkout that has none.
+
+    Bound in memory rather than written to disk. serverconf.py is gitignored
+    and per-machine, so an earlier version of this helper that copied the
+    template over it turned a "no config" checkout into a "config installed"
+    one permanently -- changing what the sibling suites then exercise, and, in
+    this repo, a stray serverconf copied between trees has already produced a
+    phantom INTRODUCED failure. Same pattern as
+    test_report_survives_mail_outage.py.
+    """
+    try:
+        import src.conf.serverconf                       # noqa: F401 -- availability probe
+        return
+    except ImportError:
+        pass
+
+    template = os.path.join(HERE, "..", "resources", "example_serverconf.py")
+    spec = importlib.util.spec_from_file_location("src.conf.serverconf", template)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["src.conf.serverconf"] = module
+    spec.loader.exec_module(module)
 
 
 _ensureServerConfig()
@@ -356,6 +369,24 @@ class ClientCompatibilityTest(unittest.TestCase):
                       T._panel("ROWS", monospace=True))
         self.assertNotIn("monospace", T._panel("ROWS"))
 
+    def test_a_quoted_block_keeps_its_indentation_and_its_columns(self):
+        """A fixed-pitch face cannot align what HTML has already collapsed.
+
+        Runs of spaces and tabs go before the font can line them up, so a
+        pasted traceback arrives flush left and tab-separated columns become
+        single spaces -- exactly what this panel exists to avoid.
+        """
+        self.assertIn("white-space:pre-wrap;", T._panel("ROWS", monospace=True))
+
+    def test_a_quoted_block_cannot_stretch_the_card(self):
+        """Preserved text no longer collapses at a space either.
+
+        Rendered and measured: with white-space alone, one long unbroken token
+        pushes the 600px card past the edge of the window. word-break is what
+        keeps it inside.
+        """
+        self.assertIn("word-break:break-word;", T._panel("ROWS", monospace=True))
+
     def test_no_message_uses_an_svg_image(self):
         """Gmail and every Outlook build refuse an <img> whose source is SVG.
 
@@ -502,15 +533,19 @@ class SharedChromeTest(unittest.TestCase):
         template named it with no suffix at all, so the URL 404'd. Changing the
         template default does nothing there. The mark is part of the message
         design rather than a per-machine setting, so a configured value that
-        still points at the retired file is treated as unset -- and only the
-        file is replaced, so a deployment's own host survives.
+        still points at the retired file is treated as unset and the mark is
+        served from PAINTOMICS_BASE_URL, the deployment's own externally
+        reachable address.
         """
-        original = T.PAINTOMICS_LOGO_URL
+        original = (T.PAINTOMICS_LOGO_URL, T.PAINTOMICS_BASE_URL)
         try:
+            T.PAINTOMICS_BASE_URL = "https://paintomics.uv.es"
             for configured, expected in (
+                    # The install-time defaults, with and without the suffix the
+                    # older template omitted -- which made the URL 404 outright.
                     ("https://paintomics.uv.es/resources/images/paintomics_white_300x66",
                      "https://paintomics.uv.es" + T._EMAIL_MARK_PATH),
-                    ("https://paintomics.uv.es/resources/images/paintomics_white_300x66.png",
+                    ("https://old-host.example/img/paintomics_white_300x66.png",
                      "https://paintomics.uv.es" + T._EMAIL_MARK_PATH),
                     # A deliberate override is left alone: this is still a knob.
                     ("https://example.org/resources/images/house-brand.png",
@@ -519,6 +554,29 @@ class SharedChromeTest(unittest.TestCase):
                 T.PAINTOMICS_LOGO_URL = configured
                 self.assertEqual(expected, T._markURL(),
                                  "configured %s" % configured)
+        finally:
+            T.PAINTOMICS_LOGO_URL, T.PAINTOMICS_BASE_URL = original
+
+    def test_the_mark_url_is_always_absolute(self):
+        """A host-less src is a broken image: mail has no page to resolve against.
+
+        The base comes from PAINTOMICS_BASE_URL. Slicing it out of the
+        configured logo URL on "/resources/" worked for the one legacy default
+        and returned a bare path for every other layout.
+        """
+        original = T.PAINTOMICS_LOGO_URL
+        try:
+            for configured in (
+                    "https://host/img/paintomics_white_300x66.png",   # not under /resources/
+                    "https://host/resources/images/paintomics_white_300x66",
+                    "paintomics_white_300x66",
+                    "",
+                    None):
+                T.PAINTOMICS_LOGO_URL = configured
+                url = T._markURL()
+                self.assertRegex(url, r"^https?://",
+                                 "configured %r gives %r, which no mail client can "
+                                 "resolve" % (configured, url))
         finally:
             T.PAINTOMICS_LOGO_URL = original
 

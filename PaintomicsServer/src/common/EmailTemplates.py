@@ -80,6 +80,7 @@ import html
 
 from src.conf.serverconf import (
     EMAIL_FROM_ADDRESS,
+    PAINTOMICS_BASE_URL,
     PAINTOMICS_LOGIN_URL,
     PAINTOMICS_LOGO_URL,
 )
@@ -162,14 +163,18 @@ def _markURL():
 
     Follows ``PAINTOMICS_LOGO_URL`` -- an operator branding a private
     deployment sets ``PAINTOMICS_LOGO_PATH`` and gets their own mark -- unless
-    that value is the wordmark this release retired, in which case the
-    configured host is kept and only the file is replaced.
+    that value is the wordmark this release retired, in which case the mark is
+    served from ``PAINTOMICS_BASE_URL`` instead.
+
+    The base comes from configuration rather than from the retired URL. Slicing
+    the configured value on ``/resources/`` happened to work for the one legacy
+    default and returned a host-less path for anything else, which no mail
+    client can resolve: the message would carry a broken image.
     """
     configured = str(PAINTOMICS_LOGO_URL or "")
-    if _RETIRED_MARK not in configured:
+    if configured and _RETIRED_MARK not in configured:
         return configured
-    base = configured.split("/resources/", 1)[0] if "/resources/" in configured else ""
-    return base + _EMAIL_MARK_PATH
+    return str(PAINTOMICS_BASE_URL or "").rstrip("/") + _EMAIL_MARK_PATH
 
 
 #: The three configured strings that reach the markup. They are fixed at
@@ -507,8 +512,12 @@ def _panel(rows, accent="", monospace=False):
     on the dark card Apple Mail substitutes.
 
     ``monospace`` is for a block that is quoted rather than read -- a pasted
-    traceback or a run of tab-separated data, where the columns only line up in
-    a fixed-pitch face.
+    traceback or a run of tab-separated data. A fixed-pitch face is only half
+    of that: HTML collapses runs of spaces and tabs, so the indentation and the
+    columns are gone before the font can line them up, which is why the face
+    comes with ``white-space``. ``word-break`` goes with it, because preserved
+    text no longer collapses at a space either -- one long unbroken token then
+    stretches the whole 600px card past the edge of the window.
     """
     edge = "border-radius:8px;"
     if accent:
@@ -516,6 +525,7 @@ def _panel(rows, accent="", monospace=False):
     face = ""
     if monospace:
         face = ("font-family:Menlo,Consolas,monospace;font-size:13px;"
+                "white-space:pre-wrap;word-break:break-word;"
                 "mso-line-height-rule:exactly;line-height:20px;")
     return """
           <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0"
