@@ -322,6 +322,40 @@ class AnimationInvariantTest(unittest.TestCase):
 
 class ClientCompatibilityTest(unittest.TestCase):
 
+    def test_the_report_body_reuses_the_panel_rather_than_a_copy_of_it(self):
+        """One inset block, two dressings -- not two blocks that look alike.
+
+        The report body used to hand-roll a table with the panel's own margin,
+        background, class and padding, differing only in a border and a font.
+        In a module whose reason for existing is that the chrome lives once,
+        that is the duplication coming back.
+        """
+        plain = T._panel("ROWS")
+        accented = T._panel("ROWS", accent="#0069C0", monospace=True)
+        for shared in ('<table role="presentation"', "margin:4px 0 18px 0;",
+                       'class="po-panel"', T._PANEL, "padding:14px 18px;"):
+            self.assertIn(shared, plain)
+            self.assertIn(shared, accented,
+                          "the accented panel no longer shares %r with the plain "
+                          "one, so they have drifted into two components" % shared)
+
+    def test_the_panel_accent_is_a_border_never_the_text(self):
+        """Colouring the body put 3.5:1 of red on Apple Mail's dark card."""
+        accented = T._panel("ROWS", accent="#C0392B")
+        self.assertIn("border-left:4px solid #C0392B;", accented)
+        self.assertNotIn("color:#C0392B", accented,
+                         "the accent colours the text again; it belongs in the border")
+        self.assertIn("border-radius:0 8px 8px 0;", accented,
+                      "the accented corner is still rounded, so the rule reads as "
+                      "a stripe on a lozenge rather than an edge")
+        self.assertNotIn("border-left", T._panel("ROWS"),
+                         "an unaccented panel grew a border")
+
+    def test_the_panel_can_be_fixed_pitch_for_quoted_text(self):
+        self.assertIn("font-family:Menlo,Consolas,monospace;",
+                      T._panel("ROWS", monospace=True))
+        self.assertNotIn("monospace", T._panel("ROWS"))
+
     def test_no_message_uses_an_svg_image(self):
         """Gmail and every Outlook build refuse an <img> whose source is SVG.
 
@@ -335,7 +369,7 @@ class ClientCompatibilityTest(unittest.TestCase):
                                  "Gmail or Outlook" % (name, source))
 
     #: Every surface a body colour is set on in this file.
-    SURFACES = ("#FFFFFF", "#F5F7F9", "#F1F6FC", "#F4F5F7")
+    SURFACES = (T._CARD, T._PANEL, T._AI_TINT, T._PAGE)
 
     @staticmethod
     def _contrast(foreground, background):

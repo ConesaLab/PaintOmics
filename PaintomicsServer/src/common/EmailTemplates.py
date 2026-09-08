@@ -116,6 +116,9 @@ _MUTED = "#67717C"
 _CARD = "#FFFFFF"
 _PAGE = "#F4F5F7"
 _HAIRLINE = "#E3E6EA"
+#: The inset-panel surface. Named because a text colour has to clear 4.5:1
+#: against it, so it is one of the four surfaces the contrast test walks.
+_PANEL = "#F5F7F9"
 
 #: --pa-ai-blue from resources/css/main.css. The one accent in the message.
 _AI_BLUE = "#4A90D9"
@@ -493,17 +496,36 @@ def _aiCallout(title, text):
     }
 
 
-def _panel(rows):
-    """A quiet inset block for facts the reader may need to copy out."""
+def _panel(rows, accent="", monospace=False):
+    """A quiet inset block for facts the reader may need to copy out.
+
+    ``accent`` puts a coloured rule down the left edge, squaring that corner so
+    the rule reads as an edge rather than a stripe on a lozenge. The report
+    notification uses it to tell an error report from an organism request at a
+    glance; nothing else about the block changes, and in particular the text
+    stays normal ink, because colouring the body itself put a 3.5:1 run of red
+    on the dark card Apple Mail substitutes.
+
+    ``monospace`` is for a block that is quoted rather than read -- a pasted
+    traceback or a run of tab-separated data, where the columns only line up in
+    a fixed-pitch face.
+    """
+    edge = "border-radius:8px;"
+    if accent:
+        edge = "border-left:4px solid %s;border-radius:0 8px 8px 0;" % accent
+    face = ""
+    if monospace:
+        face = ("font-family:Menlo,Consolas,monospace;font-size:13px;"
+                "mso-line-height-rule:exactly;line-height:20px;")
     return """
           <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0"
                  style="margin:4px 0 18px 0;">
             <tr>
               <td class="po-panel" bgcolor="%(panel)s" style="background-color:%(panel)s;
-                  border-radius:8px;padding:14px 18px;">%(rows)s</td>
+                  %(edge)spadding:14px 18px;%(face)s">%(rows)s</td>
             </tr>
           </table>
-""" % {"panel": "#F5F7F9", "rows": rows}
+""" % {"panel": _PANEL, "rows": rows, "edge": edge, "face": face}
 
 
 def _panelRow(label, value):
@@ -653,24 +675,12 @@ def reportNotificationEmail(title, userName, userEmail, reportBody, accent):
         _heading(title)
         + _paragraph("Thanks for the report%s. We will get back to you." % ((", " + name) if name else ""))
         + _panel(_panelRow("From", "<strong>%s</strong>" % _escape(userEmail)))
-        # The accent lives in the border, not in the text. It used to colour the
-        # whole monospace body, which put a 3.5:1 run of red on the dark card
-        # Apple Mail substitutes -- and the card itself was pinned white, so it
-        # stayed a slab of daylight in an otherwise dark message. The border
-        # still tells an error report from an organism request at a glance,
-        # which is all the colour was ever carrying.
-        + """
-          <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" border="0"
-                 style="margin:4px 0 18px 0;">
-            <tr>
-              <td class="po-panel" bgcolor="%(panel)s" style="background-color:%(panel)s;
-                  border-left:4px solid %(accent)s;border-radius:0 8px 8px 0;
-                  padding:14px 18px;font-family:Menlo,Consolas,monospace;font-size:13px;
-                  mso-line-height-rule:exactly;line-height:20px;">
-                <span class="po-text" style="color:%(ink)s;">%(body)s</span></td>
-            </tr>
-          </table>
-""" % {"accent": accent, "panel": "#F5F7F9", "ink": _BODY, "body": body}
+        # The same inset block as above, with the accent in its border rather
+        # than in the text -- the colour used to run through the whole monospace
+        # body, which put 3.5:1 of red on the dark card Apple Mail substitutes.
+        + _panel(
+            '<span class="po-text" style="color:%s;">%s</span>' % (_BODY, body),
+            accent=accent, monospace=True)
         + _paragraph("&mdash; the %s team" % PRODUCT_NAME)
     )
     return renderEmail(_bodyRow(inner), preheaderText=title)
