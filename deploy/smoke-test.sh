@@ -180,9 +180,10 @@ else
     gateway=$("${COMPOSE[@]}" exec -T app \
         python /app/PaintomicsServer/src/AdminTools/check_llm_gateway.py --timeout 60 2>&1 | tr -d '\r' | tail -1)
     case "${gateway}" in
-        OK*)   ok "LLM gateway answers: ${gateway#OK }" ;;
-        SKIP*) note "LLM gateway not asked: ${gateway#SKIP }" ;;
-        *)     bad "LLM gateway: ${gateway:-no output from check_llm_gateway.py}" ;;
+        OK*)       ok "LLM gateway answers: ${gateway#OK }" ;;
+        DEGRADED*) note "LLM gateway degraded: ${gateway#DEGRADED }" ;;
+        SKIP*)     note "LLM gateway not asked: ${gateway#SKIP }" ;;
+        *)         bad "LLM gateway: ${gateway:-no output from check_llm_gateway.py}" ;;
     esac
 fi
 

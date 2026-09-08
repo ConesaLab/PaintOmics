@@ -78,6 +78,8 @@ services:
       AI_CSIC_API_BASE: ${AI_CSIC_API_BASE:-https://llm.iiia.es/v1}
       AI_CSIC_API_KEY: ${AI_CSIC_API_KEY:-}
       AI_CSIC_MODEL: ${AI_CSIC_MODEL:-deepseek-ai/DeepSeek-V4-Flash-0731}
+      # Asked in order when AI_CSIC_MODEL is not being served; see env.example.
+      AI_CSIC_FALLBACK_MODELS: ${AI_CSIC_FALLBACK_MODELS:-default/llm}
       AI_PUBMED_EMAIL: ${AI_PUBMED_EMAIL:-}
       AI_PUBMED_API_KEY: ${AI_PUBMED_API_KEY:-}
 

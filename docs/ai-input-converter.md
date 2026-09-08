@@ -191,6 +191,12 @@ on a conversion the server no longer holds.
 | "The AI service did not answer within 150 seconds…" | A single request timed out. Try again. |
 | "The server lost track of this conversion (it may have restarted)." | Start it again. |
 
+The gateway serves several models. The pinned one is asked first; when it is
+not being served (a 5xx, a dead backend, a timeout) the deployment's fallback
+list is tried in order -- by default the gateway's own `default/llm` alias --
+and the model that failed is skipped for five minutes before the pinned one
+is tried first again. The result records which model wrote the script.
+
 When the server refuses a turn or the gateway does not answer, the sheet says
 what stopped it and offers **Try again**; the box at the foot stays open, so an
 instruction can be the retry. The one refusal with no retry is the server that

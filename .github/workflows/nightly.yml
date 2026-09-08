@@ -85,9 +85,11 @@ jobs:
           python-version: "3.11"
       - name: requests
         run: python -m pip install --quiet requests
-      # Exit 0 = answered, 1 = did not answer, 2 = no key. A missing secret is
-      # a failure here on purpose: on the main repository the key is meant to
-      # be set, and a nightly that quietly skips is no monitor.
+      # Exit 0 = the pinned model answered, 3 = only a fallback did, 1 = none
+      # did, 2 = no key. Everything but 0 fails the job on purpose: a missing
+      # secret is a misconfiguration on the main repository, and the pinned
+      # model being down is exactly the alert this job exists to raise, even
+      # while the fallback keeps the site working.
       - name: src/AdminTools/check_llm_gateway.py
         env:
           AI_CSIC_API_KEY: ${{ secrets.AI_CSIC_API_KEY }}

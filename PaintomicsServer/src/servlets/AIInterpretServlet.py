@@ -11,6 +11,7 @@ from src.classes.AIInterpret.agent import run_ai_agent
 from src.classes.AIInterpret.verification import normalize_citation_markers
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
+from src.classes.AIInterpret import model_fallback
 from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
     SYSTEM_PROMPT_PATHWAY_FOCUS, build_pathway_focus_prompt)
 from src.classes.AIInterpret.context_builder import (build_pathway_context,
@@ -124,6 +125,10 @@ def getAIProviderInfo():
         "provider": AI_LLM_PROVIDER,
         "host": host,
         "model": provider.get("model", ""),
+        # Asked when the model above is not being served; the answer then
+        # records which one wrote it. Listed so the consent notice can be
+        # honest about what may run.
+        "fallbackModels": model_fallback.fallback_models(provider, AI_LLM_PROVIDER),
         "operator": known.get("operator", host),
         "summary": known.get("summary", host),
         # Whether Chapter V of the GDPR (Arts. 44-49, transfers outside the
