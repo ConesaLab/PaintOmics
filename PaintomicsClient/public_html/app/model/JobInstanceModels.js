@@ -594,8 +594,8 @@ function JobInstance(jobID) {
 				if (omicsAux[i].omicSummary === undefined) {
 					showWarningMessage("No information about min/max available.", {
 						message: "The current job instance do not include information about min/max values for each omic type.</br>" +
-						"A possible explanation for this issue could be that the data was generated using an older version of Paintomics.</br>" +
-						"Instead of using the percentiles 10 and 90 for each omics as reference to obtain the colors for the heatmap, Paintomics " +
+						"A possible explanation for this issue could be that the data was generated using an older version of PaintOmics.</br>" +
+						"Instead of using the percentiles 10 and 90 for each omics as reference to obtain the colors for the heatmap, PaintOmics AI " +
 						"will calculate locally the min / max for each omics for each selected pathway.", showButton: true, height: 260
 					});
 					return null;
@@ -608,8 +608,8 @@ function JobInstance(jobID) {
 				if (omicsAux[i].omicSummary === undefined) {
 					showWarningMessage("No information about min/max available.", {
 						message: "The current job instance do not include information about min/max values for each omic type.</br>" +
-						"A possible explanation for this issue could be that the data was generated using an older version of Paintomics.</br>" +
-						"Instead of using the percentiles 10 and 90 for each omics as reference to obtain the colors for the heatmap, Paintomics" +
+						"A possible explanation for this issue could be that the data was generated using an older version of PaintOmics.</br>" +
+						"Instead of using the percentiles 10 and 90 for each omics as reference to obtain the colors for the heatmap, PaintOmics AI" +
 						" will calculate locally the min / max for each omics for each selected pathway."
 					});
 					return null;

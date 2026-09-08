@@ -1,5 +1,5 @@
 #!/bin/bash
-# PaintOmics 4 startup script
+# PaintOmics AI startup script
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -27,7 +27,7 @@ if ! pgrep -x "mongod" > /dev/null; then
   sleep 2
 fi
 
-echo "Starting PaintOmics 4..."
+echo "Starting PaintOmics AI..."
 echo "  MongoDB: localhost:27017"
 echo "  Server:  http://localhost:8000"
 echo "  Admin:   admin / admin"

@@ -17,7 +17,7 @@
         {"type": "myFilesSelectorButton", "label": "Annotations file (GTF)",  "name" : "annotationsFile", "itemId": "mainFileSelector"},
         {"type": "text", "label": "", "name":"annotationsFile_omic_name", "value": "gtf", "other":[{"hidden":true}]},
         {"type": "text", "label": "", "name":"annotationsFile_match_type", "value":"gene", "other":[{"hidden":true}]},
-        {"type": "label", "value":"<p class='formHelpTip'>Upload the Annotations file (GTF format), choose it from your data folder or browse the GFT files included in Paintomics.</p>"},
+        {"type": "label", "value":"<p class='formHelpTip'>Upload the Annotations file (GTF format), choose it from your data folder or browse the GTF files included in PaintOmics AI.</p>"},
         
         {"type": "combo", "label": "Summarization method",  "name":"summarizationMethod", "options": [{"label": "Mean", "value": "mean"},{"label": "Maximum", "value": "max"}]},
         {"type": "label", "value":"<p class='formHelpTip'>Choose the strategy used to resolve regions mapping to the same gen region.</p>"},

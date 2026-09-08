@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 #***************************************************************
-# MORE backend for Paintomics v4
+# MORE backend for PaintOmics AI
 # Performs regulatory analysis using regression models.
 #***************************************************************
 
@@ -296,7 +296,7 @@ if (length(common_samples) == 0) {
     paste(head(rownames(condition), 3), collapse=", "),
     if (nrow(condition) > 3) ", ..." else "", "\n",
     paste(reg_lines, collapse="\n"), "\n",
-    "Paintomics requires the same biological sample to carry the SAME column ",
+    "PaintOmics AI requires the same biological sample to carry the SAME column ",
     "name in the target expression file, the condition file, and every ",
     "regulatory omic file. Rename columns in R (e.g. ",
     "colnames(data.omics$miRNA) <- canonical_names) before saving so the ",

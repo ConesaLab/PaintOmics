@@ -5879,7 +5879,7 @@ function PA_Step3PathwayTableView() {
 					searchFor: "title",
 					defaults: {border: false}, columnLines: true, stripeRows:false,
 					download: {
-						title: 'Paintomics pathways ' + me.getModel().getJobID(),
+						title: 'PaintOmics pathways ' + me.getModel().getJobID(),
 						ignoreColums: [1]
 					},
 					store: Ext.create('Ext.data.Store', {

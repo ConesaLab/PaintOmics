@@ -1,4 +1,4 @@
-# PaintOmics 4 deployment stack.
+# PaintOmics AI deployment stack.
 #
 #   nginx  -> TLS termination, static limits, reverse proxy
 #   app    -> Flask/uWSGI + the in-process PySiQ job queue
@@ -57,6 +57,15 @@ services:
 
       # Embedded in activation emails: must be the externally reachable URL.
       PAINTOMICS_BASE_URL: ${PAINTOMICS_BASE_URL:?set PAINTOMICS_BASE_URL in deploy/.env}
+
+      # The mark every outgoing email shows, relative to PAINTOMICS_BASE_URL.
+      # serverconf.py has read this from the environment for a while, but the
+      # variable was never in this list, so setting it in deploy/.env did
+      # nothing -- it never reached the container. The default below is the
+      # same one the template carries; override it only to point at a
+      # site-specific raster (and it must be a raster: Gmail and Outlook will
+      # not render an SVG in an <img>).
+      PAINTOMICS_LOGO_PATH: ${PAINTOMICS_LOGO_PATH:-/resources/images/paintomics-mark-email.png}
 
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@example.org}
       SMTP_HOST: ${SMTP_HOST:-smtp.sendgrid.net}

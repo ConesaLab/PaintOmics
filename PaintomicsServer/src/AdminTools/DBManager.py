@@ -100,7 +100,7 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
         SPECIES_DOWNLOAD = readFile(inputfile)  # THE IDS FOR THE SPECIES TO UPDATE
 
     log("######################################################################")
-    log("### PAINTOMICS 4.0 - DATABASE DOWNLOADER ")
+    log("### PAINTOMICS AI - DATABASE DOWNLOADER ")
     log("### v." + str(VERSION))
     log("######################################################################")
     log("")
@@ -434,7 +434,7 @@ def install_command(inputfile=None, specie=None, species=None, common=0, reinsta
     currentStep = 1;
 
     log("######################################################################")
-    log("### PAINTOMICS 4.0 - DATABASE INSTALLER ")
+    log("### PAINTOMICS AI - DATABASE INSTALLER ")
     log("### v." + str(VERSION))
     log("######################################################################")
     log("")

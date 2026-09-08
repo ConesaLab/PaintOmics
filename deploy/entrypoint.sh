@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PaintOmics 4 container entrypoint.
+# PaintOmics AI container entrypoint.
 #
 # Runs as root only long enough to fix ownership of the mounted data volume,
 # then drops to the unprivileged `paintomics` user for the actual process.

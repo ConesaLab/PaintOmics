@@ -282,7 +282,7 @@ currently painted. What goes into the file:
   in force at the moment you press the button;
 * the [evidence overlay](#the-evidence-overlay), including any regulator boxes
   you have dragged;
-* the credit line "Created with PaintOmics 4" in the corner.
+* the credit line "Created with PaintOmics AI" in the corner.
 
 The whole map is exported, whatever you have zoomed or panned to, and rendered
 at three times the artwork's own size; the file arrives as

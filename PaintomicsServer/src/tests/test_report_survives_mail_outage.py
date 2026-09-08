@@ -287,6 +287,140 @@ class ReportRoutesTest(unittest.TestCase):
         self.assertIn("adminServletDeleteReport", source)
 
 
+class LegacyReportBodyTest(unittest.TestCase):
+    """The request dialogs used to post an HTML fragment as `message`.
+
+    The maintainer notification escapes the body now, because /dm_sendReport
+    takes no session and `message` is free-form input. The dialogs post plain
+    text since this release, but the endpoint cannot assume that: a tab open
+    across a deploy keeps posting the fragment, and no session expires it.
+    """
+
+    def test_the_legacy_fragment_becomes_labelled_lines(self):
+        body = ("<p><b>Specie:</b> Bos taurus (cow)</p>"
+                "<p><b>Comments:</b>We use Ensembl IDs &amp; &lt;2000 genes</p>")
+        self.assertEqual(
+            "Specie: Bos taurus (cow)\nComments: We use Ensembl IDs & <2000 genes",
+            AdminServlet._plainTextReportBody(body))
+
+    def test_an_address_in_angle_brackets_survives(self):
+        """The contact form wrote it bare, so HTML ate it as an unknown tag.
+
+        Only the five tags that fragment was built from are treated as markup;
+        anything else between angle brackets is text. That makes the converted
+        mail better than the one a client used to render, where the maintainers
+        never saw who had written in.
+        """
+        body = ("<p><b>From:</b> Ada Lovelace<ada@example.org></p>"
+                "<p><b>Message:</b>Hi there</p>")
+        self.assertEqual("From: Ada Lovelace<ada@example.org>\nMessage: Hi there",
+                         AdminServlet._plainTextReportBody(body))
+
+    def test_a_typed_comparison_does_not_swallow_the_tag_after_it(self):
+        """The old client concatenated the textarea raw, so a bare "<" is easy.
+
+        "<2000 genes" and "padj<0.05" are ordinary things to write in this
+        domain. Pairing that "<" with the next ">" anywhere later in the string
+        matched the ">" of the real closing tag, so the tag was emitted as text
+        -- the maintainer read a literal "</p>" and lost the line break, and
+        with another field after it the two ran together.
+
+        The first version of this test used "&lt;2000", which is what an
+        escaping client would send. This one does not escape, because the
+        client that still posts this shape does not either.
+        """
+        self.assertEqual(
+            "Comments: We use <2000 genes",
+            AdminServlet._plainTextReportBody(
+                "<p><b>Comments:</b>We use <2000 genes</p>"))
+
+        self.assertEqual(
+            "Specie: Bos taurus\nComments: only <2000 genes, padj<0.05",
+            AdminServlet._plainTextReportBody(
+                "<p><b>Specie:</b> Bos taurus</p>"
+                "<p><b>Comments:</b>only <2000 genes, padj<0.05</p>"))
+
+    def test_both_comparison_directions_survive(self):
+        self.assertEqual(
+            "a: 3 < 4 and 5 > 2",
+            AdminServlet._plainTextReportBody("<p><b>a:</b>3 < 4 and 5 > 2</p>"))
+
+    def test_a_plain_text_report_is_returned_untouched(self):
+        """Error reports are plain text and carry <module> in a traceback.
+
+        Converting unconditionally would eat it, which is why this is keyed on
+        the fragment's own opening rather than applied to every body.
+        """
+        for body in ('Oops..Internal error!\nTraceback (most recent call last):\n'
+                     '  File "<module>", line 3\nKeyError',
+                     "Specie: Bos taurus\n\nComments: none",
+                     "", None):
+            expected = "" if body is None else body
+            self.assertEqual(expected, AdminServlet._plainTextReportBody(body))
+
+    def test_markup_inside_the_fragment_is_kept_as_text_not_dropped(self):
+        """Whatever survives is escaped downstream, so keeping it is safe.
+
+        Dropping it would be the dangerous direction: it hides from the
+        maintainer what the reporter actually sent.
+        """
+        converted = AdminServlet._plainTextReportBody(
+            "<p><b>Specie:</b> x</p><p><b>C:</b><script>alert(1)</script></p>")
+        self.assertIn("<script>alert(1)</script>", converted)
+
+
+class ReportBodySurvivesTheAdminPanelTest(unittest.TestCase):
+    """A report body is rendered twice, and the second renderer strips tags.
+
+    The mail escapes the body, so anything angle-bracketed shows up fine there.
+    The admin panel does not: report-list-service.js runs the stored message
+    through ``/<[^>]*>/g`` to display it as text, because reports stored before
+    this release are HTML. So a bare ``<ada@example.org>`` in a plain-text body
+    survives the mail and is eaten by the panel.
+    """
+
+    #: What admin/controllers/report-list-service.js does to a stored message.
+    _TAG = re.compile(r"<[^>]*>")
+
+    def _clientSource(self):
+        path = os.path.join(REPO, "PaintomicsClient", "public_html", "app",
+                            "controller", "DataManagementController.js")
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_no_report_dialog_wraps_a_value_in_angle_brackets(self):
+        """Asserts the property, not one spelling of the fix."""
+        source = self._clientSource()
+        for handler in ("requestNewSpecieHandler", "sendReportHandler"):
+            match = re.search(r"this\.%s = function\(\)\{.*?\n\};" % handler,
+                              source, re.S)
+            self.assertIsNotNone(match, "%s is gone" % handler)
+            built = re.search(r'var message\s*=\s*(.*?);', match.group(0), re.S)
+            self.assertIsNotNone(built, "%s builds no message" % handler)
+            body = built.group(1)
+            self.assertNotIn('"<"', body,
+                             "%s wraps a value in angle brackets. The mail escapes "
+                             "it, but the admin panel strips tags out of the stored "
+                             "message and the value disappears there." % handler)
+            self.assertNotIn('" <"', body,
+                             "%s wraps a value in angle brackets; see above." % handler)
+
+    def test_a_contact_body_keeps_its_address_through_the_panel_stripper(self):
+        source = self._clientSource()
+        match = re.search(r"this\.sendReportHandler = function\(\)\{.*?\n\};",
+                          source, re.S)
+        self.assertIsNotNone(match)
+        # The body the handler builds, with the two field reads substituted.
+        built = re.search(r'var message\s*=\s*(.*?);', match.group(0), re.S).group(1)
+        rendered = (built.replace("userName", '"Ada Lovelace"')
+                         .replace("userEmail", '"ada@example.org"'))
+        self.assertIn("ada@example.org", rendered)
+        # Everything the panel would strip, stripped.
+        self.assertIn("ada@example.org", self._TAG.sub(" ", rendered),
+                      "the address does not survive the admin panel's tag "
+                      "stripper, so the report body shows a sender with no address")
+
+
 class EmailTemplateTest(unittest.TestCase):
     """The report email rendered a broken logo and named the wrong mailbox.
 

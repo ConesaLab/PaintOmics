@@ -126,7 +126,7 @@ Every file field in the application — on the upload form, and in the
 Regions-to-Genes and miRNA-to-Genes tools — carries a **Browse** control inside
 the field itself. The caret at its right opens a menu of three items — two
 fields add a fourth of their own, the GTF field on a Region-based omic ("Use a
-GTF from Paintomics") and the gene expression field on a miRNA omic ("Use a file
+GTF from PaintOmics") and the gene expression field on a miRNA omic ("Use a file
 from other omic").
 
 ![The Browse menu on a file field](img/ui/step1-browse-menu.png)
