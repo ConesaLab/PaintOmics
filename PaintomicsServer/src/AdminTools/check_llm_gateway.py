@@ -128,8 +128,13 @@ def probe(config, provider_name="csic", timeout=60):
 
 
 def probe_ladder(config, provider_name="csic", timeout=60):
-    """One probe per model on the ladder, pinned model first."""
+    """One probe per model on the ladder, pinned model first.
+
+    Cooldowns are cleared first: this measures each model as it is now, not
+    what an earlier call in this process concluded about it.
+    """
     from src.classes.AIInterpret import model_fallback
+    model_fallback.reset()
     results = []
     for model in model_fallback.candidates(config, provider_name):
         results.append(probe(dict(config, model=model), provider_name, timeout))
