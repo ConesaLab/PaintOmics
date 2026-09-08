@@ -6,6 +6,8 @@ import random
 import threading
 import time
 
+from . import model_fallback
+
 logger = logging.getLogger(__name__)
 
 # Timeout as (connect, read) tuple.
@@ -146,6 +148,12 @@ class LLMClient:
         # routinely carries a trailing newline, which the header would forward
         # verbatim and the gateway would reject as a different malformed key.
         self.api_key = (provider_config.get("api_key") or "").strip()
+        # The ladder: the configured model, then its fallbacks (see
+        # model_fallback). `model_used` names whichever rung answered last,
+        # for a caller that records provenance.
+        self.provider_name = provider_name
+        self.candidates = model_fallback.candidates(provider_config, provider_name)
+        self.model_used = None
         if not self.api_key:
             raise MissingAPIKeyError(
                 "No API key configured for the '%s' AI provider. Set %s in the "
@@ -186,12 +194,19 @@ class LLMClient:
         is judged per read and runs for as long as tokens keep coming.
 
         `budget_seconds` is a wall clock over the WHOLE call -- every attempt,
-        every backoff and the streamed body itself. A caller with someone
-        waiting on the other end (a browser polling a ticket) sets it so this
-        call gives up FIRST and says why; without it a stream that trickles a
-        token a minute holds a worker and a queue slot until the gateway
-        decides to stop. `max_attempts` bounds the retries the same way. Both
-        default to the behaviour every existing caller had.
+        every backoff, every model on the ladder and the streamed body itself.
+        A caller with someone waiting on the other end (a browser polling a
+        ticket) sets it so this call gives up FIRST and says why; without it a
+        stream that trickles a token a minute holds a worker and a queue slot
+        until the gateway decides to stop. `max_attempts` bounds the retries
+        per model the same way. Both default to the behaviour every existing
+        caller had.
+
+        The configured model is asked first unless it is known to be down;
+        when it fails in a way that says "not served" (see
+        model_fallback.falls_back) the next model on the ladder is asked at
+        once, and the failed one is skipped for a while. `self.model_used`
+        says which one answered.
         """
         # Drop the schema up front on an endpoint already known to reject it,
         # so we pay the 400 once per process rather than once per call.
@@ -201,6 +216,38 @@ class LLMClient:
         attempts = max(1, int(max_attempts))
         deadline = (time.monotonic() + budget_seconds) if budget_seconds else None
 
+        ladder = model_fallback.ordered(self.api_base, self.candidates)
+        for index, model in enumerate(ladder):
+            remaining = ladder[index + 1:]
+            try:
+                content = self._complete_one(
+                    model, messages, max_tokens, temperature, response_format,
+                    timeout, stream, attempts, deadline, fail_fast=bool(remaining))
+            except Exception as e:
+                if model_fallback.falls_back(e):
+                    # Remembered even for the last rung: the next call's
+                    # ordering, and the probe's verdict, read this.
+                    model_fallback.mark_down(self.api_base, model, e)
+                    if remaining:
+                        logger.warning("LLM model %s failed (%s); asking %s instead",
+                                       model, type(e).__name__, remaining[0])
+                        continue
+                raise
+            model_fallback.mark_up(self.api_base, model)
+            self.model_used = model
+            if model != self.model:
+                logger.warning("LLM answer came from fallback model %s, not the "
+                               "configured %s", model, self.model)
+            return content
+        raise RuntimeError("no model configured for provider %r" % self.provider_name)
+
+    def _complete_one(self, model, messages, max_tokens, temperature,
+                      response_format, timeout, stream, attempts, deadline,
+                      fail_fast=False):
+        """The retry loop for ONE model. `fail_fast`: another rung is waiting,
+        so a failure that would move to it is raised at once instead of being
+        retried here with a backoff."""
+
         def _backoff(seconds, err):
             # A retry that cannot finish inside the budget only delays an
             # answer nobody will be there to read. Stop here instead.
@@ -208,14 +255,20 @@ class LLMClient:
                 raise err
             time.sleep(seconds)
 
+        # One escalation per model: on 2026-09-08 the CSIC gateway answered
+        # a plain request with a 500 and the same request streamed with the
+        # answer (LiteLLM routes the two to different backends). Cheaper to
+        # try than the next model, and the folded stream is the same string.
+        retried_streamed = False
+
         for attempt in range(attempts):
             attempt_timeout = timeout or DEFAULT_TIMEOUT
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise requests.exceptions.Timeout(
-                        "LLM call exceeded its %ss budget before attempt %d"
-                        % (budget_seconds, attempt + 1))
+                        "LLM call exceeded its budget before attempt %d of %s"
+                        % (attempt + 1, model))
                 # A socket read that is blocked cannot see the deadline, so
                 # the last attempt must not be allowed a read longer than
                 # what is left -- or the budget is the budget plus one read
@@ -223,10 +276,10 @@ class LLMClient:
                 connect, read = attempt_timeout
                 attempt_timeout = (min(connect, remaining), min(read, remaining))
             try:
-                logger.info(f"LLM complete: model={self.model}, "
+                logger.info(f"LLM complete: model={model}, "
                             f"msgs={len(messages)}, max_tokens={max_tokens} "
                             f"(attempt {attempt + 1})")
-                payload = {"model": self.model, "messages": messages,
+                payload = {"model": model, "messages": messages,
                            "max_tokens": max_tokens, "temperature": temperature}
                 if response_format is not None:
                     payload["response_format"] = response_format
@@ -252,6 +305,8 @@ class LLMClient:
                 return content
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
                 logger.warning(f"LLM request failed (attempt {attempt + 1}/{attempts}): {e}")
+                if fail_fast:
+                    raise
                 if attempt < attempts - 1:
                     _backoff(5 * (attempt + 1), e)  # 5s, 10s backoff
                     continue
@@ -270,7 +325,8 @@ class LLMClient:
                 # with auth/bad-request and raised immediately, so a moment of
                 # rate limiting on a shared gateway killed a whole multi-minute
                 # job at the last phase. Back off and retry, honouring
-                # Retry-After when the server sends one.
+                # Retry-After when the server sends one. Never a reason to
+                # change model: the key is throttled, not the model.
                 if e.response is not None and e.response.status_code == 429:
                     if attempt < attempts - 1:
                         wait = 5 * (attempt + 1)
@@ -295,10 +351,22 @@ class LLMClient:
                     logger.error(f"LLM HTTP {e.response.status_code}: {e.response.text[:500]}")
                     raise
                 logger.warning(f"LLM server error (attempt {attempt + 1}/{attempts}): {e}")
+                if not stream and not retried_streamed and attempt < attempts - 1:
+                    retried_streamed = True
+                    stream = True
+                    logger.warning("LLM retrying the same request to %s streamed", model)
+                    continue
+                if fail_fast:
+                    raise
                 if attempt < attempts - 1:
                     _backoff(5 * (attempt + 1), e)
                     continue
                 raise
+        # Every branch above returns, raises or continues; this is reached
+        # only when the last attempt ended in a `continue` (a schema
+        # demotion), which used to return None into a JSON parser.
+        raise requests.exceptions.HTTPError(
+            "LLM request to %s gave no answer in %d attempts" % (model, attempts))
 
     @staticmethod
     def _fold_stream(response, deadline):
@@ -448,9 +516,12 @@ class LLMClient:
         """
         for iteration in range(max_iterations):
             for attempt in range(3):  # 2 retries on network errors
+                # The rung believed up; a failure below demotes it, so the
+                # next attempt reads a different head.
+                model = model_fallback.ordered(self.api_base, self.candidates)[0]
                 try:
                     logger.info(f"LLM tool loop iter={iteration + 1}/{max_iterations}, "
-                                f"msgs={len(messages)} (attempt {attempt + 1})")
+                                f"model={model}, msgs={len(messages)} (attempt {attempt + 1})")
                     r = requests.post(
                         f"{self.api_base}/chat/completions",
                         headers={
@@ -458,7 +529,7 @@ class LLMClient:
                             "Content-Type": "application/json",
                         },
                         json={
-                            "model": self.model,
+                            "model": model,
                             "messages": messages,
                             "tools": tools,
                             "max_tokens": max_tokens,
@@ -467,11 +538,15 @@ class LLMClient:
                         timeout=timeout or DEFAULT_TIMEOUT,
                     )
                     r.raise_for_status()
+                    model_fallback.mark_up(self.api_base, model)
+                    self.model_used = model
                     break
                 except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
                     logger.warning(f"LLM tool request failed (attempt {attempt + 1}/3): {e}")
+                    model_fallback.mark_down(self.api_base, model, e)
                     if attempt < 2:
-                        time.sleep(5 * (attempt + 1))
+                        if len(self.candidates) == 1:
+                            time.sleep(5 * (attempt + 1))
                         continue
                     raise
                 except requests.exceptions.HTTPError as e:
@@ -479,8 +554,10 @@ class LLMClient:
                         logger.error(f"LLM HTTP {e.response.status_code}: {e.response.text[:500]}")
                         raise
                     logger.warning(f"LLM server error (attempt {attempt + 1}/3): {e}")
+                    model_fallback.mark_down(self.api_base, model, e)
                     if attempt < 2:
-                        time.sleep(5 * (attempt + 1))
+                        if len(self.candidates) == 1:
+                            time.sleep(5 * (attempt + 1))
                         continue
                     raise
 

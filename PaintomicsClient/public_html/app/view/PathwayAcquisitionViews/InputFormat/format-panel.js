@@ -447,6 +447,36 @@
         strip.appendChild(text);
     }
 
+    /*
+     * Whether this server runs the converter at all. /ai_provider says so
+     * (`inputConverter`, from the same gate the turn route uses); asked once
+     * per page. Unknown -- the request failed, or an older server without
+     * the field -- counts as available: the conversion sheet asks again
+     * before it starts and the turn itself refuses if it must, and hiding
+     * the offer on a network blip would be the wrong failure. What must not
+     * happen is the 2026-09-08 one: a strip that promises "the PaintOmics AI
+     * agent converts it here", a sheet that boots a sandbox and reads the
+     * file, and only then "not enabled on this server" over a disabled box.
+     */
+    var converterPromise = null;
+    function converterAvailable() {
+        if (!converterPromise) {
+            converterPromise = fetch("ai_provider", { credentials: "same-origin" })
+                .then(function (r) { return r.json(); })
+                .then(function (p) { return !(p && p.success && p.inputConverter === false); })
+                .catch(function () { return true; });
+        }
+        return converterPromise;
+    }
+
+    /* Wording shared with the server's refusal (NOT_ENABLED_MESSAGE) and the
+       sheet's card, so a user meets one sentence wherever they meet it. */
+    var CONVERTER_OFF = "AI conversion is not enabled on this server.";
+    var MANUAL_ADVICE = "Save the table as tab-separated text and upload that instead: the " +
+        "identifier in the first column and one numeric column per sample or condition " +
+        "(in Excel: File → Save As → Text (Tab delimited)). Or ask the server's administrator " +
+        "to switch the converter on.";
+
     /* The one AI action a problem strip offers. Pressing it is the consent:
        nothing leaves this computer until the user does, so there is no box to
        tick beforehand. */
@@ -558,18 +588,20 @@
     /* Layer 2, for the job rather than for one file. */
     function requestHarmonise(entries, serverSaid) {
         var api = window.PaintomicsInputFormat;
-        if (api && api.openHarmoniseDrawer) {
-            api.openHarmoniseDrawer(entries.map(function (e) {
-                return { input: e.input, file: e.file, fieldName: e.fieldName,
-                         omic: e.omic, conditions: e.conditions };
-            }), { serverSaid: serverSaid || "" });
-            return;
-        }
-        var strip = hostFor(entries[0].input);
-        if (!strip) return;
-        renderProblem(strip, "err", "AI conversion is not enabled on this server.",
-            "Ask an administrator to enable it, or reduce the wider omic to the same " +
-            "conditions as the narrower one by hand.", []);
+        converterAvailable().then(function (available) {
+            if (available && api && api.openHarmoniseDrawer) {
+                api.openHarmoniseDrawer(entries.map(function (e) {
+                    return { input: e.input, file: e.file, fieldName: e.fieldName,
+                             omic: e.omic, conditions: e.conditions };
+                }), { serverSaid: serverSaid || "" });
+                return;
+            }
+            var strip = hostFor(entries[0].input);
+            if (!strip) return;
+            renderProblem(strip, "err", CONVERTER_OFF,
+                "Ask the server's administrator to switch it on, or reduce the wider omic to " +
+                "the same conditions as the narrower one by hand.", []);
+        });
     }
 
     /* The note under a green verdict: this file's width, the others', and
@@ -944,11 +976,26 @@
         if (SPREADSHEET.test(file.name)) {
             markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                      input: input, omic: strip.__omic, fixable: false });
-            renderProblem(strip, "err",
-                "This spreadsheet needs converting.",
-                file.name + " is a workbook — it may hold several sheets and " +
-                "columns that are not measurements. " + aiExplainer(),
-                aiActions(input, file, fieldName));
+            // A workbook is never parsed in place: it either goes to the
+            // converter or it goes nowhere. So this is the one strip that
+            // asks first -- on a server with the converter off, an offer to
+            // convert would be the whole of the user's dead end.
+            strip.__file = file;
+            converterAvailable().then(function (available) {
+                if (strip.__file !== file) return;          // a later pick replaced it
+                if (available) {
+                    renderProblem(strip, "err",
+                        "This spreadsheet needs converting.",
+                        file.name + " is a workbook — it may hold several sheets and " +
+                        "columns that are not measurements. " + aiExplainer(),
+                        aiActions(input, file, fieldName));
+                } else {
+                    renderProblem(strip, "err",
+                        "This spreadsheet needs converting, and " + CONVERTER_OFF,
+                        file.name + " is a workbook, which PaintOmics does not read directly. " + MANUAL_ADVICE,
+                        []);
+                }
+            });
             return;
         }
 
@@ -1052,6 +1099,21 @@
        then it says so plainly rather than doing nothing, because a button that
        silently does nothing reads as a broken page. */
     function requestAgent(input, file, fieldName, serverSaid, siblings) {
+        converterAvailable().then(function (available) {
+            if (!available) {
+                // The strip, not a sheet: the sheet would only boot a sandbox
+                // to be refused. Every button that leads here -- the strip's
+                // own, the submit banner's, the error dialog's -- ends on the
+                // same sentence and the same advice.
+                var strip = hostFor(input);
+                if (strip) renderProblem(strip, "err", CONVERTER_OFF, MANUAL_ADVICE, []);
+                return;
+            }
+            openAgent(input, file, fieldName, serverSaid, siblings);
+        });
+    }
+
+    function openAgent(input, file, fieldName, serverSaid, siblings) {
         if (window.PaintomicsInputFormat.openConvertDrawer) {
             // What the server said, when it is the server that refused, and
             // what the job's other files look like. The agent is otherwise
@@ -1071,10 +1133,7 @@
         }
         var strip = hostFor(input);
         if (!strip) return;
-        renderProblem(strip, "err", "AI conversion is not enabled on this server.",
-            "Ask an administrator to enable it, or export the file as a tab-separated " +
-            "table whose first column is the identifier and whose remaining columns are numbers.",
-            []);
+        renderProblem(strip, "err", CONVERTER_OFF, MANUAL_ADVICE, []);
     }
 
     /* ------------------------------------------------------------------ *

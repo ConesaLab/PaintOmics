@@ -11,6 +11,7 @@ from src.classes.AIInterpret.agent import run_ai_agent
 from src.classes.AIInterpret.verification import normalize_citation_markers
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
+from src.classes.AIInterpret import model_fallback
 from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
     SYSTEM_PROMPT_PATHWAY_FOCUS, build_pathway_focus_prompt)
 from src.classes.AIInterpret.context_builder import (build_pathway_context,
@@ -106,12 +107,28 @@ def getAIProviderInfo():
         host = ""
 
     known = _PROVIDER_OPERATORS.get(host, {})
+
+    # Whether the AI input converter is switched on here, read through the
+    # converter's own gate so this answer and the one /input_convert/turn
+    # gives can never differ. The browser asks BEFORE it boots a sandbox and
+    # profiles the file: on a switched-off server the first turn is refused,
+    # and learning that at the end left the user with a timeline, a disabled
+    # box and nothing to click (paintomics.org, 2026-09-08). Imported here
+    # rather than at module level: the converter module pulls in its agent
+    # code, which this status route has no other reason to load.
+    from src.servlets.InputConvertServlet import converter_enabled
+
     return {
         "enabled": bool(AI_INTERPRETATION_ENABLED),
         "configured": bool(provider.get("api_key")),
+        "inputConverter": bool(converter_enabled()),
         "provider": AI_LLM_PROVIDER,
         "host": host,
         "model": provider.get("model", ""),
+        # Asked when the model above is not being served; the answer then
+        # records which one wrote it. Listed so the consent notice can be
+        # honest about what may run.
+        "fallbackModels": model_fallback.fallback_models(provider, AI_LLM_PROVIDER),
         "operator": known.get("operator", host),
         "summary": known.get("summary", host),
         # Whether Chapter V of the GDPR (Arts. 44-49, transfers outside the

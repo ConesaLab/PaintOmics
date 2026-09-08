@@ -8,13 +8,16 @@ into what PaintOmics needs, in your browser, and shows you exactly what it did
 before you accept it.
 
 !!! warning "This feature ships switched off"
-    `AI_INPUT_CONVERTER` defaults to **off**, because the converter spends the
-    same gateway quota as the [pathway
-    interpretation](ai-interpretation.md). The buttons appear regardless: the
-    conversion sheet will open, start its sandbox and profile your file, and
-    only then say *"AI file conversion is not enabled on this server."* If you
-    see that, the server needs the setting turned on — nothing is wrong with
-    your file.
+    `AI_INPUT_CONVERTER` defaults to **off** in the code, because the converter
+    spends the same gateway quota as the [pathway
+    interpretation](ai-interpretation.md). A deployment switches it on with
+    `AI_INPUT_CONVERTER=true` in `deploy/.env` (the Docker stack passes it
+    through; `deploy/smoke-test.sh` reports whether the container sees it).
+    On a server where it is off, the upload strip says so the moment you pick
+    a spreadsheet or press a convert button — *"AI conversion is not enabled
+    on this server."* — with the manual route beside it, and the conversion
+    sheet does not start. Nothing is wrong with your file; the server needs
+    the setting turned on.
 
 ## Before the converter: the format check
 
@@ -187,6 +190,18 @@ on a conversion the server no longer holds.
 | A cooldown quoting the last gateway failure | The gateway failed recently; conversions pause for 90 seconds. |
 | "The AI service did not answer within 150 seconds…" | A single request timed out. Try again. |
 | "The server lost track of this conversion (it may have restarted)." | Start it again. |
+
+The gateway serves several models. The pinned one is asked first; when it is
+not being served (a 5xx, a dead backend, a timeout) the deployment's fallback
+list is tried in order -- by default the gateway's own `default/llm` alias --
+and the model that failed is skipped for five minutes before the pinned one
+is tried first again. The result records which model wrote the script.
+
+When the server refuses a turn or the gateway does not answer, the sheet says
+what stopped it and offers **Try again**; the box at the foot stays open, so an
+instruction can be the retry. The one refusal with no retry is the server that
+has the converter switched off: that card explains, hides the box, and only
+offers Close, because no wording of the request can change it.
 
 ## What it will not do
 

@@ -78,8 +78,20 @@ services:
       AI_CSIC_API_BASE: ${AI_CSIC_API_BASE:-https://llm.iiia.es/v1}
       AI_CSIC_API_KEY: ${AI_CSIC_API_KEY:-}
       AI_CSIC_MODEL: ${AI_CSIC_MODEL:-deepseek-ai/DeepSeek-V4-Flash-0731}
+      # Asked in order when AI_CSIC_MODEL is not being served; see env.example.
+      AI_CSIC_FALLBACK_MODELS: ${AI_CSIC_FALLBACK_MODELS:-default/llm}
       AI_PUBMED_EMAIL: ${AI_PUBMED_EMAIL:-}
       AI_PUBMED_API_KEY: ${AI_PUBMED_API_KEY:-}
+
+      # The AI input converter. The code ships it off (it spends the same
+      # gateway quota as the interpretation), so a deployment switches it on
+      # here. This line is the switch: the block above is an allowlist, and a
+      # key set in deploy/.env but missing from it never reaches the container
+      # -- which is how paintomics.org ran with the converter off after every
+      # rebuild while the operator believed it on (2026-09-08). Users then see
+      # "AI file conversion is not enabled on this server" after the sandbox
+      # has already read their file.
+      AI_INPUT_CONVERTER: ${AI_INPUT_CONVERTER:-false}
     volumes:
       # Single volume for both trees. On the Drago VM the Docker root lives on
       # the 600 GiB Cinder volume mounted at /var/lib/docker, so this is backed

@@ -90,7 +90,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "3.6", "534b5695f730d42028e63e2a8589613444b92f7b8da8a4c40205280ceb6c8201"),
+        "3.7", "10b80dd305fb72695651b841a71ebf6dda28e80c1d365727673930a6790a9ccf"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
@@ -98,7 +98,7 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
         "0.7", "f7046f6383282d5a3e45b96519c9191bb639bd732ffbf225b08b09f5da867d87"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-drawer.js": (
-        "1.6", "9bda68bffafde80c9ef414db497109b09acb81a813d0a67f8128c196a911427f"),
+        "1.7", "34668ccdd3c668c41af10765e518ea0f71b602821e9b0f30d9da70f4c6c3a52e"),
     # v=2.2 makes fitPlotPanel measure the figures it drew instead of the
     # height:100% wrapper it drew them into. The old reading was a function of
     # the panel height it was computing, so the panel could only grow: a

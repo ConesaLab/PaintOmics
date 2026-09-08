@@ -54,6 +54,7 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel, Field
 
+from src.classes.AIInterpret import model_fallback
 from src.conf.serverconf import (
     AI_LLM_PROVIDER,
     AI_PROVIDERS,
@@ -482,12 +483,30 @@ def configure_sdk():
         stream = await orig(*args, **kwargs)
         return await _stream_to_completion(stream)
 
+    # The model ladder (see model_fallback). The SDK passes the model by
+    # keyword on every create, so routing around a model that is not being
+    # served is one kwarg -- and the completion carries the model that
+    # answered, so the report says which one wrote it.
+    api_base = provider["api_base"]
+    ladder = model_fallback.candidates(provider, AI_LLM_PROVIDER)
+
+    def _route(kwargs):
+        """A model in cooldown is replaced before the call goes out."""
+        asked = kwargs.get("model")
+        if asked not in ladder:
+            return kwargs
+        head = model_fallback.ordered(api_base, ladder)[0]
+        return kwargs if head == asked else dict(kwargs, model=head)
+
     async def _paced_create(*args, **kwargs):
         attempt = 0
         while True:
             await pacer.wait()
+            sent = _route(kwargs)
             try:
-                return await _issue(*args, **kwargs)
+                result = await _issue(*args, **sent)
+                model_fallback.mark_up(api_base, sent.get("model"))
+                return result
             except asyncio.CancelledError:
                 # Never retry a cancellation. httpx maps some cancellations
                 # during a stream read onto its own error types, and the
@@ -501,6 +520,20 @@ def configure_sdk():
                 throttled = isinstance(e, _oai.RateLimitError)
                 limit = _RATE_ATTEMPTS if throttled else _ATTEMPTS
                 status = getattr(e, "status_code", None)
+                # A model that is not being served: the next rung, now, with
+                # no wait -- a different model is not a retry of the same one.
+                # Throttling is the key's, not the model's, so 429 stays put.
+                if not throttled and sent.get("model") in ladder and attempt < limit:
+                    model_fallback.mark_down(api_base, sent.get("model"), e)
+                    alternatives = [m for m in ladder
+                                    if not model_fallback.is_down(api_base, m)]
+                    if alternatives:
+                        _count_retry(e)
+                        logger.warning("SDK transport switching model %s -> %s after %s%s",
+                                       sent.get("model"), alternatives[0],
+                                       type(e).__name__, " %s" % status if status else "")
+                        kwargs = dict(kwargs, model=alternatives[0])
+                        continue
                 if attempt >= limit:
                     logger.warning("SDK transport giving up after %d attempts (%s%s)",
                                    attempt, type(e).__name__,
@@ -545,8 +578,8 @@ def configure_sdk():
     _MODEL_OBJ = OpenAIChatCompletionsModel(model=provider["model"],
                                             openai_client=client)
     _sdk_configured = True
-    logger.info("Agents SDK configured: provider=%s model=%s",
-                AI_LLM_PROVIDER, provider["model"])
+    logger.info("Agents SDK configured: provider=%s model=%s fallbacks=%s",
+                AI_LLM_PROVIDER, provider["model"], ladder[1:] or "none")
 
 
 def _model():

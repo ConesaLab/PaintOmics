@@ -205,6 +205,13 @@ AI_PROVIDERS = {
         # asks scientific users to name an explicit model for reproducibility,
         # and an alias can be repointed under a running deployment.
         "model": os.getenv("AI_CSIC_MODEL", "deepseek-ai/DeepSeek-V4-Flash-0731"),
+        # Asked, in order, when the pinned model is not being served (a 5xx,
+        # a dead backend, a timeout -- never a 4xx that every model would
+        # answer alike). "default/llm" is the gateway's own alias, which its
+        # operator keeps pointed at a working model. Comma-separated; empty
+        # switches the fallback off. Every result records the model that
+        # actually answered, so the pin stays honest.
+        "fallback_models": os.getenv("AI_CSIC_FALLBACK_MODELS", "default/llm"),
     },
     "dashscope": {
         "api_base": os.getenv("AI_DASHSCOPE_API_BASE", "https://coding-intl.dashscope.aliyuncs.com/v1"),

@@ -133,6 +133,30 @@ else
     note "(expected on a local test deployment; must not be true on Drago)"
 fi
 
+# Every variable set in deploy/.env must reach the app container. compose.yaml
+# passes the environment through an explicit list, so a key that is in .env but
+# not in that list is silently dropped: the setting looks on, the server runs
+# with the default, and the only symptom is a feature that "was fixed already".
+# That is how paintomics.org shipped with AI_INPUT_CONVERTER off on 2026-09-08.
+envfile="$(dirname "${COMPOSE_FILE}")/.env"
+if [ -f "${envfile}" ]; then
+    container_env=$("${COMPOSE[@]}" exec -T app env 2>/dev/null | tr -d '\r' | cut -d= -f1)
+    dropped=""
+    while IFS= read -r key; do
+        [ -n "${key}" ] || continue
+        printf '%s\n' "${container_env}" | grep -qx "${key}" || dropped="${dropped} ${key}"
+    done <<EOF
+$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "${envfile}" | cut -d= -f1)
+EOF
+    if [ -z "${dropped}" ]; then
+        ok "every variable in deploy/.env reaches the app container"
+    else
+        bad "set in deploy/.env but not passed through compose.yaml, so the app never sees:${dropped}"
+    fi
+else
+    note "no ${envfile}; cannot check that its settings reach the container"
+fi
+
 # uWSGI must run exactly one process; see deploy/README.md.
 workers=$("${COMPOSE[@]}" exec -T app sh -c \
     "grep -E '^processes' /app/uwsgi.ini | tr -d ' ' | cut -d= -f2" 2>/dev/null | tr -d '\r')
@@ -140,6 +164,37 @@ if [ "${workers}" = "1" ]; then
     ok "uWSGI runs a single process (required by the in-process job queue)"
 else
     bad "uWSGI processes = '${workers}', must be 1 or jobs are silently lost"
+fi
+
+# ---------------------------------------------------------------------------
+section "AI"
+# ---------------------------------------------------------------------------
+# One eight-token question to the configured gateway, through the same client
+# every AI feature uses. Until this existed the gateway's only monitor was a
+# user reporting that "the AI does not work". A disabled or keyless deployment
+# is a NOTE: staging runs that way on purpose.
+ai_enabled=$("${COMPOSE[@]}" exec -T app sh -c 'printf %s "${AI_INTERPRETATION_ENABLED:-true}"' 2>/dev/null | tr -d '\r')
+if [ "${ai_enabled}" = "false" ]; then
+    note "AI interpretation is disabled here (AI_INTERPRETATION_ENABLED=false); gateway not asked"
+else
+    gateway=$("${COMPOSE[@]}" exec -T app \
+        python /app/PaintomicsServer/src/AdminTools/check_llm_gateway.py --timeout 60 2>&1 | tr -d '\r' | tail -1)
+    case "${gateway}" in
+        OK*)       ok "LLM gateway answers: ${gateway#OK }" ;;
+        DEGRADED*) note "LLM gateway degraded: ${gateway#DEGRADED }" ;;
+        SKIP*)     note "LLM gateway not asked: ${gateway#SKIP }" ;;
+        *)         bad "LLM gateway: ${gateway:-no output from check_llm_gateway.py}" ;;
+    esac
+fi
+
+# The converter is offered on every upload strip whether or not the server
+# runs it, so a server with it off refuses each attempt at the last step.
+converter=$("${COMPOSE[@]}" exec -T app sh -c 'printf %s "${AI_INPUT_CONVERTER:-false}"' 2>/dev/null | tr -d '\r')
+if [ "${converter}" = "true" ]; then
+    ok "AI input converter is on"
+else
+    note "AI input converter is OFF: spreadsheets and rejected uploads will end in"
+    note "'AI file conversion is not enabled on this server'. Set AI_INPUT_CONVERTER=true in deploy/.env"
 fi
 
 # ---------------------------------------------------------------------------
