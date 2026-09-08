@@ -48,6 +48,7 @@ merged them where one exists.
 - Step 2 was rebuilt as one module system — a databases matrix, a levelled class-activity pair, and compound disambiguation inside the grid (#111, #114) — and Browse now lives inside the file field (#110).
 - Every Step 1 file row now says whether the job requires that file (#108), and the database checkboxes are drawn from what the server has actually installed.
 - Jobs are kept for as long as the interface says they will be, and no longer (#65), and the contact address is now `paintomicsai@gmail.com`.
+- The close, pin and plus controls on dialog and panel headers no longer sit on a permanent grey disc; they are a bare glyph that takes a quiet rounded surface under the cursor, the way every other icon-only control in the interface already behaves, and adjacent tools on the pathway windows no longer merge into one grey blob.
 
 ### Fixed
 

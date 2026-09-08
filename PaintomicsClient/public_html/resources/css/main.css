@@ -2495,36 +2495,50 @@ body > .x-mask {
 	border-radius: var(--pa-radius);
 }
 
-/* Header tools - the close control above all - drawn the way a sheet's close
-   button is drawn on Apple's platforms: a quiet grey disc with a thin dark
-   glyph, not a filled square with a white glyph knocked out of it.
+/* Header tools - the close control above all - drawn the way every other
+   icon-only control in this application is drawn: a bare glyph at rest, and a
+   quiet surface that appears under the cursor. .ai-gdpr-close,
+   .pa-convert-close, .step4HistoryClose and the Step 4 panel closes all work
+   this way already, so a window's close stops being the one control in the
+   app with a filled shape behind it while nobody is touching it.
 
-   Two elements share the work. The disc is the tool wrapper, `.x-tool`: the
-   15px box ExtJS sizes inline (the header's hbox layout reads that size, so it
-   is left alone - growing it would grow every window by the same amount),
-   rounded, filled, and brought to 22px by a 3.5px box-shadow spread in the
-   same colour, which follows the radius and takes no layout space.
+   It used to sit on a permanent grey disc, after Apple's sheet close. Two
+   things were wrong with that here. Alone on a window header the disc was the
+   heaviest mark on the bar, on a title bar that had just been made neutral so
+   that nothing on it would be. And on a window with several tools - the Step
+   4 pathway windows carry pin, plus and close, 6px apart - the 22px discs
+   overlapped into one grey blob with three glyphs spread across it, which
+   read as a mistake rather than a design.
+
+   Two elements share the work. The tool wrapper, `.x-tool`, is the 15px box
+   ExtJS sizes inline (the header's hbox layout reads that size, so it is left
+   alone - growing it would grow every window by the same amount). The hover
+   surface is that box plus a 3.5px box-shadow spread in the same colour: 22px
+   overall, following the box's radius and taking no layout space. A 2.5px
+   radius on the 15px box makes a 6px corner on the 22px surface - the same
+   --pa-radius-sm the other small controls use. Transparent rather than absent
+   at rest, so the surface fades in instead of appearing.
 
    The glyph is the <img> inside it, a transparent 1×1 gif that Neptune paints
    with a PNG sprite. The sprite is a raster - soft on Retina - and a white
-   one, invisible on a light disc, so it is dropped: each glyph is a vector, a
-   16px SVG held in a custom property that the img uses as a *mask* over its
+   one, invisible on a light header, so it is dropped: each glyph is a vector,
+   a 16px SVG held in a custom property that the img uses as a *mask* over its
    own background colour. The drawing carries no colour, so one of each serves
    the light theme, the dark theme and hover alike; those are colour rules, not
    further icons. The img is offset half a pixel so that its 16px box shares a
-   centre with the 15px disc.
+   centre with the 15px wrapper.
 
    A drawing exists for every tool type this client creates: close (every
    window), pin / unpin / plus / minus (the Step 4 pathway windows) and the
    collapse / expand chevrons (the Step 3 network panel; one chevron, rotated).
-   A type without one shows as a plain dot on the disc - add its drawing below
-   rather than let the sprite back in.
+   A type without one shows as a plain square - add its drawing below rather
+   than let the sprite back in.
 
    Neptune ships every tool at 50% opacity (`.x-tool .x-tool-img`), 60% on
-   hover, so the opacity is restored alongside; that was why the old grey
-   square looked lighter than the #8A8B92 it declared. Fills are Apple's
-   system fills - rgba(120,120,128) at 16% resting, 28% on hover, 36% pressed -
-   so the disc takes its tone from whatever header it sits on. Hover and press
+   hover, so the opacity is restored alongside. Inks are the application's
+   own: --pa-ink-label at rest (#52525B, 6.7:1 on the #F6F5F0 header), --pa-ink
+   under the cursor, and the hover surface is the rgba(24,24,27,0.06) wash the
+   other quiet controls use, stepped to 0.10 while pressed. Hover and press
    answer to `.x-tool-over` / `.x-tool-pressed`, the classes ExtJS sets on the
    wrapper, so the visual state and the framework's agree. dark.css restates
    the colours for the dark theme; the drawings are shared.
@@ -2532,32 +2546,31 @@ body > .x-mask {
    One panel opts out. Step 3's MORE network panel (`.more-net-panel`, a
    card on the page rather than a window) draws its own collapse control
    in more-network.css - a Font Awesome chevron on a rounded chip - and a
-   disc under that chip would be two controls in one. The panel selectors
-   here exclude it by name; the window selectors need no exception. */
+   second surface under that chip would be two controls in one. The panel
+   selectors here exclude it by name; the window selectors need no exception. */
 .x-window .x-tool,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool {
-	background-color: rgba(120, 120, 128, 0.16);
-	border-radius: 50%;
-	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.16);
+	background-color: transparent;
+	border-radius: 2.5px;
+	box-shadow: 0 0 0 3.5px transparent;
 	transition: background-color var(--pa-transition), box-shadow var(--pa-transition);
 }
 .x-window .x-tool-over,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over {
-	background-color: rgba(120, 120, 128, 0.28);
-	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.28);
+	background-color: rgba(24, 24, 27, 0.06);
+	box-shadow: 0 0 0 3.5px rgba(24, 24, 27, 0.06);
 }
 .x-window .x-tool-pressed,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed {
-	background-color: rgba(120, 120, 128, 0.36);
-	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.36);
+	background-color: rgba(24, 24, 27, 0.10);
+	box-shadow: 0 0 0 3.5px rgba(24, 24, 27, 0.10);
 }
 .x-window .x-tool .x-tool-img,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool .x-tool-img {
 	opacity: 1;
 	margin: -0.5px 0 0 -0.5px;
-	background-color: #5F5F66;
+	background-color: var(--pa-ink-label, #52525B);
 	background-image: none;
-	border-radius: 50%;
 	-webkit-mask: var(--pa-tool-glyph) center / 16px 16px no-repeat;
 	mask: var(--pa-tool-glyph) center / 16px 16px no-repeat;
 	transition: background-color var(--pa-transition);
@@ -2567,7 +2580,7 @@ body > .x-mask {
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over .x-tool-img,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed .x-tool-img {
 	opacity: 1;
-	background-color: #3F3F46;
+	background-color: var(--pa-ink, #18181B);
 }
 /* The drawings: a 16px box, 1.75px round-capped strokes. They are masks, so
    the `#000` inside each is opacity, not a colour. */
