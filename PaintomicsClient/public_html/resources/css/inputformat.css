@@ -155,39 +155,65 @@
 
    Only problems are tinted. Tinting every valid card green would make an
    ordinary correct form loud and leave nothing for a real fault to say.
+
+   Both tints are read through a token whose FALLBACK is the light literal, so
+   this file still says what light paints and dark.css substitutes the rest.
+   They were plain literals until 2026-09-08, and the dark theme inherited them:
+   a flagged card kept a near-white band while dark.css repainted the omic's
+   name to --pa-ink-title, which put #EDEEF0 on #F7E9ED -- 1.01:1, measured on
+   the rendered card. The name and the delete control simply vanished.
+
+   The lesson is not "add a dark rule". It is that a surface and the ink on it
+   are one decision, and this file owned only half of it: dark.css could see the
+   h4 it was inverting but had no way to know what this file had painted under
+   it. A token is that missing half, and it is the same answer --pa-cell-empty
+   already gives for the inline style PA_Step3Views writes.
    ------------------------------------------------------------------------ */
 .omicbox.pa-state-warn,
 .omicbox.pa-state-err {
-    background-color: #F7E9ED;
+    background-color: var(--pa-state-bad-bg, #F7E9ED);
     border-radius: 6px;
 }
 
 .omicbox.pa-state-ok {
-    background-color: #F4F9F3;
+    background-color: var(--pa-state-ok-bg, #F4F9F3);
     border-radius: 6px;
 }
 
 /* The card's title bar paints its own white and would otherwise sit as a clean
-   white strip on top of a tinted body -- the card would look half-flagged. */
+   white strip on top of a tinted body -- the card would look half-flagged.
+
+   `!important` is what reaches past [data-theme="dark"] .omicboxTitle, which is
+   why this half of the rule was the visible one. It stays; what changes is that
+   the value it forces is now the theme's. */
 .omicbox.pa-state-ok .omicboxTitle {
-    background-color: #F4F9F3 !important;
+    background-color: var(--pa-state-ok-bg, #F4F9F3) !important;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
 }
 
 .omicbox.pa-state-warn .omicboxTitle,
 .omicbox.pa-state-err .omicboxTitle {
-    background-color: #F7E9ED !important;
+    background-color: var(--pa-state-bad-bg, #F7E9ED) !important;
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
 }
 
 /* The field itself, so the eye lands on the right row inside the card. Same
-   treatment the account forms give an invalid input. */
+   treatment the account forms give an invalid input.
+
+   Tokens for the same reason the card's tints take them, and this half had a
+   second problem the card did not: `!important` was not enough. The dark
+   theme's blanket field rule is
+   `[data-theme="dark"] .x-form-field:not(.x-form-checkbox):not(.x-form-radio)`,
+   which is (0,4,0) and also !important, so it beat this (0,2,1) selector
+   outright -- the red border was never painted on a dark page at all, and the
+   14% ring alone is invisible on #23252A. dark.css restates both; see the note
+   there for why it cannot simply exclude flagged fields from the blanket. */
 input[type="text"].pa-field-warn,
 input[type="text"].pa-field-err {
-    border-color: #D22 !important;
-    box-shadow: 0 0 0 3px rgba(221, 34, 34, 0.14);
+    border-color: var(--pa-field-bad-border, #D22) !important;
+    box-shadow: 0 0 0 3px var(--pa-field-bad-ring, rgba(221, 34, 34, 0.14));
 }
 
 /* Only the submit-time banner lives here now; per-file messages sit inside
