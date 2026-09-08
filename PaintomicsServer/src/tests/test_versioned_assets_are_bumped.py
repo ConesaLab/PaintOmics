@@ -223,7 +223,9 @@ PUBLISHED = {
     # 0.5 since #113. index.html has said 0.5 since that merge while this table
     # still said 0.4, so the gate that exists to catch an unbumped marker was
     # itself red on master -- caught by run_all on this branch, fixed here.
-    "app.js": ("0.5", None),
+    # 0.6 -- the three browser-support warnings and the stale-analysis
+    # message named the product "Paintomics"; they now say "PaintOmics AI".
+    "app.js": ("0.6", None),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

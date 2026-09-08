@@ -3256,7 +3256,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					namePrefix: this.namePrefix + '_annotations',
 					itemId: "tertiaryFileSelector",
 					extraButtons: [{
-						text: 'Use a GTF from Paintomics',
+						text: 'Use a GTF from PaintOmics',
 						handler: function() {
 							var me = this;
 							var _callback = function(selectedItem) {
@@ -3268,7 +3268,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							Ext.widget("GTFSelectorDialog").showDialog(_callback);
 						}
 					}],
-					helpTip: "Upload the Annotations file (GTF format), choose it from your data folder or browse the GFT files included in Paintomics."
+					helpTip: "Upload the Annotations file (GTF format), choose it from your data folder or browse the GTF files included in PaintOmics AI."
 				}, {
 					xtype: 'textfield',
 					hidden: true,

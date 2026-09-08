@@ -1,4 +1,4 @@
-# Deploying PaintOmics 4
+# Deploying PaintOmics AI
 
 The stack is three containers: **nginx** (TLS, reverse proxy) → **app**
 (Flask + uWSGI + the in-process job queue) → **mongo** (MongoDB 7, not

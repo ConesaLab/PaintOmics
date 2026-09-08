@@ -42,6 +42,7 @@ from src.classes.Message import Message
 from src.classes.Report import Report
 
 from src.common.Util import sendEmail
+from src.common.EmailTemplates import reportNotificationEmail
 
 from src.conf.serverconf import (
     MONGODB_HOST,
@@ -53,8 +54,6 @@ from src.conf.serverconf import (
     MAX_CLIENT_SPACE,
     MAX_JOB_DAYS,
     MAX_GUEST_DAYS,
-    PAINTOMICS_BASE_URL,
-    PAINTOMICS_LOGO_URL,
     EMAIL_REPORT_RECIPIENTS,
 )
 from src.servlets.DataManagementServlet import dir_total_size
@@ -894,37 +893,24 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
                 return response
 
         subject = "Other request"
-        title = "<h1>Other request</h1>"
-        color = "#333"
+        title = "Other request"
+        color = "#333333"
 
         if request_type == "error":
             subject = "Error notification"
-            title = "<h1>New error notification</h1>"
-            color = "#f95959"
+            title = "New error notification"
+            color = "#C0392B"
         elif request_type == "specie_request":
             subject = "New organism requested"
-            title = "<h1>New organism requested</h1>"
-            color = "#0090ff"
+            title = "New organism requested"
+            color = "#0069C0"
 
-        message = '<html><body>'
-        message +=  "<a href='" + PAINTOMICS_BASE_URL + "/' target='_blank'>"
-        message += "  <img src='" + PAINTOMICS_LOGO_URL + "' border='0' width='auto' height='50' alt='PaintOmics logo'>"
-        message += "</a>"
-        message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += title
-        message += "<p>Thanks for the report, " + userName + "!</p>"
-        message += "<p><b>Username:</b> " + userEmail + "</p></br>"
-        message += "<div style='width:100%; border: 1px solid " + color +"; padding:10px;font-family: monospace;color:"+ color + ";'>" + _message + "</div>"
-        message += "<p>We will contact you as soon as possible.</p>"
-        message += "<p>Best regards,</p>"
-        message += "<p>The Paintomics developers team.</p>"
-        message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        # The contact address follows EMAIL_FROM_ADDRESS rather than being
-        # hardcoded, so changing the project mailbox in config changes it here
-        # too. Pinned to a literal in two places, this footer kept naming a
-        # mailbox the deployment no longer used.
-        message += "<p>Problems? E-mail <a href='mailto:" + smpt_sender + "'>" + smpt_sender + "</a></p>"
-        message += '</body></html>'
+        # The accent colours above were #f95959 and #0090ff, which are 3.0:1 and
+        # 2.8:1 against white -- below the 4.5:1 a body-text colour needs, and
+        # the report body is rendered IN that colour. Darkened to 5.1:1 and
+        # 5.4:1; the hue is unchanged, so the two report kinds still read apart
+        # at a glance.
+        message = reportNotificationEmail(title, userName, userEmail, _message, color)
 
         #****************************************************************
         # Step 2.PERSIST THE REPORT BEFORE ATTEMPTING DELIVERY

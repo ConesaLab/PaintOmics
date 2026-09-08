@@ -1,4 +1,4 @@
-# PaintOmics 4 application image.
+# PaintOmics AI application image.
 #
 # Two things drive the shape of this file:
 #

@@ -119,7 +119,7 @@ function PathwayController() {
 
 			canvas	= SVG(svgElem[0]);
 			canvas.viewbox(0,0, current_width, current_height);
-			canvas.text("Created with PaintOmics 4").size(8).attr({ x: current_width - 100, y: current_height - 15})
+			canvas.text("Created with PaintOmics AI").size(8).attr({ x: current_width - 100, y: current_height - 15})
 			canvas.height(original_height);
 			canvas.width(original_width);
 

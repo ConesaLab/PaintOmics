@@ -183,7 +183,7 @@
 		$rootScope.myAppConfig = myAppConfig;
 
 		$scope.open_services = [
-			{name:"control-panel", title: 'Control panel', description: 'The main Paintomics admin page', icon : 'fa-tachometer'},
+			{name:"control-panel", title: 'Control panel', description: 'The main PaintOmics AI admin page', icon : 'fa-tachometer'},
 			{name:"users-management", title: 'Users', description: 'Manage the users in the applications', icon : 'fa-users'},
 			{name:"databases-management", title: 'Organisms', description: 'Manage the installed organisms', icon : 'fa-database'},
 			{name:"files-management", title: 'Files', description: 'Manage available reference files', icon : 'fa-files-o'},

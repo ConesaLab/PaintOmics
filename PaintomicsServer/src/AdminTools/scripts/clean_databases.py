@@ -8,7 +8,6 @@ from pymongo import MongoClient
 from pymongo.errors import OperationFailure
 from conf.serverconf import (
     MONGODB_HOST,
-    smpt_sender,
     MONGODB_PORT,
     MONGODB_DATABASE,
     CLIENT_TMP_DIR,
@@ -16,10 +15,10 @@ from conf.serverconf import (
     MAX_GUEST_DAYS,
     MAX_JOB_DAYS,
     PAINTOMICS_BASE_URL,
-    PAINTOMICS_LOGO_URL,
 )
 
 from src.common.Util import sendEmail
+from src.common.EmailTemplates import PRODUCT_NAME, jobExpiryEmail
 
 # serverconf.py is per-site and gitignored, so a deploy carries new code to a
 # configuration file that predates it. A hard `from conf.serverconf import
@@ -325,24 +324,11 @@ def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
     try:
         user_data = connection[MONGODB_DATABASE]['userCollection'].find_one({"userID": user_id})
 
-        message = '<html><body>'
-        message += "<a href='" + PAINTOMICS_BASE_URL + "/' target='_blank'>"
-        message += "  <img src='" + PAINTOMICS_LOGO_URL + "' border='0' width='150' height='33' alt='PaintOmics logo'>"
-        message += "</a>"
-        message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += "<h1>Your Paintomics job " + job_id + " will be deleted soon!</h1>"
-        message += "<p>Hello, " + user_data["userName"] + "! Your job with ID " + job_id + " will be deleted in one week.</p>"
-        message += "<p>To avoid it, please visit the following link to update the accession date:</p>"
         reminder_link = PAINTOMICS_BASE_URL + "/?jobID=" + job_id
-        message += "<p><a target='_blank' href='" + reminder_link + "'>" + reminder_link + "</a></p></br>"
-        message += "<div style='width:100%; height:10px; border-top: 1px dotted #333; margin-top:20px; margin-bottom:30px;'></div>"
-        message += "<p>Problems? E-mail <a href='mailto:" + smpt_sender + "'>" + smpt_sender + "</a></p>"
-        message += "<p>Legal notice: you are receiving this e-mail because you accepted Paintomics conditions. Your data will be stored for the"
-        message += "solely purpose of informing you about actions involving your jobs."
-        message += '</body></html>'
+        message = jobExpiryEmail(user_data["userName"], job_id, reminder_link)
 
-        sendEmail(ROOT_DIRECTORY_CORRECTED, user_data["email"], user_data["userName"], "PaintOmics 4: one job is going to expire soon",
-                  message, isHTML=True)
+        sendEmail(ROOT_DIRECTORY_CORRECTED, user_data["email"], user_data["userName"],
+                  PRODUCT_NAME + ": one job is going to expire soon", message, isHTML=True)
     except Exception:
         logging.error("Failed to send the email.")
 

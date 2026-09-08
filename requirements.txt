@@ -1,4 +1,4 @@
-# PaintOmics 4 runtime dependencies.
+# PaintOmics AI runtime dependencies.
 #
 # This is the only pip manifest in the tree, and that is enforced by
 # src/tests/test_dependencies_declared.py.

@@ -369,8 +369,7 @@ full download takes hours and both uWSGI (`harakiri = 300`) and nginx
 (`proxy_read_timeout 300s`) give up after five minutes — so use the command
 line for anything but a small update. And despite the page's own subtitle,
 removal is not implemented: the Uninstall button is commented out of the
-template and the delete route returns failure without calling anything. The
-panel's headings also still read "PaintOmics 3".
+template and the delete route returns failure without calling anything.
 
 ## After the install
 

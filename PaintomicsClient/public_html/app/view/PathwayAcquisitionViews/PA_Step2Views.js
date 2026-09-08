@@ -295,7 +295,7 @@ function PA_Step2JobView() {
 				items: [{
 					html: '<h2 style="width: 100%;">Configure the number of clusters</h2>'
 				}, {
-					html: '<p>In the next step Paintomics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.<br><br></p>'
+					html: '<p>In the next step PaintOmics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.<br><br></p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,
@@ -1765,10 +1765,10 @@ function PA_Step2ReplicateDetectionView() {
 			html:
 				'<div id="repDetection">' +
 				'  <h2>Replicate detection ' +
-				'    <span class="helpTip" title="When your values file contains technical or biological replicates of the same biological sample (e.g., Ctrl_R1, Ctrl_R2), Paintomics can collapse them to one cell per sample in the pathway visualization. Choose how each omic should be handled below."></span>' +
+				'    <span class="helpTip" title="When your values file contains technical or biological replicates of the same biological sample (e.g., Ctrl_R1, Ctrl_R2), PaintOmics AI can collapse them to one cell per sample in the pathway visualization. Choose how each omic should be handled below."></span>' +
 				'  </h2>' +
 				'  <p>The column headers below look like <i>replicates</i> of a smaller set of biological samples. ' +
-				'     Choose how Paintomics should display them in the pathway visualization. ' +
+				'     Choose how PaintOmics AI should display them in the pathway visualization. ' +
 				'     You can change this later from the visualization toolbar.</p>' +
 				   cards +
 				'</div>',

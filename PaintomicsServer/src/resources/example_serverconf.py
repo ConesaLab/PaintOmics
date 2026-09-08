@@ -1,4 +1,4 @@
-"""PaintOmics 4 server configuration template.
+"""PaintOmics AI server configuration template.
 
 Copy to `PaintomicsServer/src/conf/serverconf.py` and edit. That path is
 gitignored: the real config holds credentials and MUST NOT be committed.
@@ -156,10 +156,16 @@ smpt_sender_name = EMAIL_FROM_DISPLAY
 # PAINTOMICS_BASE_URL must be the externally reachable URL; it is embedded in
 # activation links sent by email, so localhost breaks registration in production.
 PAINTOMICS_BASE_URL     = os.getenv("PAINTOMICS_BASE_URL", "http://localhost:8000").rstrip("/")
+# The mark shown in every outgoing email. It has to be a raster: Gmail and
+# every Outlook build refuse an <img> whose source is an SVG, so this cannot
+# point at paintomics-mark.svg even though that is the file the application
+# itself uses. The PNG is rendered from that same vector by
+# public_html/resources/images/build-email-mark.py.
+#
 # The extension is part of the path. Without it the URL 404s and every email
 # renders a broken-image icon where the logo should be; the file on disk is
-# public_html/resources/images/paintomics_white_300x66.png
-PAINTOMICS_LOGO_PATH    = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/paintomics_white_300x66.png")
+# public_html/resources/images/paintomics-mark-email.png
+PAINTOMICS_LOGO_PATH    = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/paintomics-mark-email.png")
 PAINTOMICS_LOGO_URL     = f"{PAINTOMICS_BASE_URL}{PAINTOMICS_LOGO_PATH}"
 PAINTOMICS_LOGIN_URL    = os.getenv("PAINTOMICS_LOGIN_URL", f"{PAINTOMICS_BASE_URL}/")
 PAINTOMICS_DOCS_URL     = os.getenv("PAINTOMICS_DOCS_URL", "https://conesalab.github.io/PaintOmics/")
