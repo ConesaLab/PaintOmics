@@ -340,6 +340,58 @@ class LegacyReportBodyTest(unittest.TestCase):
         self.assertIn("<script>alert(1)</script>", converted)
 
 
+class ReportBodySurvivesTheAdminPanelTest(unittest.TestCase):
+    """A report body is rendered twice, and the second renderer strips tags.
+
+    The mail escapes the body, so anything angle-bracketed shows up fine there.
+    The admin panel does not: report-list-service.js runs the stored message
+    through ``/<[^>]*>/g`` to display it as text, because reports stored before
+    this release are HTML. So a bare ``<ada@example.org>`` in a plain-text body
+    survives the mail and is eaten by the panel.
+    """
+
+    #: What admin/controllers/report-list-service.js does to a stored message.
+    _TAG = re.compile(r"<[^>]*>")
+
+    def _clientSource(self):
+        path = os.path.join(REPO, "PaintomicsClient", "public_html", "app",
+                            "controller", "DataManagementController.js")
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_no_report_dialog_wraps_a_value_in_angle_brackets(self):
+        """Asserts the property, not one spelling of the fix."""
+        source = self._clientSource()
+        for handler in ("requestNewSpecieHandler", "sendReportHandler"):
+            match = re.search(r"this\.%s = function\(\)\{.*?\n\};" % handler,
+                              source, re.S)
+            self.assertIsNotNone(match, "%s is gone" % handler)
+            built = re.search(r'var message\s*=\s*(.*?);', match.group(0), re.S)
+            self.assertIsNotNone(built, "%s builds no message" % handler)
+            body = built.group(1)
+            self.assertNotIn('"<"', body,
+                             "%s wraps a value in angle brackets. The mail escapes "
+                             "it, but the admin panel strips tags out of the stored "
+                             "message and the value disappears there." % handler)
+            self.assertNotIn('" <"', body,
+                             "%s wraps a value in angle brackets; see above." % handler)
+
+    def test_a_contact_body_keeps_its_address_through_the_panel_stripper(self):
+        source = self._clientSource()
+        match = re.search(r"this\.sendReportHandler = function\(\)\{.*?\n\};",
+                          source, re.S)
+        self.assertIsNotNone(match)
+        # The body the handler builds, with the two field reads substituted.
+        built = re.search(r'var message\s*=\s*(.*?);', match.group(0), re.S).group(1)
+        rendered = (built.replace("userName", '"Ada Lovelace"')
+                         .replace("userEmail", '"ada@example.org"'))
+        self.assertIn("ada@example.org", rendered)
+        # Everything the panel would strip, stripped.
+        self.assertIn("ada@example.org", self._TAG.sub(" ", rendered),
+                      "the address does not survive the admin panel's tag "
+                      "stripper, so the report body shows a sender with no address")
+
+
 class EmailTemplateTest(unittest.TestCase):
     """The report email rendered a broken logo and named the wrong mailbox.
 

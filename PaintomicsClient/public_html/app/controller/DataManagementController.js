@@ -462,11 +462,16 @@ this.sendReportHandler = function(){
 					var type = "other";
 					var userName = messageDialog.queryById('nameTextField').getValue();
 					var userEmail = messageDialog.queryById('emailTextField').getValue();
-					/* Plain text, as in requestNewSpecieHandler above. The old
-					   markup wrapped the address in bare angle brackets, so a
-					   client rendering it as HTML read "<ada@example.org>" as an
-					   unknown tag and dropped the address entirely. */
-					var message = "From: " + userName + " <" + userEmail + ">\n\nMessage: " +
+					/* Plain text, as in requestNewSpecieHandler above, and the
+					   address in PARENTHESES rather than the conventional angle
+					   brackets. The old markup wrapped it in bare <>, so anything
+					   rendering the body as HTML read "<ada@example.org>" as an
+					   unknown tag and dropped the address. Escaping in the mail
+					   template fixes that for the e-mail, but the admin panel
+					   still strips tags out of the stored message to display it
+					   (admin/controllers/report-list-service.js), and /<[^>]*>/g
+					   eats the address there too. Parentheses survive both. */
+					var message = "From: " + userName + " (" + userEmail + ")\n\nMessage: " +
 						messageDialog.queryById('commentsTextArea').getValue();
 					messageDialog.close();
 					sendReportMessage(type, message, userEmail, userName);
