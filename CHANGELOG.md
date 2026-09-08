@@ -51,6 +51,7 @@ merged them where one exists.
 
 ### Fixed
 
+- In the dark theme, an omic card flagged by the file check painted a near-white title bar under near-white text, so the omic's name and its delete control were invisible at 1.01:1; the card body meanwhile lost its tint entirely, and the flagged file field lost its red border to the theme's blanket form-field rule. All three now follow the theme.
 - Enrichment counting inflated `totalMatched`, changing which pathways were reported as significant.
 - Step 3's hub scorer used the enrichment denominator instead of its own, and Benjamini-Hochberg is now applied across the whole p-value vector rather than piecewise.
 - Non-finite p-values were carried into the FDR correction and into the combination step, where a single NaN produced a NaN result; they are now dropped first, and the combining statistics were checked against SciPy.

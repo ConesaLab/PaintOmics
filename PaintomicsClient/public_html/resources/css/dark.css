@@ -171,6 +171,30 @@
   --pa-chart-grid: #33353B;
   --pa-chart-axis: #4A4D55;
 
+  /* The omic card's file-check tint (inputformat.css). Light paints #F4F9F3
+     and #F7E9ED, which are washes ON white -- a shade DARKER than the card they
+     flag. The dark answer is the same relationship, not the same numbers: a step
+     LIGHTER than --pa-surface (#1E1F23), carrying the same hue. Both were
+     literals until 2026-09-08 and survived into this theme unchanged, which put
+     a near-white band under a --pa-ink-title omic name at 1.01:1.
+
+     Kept a touch off --pa-invalid-bg, which flags one wrong CELL inside a grid
+     and can afford to be a pure hue shift at the row's own lightness. This
+     tints a whole CARD and has to be legible as a state from across the form,
+     so it takes the lift as well as the hue. --pa-ink-title clears 12:1 on
+     both. */
+  --pa-state-ok-bg: #1F2721;
+  --pa-state-bad-bg: #3A2228;
+
+  /* ...and the flagged FILE FIELD inside that card. The border is
+     --pa-invalid-border, which is what an invalid form control already wears on
+     this theme, so a rejected file reads like a rejected value. The ring is
+     lifted from light's 14% to 30%: 14% red over #23252A is not a halo, it is
+     nothing. 3.15:1 on the field ground, past the 3:1 that a non-text UI
+     boundary needs. */
+  --pa-field-bad-border: #A15C5C;
+  --pa-field-bad-ring: rgba(209, 92, 92, 0.30);
+
   /* Form controls */
   --pa-invalid-bg: #2E1C21;
   --pa-invalid-border: #A15C5C;
@@ -1062,6 +1086,43 @@
 }
 [data-theme="dark"] div.omicboxTitle h4,
 [data-theme="dark"] .omicboxTitle a { color: var(--pa-ink-title); }
+
+/* A card that has failed -- or passed -- its file check is tinted by
+   inputformat.css, which now reads --pa-state-ok-bg / --pa-state-bad-bg. The
+   TITLE BAR needs nothing more: it carries `!important` and so already takes
+   the token's dark value.
+
+   The card BODY does, and this is the half of the bug nobody photographed. The
+   two rules are the same specificity -- `.omicbox.pa-state-ok` is (0,2,0) and so
+   is `[data-theme="dark"] .omicbox` above -- and this file loads last, so the
+   tie went to the plain surface and the tint never reached the body at all. A
+   dark user got the signal on a 44px strip whose text they could not read, and
+   nowhere else. Restating it here at (0,3,0) is what settles the tie; the token
+   alone cannot, because a fallback loses a cascade it never enters. */
+[data-theme="dark"] .omicbox.pa-state-ok {
+	background-color: var(--pa-state-ok-bg);
+}
+[data-theme="dark"] .omicbox.pa-state-warn,
+[data-theme="dark"] .omicbox.pa-state-err {
+	background-color: var(--pa-state-bad-bg);
+}
+
+/* The flagged file field inside that card, which the blanket form-field rule
+   above was painting over: that selector is (0,4,0) and !important, and
+   inputformat.css's `input[type="text"].pa-field-warn` is (0,2,1), so the red
+   border it forces never reached a dark page. Only the 14% ring survived, and
+   14% red on #23252A is invisible -- so the row the message is about carried no
+   mark at all.
+
+   The blanket cannot simply exclude these the way it excludes checkboxes and
+   radios: those have dedicated rules supplying their own ground and ink, and a
+   flagged text field has none. Dropped from the blanket it would fall back to
+   Neptune's light field and turn white. So only the border moves, and the
+   selector carries .x-form-text purely to reach (0,4,1) and outrank it. */
+[data-theme="dark"] input[type="text"].x-form-text.pa-field-warn,
+[data-theme="dark"] input[type="text"].x-form-text.pa-field-err {
+	border-color: var(--pa-field-bad-border) !important;
+}
 
 /* Step 1's help panel and the numbered section labels around it are plain prose
    in a box with no class of their own, so they inherit whatever the page gives

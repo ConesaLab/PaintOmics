@@ -172,6 +172,7 @@ PaintomicsServer/src/tests/test_ai_missing_key_fails_fast.py: unused method 'tes
 PaintomicsServer/src/tests/test_ai_servlet_handlers.py: unused method 'do_POST' (60% confidence)
 PaintomicsServer/src/tests/test_ai_servlet_handlers.py: unused method 'log_message' (60% confidence)
 PaintomicsServer/src/tests/test_citation_marker_normalization.py: unused method '_entry_for' (60% confidence)
+PaintomicsServer/src/tests/test_dark_theme_paints_the_omic_card_state_tints.py: unused class 'DarkThemePaintsTheOmicCardStateTints' (60% confidence)
 PaintomicsServer/src/tests/test_duplicate_user_ids.py: unused attribute 'lastQuery' (60% confidence)
 PaintomicsServer/src/tests/test_duplicate_user_ids.py: unused attribute 'lastQuery' (60% confidence)
 PaintomicsServer/src/tests/test_duplicate_user_ids.py: unused attribute 'lastQuery' (60% confidence)
