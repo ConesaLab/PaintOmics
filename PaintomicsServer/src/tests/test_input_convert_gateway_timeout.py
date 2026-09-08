@@ -57,7 +57,10 @@ from src.classes.InputConvert import agent_turn
 from src.common.PySiQ import Queue, JobStatus
 from src.servlets import InputConvertServlet as servlet
 
-PROVIDER = {"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m"}
+# No ladder: every count below is "attempts per model" for ONE model. The
+# fallback has its own suite (test_model_fallback).
+PROVIDER = {"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+            "fallback_models": ""}
 
 
 # ---------------------------------------------------------------------------

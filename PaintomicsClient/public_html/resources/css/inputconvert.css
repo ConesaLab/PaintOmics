@@ -909,6 +909,10 @@
     gap: 8px;
     align-items: flex-end;
 }
+/* Hidden when the server runs no converter: display:flex above would
+   otherwise beat the attribute, and the box would sit under a card that
+   says there is no agent to tell. */
+.pa-convert-composer[hidden], .pa-convert-composer-hint[hidden] { display: none; }
 /* Two lines tall at rest and growing with what is typed. A one-row box
    clipped its own placeholder mid-sentence. */
 .pa-convert-composer-input {
