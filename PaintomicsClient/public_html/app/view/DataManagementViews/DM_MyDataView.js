@@ -840,6 +840,42 @@ function DM_GTFFileListView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
+	/* Bytes as something a human can read. The MyData grid above prints
+	   Math.round(value / 1024) + "Kb", which suits the files a user uploads and
+	   falls apart on a reference library: the human GRCh38 annotation renders
+	   as "2334265Kb". Inbuilt GTFs run from well under a megabyte (yeast) to
+	   gigabytes (human, mouse), so the unit has to move with the value. */
+	var formatFileSize = function(bytes) {
+		var value = Number(bytes);
+		if (!isFinite(value) || value <= 0) {
+			return "";
+		}
+		var units = ["B", "KB", "MB", "GB", "TB"];
+		var unit = 0;
+		while (value >= 1024 && unit < units.length - 1) {
+			value = value / 1024;
+			unit++;
+		}
+		/* One decimal while the mantissa is small (2.4 GB), none once it is not
+		   (566 MB): past 10 the extra digit is noise in a column that gets
+		   scanned rather than measured. */
+		return (unit > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))) + " " + units[unit];
+	};
+
+	/* Show the whole cell on hover. Every text column here truncates in a
+	   window this narrow -- "Staphylococcus aureus subsp. aureus strain
+	   MRSA252", "GenBank: BX571856.1" -- and a clipped cell with no tooltip is
+	   unreadable with no way to read it. Same mechanism as the MyData grid
+	   above, but html-encoded: a value carrying a double quote would otherwise
+	   close the data-qtip attribute early and spill its tail into the markup. */
+	var renderWithTooltip = function(value, metadata) {
+		var text = (value === null || value === undefined) ? "" : String(value);
+		if (text !== "") {
+			metadata.tdAttr = 'data-qtip="' + Ext.String.htmlEncode(text) + '"';
+		}
+		return text;
+	};
+
 	this.loadData = function(fileList) {
 		this.getComponent().setLoading(true);
 		var grid = this.getComponent().queryById("GTFFilesGrid");
@@ -853,10 +889,67 @@ function DM_GTFFileListView() {
 			dataAux.push((fileList[i]["otherFields"] ? fileList[i]["otherFields"]["version"] : ""));
 			dataAux.push((fileList[i]["otherFields"] ? fileList[i]["otherFields"]["source"] : ""));
 			dataAux.push(fileList[i]["description"]);
+			/* dm_get_gtffiles has always returned the size and this grid has
+			   always dropped it on the floor. It is the one field a user wants
+			   before picking a reference file: these are hundreds of megabytes
+			   each, and the choice is often between two builds of one genome. */
+			dataAux.push(fileList[i]["size"]);
 			data.push(dataAux);
 		}
+		this.totalCount = data.length;
+		this.totalBytes = data.reduce(function(sum, row) {
+			return sum + (Number(row[5]) || 0);
+		}, 0);
 		grid.getStore().loadData(data);
+		/* Reloading keeps whatever the user typed, so re-apply it rather than
+		   showing an unfiltered list under a filled-in filter box. */
+		var filterField = grid.down("#GTFFilesFilter");
+		if (filterField && filterField.getValue()) {
+			this.filterData(filterField.getValue());
+		} else {
+			this.updateSummary();
+		}
 		this.getComponent().setLoading(false);
+	};
+
+	/* Free-text filter across every column. Five rows needed no filter; the
+	   library is one file per supported organism now, and finding "the maize
+	   one" by eye means reading every row. Ext 4.2 semantics: filterBy()
+	   filters from the store's snapshot and so replaces the previous
+	   predicate, and clearFilter() restores it. */
+	this.filterData = function(term) {
+		var store = this.getComponent().queryById("GTFFilesGrid").getStore();
+		var needle = $.trim(term || "").toLowerCase();
+		if (needle === "") {
+			store.clearFilter();
+		} else {
+			store.filterBy(function(record) {
+				return ["fileName", "specie", "version", "source", "description"].some(function(field) {
+					return String(record.get(field) || "").toLowerCase().indexOf(needle) !== -1;
+				});
+			});
+		}
+		this.updateSummary();
+	};
+
+	/* The line under the grid: how many rows are showing out of how many, and
+	   what the library costs on disk. Without it a filtered grid looks exactly
+	   like a server that only has three reference files. */
+	this.updateSummary = function() {
+		var grid = this.getComponent().queryById("GTFFilesGrid");
+		var summary = grid.down("#GTFFilesSummary");
+		if (!summary) {
+			return;
+		}
+		var total = this.totalCount || 0;
+		var shown = grid.getStore().getCount();
+		var text = (shown === total)
+			? total + (total === 1 ? " file" : " files")
+			: shown + " of " + total + " files";
+		if (this.totalBytes) {
+			text += " &middot; " + formatFileSize(this.totalBytes) + " on disk";
+		}
+		summary.setText(text);
 	};
 
 	this.updateContent = function() {
@@ -877,29 +970,77 @@ function DM_GTFFileListView() {
 				itemId: "GTFFilesGrid",
 				columnWidth: 300,
 				store: Ext.create('Ext.data.ArrayStore', {
-					fields: ['fileName', 'specie', 'version', 'source', 'description'],
-					data: []
+					/* size is typed so the column sorts by magnitude. As a
+					   string "9 MB" sorts above "10 GB". */
+					fields: ['fileName', 'specie', 'version', 'source', 'description',
+						{name: 'size', type: 'int'}],
+					data: [],
+					/* Species first: the question a user brings to this window
+					   is "is my organism here", not "what is on disk". */
+					sorters: [{property: 'specie', direction: 'ASC'},
+						{property: 'fileName', direction: 'ASC'}]
 				}),
+				viewConfig: {
+					deferEmptyText: false,
+					emptyText: '<div style="padding: 10px;"><i>No inbuilt GTF files are installed on this server.</i></div>'
+				},
+				tbar: [{
+					xtype: 'textfield',
+					itemId: 'GTFFilesFilter',
+					emptyText: 'Filter by species, file name, assembly or source',
+					flex: 1,
+					listeners: {
+						change: {
+							fn: function(field, value) {
+								me.filterData(value);
+							},
+							/* Buffered: the predicate touches every row of
+							   every column, and this runs per keystroke. */
+							buffer: 200
+						}
+					}
+				}],
+				bbar: [{
+					xtype: 'tbtext',
+					itemId: 'GTFFilesSummary',
+					text: ''
+				}],
 				columns: [{
 					text: 'File Name',
 					dataIndex: 'fileName',
-					flex: 2
+					flex: 2,
+					renderer: renderWithTooltip
 				}, {
-					text: 'Specie',
+					/* "Species" -- the old header read "Specie", which is
+					   money in coin form. */
+					text: 'Species',
 					dataIndex: 'specie',
-					flex: 1
+					flex: 1,
+					renderer: renderWithTooltip
 				}, {
-					text: 'Version',
+					/* The field holds "GRCh38 (Ensembl 116)", not a version
+					   number, and which assembly a GTF is built on is the
+					   thing that has to match the user's coordinates. */
+					text: 'Assembly / release',
 					dataIndex: 'version',
-					flex: 1
+					flex: 1,
+					renderer: renderWithTooltip
 				}, {
 					text: 'Source',
 					dataIndex: 'source',
-					flex: 1
+					flex: 1,
+					renderer: renderWithTooltip
+				}, {
+					text: 'Size',
+					dataIndex: 'size',
+					width: 90,
+					align: 'right',
+					renderer: formatFileSize
 				}, {
 					text: 'Description',
 					dataIndex: 'description',
-					flex: 3
+					flex: 3,
+					renderer: renderWithTooltip
 				}]
 			}],
 			listeners: {
