@@ -26,7 +26,7 @@ $EDITOR deploy/.env               # see "Configuration" below
 # Two host directories are bind-mounted into the stack. Create them yourself:
 # left to Docker they are created owned by root, and the reference GTF library
 # then rejects every admin upload, because the container runs as uid 1001.
-install -d -m 755 -o 1001 -g 1000 deploy/gtf     # reference GTF library
+sudo install -d -m 755 -o 1001 -g 1000 deploy/gtf  # reference GTF library
 install -d -m 755 deploy/certbot-webroot         # http-01 challenge webroot
 
 # Build with the script, not `up --build`. The Dockerfile copies a single

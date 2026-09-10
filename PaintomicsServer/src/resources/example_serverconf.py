@@ -169,9 +169,15 @@ PAINTOMICS_LOGO_PATH    = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/p
 PAINTOMICS_LOGO_URL     = f"{PAINTOMICS_BASE_URL}{PAINTOMICS_LOGO_PATH}"
 PAINTOMICS_LOGIN_URL    = os.getenv("PAINTOMICS_LOGIN_URL", f"{PAINTOMICS_BASE_URL}/")
 PAINTOMICS_DOCS_URL     = os.getenv("PAINTOMICS_DOCS_URL", "https://conesalab.github.io/PaintOmics/")
-PAINTOMICS_EMAIL_DOMAIN = os.getenv(
-    "PAINTOMICS_EMAIL_DOMAIN",
-    urlparse(PAINTOMICS_BASE_URL).netloc or "example.org"
+# `or`, not os.getenv's default, because deploy/compose.yaml passes this as
+# ${PAINTOMICS_EMAIL_DOMAIN:-}: absent from .env, the container still gets the
+# variable SET to "". os.getenv returns that empty string rather than the
+# default, so the fallback below never ran and guest accounts were mailed as
+# "guest1234@" -- a domainless address, with nothing logged either side.
+PAINTOMICS_EMAIL_DOMAIN = (
+    os.getenv("PAINTOMICS_EMAIL_DOMAIN", "").strip()
+    or urlparse(PAINTOMICS_BASE_URL).netloc
+    or "example.org"
 )
 EMAIL_REPORT_RECIPIENTS = [
     email.strip()

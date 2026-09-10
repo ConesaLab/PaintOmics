@@ -43,6 +43,13 @@ services:
       # churn alone was 97.7% of the log bytes, burning the 100 MB budget every
       # ~40 hours at zero traffic and evicting the real startup diagnostics.
       interval: 60s
+      # ...but `interval` is also what Docker probes at DURING start_period, and
+      # app gates on `condition: service_healthy`. At 60s alone the whole stack
+      # would wait a minute before the first probe, and a genuinely dead mongod
+      # would take retries x interval = 5 min to be called unhealthy instead of
+      # 75 s. start_interval keeps startup and failure detection fast while the
+      # steady-state probe stays cheap.
+      start_interval: 5s
       timeout: 10s
       retries: 5
       start_period: 30s
@@ -75,9 +82,12 @@ services:
       # Embedded in activation emails: must be the externally reachable URL.
       PAINTOMICS_BASE_URL: ${PAINTOMICS_BASE_URL:?set PAINTOMICS_BASE_URL in deploy/.env}
       # Guest accounts are stored as "guest<n>@<this>", and the client shows the
-      # user the same address from a hardcoded constant in ServerConfiguration.js.
-      # Left unset it is derived from PAINTOMICS_BASE_URL, so changing the base URL
-      # alone silently splits the stored address from the displayed one.
+      # user the same address from a hardcoded constant in ServerConfiguration.js,
+      # so changing the base URL alone splits the stored address from the
+      # displayed one. Note `:-` yields "" rather than leaving the variable unset,
+      # and os.getenv returns a set-but-empty value as-is -- so example_serverconf
+      # treats blank as absent before falling back to PAINTOMICS_BASE_URL's host.
+      # Without that, an unconfigured deployment mails "guest1234@".
       PAINTOMICS_EMAIL_DOMAIN: ${PAINTOMICS_EMAIL_DOMAIN:-}
 
       # The mark every outgoing email shows, relative to PAINTOMICS_BASE_URL.
@@ -119,9 +129,11 @@ services:
       # "AI file conversion is not enabled on this server" after the sandbox
       # has already read their file.
       AI_INPUT_CONVERTER: ${AI_INPUT_CONVERTER:-false}
-      # Production runs the agent arm (median 450 s) rather than the cluster
-      # baseline (627-813 s). The code defaults all three to "0", so omitting
-      # them here quietly ships the slower, differently-worded interpretation.
+      # The code defaults all three OFF (clusters.py and agent_loop.py read them
+      # as os.getenv(..., "0") == "1"), and paintomics.org turns all three ON in
+      # its .env. This block is an allowlist, so leaving them out does not mean
+      # "use the default" -- it means the operator's own 1s never reach the
+      # container and production silently runs the arm it did not choose.
       AI_CLUSTER_MODE: ${AI_CLUSTER_MODE:-0}
       AI_FULL_AGENT: ${AI_FULL_AGENT:-0}
       AI_AGENT_RESULTS_SECTION: ${AI_AGENT_RESULTS_SECTION:-0}
