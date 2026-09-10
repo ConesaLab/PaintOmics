@@ -1,21 +1,22 @@
 #!/usr/bin/env python
 
 import traceback
-from sys import stderr
+from sys import argv, stderr
 import imp
 
 #**************************************************************************
 #STEP 1. READ CONFIGURATION AND PARSE INPUT FILES
 #
 # DO NOT CHANGE THIS CODE
+#
+# These three used to be hard-coded to /home/tian/... -- paths that exist on
+# paintomics.uv.es and nowhere else -- so on every other host this script
+# died at the first import and zebrafish never received its Ensembl mapping
+# (paintomics.org, 2026-09-10: dre had KEGG tables only).
 #**************************************************************************
-#SPECIE      = argv[1]
-#ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
-#DESTINATION = argv[3].rstrip("/") + "/"
-
-SPECIE = 'dre'
-ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-DESTINATION ='/home/tian/database/KEGG_DATA/current/dre/mapping/'
+SPECIE      = argv[1]
+ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
+DESTINATION = argv[3].rstrip("/") + "/"
 
 
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")

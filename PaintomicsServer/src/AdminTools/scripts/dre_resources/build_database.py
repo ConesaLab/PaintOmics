@@ -1,17 +1,14 @@
 import imp
 import traceback
-from sys import stderr
+from sys import argv, stderr
 from subprocess import CalledProcessError
 
-#SPECIE      = argv[1]
-#ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
-#DATA_DIR    = argv[3].rstrip("/") + "/"
-#LOG_FILE    = argv[4]
-
-SPECIE = "dre"
-ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-DATA_DIR = '/home/tian/database/KEGG_DATA/current/dre/'
-LOG_FILE = "/home/tian/database/KEGG_DATA/current/install.log"
+# Read from the arguments DBManager passes, like every other species. The
+# /home/tian/... constants that stood here exist only on paintomics.uv.es.
+SPECIE      = argv[1]
+ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
+DATA_DIR    = argv[3].rstrip("/") + "/"
+LOG_FILE    = argv[4]
 
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")
 COMMON_BUILD_DB_TOOLS.SPECIE= SPECIE

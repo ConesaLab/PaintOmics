@@ -168,6 +168,20 @@ class RegistryTests(unittest.TestCase):
 
 class BuildOrderTests(unittest.TestCase):
 
+    def test_species_scripts_take_their_paths_from_the_arguments(self):
+        """dre's scripts hard-coded /home/tian/... (paintomics.uv.es only): dead on every other host."""
+        hardcoded = re.compile(r"""^\s*(SPECIE|ROOT_DIR|DATA_DIR|DESTINATION|LOG_FILE)\s*=\s*['"]""", re.M)
+        broken = []
+        for resourceDir in resourceDirs():
+            for name in ("download_others.py", "build_database.py"):
+                path = os.path.join(resourceDir, name)
+                if not os.path.isfile(path):
+                    continue
+                with open(path, encoding="utf-8") as handle:
+                    for match in hardcoded.finditer(handle.read()):
+                        broken.append("%s/%s assigns %s a literal" % (speciesOf(resourceDir), name, match.group(1)))
+        self.assertEqual([], broken, "\n  ".join([""] + broken))
+
     def test_ensembl_dumps_are_fetched_through_the_shared_helper(self):
         """One loop in common_build_database; a private copy in a species script drifts (dre's did)."""
         broken = []
