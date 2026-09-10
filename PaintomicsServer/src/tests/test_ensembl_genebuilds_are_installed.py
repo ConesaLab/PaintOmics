@@ -231,6 +231,32 @@ class BuildOrderTests(unittest.TestCase):
         self.assertEqual([], broken, "\n  ".join([""] + broken))
 
 
+class CensusToolTests(unittest.TestCase):
+    """The registry builder must not mistake a failed listing for an empty one."""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("ensembl_census_under_test",
+                                                      os.path.join(SCRIPTS, "ensembl_census.py"))
+        self.census = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.census)
+
+    def test_a_failed_listing_is_unknown_not_empty(self):
+        def failing(url, tries=3):
+            raise Exception("connection reset")
+        self.census.fetch = failing
+        self.assertIsNone(self.census.dumpsPublished("fungi", "fungi_x_collection/some_species", "release-116"))
+
+    def test_a_listing_reports_exactly_the_dumps_it_carries(self):
+        def listing(url, tries=3):
+            return ('<a href="Some_species.ASM1.63.ena.tsv.gz">x</a>'
+                    '<a href="Some_species.ASM1.63.uniprot.tsv.gz">x</a>'
+                    '<a href="Some_species.ASM1.63.karyotype.tsv.gz">x</a>')
+        self.census.fetch = listing
+        self.assertEqual(["uniprot"], self.census.dumpsPublished("plants", "some_species", "release-116"))
+        self.census.fetch = lambda url, tries=3: "<a href=\"README\">x</a>"
+        self.assertEqual([], self.census.dumpsPublished("plants", "some_species", "release-116"))
+
+
 class ParserTests(unittest.TestCase):
     """Drive the real processors on tiny mapping files in a temporary DATA_DIR."""
 

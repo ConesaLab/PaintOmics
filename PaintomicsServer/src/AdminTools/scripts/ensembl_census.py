@@ -185,12 +185,20 @@ def keggTaxid(tNumber):
 
 
 def dumpsPublished(division, path, release):
+    """The dumps a genebuild's tsv/ directory lists, or None when the listing cannot be fetched.
+
+    None and [] are different answers: [] means Ensembl publishes neither dump
+    and the species cannot be linked; None means we do not know today, and the
+    registry keeps whatever it already says rather than dropping the species
+    on a transient failure (fetch() has already retried three times).
+    """
     base = ("https://ftp.ensembl.org/pub/%s/tsv/" % release if division == "vertebrates"
             else "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/%s/tsv/" % division)
     try:
         listing = fetch(base + path + "/")
-    except Exception:
-        return []
+    except Exception as exc:
+        sys.stderr.write("%s: cannot list %s (%s)\n" % (path, base + path + "/", exc))
+        return None
     kinds = {name.rsplit(".", 3)[-3] for name in re.findall(r'href="([^"]*\.tsv\.gz)"', listing)}
     return [kind for kind in ("entrez", "uniprot") if kind in kinds]
 
@@ -234,6 +242,10 @@ def registry(args):
         division, species, _, _, assembly, collection = sorted(hits, key=lambda row: (len(row[1]), row[1]))[0]
         path = (collection + "/" if collection else "") + species
         dumps = dumpsPublished(division, path, release)
+        if dumps is None:
+            sys.stderr.write("%s: listing failed; %s\n"
+                             % (code, "keeping the previous entry" if code in genebuilds else "not registered"))
+            continue
         if not dumps:
             sys.stderr.write("%s: %s publishes neither an entrez nor a uniprot dump\n" % (code, path))
             genebuilds.pop(code, None)
