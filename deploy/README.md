@@ -109,6 +109,31 @@ Rough sizes: shared common data ~1.4 GB, Reactome shared ~856 MB, and roughly
 about 20 other species. Installing one it does not cover fails with a clear
 message naming the species; use `--reactome=0` for those.
 
+**Ensembl identifiers come with the mapping data.** `download --mapping=1` fetches,
+for every organism Ensembl or Ensembl Genomes annotates, its EntrezGene and UniProt
+cross-reference dumps, and the build files them as `ensembl_gene`,
+`ensembl_transcript`, `ensembl_peptide` and `entrezgene` tables linked to the KEGG
+identifiers. Species with their own `AdminTools/scripts/<code>_resources/` declare the
+dumps in `download_conf.py`; every other species is looked up in
+`AdminTools/scripts/common_resources/ensembl_genebuilds.json`. A species missing from
+both gets KEGG's conversion lists only. To see what is installed, and whether it works:
+
+```bash
+# one line per species: rows per identifier table, and whether the Ensembl tables exist
+docker compose -f deploy/compose.yaml exec -T -w /app/PaintomicsServer app \
+  sh -c 'PYTHONPATH=. python src/AdminTools/scripts/ensembl_census.py census'
+# sample 100 Ensembl gene ids per species and translate them through the real mapper
+docker compose -f deploy/compose.yaml exec -T -w /app/PaintomicsServer app \
+  sh -c 'PYTHONPATH=. python src/AdminTools/scripts/ensembl_census.py verify --sample 100'
+```
+
+`census` exits 1 while a species with a registered genebuild lacks its Ensembl
+tables; refresh it with `download --specie=<code> --kegg=0 --mapping=1` followed by
+`install --specie=<code> --common=0` (the KEGG data is copied from the installed
+tree, only the mapping is fetched again). Run installs one at a time: they rewrite
+`species.json` and share `/tmp/xref.tmp`. When KEGG adds an organism, register its
+genebuild with `ensembl_census.py registry --species=<code> --merge`.
+
 ## Reference GTF for the Regions2Genes example
 
 `Supporting tools -> From Regions to Genes -> Load example` reads
