@@ -26,10 +26,15 @@ SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverco
 # STEP 2. DOWNLOAD FILES
 #**************************************************************************
 try:
-    #STEP 2.3 GET UNIPROT TRANSCRIPTS, PEPTIDES -> ENTREZ GENES
-    stderr.write( "STEP3 DOWNLOAD UNIPROT" + "\n")
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("uniprot")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    #**************************************************************************
+    # Ensembl cross-reference dumps (see download_conf.py). The EntrezGene dump
+    # feeds processEnsemblData, the UniProt dump feeds processEnsemblUniProtData.
+    #**************************************************************************
+    for key in ("ensembl", "ensembl_uniprot"):
+        for resource in COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get(key, []):
+            stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
+            COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"),
+                                                         SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
     #*************************************************************************
 

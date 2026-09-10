@@ -5,16 +5,18 @@ EXTERNAL_RESOURCES = {
                     "species-dir"   :   "oryza_sativa",
                     "division"      :   "plants",
                     "output"        :   "ensembl_mapping.list",
-                    "description"   :   "Source: Ensembl cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
-                    },
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (IRGSP-1.0), EntrezGene rows. Release and filename are resolved at run time."
+                    }
+                ],
+                "ensembl_uniprot"   :   [
                     {
                     "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
                     "species-dir"   :   "oryza_sativa",
                     "division"      :   "plants",
                     "xref-type"     :   "uniprot",
                     "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL"],
-                    "output"        :   "uniprot_mapping.list",
-                    "description"   :   "Source: Ensembl UniProt cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
+                    "output"        :   "ensembl_uniprot.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (IRGSP-1.0), UniProt rows. Links the Ensembl identifiers to KEGG through the accessions KEGG maps itself (processEnsemblUniProtData)."
                     }
                 ]
         }

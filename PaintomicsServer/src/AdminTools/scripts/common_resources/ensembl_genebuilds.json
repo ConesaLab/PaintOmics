@@ -1,0 +1,756 @@
+{
+ "_comment": [
+  "Species codes (KEGG) whose organism has an Ensembl / Ensembl Genomes genebuild, and where its",
+  "cross-reference TSV dumps live. Consulted by scripts/default/{download_others,build_database}.py for",
+  "every species that has no <code>_resources/ directory of its own, and checked by",
+  "src/tests/test_ensembl_genebuilds_are_installed.py. Regenerate with scripts/ensembl_census.py --write-registry.",
+  "species-path is relative to <division>/tsv/ (Ensembl Genomes files many fungi under *_collection/).",
+  "xrefs lists which of the entrez and uniprot dumps the genebuild publishes; a species with only a uniprot",
+  "dump is linked to KEGG through the UniProt accessions KEGG itself maps (processEnsemblUniProtData)."
+ ],
+ "vertebrates-base": "https://ftp.ensembl.org/pub/",
+ "genomes-base": "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+ "genebuilds": {
+  "afm": {
+   "name": "Aspergillus fumigatus",
+   "taxid": 330879,
+   "division": "fungi",
+   "species-path": "aspergillus_fumigatus",
+   "assembly": "GCA000002655v1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "afv": {
+   "name": "Aspergillus flavus",
+   "taxid": 332952,
+   "division": "fungi",
+   "species-path": "aspergillus_flavus",
+   "assembly": "GCA000006275v3",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "aga": {
+   "name": "Anopheles gambiae (malaria mosquito)",
+   "taxid": 7165,
+   "division": "metazoa",
+   "species-path": "anopheles_gambiae",
+   "assembly": "AgamP4",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ahf": {
+   "name": "Arachis hypogaea (peanut)",
+   "taxid": 3818,
+   "division": "plants",
+   "species-path": "arachis_hypogaea",
+   "assembly": "arahy.Tifrunner.gnm2.J5K5",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ame": {
+   "name": "Apis mellifera (honey bee)",
+   "taxid": 7460,
+   "division": "metazoa",
+   "species-path": "apis_mellifera",
+   "assembly": "Amel_HAv3.1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ang": {
+   "name": "Aspergillus niger (black aspergilli)",
+   "taxid": 425011,
+   "division": "fungi",
+   "species-path": "aspergillus_niger",
+   "assembly": "ASM285v2",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "aor": {
+   "name": "Aspergillus oryzae",
+   "taxid": 510516,
+   "division": "fungi",
+   "species-path": "aspergillus_oryzae",
+   "assembly": "ASM18445v3",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "aqu": {
+   "name": "Amphimedon queenslandica (sponge)",
+   "taxid": 400682,
+   "division": "metazoa",
+   "species-path": "amphimedon_queenslandica_gca000090795v2rs",
+   "assembly": "v1.1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "bmor": {
+   "name": "Bombyx mori (domestic silkworm)",
+   "taxid": 7091,
+   "division": "metazoa",
+   "species-path": "bombyx_mori_gca030269925v1rs",
+   "assembly": "ASM3026992v2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "boe": {
+   "name": "Brassica oleracea (wild cabbage)",
+   "taxid": 109376,
+   "division": "plants",
+   "species-path": "brassica_oleracea",
+   "assembly": "BOL",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cal": {
+   "name": "Candida albicans",
+   "taxid": 237561,
+   "division": "fungi",
+   "species-path": "candida_albicans",
+   "assembly": "GCA000182965v3",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cci": {
+   "name": "Coprinopsis cinerea (gray shag)",
+   "taxid": 240176,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/coprinopsis_cinerea_okayama7_130_gca_000182895",
+   "assembly": "CC3",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "cge": {
+   "name": "Cricetulus griseus (Chinese hamster)",
+   "taxid": 10029,
+   "division": "vertebrates",
+   "species-path": "cricetulus_griseus_picr",
+   "assembly": "CriGri-PICRH-1.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cgi": {
+   "name": "Cryptococcus gattii",
+   "taxid": 367775,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/cryptococcus_gattii_wm276_gca_000185945",
+   "assembly": "ASM18594v1",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "chx": {
+   "name": "Capra hircus (goat)",
+   "taxid": 9925,
+   "division": "vertebrates",
+   "species-path": "capra_hircus",
+   "assembly": "ARS1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cic": {
+   "name": "Citrus x clementina (clementine)",
+   "taxid": 85681,
+   "division": "plants",
+   "species-path": "citrus_clementina",
+   "assembly": "Citrus_clementina_v1.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "clum": {
+   "name": "Cyclopterus lumpus (lumpfish)",
+   "taxid": 8103,
+   "division": "vertebrates",
+   "species-path": "cyclopterus_lumpus",
+   "assembly": "fCycLum1.pri",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cnb": {
+   "name": "Cryptococcus deneoformans B-3501A",
+   "taxid": 283643,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/cryptococcus_neoformans_var_neoformans_b_3501a_gca_000149385",
+   "assembly": "ASM14938v1",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "cne": {
+   "name": "Cryptococcus deneoformans JEC21",
+   "taxid": 214684,
+   "division": "fungi",
+   "species-path": "cryptococcus_neoformans",
+   "assembly": "ASM9104v1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cpoo": {
+   "name": "Crocodylus porosus (Australian saltwater crocodile)",
+   "taxid": 8502,
+   "division": "vertebrates",
+   "species-path": "crocodylus_porosus",
+   "assembly": "CroPor_comp1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "cre": {
+   "name": "Chlamydomonas reinhardtii",
+   "taxid": 3055,
+   "division": "plants",
+   "species-path": "chlamydomonas_reinhardtii",
+   "assembly": "Chlamydomonas_reinhardtii_v5.5",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "crg": {
+   "name": "Magallana gigas (Pacific oyster)",
+   "taxid": 29159,
+   "division": "metazoa",
+   "species-path": "magallana_gigas_gca963853765v1rs",
+   "assembly": "xbMagGiga1.1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ctp": {
+   "name": "Candida tropicalis",
+   "taxid": 294747,
+   "division": "fungi",
+   "species-path": "candida_tropicalis",
+   "assembly": "GCA000006335v3",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ddi": {
+   "name": "Dictyostelium discoideum (cellular slime mold)",
+   "taxid": 352472,
+   "division": "protists",
+   "species-path": "dictyostelium_discoideum",
+   "assembly": "dicty_2.7",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "dosa": {
+   "name": "Oryza sativa japonica (Japanese rice) (RAPDB)",
+   "taxid": 39947,
+   "division": "plants",
+   "species-path": "oryza_sativa",
+   "assembly": "IRGSP-1.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "dre": {
+   "name": "Danio rerio (zebrafish)",
+   "taxid": 7955,
+   "division": "vertebrates",
+   "species-path": "danio_rerio",
+   "assembly": "GRCz11",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "dsq": {
+   "name": "Dichomitus squalens",
+   "taxid": 732165,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/dichomitus_squalens_lyad_421_ss1_gca_000275845",
+   "assembly": "Dichomitus squalens v1.0",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "ecb": {
+   "name": "Equus caballus (horse)",
+   "taxid": 9796,
+   "division": "vertebrates",
+   "species-path": "equus_caballus",
+   "assembly": "EquCab3.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "fgr": {
+   "name": "Fusarium graminearum",
+   "taxid": 229533,
+   "division": "fungi",
+   "species-path": "fusarium_graminearum",
+   "assembly": "GCA900044135v1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "fme": {
+   "name": "Fomitiporia mediterranea",
+   "taxid": 694068,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/fomitiporia_mediterranea_mf3_22_gca_000271605",
+   "assembly": "Fomme1",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "fox": {
+   "name": "Fusarium oxysporum",
+   "taxid": 426428,
+   "division": "fungi",
+   "species-path": "fusarium_oxysporum",
+   "assembly": "FO2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "gmx": {
+   "name": "Glycine max (soybean)",
+   "taxid": 3847,
+   "division": "plants",
+   "species-path": "glycine_max",
+   "assembly": "Glycine_max_v2.1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "gtr": {
+   "name": "Gloeophyllum trabeum",
+   "taxid": 670483,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/gloeophyllum_trabeum_atcc_11539_gca_000344685",
+   "assembly": "Glotr1_1",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "hir": {
+   "name": "Heterobasidion irregulare",
+   "taxid": 747525,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/heterobasidion_irregulare_tc_32_1_gca_000320585",
+   "assembly": "Heterobasidion irregulare v2.0",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "hmg": {
+   "name": "Hydra vulgaris (swiftwater hydra)",
+   "taxid": 6087,
+   "division": "metazoa",
+   "species-path": "hydra_vulgaris_gca038396675v1rs",
+   "assembly": "HydraT2T_AEP",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "iti": {
+   "name": "Ictidomys tridecemlineatus (thirteen-lined ground squirrel)",
+   "taxid": 43179,
+   "division": "vertebrates",
+   "species-path": "ictidomys_tridecemlineatus",
+   "assembly": "SpeTri2.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "lbc": {
+   "name": "Laccaria bicolor",
+   "taxid": 486041,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/laccaria_bicolor_s238n_h82_gca_000143565",
+   "assembly": "V1.0",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "lma": {
+   "name": "Leishmania major",
+   "taxid": 347515,
+   "division": "protists",
+   "species-path": "leishmania_major",
+   "assembly": "ASM272v2",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "lsv": {
+   "name": "Lactuca sativa (garden lettuce)",
+   "taxid": 4236,
+   "division": "plants",
+   "species-path": "lactuca_sativa_gca002870075v4gb",
+   "assembly": "Lsat_Salinas_v11",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "mesc": {
+   "name": "Manihot esculenta (cassava)",
+   "taxid": 3983,
+   "division": "plants",
+   "species-path": "manihot_esculenta",
+   "assembly": "M.esculenta_v8",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ncr": {
+   "name": "Neurospora crassa",
+   "taxid": 367110,
+   "division": "fungi",
+   "species-path": "neurospora_crassa",
+   "assembly": "NC12",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "oas": {
+   "name": "Ovis aries (sheep)",
+   "taxid": 9940,
+   "division": "vertebrates",
+   "species-path": "ovis_aries",
+   "assembly": "ARS-UI_Ramb_v3.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ocu": {
+   "name": "Oryctolagus cuniculus (rabbit)",
+   "taxid": 9986,
+   "division": "vertebrates",
+   "species-path": "oryctolagus_cuniculus",
+   "assembly": "OryCun2.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ogl": {
+   "name": "Oryza glaberrima (African rice)",
+   "taxid": 4538,
+   "division": "plants",
+   "species-path": "oryza_glaberrima",
+   "assembly": "Oryza_glaberrima_V1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "osa": {
+   "name": "Oryza sativa japonica (Japanese rice)",
+   "taxid": 39947,
+   "division": "plants",
+   "species-path": "oryza_sativa",
+   "assembly": "IRGSP-1.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "pco": {
+   "name": "Phanerochaete carnosa",
+   "taxid": 650164,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/phanerochaete_carnosa_hhb_10118_sp_gca_000300595",
+   "assembly": "Phanerochaete carnosa HHB-10118-Sp v1.0",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "pdul": {
+   "name": "Prunus dulcis (almond)",
+   "taxid": 3755,
+   "division": "plants",
+   "species-path": "prunus_dulcis",
+   "assembly": "ALMONDv2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "pfa": {
+   "name": "Plasmodium falciparum 3D7",
+   "taxid": 36329,
+   "division": "protists",
+   "species-path": "plasmodium_falciparum",
+   "assembly": "GCA000002765v3",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "pop": {
+   "name": "Populus trichocarpa (black cottonwood)",
+   "taxid": 3694,
+   "division": "plants",
+   "species-path": "populus_trichocarpa",
+   "assembly": "Pop_tri_v4",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "pper": {
+   "name": "Prunus persica (peach)",
+   "taxid": 3760,
+   "division": "plants",
+   "species-path": "prunus_persica",
+   "assembly": "Prunus_persica_NCBIv2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ppp": {
+   "name": "Physcomitrium patens (spreading earthmoss)",
+   "taxid": 3218,
+   "division": "plants",
+   "species-path": "physcomitrium_patens",
+   "assembly": "Phypa V3",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "psq": {
+   "name": "Punctularia strigosozonata",
+   "taxid": 741275,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/punctularia_strigosozonata_hhb_11173_ss5_gca_000264995",
+   "assembly": "Punctularia strigosozonata v1.0",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "ptep": {
+   "name": "Parasteatoda tepidariorum (common house spider)",
+   "taxid": 114398,
+   "division": "metazoa",
+   "species-path": "parasteatoda_tepidariorum_gca043381705v1rs",
+   "assembly": "CAS_Ptep_4.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "sbi": {
+   "name": "Sorghum bicolor (sorghum)",
+   "taxid": 4558,
+   "division": "plants",
+   "species-path": "sorghum_bicolor",
+   "assembly": "Sorghum_bicolor_NCBIv3",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "scm": {
+   "name": "Schizophyllum commune",
+   "taxid": 578458,
+   "division": "fungi",
+   "species-path": "schizophyllum_commune",
+   "assembly": "GCA000143185v2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "shs": {
+   "name": "Stereum hirsutum",
+   "taxid": 721885,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/stereum_hirsutum_fp_91666_ss1_gca_000264905",
+   "assembly": "Stehi1",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "sot": {
+   "name": "Solanum tuberosum (potato)",
+   "taxid": 4113,
+   "division": "plants",
+   "species-path": "solanum_tuberosum",
+   "assembly": "SolTub_3.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "spo": {
+   "name": "Schizosaccharomyces pombe (fission yeast)",
+   "taxid": 284812,
+   "division": "fungi",
+   "species-path": "schizosaccharomyces_pombe",
+   "assembly": "ASM294v2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "ssl": {
+   "name": "Sclerotinia sclerotiorum",
+   "taxid": 665079,
+   "division": "fungi",
+   "species-path": "sclerotinia_sclerotiorum",
+   "assembly": "ASM14694v1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "taes": {
+   "name": "Triticum aestivum (bread wheat)",
+   "taxid": 4565,
+   "division": "plants",
+   "species-path": "triticum_aestivum",
+   "assembly": "IWGSC",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "tgu": {
+   "name": "Taeniopygia guttata (zebra finch)",
+   "taxid": 59729,
+   "division": "vertebrates",
+   "species-path": "taeniopygia_guttata",
+   "assembly": "bTaeGut1_v1.p",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "tms": {
+   "name": "Tremella mesenterica",
+   "taxid": 578456,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/tremella_mesenterica_dsm_1558_gca_000271645",
+   "assembly": "Treme1",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "tre": {
+   "name": "Trichoderma reesei QM6a",
+   "taxid": 431241,
+   "division": "fungi",
+   "species-path": "trichoderma_reesei",
+   "assembly": "GCA000167675v2",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "tvs": {
+   "name": "Trametes versicolor",
+   "taxid": 717944,
+   "division": "fungi",
+   "species-path": "fungi_basidiomycota1_collection/trametes_versicolor_fp_101664_ss1_gca_000271585",
+   "assembly": "Trametes versicolor v1.0",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "vde": {
+   "name": "Varroa destructor (honeybee mite)",
+   "taxid": 109461,
+   "division": "metazoa",
+   "species-path": "varroa_destructor_gca002443255",
+   "assembly": "Vdes_3.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "vra": {
+   "name": "Vigna radiata (mung bean)",
+   "taxid": 3916,
+   "division": "plants",
+   "species-path": "vigna_radiata",
+   "assembly": "Vradiata_ver6",
+   "xrefs": [
+    "uniprot"
+   ]
+  },
+  "vvi": {
+   "name": "Vitis vinifera (wine grape)",
+   "taxid": 29760,
+   "division": "plants",
+   "species-path": "vitis_vinifera",
+   "assembly": "ASM3070453v1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "yli": {
+   "name": "Yarrowia lipolytica",
+   "taxid": 284591,
+   "division": "fungi",
+   "species-path": "yarrowia_lipolytica",
+   "assembly": "ASM252v1",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  },
+  "zma": {
+   "name": "Zea mays (maize)",
+   "taxid": 4577,
+   "division": "plants",
+   "species-path": "zea_mays",
+   "assembly": "Zm-B73-REFERENCE-NAM-5.0",
+   "xrefs": [
+    "entrez",
+    "uniprot"
+   ]
+  }
+ }
+}

@@ -25,6 +25,11 @@ COMMON_BUILD_DB_TOOLS.DATA_DIR= DATA_DIR
 
 COMMON_BUILD_DB_TOOLS.COMMON_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/common_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverconf.py")
+# The Ensembl dumps default/download_others.py fetched for this species, if
+# its organism has a registered genebuild (scripts/common_resources/
+# ensembl_genebuilds.json). {} for every other species, and every processor
+# below that reads them is a no-op on {}.
+COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES = COMMON_BUILD_DB_TOOLS.ensemblResourcesFor(SPECIE)
 
 #**************************************************************************
 # CHANGE THE CODE FROM HERE
@@ -34,8 +39,15 @@ COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_D
 try:
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
+    #
+    # Ensembl first: it creates the transcript groups. KEGG next: it creates
+    # kegg_id and the uniprot_acc rows. The Ensembl-UniProt pass last: it can
+    # only join groups that already exist.
     #**************************************************************************
+    if COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl"):
+        COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblUniProtData()
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************

@@ -1369,14 +1369,23 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
 
     downloadLogFile = open(downloadLog, 'a')
     try:
-        if os.path.isfile(scriptsDir + specie + "_resources/download_others.py"):
+        # A species without its own resources directory used to get no external
+        # mapping data at all -- only the KEGG conversion lists below -- so its
+        # Ensembl identifiers were never installed even when Ensembl publishes
+        # them. scripts/default/download_others.py consults the genebuild
+        # registry and fetches the dumps for a registered species; for any
+        # other it does nothing, which keeps the old behaviour exactly.
+        downloadOthers = scriptsDir + specie + "_resources/download_others.py"
+        if not os.path.isfile(downloadOthers):
+            downloadOthers = scriptsDir + "default/download_others.py"
+        if os.path.isfile(downloadOthers):
             log("     * RETRIEVING EXTERNAL MAPPING DATA")
             try:
-                check_call([sys.executable, scriptsDir + specie + "_resources/download_others.py", specie,
+                check_call([sys.executable, downloadOthers, specie,
                             ROOT_DIRECTORY + "AdminTools/", dirName], stdout=downloadLogFile, stderr=downloadLogFile)
             except CalledProcessError as exc:
                 raise Exception(
-                    "Error while calling " + scriptsDir + specie + "_resources/download_others.py" + ": Exit status " + str(
+                    "Error while calling " + downloadOthers + ": Exit status " + str(
                         exc.returncode) + ". Output is available at " + downloadLog)
 
         # we tolerate that some of the files fail on download

@@ -25,16 +25,15 @@ SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverco
 # STEP 2. DOWNLOAD FILES
 #**************************************************************************
 try:
-
     #**************************************************************************
-    #STEP 2.1 GET RAPDB GENE ID -> MSU GENE ID -> RAPDB TRANSCRIPT ID
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl")[0]
-    COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-
+    # Ensembl cross-reference dumps (see download_conf.py). The EntrezGene dump
+    # feeds processEnsemblData, the UniProt dump feeds processEnsemblUniProtData.
     #**************************************************************************
-    #STEP 2.2 SWISSPROT ACC -> TREMBL ACC -> RAPDB TRANSCRIPT ID
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl")[1]
-    COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    for key in ("ensembl", "ensembl_uniprot"):
+        for resource in COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get(key, []):
+            stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
+            COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"),
+                                                         SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 except Exception as ex:
     stderr.write("FAILED WHILE DOWNLOADING DATA " + str(ex))

@@ -32,6 +32,26 @@ GOMAPMAN_PAINTOMICS = "https://gomapman.nib.si/api/GetFile/protein_2018-05-25%7C
 GOMAPMAN_METABOLITE = "https://gomapman.nib.si/api/GetFile/metabolite_2018-02-06%7Cmapman%7C"
 
 EXTERNAL_RESOURCES = {
+                "ensembl"   :   [
+                    {
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "oryza_sativa",
+                    "division"      :   "plants",
+                    "output"        :   "ensembl_mapping.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (IRGSP-1.0), EntrezGene rows. Release and filename are resolved at run time."
+                    }
+                ],
+                "ensembl_uniprot"   :   [
+                    {
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "oryza_sativa",
+                    "division"      :   "plants",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL"],
+                    "output"        :   "ensembl_uniprot.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (IRGSP-1.0), UniProt rows. Links the Ensembl identifiers to KEGG through the accessions KEGG maps itself (processEnsemblUniProtData)."
+                    }
+                ],
                 "mapman_kegg"   :   [
                     {
                     # Path is relative to ROOT_DIR (src/AdminTools/), the same

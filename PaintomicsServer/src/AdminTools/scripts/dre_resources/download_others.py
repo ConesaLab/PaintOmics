@@ -33,8 +33,9 @@ try:
     stderr.write( "STEP1 DOWNLOAD ENSEMBL" + "\n")
     #**************************************************************************
     #STEP 2.1 GET ENSEMBL GENE ID -> TRANSCRIPT ID -> PEPTIDE ID -> ENTREZ ID
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl")[0]
-    COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    for resource in (COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl") +
+                     COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl_uniprot", [])):
+        COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
     print("success")
     #**************************************************************************
     #STEP 2.2 GET REFSEQ TRANSCRIPTS, PEPTIDES -> ENTREZ GENES and REFSEQ GENE ID -> GENE SYMBOL

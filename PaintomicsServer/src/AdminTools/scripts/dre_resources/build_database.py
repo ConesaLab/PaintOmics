@@ -42,6 +42,7 @@ try:
     # mapping files ARE present, and this call turns them into kegg_id /
     # ncbi_geneid / uniprot_acc / kegg_gene_symbol.
     COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblUniProtData()
 
 
     #**************************************************************************

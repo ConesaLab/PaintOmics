@@ -51,8 +51,10 @@ try:
     #**************************************************************************
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #**************************************************************************
+    COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processMapManMappingData()
     COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblUniProtData()
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************
