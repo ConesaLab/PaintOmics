@@ -138,8 +138,15 @@ ENSEMBL_GENEBUILDS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__
 #: The two identifier spaces one Ensembl dump can be asked for, and the
 #: db_name values that carry them. UniProt is split across reviewed and
 #: unreviewed entries, and both are real accessions KEGG maps to genes.
-ENSEMBL_XREF_DBS = {"entrez": "EntrezGene",
-                    "uniprot": ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL"]}
+#: Genebuilds filed under an Ensembl Genomes collection label every UniProt
+#: row `UniProtKB_all` and nothing else (coprinopsis_cinerea: 13,384 rows,
+#: all that label; measured 2026-09-11 when cci and cgi refused the dump), so
+#: that label is accepted too. The other genebuilds carry it alongside the
+#: split labels for the same accessions, which insertXREF de-duplicates.
+#: `Uniprot_gn_trans_name` and `Uniprot/Varsplic` stay out: their xref is a
+#: transcript name or an isoform, not an accession.
+ENSEMBL_UNIPROT_DBS = ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"]
+ENSEMBL_XREF_DBS = {"entrez": "EntrezGene", "uniprot": ENSEMBL_UNIPROT_DBS}
 
 
 def loadEnsemblGenebuilds(path=ENSEMBL_GENEBUILDS_FILE):
@@ -3924,6 +3931,35 @@ def resolveEnsemblTsvUrl(resource, delay, maxTries):
     return directoryUrl + sorted(candidates)[0]
 
 
+def translateEnsemblDump(source, target, wantedDbs):
+    """Rewrite an Ensembl TSV dump into the 4-column mapping the parsers read.
+
+    `source` yields the dump's lines (gene, transcript, protein, xref, db_name,
+    ...); `target` receives gene, xref, protein, transcript per kept row. A row is
+    kept when its db_name is one of `wantedDbs` and it names a transcript, since
+    the parsers key every identifier off the transcript. "-" means absent and is
+    written as "". Returns (rows written, rows skipped for their db_name).
+    """
+    written = 0
+    skippedDb = 0
+    for lineNumber, line in enumerate(source):
+        fields = line.rstrip("\n").split("\t")
+        if lineNumber == 0 and fields[0] == "gene_stable_id":
+            continue  # header
+        if len(fields) < 5:
+            continue
+        gene, transcript, protein, xref, dbName = fields[0], fields[1], fields[2], fields[3], fields[4]
+        if dbName not in wantedDbs:
+            skippedDb += 1
+            continue
+        if not transcript or transcript == "-":
+            continue
+        blank = lambda value: "" if value == "-" else value
+        target.write("\t".join([blank(gene), blank(xref), blank(protein), transcript]) + "\n")
+        written += 1
+    return written, skippedDb
+
+
 def downloadEnsemblMapping(resource, outputName, delay, maxTries):
     """Fetch Ensembl cross-references and write them in the 4-column shape the build expects.
 
@@ -3958,25 +3994,9 @@ def downloadEnsemblMapping(resource, outputName, delay, maxTries):
         wantedDb = resource.get("xref-db", "EntrezGene")
         wantedDbs = {wantedDb} if isinstance(wantedDb, str) else set(wantedDb)
 
-        written = 0
-        skippedDb = 0
         with gzip.open(tmpGz, "rt", encoding="utf-8", errors="replace") as source, \
              open(tmpOut, "w", encoding="utf-8") as target:
-            for lineNumber, line in enumerate(source):
-                fields = line.rstrip("\n").split("\t")
-                if lineNumber == 0 and fields[0] == "gene_stable_id":
-                    continue  # header
-                if len(fields) < 5:
-                    continue
-                gene, transcript, protein, xref, dbName = fields[0], fields[1], fields[2], fields[3], fields[4]
-                if dbName not in wantedDbs:
-                    skippedDb += 1
-                    continue
-                if not transcript or transcript == "-":
-                    continue  # the parser keys everything off the transcript
-                blank = lambda value: "" if value == "-" else value
-                target.write("\t".join([blank(gene), blank(xref), blank(protein), transcript]) + "\n")
-                written += 1
+            written, skippedDb = translateEnsemblDump(source, target, wantedDbs)
 
         if written == 0:
             raise Exception("Ensembl TSV " + url + " yielded no usable rows for db_name in " +

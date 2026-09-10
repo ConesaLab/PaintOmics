@@ -281,6 +281,28 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(0, self.builder.processEnsemblUniProtData())
         self.assertNotIn("ensembl_gene", self.builder.ALL_DBS)
 
+    def test_dump_translation_keeps_every_uniprot_label_and_drops_the_rest(self):
+        """Collection genebuilds label UniProt rows UniProtKB_all only; cci and cgi
+        were refused as 'no usable rows' until that label was accepted."""
+        import io
+        dump = io.StringIO("\n".join([
+            "gene_stable_id\ttranscript_stable_id\tprotein_stable_id\txref\tdb_name\tinfo_type",
+            "CC1G_00001\tCC1G_00001T0\tCC1G_00001P0\tA8N0A1\tUniProtKB_all\tDEPENDENT",
+            "SPAC212.11\tSPAC212.11.1\tSPAC212.11.1:pep\tP0CT33\tUniprot/SWISSPROT\tSEQUENCE_MATCH",
+            "SPAC212.11\tSPAC212.11.1\tSPAC212.11.1:pep\tP0CT33\tUniProtKB_all\tDEPENDENT",
+            "GLYMA_01G000100\tKRH00001\t-\tGLYMA_01G000100-T1\tUniprot_gn_trans_name\tDEPENDENT",
+            "SPAC1.01\t-\t-\tQ00000\tUniprot/SPTREMBL\tDEPENDENT",
+        ]) + "\n")
+        out = io.StringIO()
+        written, skipped = self.builder.translateEnsemblDump(dump, out, set(self.builder.ENSEMBL_UNIPROT_DBS))
+        rows = [line.split("\t") for line in out.getvalue().splitlines()]
+        self.assertEqual(3, written, rows)
+        self.assertEqual(1, skipped, "the transcript-name row must be skipped for its label")
+        self.assertEqual(["CC1G_00001", "A8N0A1", "CC1G_00001P0", "CC1G_00001T0"], rows[0])
+        self.assertEqual(2, sum(1 for row in rows if row[1] == "P0CT33"),
+                         "the same accession under two labels is written twice and de-duplicated at insert")
+        self.assertNotIn("Q00000", out.getvalue(), "a row without a transcript has nothing to key on")
+
     def test_registry_resources_have_the_shape_the_downloader_reads(self):
         resources = self.builder.ensemblResourcesFor("gmx")
         self.assertIn("ensembl", resources)
