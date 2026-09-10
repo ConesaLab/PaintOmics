@@ -2502,8 +2502,31 @@ body > .x-mask {
    Two elements share the work. The disc is the tool wrapper, `.x-tool`: the
    15px box ExtJS sizes inline (the header's hbox layout reads that size, so it
    is left alone - growing it would grow every window by the same amount),
-   rounded, filled, and brought to 22px by a 3.5px box-shadow spread in the
-   same colour, which follows the radius and takes no layout space.
+   rounded and filled.
+
+   It is drawn WITHIN that 15px box. It used to be brought to 22px by a 3.5px
+   box-shadow spread in the same colour, on the reasoning that a spread follows
+   the radius and takes no layout space. It takes no layout space, but it does
+   need room to paint, and it has none: ExtJS puts the tool inside
+   `.x-header-body` > `.x-box-inner`, both `overflow: hidden` and 17px tall.
+   A 15px tool in a 17px box has 1px of slack, and it sits flush with the right
+   edge, so of the 3.5px the disc needed it lost 2.5px top, 2.5px bottom and
+   the whole 3.5px right. What shipped was not a disc: it was a circle sliced
+   flat on three sides -- a half-moon behind the cross, at every window's close
+   control. Measured in Chrome on paintomics.org, 2026-09-11.
+
+   Lifting the clip is not the fix. Those two elements are what keeps a long
+   window title from spilling out of its header: with `overflow: visible` the
+   title's own box still runs 250px past the header edge (measured on the same
+   page), it is just no longer hidden. So the surface has to fit the box it is
+   given, which means the disc is 15px and there is no spread.
+
+   That leaves it smaller than the 22px `.toolbarOption` discs on the Step 4
+   lateral panels, which are a real 22px element and clip against nothing. The
+   two no longer match in size. Reconciling them means either growing the
+   header row to fit a 22px tool -- which grows every window header -- or
+   taking the panel controls down to 15px; both are design decisions rather
+   than bug fixes, and neither belongs in the same change as this.
 
    The glyph is the <img> inside it, a transparent 1×1 gif that Neptune paints
    with a PNG sprite. The sprite is a raster - soft on Retina - and a white
@@ -2538,18 +2561,15 @@ body > .x-mask {
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool {
 	background-color: rgba(120, 120, 128, 0.16);
 	border-radius: 50%;
-	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.16);
-	transition: background-color var(--pa-transition), box-shadow var(--pa-transition);
+	transition: background-color var(--pa-transition);
 }
 .x-window .x-tool-over,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over {
 	background-color: rgba(120, 120, 128, 0.28);
-	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.28);
 }
 .x-window .x-tool-pressed,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed {
 	background-color: rgba(120, 120, 128, 0.36);
-	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.36);
 }
 .x-window .x-tool .x-tool-img,
 .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool .x-tool-img {
