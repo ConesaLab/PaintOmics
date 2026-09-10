@@ -20,3 +20,4 @@ bridgeName  # test _FakeDB parameter: fixtures construct variants by name
 return_document  # test fake of pymongo find_one_and_update: real API argument
 silent  # test fake servlet-helper parameter: matches the production signature it stands in for
 fileObj  # test fake parameter: matches the production signature it stands in for
+LOG_FILE  # every scripts/*/build_database.py: argv[4] is the install log DBManager hands to each species build; the assignment documents that positional contract. It counted as "used" only through a debug print in dosa's old custom parser, removed 2026-09-11
