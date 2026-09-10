@@ -75,21 +75,17 @@ def speciesOf(resourceDir):
     return os.path.basename(resourceDir)[:-len("_resources")]
 
 
-def declaredKeys(resourceDir):
-    """Top-level keys of the directory's EXTERNAL_RESOURCES, read as text."""
-    confPath = os.path.join(resourceDir, "download_conf.py")
-    if not os.path.isfile(confPath):
-        return set()
-    with open(confPath, encoding="utf-8") as handle:
-        return set(re.findall(r'^\s*"([a-z_]+)"\s*:\s*\[', handle.read(), re.M))
-
-
 def loadBuilder():
     """A fresh common_build_database module: it keeps its tables in module globals."""
     spec = importlib.util.spec_from_file_location("common_build_database_under_test", COMMON_BUILDER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def declaredKeys(resourceDir):
+    """Top-level keys of the directory's EXTERNAL_RESOURCES, by the builder's own reader."""
+    return loadBuilder().declaredResourceKeys(os.path.join(resourceDir, "download_conf.py"))
 
 
 class RegistryTests(unittest.TestCase):
@@ -316,6 +312,23 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(2, sum(1 for row in rows if row[1] == "P0CT33"),
                          "the same accession under two labels is written twice and de-duplicated at insert")
         self.assertNotIn("Q00000", out.getvalue(), "a row without a transcript has nothing to key on")
+
+    def test_a_dump_that_cannot_be_fetched_is_reported_not_raised(self):
+        """One moved collection or a network blip must not fail the whole species."""
+        calls = []
+
+        def fetch(resource, outputName, delay, maxTries):
+            calls.append(resource["output"])
+            if resource["output"] == "ensembl_uniprot.list":
+                raise Exception("No *.uniprot.tsv.gz found in https://example.invalid/")
+
+        self.builder.downloadEnsemblMapping = fetch
+        resources = self.builder.ensemblResourcesFor("gmx")
+        fetched, failed = self.builder.downloadEnsemblResources(resources, self.dataDir + "/mapping/", 0, 1)
+        self.assertEqual(["ensembl_mapping.list", "ensembl_uniprot.list"], calls, "both dumps must be attempted")
+        self.assertEqual(1, fetched)
+        self.assertEqual(["ensembl_uniprot.list"], [name for name, _ in failed])
+        self.assertIn("uniprot.tsv.gz", failed[0][1])
 
     def test_registry_resources_have_the_shape_the_downloader_reads(self):
         resources = self.builder.ensemblResourcesFor("gmx")

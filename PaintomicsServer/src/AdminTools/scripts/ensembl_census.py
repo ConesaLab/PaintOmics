@@ -32,6 +32,7 @@ import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)                     # common_build_database
 SRC = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, SRC)                      # conf.serverconf, common.*
 sys.path.insert(0, os.path.dirname(SRC))     # src.common.* (the tests' spelling)
@@ -62,11 +63,8 @@ def loadRegistry():
 
 
 def ownDirectoryDeclares(code):
-    conf = os.path.join(HERE, code + "_resources", "download_conf.py")
-    if not os.path.isfile(conf):
-        return set()
-    with open(conf, encoding="utf-8") as handle:
-        return set(re.findall(r'^\s*"([a-z_]+)"\s*:\s*\[', handle.read(), re.M))
+    from common_build_database import declaredResourceKeys
+    return declaredResourceKeys(os.path.join(HERE, code + "_resources", "download_conf.py"))
 
 
 def hasGenebuild(code, registry):
@@ -220,7 +218,11 @@ def registry(args):
         byTaxid.setdefault(row[2], []).append(row)
     with open(REGISTRY, encoding="utf-8") as handle:
         document = json.load(handle)
-    genebuilds = document["genebuilds"] if args.merge else {}
+    # Merge by default: `registry --species gmx` re-resolves one entry and must
+    # leave the other 68 alone, since the builder treats this file as the sole
+    # source of truth and an emptied registry silently reverts every other
+    # species to a KEGG-only install. --replace is the deliberate wipe.
+    genebuilds = {} if args.replace else dict(document["genebuilds"])
     for code, (tNumber, name) in sorted(lineage.items()):
         taxid = keggTaxid(tNumber)
         time.sleep(0.35)
@@ -256,7 +258,8 @@ def main(argv=None):
     parser.add_argument("--min-fraction", type=float, default=0.8, help="verify: fail below this")
     parser.add_argument("--species", default=None, help="registry: comma-separated codes to (re)resolve")
     parser.add_argument("--installed", action="store_true", help="registry: only species installed in MongoDB")
-    parser.add_argument("--merge", action="store_true", help="registry: keep entries not visited")
+    parser.add_argument("--replace", action="store_true",
+                        help="registry: drop every entry this run does not visit (default keeps them)")
     args = parser.parse_args(argv)
     return {"census": census, "verify": verify, "registry": registry}[args.command](args)
 

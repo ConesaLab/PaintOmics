@@ -149,6 +149,23 @@ ENSEMBL_UNIPROT_DBS = ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"]
 ENSEMBL_XREF_DBS = {"entrez": "EntrezGene", "uniprot": ENSEMBL_UNIPROT_DBS}
 
 
+#: Top-level keys of a download_conf.py, read as text: `"ensembl"   :   [`.
+_RESOURCE_KEY = re.compile(r'^\s*"([a-z_]+)"\s*:\s*\[', re.M)
+
+
+def declaredResourceKeys(confPath):
+    """The EXTERNAL_RESOURCES keys a species' download_conf.py declares, or an empty set.
+
+    Read as text rather than imported: the census tool and the tests ask this of
+    every species directory, and importing 20-odd config modules for it is
+    neither needed nor safe (some carry module-level downloads).
+    """
+    if not os.path.isfile(confPath):
+        return set()
+    with open(confPath, "r", encoding="utf-8") as handle:
+        return set(_RESOURCE_KEY.findall(handle.read()))
+
+
 def loadEnsemblGenebuilds(path=ENSEMBL_GENEBUILDS_FILE):
     """The registry document: bases plus a `genebuilds` map keyed by species code."""
     with open(path, "r", encoding="utf-8") as handle:
@@ -4019,15 +4036,30 @@ def downloadEnsemblResources(resources, destination, delay, maxTries):
     "ensembl_uniprot" the UniProt dump (read by processEnsemblUniProtData); a
     species declares one, both or neither. One loop for every download_others.py
     -- the registry-driven default and the hand-written species directories
-    alike -- so the two cannot drift. Returns the number of dumps fetched.
+    alike -- so the two cannot drift.
+
+    A dump that cannot be fetched -- Ensembl moved a collection, a transient
+    network failure -- is reported and skipped rather than raised: the build
+    already degrades to KEGG-only when the file is absent (haveInputFile), the
+    KEGG conversion lists downloaded right after this are tolerant in the same
+    way, and `ensembl_census.py census` exits 1 for as long as the species lacks
+    its tables, so nothing is lost silently. Returns (fetched, failed) where
+    `failed` lists (output name, reason).
     """
     fetched = 0
+    failed = []
     for key in ("ensembl", "ensembl_uniprot"):
         for resource in (resources or {}).get(key, []):
             stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
-            downloadEnsemblMapping(resource, destination + resource.get("output"), delay, maxTries)
-            fetched += 1
-    return fetched
+            try:
+                downloadEnsemblMapping(resource, destination + resource.get("output"), delay, maxTries)
+                fetched += 1
+            except Exception as exc:
+                failed.append((resource.get("output"), str(exc)))
+                stderr.write("WARNING [ENSEMBL] could not fetch " + str(resource.get("output")) + ": " +
+                             str(exc).strip() + "\n         -> the species installs without it; "
+                             "ensembl_census.py census will flag it until the download succeeds\n")
+    return fetched, failed
 
 
 def downloadMapManResource(resource, outputName, delay, maxTries, checkIfExists=False):

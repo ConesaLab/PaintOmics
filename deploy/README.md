@@ -132,7 +132,7 @@ tables; refresh it with `download --specie=<code> --kegg=0 --mapping=1` followed
 `install --specie=<code> --common=0` (the KEGG data is copied from the installed
 tree, only the mapping is fetched again). Run installs one at a time: they rewrite
 `species.json` and share `/tmp/xref.tmp`. When KEGG adds an organism, register its
-genebuild with `ensembl_census.py registry --species=<code> --merge`.
+genebuild with `ensembl_census.py registry --species=<code>` (other entries are kept; `--replace` drops the unvisited ones).
 
 ## Reference GTF for the Regions2Genes example
 
