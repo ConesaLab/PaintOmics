@@ -23,8 +23,11 @@
 # Usage:
 #   deploy/fetch-example-gtf.sh [container-name]
 #
-# Re-run this after any image rebuild: examplefiles/ is baked into the image
-# (only /data is a volume), so a rebuilt image loses the GTF again.
+# Since 2026-09-10 examplefiles/GTF is a bind mount (deploy/gtf on the host), so
+# this no longer has to be re-run after an image rebuild -- the docker cp below
+# lands on the host directory and persists. Registering the file in MongoDB is a
+# separate step; see "The reference GTF library survives rebuilds" in
+# deploy/README.md. The example itself reads the path directly and needs no row.
 
 set -euo pipefail
 

@@ -23,7 +23,20 @@ $EDITOR deploy/.env               # see "Configuration" below
 
 ./deploy/make-cert.sh <your-hostname-or-ip>
 
-docker compose -f deploy/compose.yaml up -d --build
+# Two host directories are bind-mounted into the stack. Create them yourself:
+# left to Docker they are created owned by root, and the reference GTF library
+# then rejects every admin upload, because the container runs as uid 1001.
+sudo install -d -m 755 -o 1001 -g 1000 deploy/gtf  # reference GTF library
+install -d -m 755 deploy/certbot-webroot         # http-01 challenge webroot
+
+# Build with the script, not `up --build`. The Dockerfile copies a single
+# deploy/app.tar, which build-image.sh packs from the working tree -- it is
+# gitignored, so a fresh clone has no app.tar and `--build` fails on that COPY.
+# The script also refuses to ship an image it cannot start. See the comments in
+# it for the two failure modes that earned those checks.
+./deploy/build-image.sh
+
+docker compose -f deploy/compose.yaml up -d
 ```
 
 The first build takes 15–30 minutes; most of it is R packages.
@@ -124,10 +137,42 @@ It downloads Ensembl GRCm38 (mm10 — the assembly the example BED was called
 against), trims it to the feature types RGMatch reads, and installs it. Takes a
 few minutes and lands ~566 MB.
 
-**Re-run this after every image rebuild.** `examplefiles/` is baked into the
-image rather than mounted from the `paintomics-data` volume, so a rebuilt image
-loses the GTF. The script is idempotent: it exits immediately if the file is
-already in place.
+The script is idempotent: it exits immediately if the file is already in place.
+
+### The reference GTF library survives rebuilds (since 2026-09-10)
+
+`examplefiles/GTF/` is now a bind mount (`deploy/gtf` on the host), so nothing
+here is lost on an image rebuild and `fetch-example-gtf.sh` no longer has to be
+re-run after one. Before this it was on the image's writable layer: a rebuild
+dropped every file in it while the `fileCollection` rows advertising them
+survived in MongoDB, which is how paintomics.org came to list five reference
+files that were not on disk at all (four dead bacterial FASTAs, since removed,
+plus the mouse GRCm39 GTF, since restored and md5-verified).
+
+Because the picker lists from MongoDB and never from the directory
+(`dataManagementGetMyFiles` calls `FileDAO().findAll({"userID": "-1"})` and
+touches the disk only for a size total), a file needs BOTH halves: the bytes in
+`deploy/gtf/` and a row. Add one the way the admin endpoint does, via
+`registerFile`, which stats the file itself and is idempotent:
+
+```bash
+sudo install -o 1001 -g 1000 -m 644 my.gtf deploy/gtf/     # container is uid 1001
+docker compose -f deploy/compose.yaml exec -T app python3 - <<'PY'
+import os, sys; sys.path.insert(0, "/app/PaintomicsServer/src")
+os.chdir("/app/PaintomicsServer/src")
+from servlets.DataManagementServlet import registerFile
+GTF = "/app/PaintomicsServer/src/examplefiles/GTF"
+registerFile("-1", "my.gtf", {"dataType": "Reference file", "omicType": "GTF",
+                              "specie": "...", "version": "...", "source": "...",
+                              "description": "..."}, GTF)
+PY
+```
+
+Currently hosted: human GRCh38 (Ensembl 116), mouse GRCm39 (Ensembl 113, full
+untrimmed) and GRCm38/mm10 (`sorted_mmu.gtf`, which also backs the example),
+Arabidopsis TAIR10 and tomato SL4.0 (both Ensembl Plants 63) -- 4.2 GB in all.
+Use Ensembl rather than GENCODE so chromosome names stay bare (`1`, `X`, `MT`)
+and match both `sorted_mmu.gtf` and the BED files users upload.
 
 ## Everyday operations
 
