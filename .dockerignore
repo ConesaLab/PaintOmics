@@ -15,3 +15,10 @@ PaintomicsServer/src/conf/serverconf.py
 **/*.pyc
 .DS_Store
 *.log
+
+# The reference GTF library. It is bind-mounted into the container at run time
+# (see the ./gtf mount in deploy/compose.yaml), so it must never enter the
+# image -- and, more urgently, never enter the build context: at 6.6 GB it took
+# the context from ~800 MB to 7.4 GB, and every build after that produced an
+# image whose rootfs was missing /bin/sh while still reporting success.
+deploy/gtf/

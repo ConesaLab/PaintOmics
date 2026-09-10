@@ -23,9 +23,26 @@ services:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
     command: ["--bind_ip_all", "--wiredTigerCacheSizeGB", "4"]
+    # MongoDB's own startup check asks for at least 64000 open files; Docker
+    # hands a container 1024. That is survivable with a handful of databases
+    # and fatal with a full pathway install: PaintOmics keeps one database per
+    # species, so a 133-species server holds well over a thousand WiredTiger
+    # file handles at once. On the first full restore mongod hit EMFILE
+    # (WiredTiger "error 24") midway through, failed the fassert at
+    # wiredtiger_util.cpp:741 and aborted with signal 6, leaving 65 species
+    # short of their `versions` collection. The restart policy then brought it
+    # back cleanly, so `docker inspect` reported ExitCode=0 and nothing looked
+    # wrong from the outside.
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 15s
+      # 60s, not 15s: each probe is a fresh mongosh connection, and at 15s that
+      # churn alone was 97.7% of the log bytes, burning the 100 MB budget every
+      # ~40 hours at zero traffic and evicting the real startup diagnostics.
+      interval: 60s
       timeout: 10s
       retries: 5
       start_period: 30s
@@ -57,6 +74,11 @@ services:
 
       # Embedded in activation emails: must be the externally reachable URL.
       PAINTOMICS_BASE_URL: ${PAINTOMICS_BASE_URL:?set PAINTOMICS_BASE_URL in deploy/.env}
+      # Guest accounts are stored as "guest<n>@<this>", and the client shows the
+      # user the same address from a hardcoded constant in ServerConfiguration.js.
+      # Left unset it is derived from PAINTOMICS_BASE_URL, so changing the base URL
+      # alone silently splits the stored address from the displayed one.
+      PAINTOMICS_EMAIL_DOMAIN: ${PAINTOMICS_EMAIL_DOMAIN:-}
 
       # The mark every outgoing email shows, relative to PAINTOMICS_BASE_URL.
       # serverconf.py has read this from the environment for a while, but the
@@ -72,6 +94,11 @@ services:
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-apikey}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # Where admin error reports and organism requests go. Setting this in
+      # .env alone does nothing -- this environment block is an explicit
+      # allowlist, so an unlisted key is silently dropped and the only symptom
+      # is mail that never arrives.
+      EMAIL_REPORT_RECIPIENTS: ${EMAIL_REPORT_RECIPIENTS:-}
 
       AI_INTERPRETATION_ENABLED: ${AI_INTERPRETATION_ENABLED:-true}
       AI_LLM_PROVIDER: ${AI_LLM_PROVIDER:-csic}
@@ -92,11 +119,37 @@ services:
       # "AI file conversion is not enabled on this server" after the sandbox
       # has already read their file.
       AI_INPUT_CONVERTER: ${AI_INPUT_CONVERTER:-false}
+      # Production runs the agent arm (median 450 s) rather than the cluster
+      # baseline (627-813 s). The code defaults all three to "0", so omitting
+      # them here quietly ships the slower, differently-worded interpretation.
+      AI_CLUSTER_MODE: ${AI_CLUSTER_MODE:-0}
+      AI_FULL_AGENT: ${AI_FULL_AGENT:-0}
+      AI_AGENT_RESULTS_SECTION: ${AI_AGENT_RESULTS_SECTION:-0}
     volumes:
       # Single volume for both trees. On the Drago VM the Docker root lives on
-      # the 600 GiB Cinder volume mounted at /var/lib/docker, so this is backed
+      # the 1 TiB Cinder volume mounted at /var/lib/docker, so this is backed
       # by that disk rather than the 80 GB instance root.
       - paintomics-data:/data
+      # Without this the rotated application.log.1..16 -- about a fortnight of
+      # diagnostics -- sits in the writable layer and dies on every recreate.
+      - paintomics-logs:/app/PaintomicsServer/src/log
+      # Reference GTFs for the admin-hosted file picker (dm_get_gtffiles).
+      # These MUST NOT live in the image: examplefiles/ is on the writable
+      # layer, so a rebuild silently drops every file here while the
+      # fileCollection rows that advertise them survive in MongoDB. That is
+      # exactly how the migrated .org registry ended up listing five reference
+      # files that were not on disk. DataManagementServlet appends "GTF/" for
+      # every isReference upload/list/delete, so this directory is also where
+      # new admin uploads land -- hence a bind mount rather than a named
+      # volume, so they are visible and rsync-able from the host.
+      - ./gtf:/app/PaintomicsServer/src/examplefiles/GTF
+    # Same reasoning as mongo above: the app opens KGML and Reactome graph
+    # files per species, and 1024 is the container default, not a considered
+    # limit.
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     logging: *default-logging
 
   nginx:
@@ -112,6 +165,9 @@ services:
     volumes:
       - ./nginx/paintomics.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      # Webroot for certbot http-01. certbot runs on the host and writes here;
+      # nginx serves it from the :80 block before the redirect to https.
+      - ./certbot-webroot:/var/www/certbot:ro
       - nginx-cache:/var/cache/nginx
     healthcheck:
       # 127.0.0.1, not localhost. In this image localhost resolves to ::1, while
@@ -152,6 +208,7 @@ networks:
 
 volumes:
   paintomics-data:
+  paintomics-logs:
   mongo-data:
   mongo-config:
   nginx-cache:

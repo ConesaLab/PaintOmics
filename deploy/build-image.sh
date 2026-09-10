@@ -33,9 +33,11 @@ tar -cf "${ARCHIVE}" \
     --exclude='*.pyc' \
     --exclude='*.pyo' \
     --exclude='.DS_Store' \
+    --exclude='._*' \
     --exclude='PaintomicsServer/src/conf/serverconf.py' \
     --exclude='PaintomicsServer/src/conf/local_serverconf.py' \
     --exclude='node_modules' \
+    --exclude='PaintomicsServer/src/log' \
     PaintomicsServer PaintomicsClient
 
 echo "  $(du -h "${ARCHIVE}" | cut -f1), $(tar -tf "${ARCHIVE}" | wc -l | tr -d ' ') entries"
@@ -114,7 +116,39 @@ for link in PaintomicsServer/src/src \
 done
 [ "${missing}" -eq 0 ] && echo "  symlinks preserved"
 
+# Build through a `docker-container` buildkit rather than the one embedded in
+# dockerd. On this host (Docker 29.7.1 / buildx 0.36.1 / overlay2) the embedded
+# builder writes an image whose rootfs is missing /bin/sh while still reporting
+# success: 3/3 builds on 2026-09-10 produced a 1.4 GB image that could not be
+# started ("exec: /bin/sh: no such file or directory"), against 2.8 GB for the
+# image the same tree produced on 2026-09-08. Layers 1-7 of the bad image --
+# including the base layer that carries /bin/sh -- were byte-identical to the
+# good one, so the damage is in how the later diffs are generated and exported,
+# not in anything the Dockerfile does. Ruled out: daemon restart, provenance and
+# SBOM attestations, build-context size, base-image corruption, and COPY
+# ordering (the constraint the Dockerfile documents is intact).
+#
+# The docker-container driver runs its own buildkit with its own snapshotter and
+# hands dockerd a finished tarball, which comes out sound.
+BUILDER_NAME="paintomics-isolated"
+if ! docker buildx inspect "${BUILDER_NAME}" >/dev/null 2>&1; then
+    echo "creating isolated builder ${BUILDER_NAME}"
+    docker buildx create --name "${BUILDER_NAME}" --driver docker-container >/dev/null
+fi
+
 echo "building image"
-docker compose -f deploy/compose.yaml build "$@"
+docker buildx build --builder "${BUILDER_NAME}" --load --provenance=false \
+    -f deploy/Dockerfile -t paintomics-app:latest "$@" .
+
+# A build that exits 0 is not evidence the image can run -- that is exactly the
+# failure above. Probe it before anything recreates a container from it.
+echo "probing the built image"
+if ! docker run --rm --entrypoint /bin/sh paintomics-app:latest \
+        -c 'ls /bin/sh /usr/bin/ls /usr/local/bin/entrypoint.sh >/dev/null' 2>/dev/null; then
+    echo "REFUSING TO SHIP: the built image has no usable rootfs." >&2
+    echo "Do not recreate the container -- the running one is still on the old image." >&2
+    exit 1
+fi
+echo "  rootfs OK"
 
 echo "done"
