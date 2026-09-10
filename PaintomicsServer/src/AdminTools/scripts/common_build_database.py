@@ -4012,6 +4012,24 @@ def downloadEnsemblMapping(resource, outputName, delay, maxTries):
                 os.remove(leftover)
 
 
+def downloadEnsemblResources(resources, destination, delay, maxTries):
+    """Fetch every Ensembl dump a species' EXTERNAL_RESOURCES declares.
+
+    "ensembl" carries the EntrezGene dump (read by processEnsemblData),
+    "ensembl_uniprot" the UniProt dump (read by processEnsemblUniProtData); a
+    species declares one, both or neither. One loop for every download_others.py
+    -- the registry-driven default and the hand-written species directories
+    alike -- so the two cannot drift. Returns the number of dumps fetched.
+    """
+    fetched = 0
+    for key in ("ensembl", "ensembl_uniprot"):
+        for resource in (resources or {}).get(key, []):
+            stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
+            downloadEnsemblMapping(resource, destination + resource.get("output"), delay, maxTries)
+            fetched += 1
+    return fetched
+
+
 def downloadMapManResource(resource, outputName, delay, maxTries, checkIfExists=False):
     """Fetch a single MapMan resource from GoMapMan into `outputName`.
 

@@ -26,7 +26,6 @@ host unless --mongo-host is given):
 import argparse
 import json
 import os
-import random
 import re
 import sys
 import time
@@ -113,7 +112,6 @@ def verify(args):
     registry = loadRegistry()
     from common.FeatureNamesToKeggIDsMapper import (
         findIDsByFeaturesName, getDatabasesByOrganismCode)
-    random.seed(args.seed)
     below = []
     print("\t".join(("code", "target_table", "sampled", "reached", "fraction")))
     for code in speciesDatabases(client):
@@ -126,11 +124,17 @@ def verify(args):
         if target is None:
             print("\t".join((code, targetName or "-", "0", "0", "no-target-table")))
             continue
-        ids = [row["display_id"] for row in db.xref.find({"dbname_id": geneTable["_id"]}, {"display_id": 1})]
-        if not ids:
+        # Sampled on the server: wheat's ensembl_gene table alone is >100k rows,
+        # and pulling every species' table into the process just to keep 100
+        # ids is the memory profile this tool is meant to check, not have.
+        sample = [row["display_id"] for row in db.xref.aggregate([
+            {"$match": {"dbname_id": geneTable["_id"]}},
+            {"$sample": {"size": args.sample}},
+            {"$project": {"display_id": 1}},
+        ])]
+        if not sample:
             print("\t".join((code, targetName, "0", "0", "empty")))
             continue
-        sample = random.sample(ids, min(args.sample, len(ids)))
         translated = findIDsByFeaturesName("ensembl-census-" + code + "-" + str(time.time()),
                                            sample, db, target["_id"])
         reached = sum(1 for name in sample if translated.get(name))
@@ -250,7 +254,6 @@ def main(argv=None):
     parser.add_argument("--mongo-port", type=int, default=None)
     parser.add_argument("--sample", type=int, default=100, help="verify: gene ids per species")
     parser.add_argument("--min-fraction", type=float, default=0.8, help="verify: fail below this")
-    parser.add_argument("--seed", type=int, default=20260910)
     parser.add_argument("--species", default=None, help="registry: comma-separated codes to (re)resolve")
     parser.add_argument("--installed", action="store_true", help="registry: only species installed in MongoDB")
     parser.add_argument("--merge", action="store_true", help="registry: keep entries not visited")

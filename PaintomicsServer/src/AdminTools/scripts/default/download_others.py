@@ -30,12 +30,8 @@ try:
     if not resources:
         stderr.write("No Ensembl genebuild is registered for " + SPECIE +
                      " (scripts/common_resources/ensembl_genebuilds.json); KEGG mapping only.\n")
-    for key in ("ensembl", "ensembl_uniprot"):
-        for resource in resources.get(key, []):
-            stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
-            COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(
-                resource, DESTINATION + resource.get("output"),
-                SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    COMMON_BUILD_DB_TOOLS.downloadEnsemblResources(resources, DESTINATION,
+                                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 except Exception as ex:
     stderr.write("FAILED WHILE DOWNLOADING DATA " + str(ex))

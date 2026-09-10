@@ -119,7 +119,8 @@ class RegistryTests(unittest.TestCase):
         with open(download, encoding="utf-8") as handle:
             source = handle.read()
         self.assertIn("ensemblResourcesFor(", source)
-        self.assertIn("downloadEnsemblMapping(", source)
+        self.assertIn("downloadEnsemblResources(", source,
+                      "the default download must go through the shared helper, not a private copy of the loop")
         with open(build, encoding="utf-8") as handle:
             source = handle.read()
         self.assertIn("ensemblResourcesFor(", source)
@@ -170,6 +171,19 @@ class RegistryTests(unittest.TestCase):
 
 
 class BuildOrderTests(unittest.TestCase):
+
+    def test_ensembl_dumps_are_fetched_through_the_shared_helper(self):
+        """One loop in common_build_database; a private copy in a species script drifts (dre's did)."""
+        broken = []
+        for resourceDir in resourceDirs():
+            keys = declaredKeys(resourceDir)
+            if not keys & {"ensembl_uniprot"}:
+                continue  # directories predating the helper only fetch the entrez dump; left as they are
+            with open(os.path.join(resourceDir, "download_others.py"), encoding="utf-8") as handle:
+                source = handle.read()
+            if "downloadEnsemblResources(" not in source:
+                broken.append(speciesOf(resourceDir) + " declares ensembl_uniprot but does not call downloadEnsemblResources")
+        self.assertEqual([], broken, "\n  ".join([""] + broken))
 
     def test_ensembl_dump_declared_means_ensembl_pass_called(self):
         broken = []

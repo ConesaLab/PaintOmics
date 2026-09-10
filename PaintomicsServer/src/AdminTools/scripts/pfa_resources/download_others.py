@@ -25,15 +25,8 @@ SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverco
 # STEP 2. DOWNLOAD FILES
 #**************************************************************************
 try:
-    #**************************************************************************
-    # Ensembl cross-reference dumps (see download_conf.py). The EntrezGene dump
-    # feeds processEnsemblData, the UniProt dump feeds processEnsemblUniProtData.
-    #**************************************************************************
-    for key in ("ensembl", "ensembl_uniprot"):
-        for resource in COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get(key, []):
-            stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
-            COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"),
-                                                         SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    COMMON_BUILD_DB_TOOLS.downloadEnsemblResources(COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES, DESTINATION,
+                                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
 
     #**************************************************************************
