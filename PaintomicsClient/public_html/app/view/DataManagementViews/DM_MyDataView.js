@@ -907,6 +907,7 @@ function DM_GTFFileListView() {
 		if (filterField && filterField.getValue()) {
 			this.filterData(filterField.getValue());
 		} else {
+			this.setEmptyText(false);
 			this.updateSummary();
 		}
 		this.getComponent().setLoading(false);
@@ -917,11 +918,35 @@ function DM_GTFFileListView() {
 	   one" by eye means reading every row. Ext 4.2 semantics: filterBy()
 	   filters from the store's snapshot and so replaces the previous
 	   predicate, and clearFilter() restores it. */
+	/* Which emptiness the grid is reporting. An empty grid means one of two
+	   unrelated things -- this server hosts no reference GTF, or your filter
+	   matched none of the ones it hosts -- and the static text asserted the
+	   first while the second was true. Set before the store change, because
+	   filterBy()/clearFilter() are what trigger the refresh that paints it. */
+	this.setEmptyText = function(filtered) {
+		var view = this.getComponent().queryById("GTFFilesGrid").getView();
+		var message = filtered
+			? "No inbuilt GTF file matches this filter."
+			: "No inbuilt GTF files are installed on this server.";
+		view.emptyText = '<div style="padding: 10px;"><i>' + message + '</i></div>';
+	};
+
 	this.filterData = function(term) {
 		var store = this.getComponent().queryById("GTFFilesGrid").getStore();
 		var needle = $.trim(term || "").toLowerCase();
+		this.setEmptyText(needle !== "");
 		if (needle === "") {
 			store.clearFilter();
+			/* Re-sort after unfiltering. Ext 4.2's filterBy() takes a snapshot
+			   of me.data on first use and clearFilter() restores it verbatim,
+			   but doSort() only ever sorts me.data -- so a sort applied while
+			   the filter was active was thrown away the moment it was cleared,
+			   and the grid silently reverted to the order it had when the user
+			   first typed. sort() with no arguments re-applies the sorters the
+			   store already holds. */
+			if (store.sorters && store.sorters.getCount()) {
+				store.sort();
+			}
 		} else {
 			store.filterBy(function(record) {
 				return ["fileName", "specie", "version", "source", "description"].some(function(field) {
@@ -982,6 +1007,10 @@ function DM_GTFFileListView() {
 				}),
 				viewConfig: {
 					deferEmptyText: false,
+					/* Replaced by setEmptyText() before every store change: the
+					   two emptinesses are not the same statement, and saying
+					   the server has no reference files while it holds 24 of
+					   them is worse than saying nothing. */
 					emptyText: '<div style="padding: 10px;"><i>No inbuilt GTF files are installed on this server.</i></div>'
 				},
 				tbar: [{
