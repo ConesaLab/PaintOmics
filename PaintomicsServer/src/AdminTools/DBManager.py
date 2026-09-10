@@ -1868,5 +1868,9 @@ def calculateAproxTime(nElems, delay):
 # ------------------------------------------------------------------------------------------
 if __name__ == '__main__':
     import scriptine
+    # scriptinep3 0.3.1 still calls inspect.getargspec(), gone since Python
+    # 3.11; without this every command failed before parsing its arguments.
+    from scriptine_compat import ensure_getargspec
 
+    ensure_getargspec()
     scriptine.run()
