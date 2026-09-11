@@ -245,9 +245,18 @@ class Runner(object):
             return dict(self.states.get(code, {"code": code, "state": "pending", "attempts": 0}))
 
     def counts(self):
+        """States of the species THIS run loaded from the manifest.
+
+        State files of organisms the manifest now defers stay on disk (they
+        hold the reason they were parked); counting them as pending made a
+        3,000-species run report 11,630 pending and never finish.
+        """
         with self.stateLock:
             out = {}
-            for entry in self.states.values():
+            wanted = getattr(self, "orderedCodeSet", None)
+            for code, entry in self.states.items():
+                if wanted is not None and code not in wanted:
+                    continue
                 out[entry["state"]] = out.get(entry["state"], 0) + 1
             return out
 
@@ -547,6 +556,7 @@ class Runner(object):
         self.log("census: %d species databases with pathways" % sum(1 for n in census.values() if n > 0))
         rowsByCode = {r["code"]: r for r in rows}
         self.orderedCodes = [r["code"] for r in rows]
+        self.orderedCodeSet = set(self.orderedCodes)
         work = queue.Queue()
         queued = 0
         for row in rows:
