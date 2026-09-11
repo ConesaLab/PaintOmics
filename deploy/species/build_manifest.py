@@ -181,6 +181,65 @@ def loadRegistry(path):
         return json.load(handle).get("genebuilds", {})
 
 
+def loadPopularity(path):
+    """{code: (binomial, pubmed_count)} from pubmed_popularity.py's output."""
+    out = {}
+    with open(path, encoding="utf-8") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row["pubmed_count"] != "":
+                out[row["code"]] = (row["binomial"], int(row["pubmed_count"]))
+    return out
+
+
+def rankByPopularity(rows, popularity, census, top):
+    """Order the organisms still to install by how much is written about them.
+
+    Every `install` row gets a `pubmed_count` and a `rank`; the rank becomes
+    its priority, so the runner takes the most cited first. One KEGG code per
+    binomial is kept: the first KEGG lists (its reference genome), or none if
+    the server already holds a code of that species -- the other strains are
+    `defer`red with the reason. With `top`, everything ranked below it is
+    deferred too. Rows the manifest does not install (keep, refresh, rebuild)
+    are untouched.
+    """
+    installedBinomials = set()
+    for code, entry in census.items():
+        if entry.get("sources", {}).get("KEGG", 0) > 0 and code in popularity:
+            installedBinomials.add(popularity[code][0])
+    seen = set()
+    candidates = []
+    keggOrder = {r["code"]: i for i, r in enumerate(rows)}
+    for row in rows:
+        if row["action"] != "install":
+            continue
+        code = row["code"]
+        binomial, count = popularity.get(code, (None, -1))
+        row["pubmed_count"] = count if count >= 0 else ""
+        if binomial is None:
+            row["action"] = "defer"
+            row["note"] = "; ".join(filter(None, [row["note"], "deferred: no popularity count"]))
+            continue
+        if binomial in installedBinomials:
+            row["action"] = "defer"
+            row["note"] = "; ".join(filter(None, [row["note"], "deferred: another strain of %s is installed" % binomial]))
+            continue
+        if binomial in seen:
+            row["action"] = "defer"
+            row["note"] = "; ".join(filter(None, [row["note"], "deferred: another strain of %s ranks for it" % binomial]))
+            continue
+        seen.add(binomial)
+        candidates.append(row)
+    # Most cited first; ties by KEGG's own order (reference genomes first).
+    candidates.sort(key=lambda r: (-int(r["pubmed_count"]), keggOrder[r["code"]]))
+    for rank, row in enumerate(candidates, start=1):
+        row["rank"] = rank
+        if top and rank > top:
+            row["action"] = "defer"
+            row["note"] = "; ".join(filter(None, [row["note"], "deferred: rank %d by PubMed count, beyond the top %d" % (rank, top)]))
+        else:
+            row["priority"] = rank
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cache-dir", default=os.path.join(HERE, "cache"))
@@ -188,6 +247,10 @@ def main(argv=None):
     parser.add_argument("--registry", default=os.path.join(HERE, "..", "..", "PaintomicsServer", "src", "AdminTools",
                                                            "scripts", "common_resources", "ensembl_genebuilds.json"))
     parser.add_argument("-o", "--output", default=os.path.join(HERE, "manifest.tsv"))
+    parser.add_argument("--popularity", default=None,
+                        help="popularity.tsv from pubmed_popularity.py; ranks the organisms still to install")
+    parser.add_argument("--top", type=int, default=0,
+                        help="with --popularity: install only the N most cited species (one KEGG code per binomial), defer the rest")
     args = parser.parse_args(argv)
 
     organisms = keggOrganisms(args.cache_dir)
@@ -205,7 +268,7 @@ def main(argv=None):
     columns = ["code", "T", "kingdom", "group", "name", "priority", "action",
                "kegg", "reactome", "mapman", "omnipath", "ensembl_genebuild",
                "installed_kegg", "installed_reactome", "installed_mapman", "installed_omnipath",
-               "reactome_pathways_published", "mapman_source_code", "note"]
+               "reactome_pathways_published", "mapman_source_code", "pubmed_count", "rank", "note"]
     rows = []
     for code in sorted(organisms, key=lambda c: (PRIORITY.get(organisms[c]["kingdom"], 9), c)):
         entry = organisms[code]
@@ -261,12 +324,17 @@ def main(argv=None):
             "installed_kegg": installedKegg, "installed_reactome": installedReactome,
             "installed_mapman": installedMapman, "installed_omnipath": installedOmnipath,
             "reactome_pathways_published": reactome[code][1] if code in reactome else "",
-            "mapman_source_code": gcode, "note": "; ".join(notes),
+            "mapman_source_code": gcode, "pubmed_count": "", "rank": "", "note": "; ".join(notes),
         })
 
-    # Priority order is the install order: refreshes first, then eukaryotes,
-    # archaea, bacteria; alphabetical within a class.
-    rows.sort(key=lambda r: (r["priority"], PRIORITY.get(r["kingdom"], 9), r["code"]))
+    if args.popularity:
+        rankByPopularity(rows, loadPopularity(args.popularity), census, args.top)
+
+    # Priority order is the install order: refreshes first, then (with
+    # --popularity) the most cited organisms by rank, else eukaryotes, archaea,
+    # bacteria; alphabetical within a class.
+    rows.sort(key=lambda r: (int(r["priority"]) if str(r["priority"]).lstrip("-").isdigit() else 9,
+                             PRIORITY.get(r["kingdom"], 9), r["code"]))
 
     # Species the server holds that KEGG no longer lists stay visible here.
     for code in sorted(set(census) - set(organisms)):

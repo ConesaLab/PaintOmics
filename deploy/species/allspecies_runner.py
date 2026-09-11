@@ -280,9 +280,14 @@ class Runner(object):
         rows = [r for r in rows if r["kingdom"] in kinds]
         order = {k: i for i, k in enumerate(kinds)}
         # Priority 0 (a refresh or rebuild of a species people already use)
-        # goes before everything, whatever its kingdom; then the kinds order.
-        rows.sort(key=lambda r: (0 if r["priority"] == "0" else 1, order.get(r["kingdom"], 99),
-                                 int(r["priority"] or 9), r["code"]))
+        # goes before everything, whatever its kingdom; then, with
+        # --order priority, the manifest's priority (a popularity rank) alone;
+        # else the kinds order, then priority, then code.
+        if self.args.order == "priority":
+            rows.sort(key=lambda r: (int(r["priority"] or 9), r["code"]))
+        else:
+            rows.sort(key=lambda r: (0 if r["priority"] == "0" else 1, order.get(r["kingdom"], 99),
+                                     int(r["priority"] or 9), r["code"]))
         if self.args.only:
             wanted = set(self.args.only.split(","))
             rows = [r for r in rows if r["code"] in wanted]
@@ -631,6 +636,8 @@ def main(argv=None):
     parser.add_argument("--workers", type=int, default=5)
     parser.add_argument("--batch", type=int, default=25, help="species per install run")
     parser.add_argument("--kinds", default="Eukaryota,Archaea,Bacteria", help="kingdoms to run, in order")
+    parser.add_argument("--order", choices=("kinds", "priority"), default="kinds",
+                        help="'priority': install in the manifest's priority order (a popularity rank) regardless of kingdom")
     parser.add_argument("--only", default=None, help="comma-separated codes (smoke tests)")
     parser.add_argument("--max-species", type=int, default=0)
     parser.add_argument("--max-attempts", type=int, default=3)

@@ -166,6 +166,55 @@ def test_report_sampler_spans_the_whole_table():
         raise AssertionError("--sample 0 must be rejected")
 
 
+def test_popularity_ranking_keeps_one_strain_per_species_and_caps_the_list():
+    m = _load("build_manifest")
+    def row(code, kingdom, action="install", priority="3"):
+        return {"code": code, "kingdom": kingdom, "action": action, "priority": priority, "note": ""}
+    rows = [row("eco", "Bacteria"), row("ecj", "Bacteria"), row("hsa", "Eukaryota", "keep", "9"),
+            row("mmu", "Eukaryota"), row("xyz", "Bacteria"), row("aaa", "Archaea"), row("mmx", "Eukaryota")]
+    popularity = {"eco": ("Escherichia coli", 500000), "ecj": ("Escherichia coli", 500000),
+                  "hsa": ("Homo sapiens", 9000000), "mmu": ("Mus musculus", 2000000),
+                  "mmx": ("Mus musculus", 2000000), "xyz": ("Xanthomonas ypsilon", 3), "aaa": ("Archaeon alpha", 40)}
+    census = {"hsa": {"sources": {"KEGG": 372}, "tables": {}}}
+    m.rankByPopularity(rows, popularity, census, top=2)
+    byCode = {r["code"]: r for r in rows}
+    # Most cited first: mmu rank 1, eco rank 2; ecj is another strain of E. coli.
+    assert byCode["mmu"]["rank"] == 1 and byCode["mmu"]["priority"] == 1 and byCode["mmu"]["action"] == "install", byCode["mmu"]
+    assert byCode["eco"]["rank"] == 2 and byCode["eco"]["action"] == "install", byCode["eco"]
+    assert byCode["ecj"]["action"] == "defer" and "another strain" in byCode["ecj"]["note"], byCode["ecj"]
+    assert byCode["mmx"]["action"] == "defer", byCode["mmx"]
+    # Beyond the top 2: deferred with the rank in the reason.
+    assert byCode["aaa"]["action"] == "defer" and "rank 3" in byCode["aaa"]["note"], byCode["aaa"]
+    assert byCode["xyz"]["action"] == "defer" and "rank 4" in byCode["xyz"]["note"], byCode["xyz"]
+    # Rows the manifest does not install are untouched.
+    assert byCode["hsa"]["action"] == "keep" and byCode["hsa"]["priority"] == "9", byCode["hsa"]
+
+
+def test_runner_priority_order_ignores_the_kingdom():
+    r = _load("allspecies_runner")
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    try:
+        manifest = os.path.join(tmp, "manifest.tsv")
+        with open(manifest, "w") as handle:
+            handle.write("code\tkingdom\tpriority\taction\tkegg\treactome\n"
+                         "aaa\tEukaryota\t7\tinstall\t1\t0\n"
+                         "eco\tBacteria\t1\tinstall\t1\t0\n"
+                         "zzz\tBacteria\t9\tdefer\t1\t0\n"
+                         "mmu\tEukaryota\t2\tinstall\t1\t0\n")
+        import argparse
+        runner = r.Runner.__new__(r.Runner)
+        runner.args = argparse.Namespace(manifest=manifest, kinds="Eukaryota,Archaea,Bacteria", only=None,
+                                         max_species=0, order="priority")
+        assert [row["code"] for row in r.Runner.loadManifest(runner)] == ["eco", "mmu", "aaa"]
+        runner.args = argparse.Namespace(manifest=manifest, kinds="Eukaryota,Archaea,Bacteria", only=None,
+                                         max_species=0, order="kinds")
+        assert [row["code"] for row in r.Runner.loadManifest(runner)] == ["mmu", "aaa", "eco"]
+    finally:
+        import shutil
+        shutil.rmtree(tmp)
+
+
 def test_runner_parses_the_install_summary_block():
     r = _load("allspecies_runner")
     import tempfile
