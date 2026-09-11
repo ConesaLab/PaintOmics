@@ -18,6 +18,13 @@ actually searches in production, with the collisions that matter -- two
 yeasts, three rices, "licorice" hiding "rice", "Streptococcus mutans" hiding
 "mus", two Nostocs and a quoted name.
 
+The empty query is a browse, and with 3,000 organisms installed (12,000 to
+come) a browse in species.json's own order is a wall. It lists the curated
+model organisms first (MODEL_ORGANISMS in the module, human, mouse, rat, ...)
+and everything else by name; the list renders at most `maxRows` rows and
+says how many more there are. CuratedList pins what the codes in that list
+mean, RenderCap what the combo shows.
+
 Why a Python file runs a JavaScript module
 ------------------------------------------
 The client has no test harness of its own; every client contract in this
@@ -29,6 +36,8 @@ Usage:
     cd PaintomicsServer
     python -m src.tests.test_organism_search
 """
+import csv
+import glob
 import io
 import json
 import os
@@ -48,6 +57,8 @@ ALL_SPECIES = os.path.join(CLIENT_ROOT, "resources/data/all_species.json")
 STEP1_VIEWS = os.path.join(CLIENT_ROOT, "app/view/PathwayAcquisitionViews/PA_Step1Views.js")
 DATA_MANAGEMENT = os.path.join(CLIENT_ROOT, "app/controller/DataManagementController.js")
 INDEX_HTML = os.path.join(CLIENT_ROOT, "index.html")
+MANIFEST = os.path.abspath(os.path.join(HERE, "../../../deploy/species/manifest.tsv"))
+ADMIN_SCRIPTS = os.path.abspath(os.path.join(HERE, "../AdminTools/scripts"))
 
 NODE = shutil.which("node")
 
@@ -191,11 +202,19 @@ class MultiWordQueries(unittest.TestCase):
 @unittest.skipIf(NODE is None, "node is not available")
 class EmptyQueryAndOrder(unittest.TestCase):
 
-    def test_empty_query_lists_every_organism_alphabetically(self):
-        listed = codes("")
-        names = node("S.rank('', L).map(r => r.name)")
+    def test_empty_query_lists_model_organisms_first_then_the_rest_by_name(self):
+        # A browse: the curated organisms lead, in their curated order --
+        # human, mouse, rat, ... -- and everything else follows by name.
+        listed = node("S.rank('', L).map(r => [r.value, r.name])")
+        curated = node("S.MODEL_ORGANISMS")
+        present = set(value for value, _ in listed)
+        lead = [code for code in curated if code in present]
         self.assertEqual(FIXTURE_SIZE, len(listed))
-        self.assertEqual(sorted(names, key=lambda n: n.lower()), names)
+        self.assertEqual(["hsa", "mmu", "rno"], lead[:3])
+        self.assertEqual(lead, [value for value, _ in listed[:len(lead)]])
+        rest = [name for _, name in listed[len(lead):]]
+        self.assertGreater(len(rest), 50)
+        self.assertEqual(sorted(rest, key=lambda n: n.lower()), rest)
 
     def test_whitespace_only_is_empty(self):
         self.assertEqual(FIXTURE_SIZE, len(codes("   ")))
@@ -286,6 +305,234 @@ class RequestDialogScale(unittest.TestCase):
         ranked = node("S.rank('mosue', L).map(r => r.value)", listPath=ALL_SPECIES)
         self.assertEqual("mmu", ranked[0])
 
+    def test_a_code_that_spells_a_genus_does_not_outrank_the_genus(self):
+        # Six KEGG codes spell the genus of another organism: "mus" is Musa
+        # acuminata (a banana), "sus" a Solibacter, "bos" a Bosea, "pan" a
+        # Podospora. A code and a genus score level, so the curated order
+        # decides -- and the code-holder is still on the first screen.
+        full = lambda q: node("S.rank(%s, L).map(r => r.value)" % json.dumps(q), listPath=ALL_SPECIES)
+        self.assertEqual("mmu", full("mus")[0])
+        self.assertIn("mus", full("mus")[:4])
+        self.assertEqual("ssc", full("sus")[0])
+        self.assertEqual("bta", full("bos")[0])
+        self.assertEqual("ptr", full("pan")[0])
+
+    def test_ties_between_equal_matches_follow_the_curated_order(self):
+        full = lambda q: node("S.rank(%s, L).map(r => r.value)" % json.dumps(q), listPath=ALL_SPECIES)
+        self.assertEqual(["sce", "spo"], full("yeast")[:2])
+        self.assertEqual("eco", full("coli")[0])
+        self.assertEqual("mmu", full("mouse")[0])
+        self.assertEqual(["osa", "dosa"], full("rice")[:2])
+
+    def test_the_full_browse_leads_with_the_curated_organisms(self):
+        listed = node("S.rank('', L).map(r => r.value)", listPath=ALL_SPECIES)
+        curated = node("S.MODEL_ORGANISMS")
+        present = set(listed)
+        lead = [code for code in curated if code in present]
+        self.assertGreater(len(lead), 50)
+        self.assertEqual(lead, listed[:len(lead)])
+        self.assertEqual(len(present), len(listed))
+
+    def test_a_browse_of_eleven_thousand_organisms_is_quick(self):
+        # The browse re-sorts every organism (rank() over the empty query);
+        # it runs on every trigger click after the field was cleared.
+        millis = node(
+            "(() => { S.rank('', L); const t = process.hrtime.bigint();"
+            " S.rank('', L); return Number(process.hrtime.bigint() - t) / 1e6; })()",
+            listPath=ALL_SPECIES)
+        self.assertLess(millis, 100, "%.1f ms per browse" % millis)
+
+
+# The genus each curated code must name. A code is three or four letters
+# that mean nothing to a reader; this table is what they mean, and
+# CuratedList holds the module's list to it and to KEGG's own organism list.
+CURATED_GENUS = {
+    "hsa": "Homo", "mmu": "Mus", "rno": "Rattus", "dre": "Danio", "dme": "Drosophila",
+    "cel": "Caenorhabditis", "sce": "Saccharomyces", "spo": "Schizosaccharomyces",
+    "ath": "Arabidopsis", "eco": "Escherichia", "bsu": "Bacillus",
+    "xtr": "Xenopus", "xla": "Xenopus", "gga": "Gallus", "bta": "Bos", "ssc": "Sus",
+    "cfa": "Canis", "ptr": "Pan", "mcc": "Macaca", "cge": "Cricetulus", "ola": "Oryzias",
+    "acs": "Anolis",
+    "aga": "Anopheles", "ame": "Apis", "bmor": "Bombyx", "tca": "Tribolium", "dpx": "Daphnia",
+    "cin": "Ciona", "spu": "Strongylocentrotus", "nve": "Nematostella",
+    "cal": "Candida", "ncr": "Neurospora", "ani": "Aspergillus",
+    "osa": "Oryza", "dosa": "Oryza", "zma": "Zea", "taes": "Triticum", "sbi": "Sorghum",
+    "bdi": "Brachypodium", "gmx": "Glycine", "mtr": "Medicago", "sly": "Solanum",
+    "sot": "Solanum", "nta": "Nicotiana", "vvi": "Vitis", "pop": "Populus",
+    "ppp": "Physcomitrium", "cre": "Chlamydomonas",
+    "ddi": "Dictyostelium", "pfa": "Plasmodium", "tgo": "Toxoplasma", "tbr": "Trypanosoma",
+    "lma": "Leishmania", "tet": "Tetrahymena",
+    "mtu": "Mycobacterium", "pae": "Pseudomonas", "stm": "Salmonella", "hpy": "Helicobacter",
+    "syn": "Synechocystis", "ccr": "Caulobacter", "atu": "Agrobacterium", "sco": "Streptomyces",
+}
+
+# What the picker was asked to lead with, in this order for the first three.
+REQUIRED_FIRST = "hsa mmu rno dre dme cel sce spo ath xtr gga bta ssc cfa eco bsu osa zma pfa ddi mtu".split()
+
+
+@unittest.skipIf(NODE is None, "node is not available")
+class CuratedList(unittest.TestCase):
+    """MODEL_ORGANISMS names what it says it names.
+
+    The list once carried "tae" for wheat, which KEGG gives to
+    Tepidanaerobacter acetatoxydans (wheat is taes), and nothing could have
+    told: a code is opaque. So every code is checked against
+    deploy/species/manifest.tsv, KEGG's full organism list, and against the
+    genus CURATED_GENUS says it must name.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.curated = node("S.MODEL_ORGANISMS")
+        with io.open(MANIFEST, encoding="utf-8") as handle:
+            cls.manifest = {row["code"]: row["name"] for row in csv.DictReader(handle, delimiter="\t")}
+
+    def test_the_list_and_the_table_name_the_same_organisms(self):
+        self.assertEqual(len(set(self.curated)), len(self.curated))
+        self.assertEqual(sorted(CURATED_GENUS), sorted(self.curated))
+
+    def test_every_code_is_a_kegg_organism_of_the_genus_it_is_meant_to_be(self):
+        for code in self.curated:
+            self.assertIn(code, self.manifest, "%s is not a KEGG organism code" % code)
+            self.assertTrue(self.manifest[code].startswith(CURATED_GENUS[code] + " "),
+                            "%s is %s, not a %s" % (code, self.manifest[code], CURATED_GENUS[code]))
+
+    def test_the_organisms_the_picker_must_lead_with_are_listed(self):
+        for code in REQUIRED_FIRST:
+            self.assertIn(code, self.curated)
+        self.assertEqual(["hsa", "mmu", "rno"], self.curated[:3])
+
+    def test_every_organism_this_repository_ships_resources_for_is_listed(self):
+        # AdminTools/scripts/<code>_resources is an organism the project
+        # curated by hand. bvu is the one exception: its resources are Beta
+        # vulgaris under a GoMapMan code, while KEGG's bvu is Phocaeicola
+        # vulgatus, a gut bacterium.
+        shipped = sorted(os.path.basename(path)[:-len("_resources")]
+                         for path in glob.glob(os.path.join(ADMIN_SCRIPTS, "*_resources")))
+        self.assertIn("hsa", shipped)
+        for code in shipped:
+            if code in ("common", "bvu"):
+                continue
+            self.assertIn(code, self.curated, "%s has resources but is not a curated organism" % code)
+
+
+@unittest.skipIf(NODE is None, "node is not available")
+class RenderCap(unittest.TestCase):
+    """The list shows at most maxRows rows, whatever the store holds.
+
+    ExtJS's BoundList renders one <li> per row of the store, so the cap is a
+    store filter: the first maxRows of rank()'s order stay, the rest are
+    filtered out, and a footer row says how many there were.
+    """
+
+    def run_js(self, expression):
+        return node("(() => {" + STUB_EXT + "return " + expression + ";})()")
+
+    def test_a_browse_keeps_the_first_rows_of_the_curated_order(self):
+        out = self.run_js("(combo.maxRows = 5, query(''), {rows: rows(), count: store.getCount(), "
+                          "shown: combo.organismShown})")
+        self.assertEqual(["hsa", "mmu", "rno", "dre", "dme"], out["rows"])
+        self.assertEqual(5, out["count"])
+        self.assertEqual({"query": "", "shown": 5, "matched": FIXTURE_SIZE, "total": FIXTURE_SIZE,
+                          "model": 5, "groups": False}, out["shown"])
+
+    def test_a_query_keeps_the_best_rows(self):
+        out = self.run_js("(combo.maxRows = 2, query('mo'), {rows: rows(), shown: combo.organismShown})")
+        self.assertEqual(2, len(out["rows"]))
+        self.assertEqual("mmu", out["rows"][0])
+        self.assertGreater(out["shown"]["matched"], 2)
+        self.assertEqual("mo", out["shown"]["query"])
+
+    def test_zero_is_no_cap(self):
+        self.assertEqual(FIXTURE_SIZE, self.run_js("(combo.maxRows = 0, query(''), store.getCount())"))
+
+    def test_the_default_cap_is_two_hundred(self):
+        self.assertEqual(200, self.run_js("combo.maxRows"))
+
+    def test_the_footer_says_how_many_rows_the_cap_cut(self):
+        html = self.run_js("(combo.maxRows = 5, query(''), body.statics.renderFooter('c1'))")
+        self.assertEqual('<li class="po-organism-more">Showing 5 of %d organisms. Type to search the rest.</li>'
+                         % FIXTURE_SIZE, html)
+        html = self.run_js("(combo.maxRows = 2, query('mo'), body.statics.renderFooter('c1'))")
+        self.assertRegex(html, r'^<li class="po-organism-more">Showing the best 2 of \d+ matches\. '
+                               r'Keep typing to narrow the list\.</li>$')
+
+    def test_no_footer_when_every_row_fits(self):
+        self.assertEqual("", self.run_js("(query(''), body.statics.renderFooter('c1'))"))
+        self.assertEqual("", self.run_js("(query('mouse'), body.statics.renderFooter('c1'))"))
+
+    def test_counts_carry_thousands_separators(self):
+        self.assertEqual(["11,951", "200", "1,234,567", "0"],
+                         node("[11951, 200, 1234567, 0].map(S.formatCount)"))
+
+    def test_group_labels_sit_either_side_of_the_curated_block_in_a_browse(self):
+        out = self.run_js(
+            "(query(''), {model: combo.organismShown.model, groups: combo.organismShown.groups, "
+            "first: body.statics.renderRow({name: 'Homo sapiens (human)', value: 'hsa'}, 1, 'c1'), "
+            "second: body.statics.renderRow({name: 'Mus musculus (house mouse)', value: 'mmu'}, 2, 'c1'), "
+            "seam: body.statics.renderRow({name: 'Abies', value: 'abi'}, combo.organismShown.model + 1, 'c1')})")
+        self.assertTrue(out["groups"])
+        self.assertGreater(out["model"], 10)
+        self.assertTrue(out["first"].startswith(
+            '<li class="po-organism-group">Model organisms</li>'
+            '<li role="option" unselectable="on" class="x-boundlist-item">'), out["first"])
+        self.assertTrue(out["second"].startswith('<li role="option"'), out["second"])
+        self.assertTrue(out["seam"].startswith('<li class="po-organism-group">All organisms, A to Z</li>'), out["seam"])
+
+    def test_no_group_labels_while_a_query_ranks(self):
+        html = self.run_js("(query('mouse'), body.statics.renderRow({name: 'Mus musculus (house mouse)', value: 'mmu'}, 1, 'c1'))")
+        self.assertTrue(html.startswith('<li role="option"'), html)
+        self.assertIn("house <mark>mouse</mark>", html)
+
+    def test_no_group_labels_when_every_shown_row_is_curated(self):
+        self.assertFalse(self.run_js("(combo.maxRows = 3, query(''), combo.organismShown.groups)"))
+
+    def test_the_cap_and_the_counts_follow_the_stores_other_filters(self):
+        # The request dialog hangs a permanent filter that hides installed
+        # organisms on the very store this combo renders. Ranking the raw
+        # snapshot spent the row budget on rows that filter then dropped,
+        # reported them in the footer, and put the "All organisms" label
+        # inside the alphabet (review catch on #156). hsa, mmu, rno and naz
+        # "installed": the browse starts at dre, and every count is of what
+        # is left.
+        installed = ("store.addFilter(new Ext.util.Filter({id: 'installed-organisms', "
+                     "filterFn: r => !/^(hsa|mmu|rno|naz)$/.test(r.data.value)})), ")
+        out = self.run_js(installed + "(combo.maxRows = 5, query(''), {rows: rows(), count: store.getCount(), "
+                          "shown: combo.organismShown})")
+        self.assertEqual(["dre", "dme", "cel", "sce", "spo"], out["rows"])
+        self.assertEqual(5, out["count"])
+        self.assertEqual({"query": "", "shown": 5, "matched": FIXTURE_SIZE - 4, "total": FIXTURE_SIZE - 4,
+                          "model": 5, "groups": False}, out["shown"])
+        # Uncapped: the seam label sits exactly after the curated rows that
+        # are left, and the alphabet starts at Abrus precatorius, naz being gone.
+        out = self.run_js(installed + "(combo.maxRows = 0, query(''), {rows: rows(), model: combo.organismShown.model, "
+                          "groups: combo.organismShown.groups})")
+        self.assertTrue(out["groups"])
+        self.assertEqual(FIXTURE_SIZE - 4, len(out["rows"]))
+        self.assertNotIn("hsa", out["rows"])
+        self.assertEqual("aprc", out["rows"][out["model"]])
+        self.assertEqual("dre", out["rows"][0])
+        # A query is narrowed the same way: the mouse is installed, so
+        # "mouse" finds the others only.
+        out = self.run_js(installed + "(query('mouse'), {rows: rows(), matched: combo.organismShown.matched})")
+        self.assertNotIn("mmu", out["rows"])
+        self.assertEqual(len(out["rows"]), out["matched"])
+
+    def test_a_browse_before_the_list_arrives_is_not_cached(self):
+        # autoLoad is in flight, the user clicks the trigger: nothing to
+        # show, and doQuery must not remember '' as answered, or the first
+        # click after the load expands an empty list.
+        out = self.run_js("(store.data = {items: []}, combo.lastQuery = '', "
+                          "combo.doLocalQuery({query: '', forceAll: true}), "
+                          "{forgotten: combo.lastQuery === undefined, events: combo.events})")
+        self.assertTrue(out["forgotten"])
+        self.assertEqual(["collapse", "afterQuery"], out["events"])
+
+    def test_the_list_template_renders_rows_and_the_footer(self):
+        tpl = self.run_js("combo.listConfig.tpl")
+        self.assertIn('<tpl for=".">{[Paintomics.form.OrganismCombo.renderRow(values, xindex, "c1")]}</tpl>', tpl)
+        self.assertIn('{[Paintomics.form.OrganismCombo.renderFooter("c1")]}</ul>', tpl)
+
 
 # A stand-in for the slice of ExtJS 4.2.1 the combo touches, just enough to run
 # doLocalQuery / renderItem / findRecord under node. The store mimics what was
@@ -298,12 +545,12 @@ function collection(items) {
           add(x) { this.items.push(x); }, addAll(xs) { this.items = this.items.concat(xs); }, get length() { return this.items.length; }};
 }
 const store = {
-  snapshot: null, data: {items: organisms.slice()}, filters: [],
+  snapshot: null, data: {items: organisms.slice()}, filters: collection([]),
   sorters: collection([{property: 'name', sorterFn: (a, b) => a.data.name < b.data.name ? -1 : 1}]),
-  addFilter(f) { this.filters.push(f); },
+  addFilter(f) { this.filters.add(f); },
   filter() {
     this.snapshot = this.snapshot || {items: organisms.slice()};
-    const live = this.filters.filter(f => !f.disabled);
+    const live = this.filters.items.filter(f => !f.disabled);
     this.data = {items: this.snapshot.items.filter(r => live.every(f => f.filterFn(r)))};
     const sorter = this.sorters.items[0];
     if (sorter) this.data.items.sort(sorter.sorterFn);
@@ -350,14 +597,17 @@ class ComboIntegration(unittest.TestCase):
     def test_a_typo_is_ranked_the_same_way_through_the_combo(self):
         self.assertEqual("hsa", self.run_js("(query('humna'), rows())")[0])
 
-    def test_the_empty_query_restores_the_store_and_lists_everything(self):
+    def test_the_empty_query_lists_everything_model_organisms_first(self):
+        # The store's own name sorter is gone: the combo's order is rank()'s
+        # for every query, and a browse is the curated organisms then the name.
         out = self.run_js("(query('mouse'), query(''), {count: store.getCount(), "
-                          "sorter: store.sorters.items[0].property, filterOff: combo.queryFilter.disabled, "
-                          "first: rows()[0]})")
+                          "sorters: store.sorters.items.length, first: rows().slice(0, 3), "
+                          "shown: combo.organismShown})")
         self.assertEqual(FIXTURE_SIZE, out["count"])
-        self.assertEqual("name", out["sorter"])
-        self.assertTrue(out["filterOff"])
-        self.assertEqual("naz", out["first"])
+        self.assertEqual(1, out["sorters"])
+        self.assertEqual(["hsa", "mmu", "rno"], out["first"])
+        self.assertEqual(FIXTURE_SIZE, out["shown"]["matched"])
+        self.assertEqual(FIXTURE_SIZE, out["shown"]["shown"])
 
     def test_a_query_with_no_word_collapses_an_empty_list(self):
         out = self.run_js("(query('('), {count: store.getCount(), events: combo.events})")

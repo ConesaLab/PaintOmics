@@ -13,7 +13,6 @@ import os
 #     os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
 
 import datetime, traceback, shutil, inspect, tempfile
-import json
 import logging
 import logging.config
 import requests
@@ -25,6 +24,11 @@ from time import strftime, sleep, time
 from subprocess import check_call, CalledProcessError
 
 from conf.serverconf import KEGG_DATA_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, MAX_TRIES_1
+# Run as a script (`python src/AdminTools/DBManager.py download ...`) only this
+# directory is on sys.path; imported as AdminTools.DBManager (the tests) src/ is.
+# The sibling module is reached the same way in both.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from AdminTools.species_json import species_json_rows, write_species_json
 
 VERSION = 0.12
 
@@ -1712,47 +1716,25 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
                     if len(row) >= 3:
                         species[row[1]] = row[2]
 
-        listAux = []
-        for specie in VALID_SPECIES:
-            if isinstance(specie, dict):
-                listAux.append(specie.get("organism_code"))
-            else:
-                listAux.append(specie)
-
-        VALID_SPECIES = listAux
-        VALID_SPECIES.sort()
-        VALID_SPECIES = set(VALID_SPECIES)
-
-        total = len(VALID_SPECIES)
-
-        file_content = '{"success": true, "species": [\n'
-        for i, specieCode in enumerate(VALID_SPECIES):
-            name = species.get(specieCode, "")
-            if name != "":
-                # json.dumps, not string concatenation: a quote or backslash in
-                # an admin-supplied custom species name would otherwise write an
-                # unparseable species.json and break the organism dropdown for
-                # every user (customSpeciesInstaller's own regenerate uses
-                # json.dumps for the same reason).
-                name = '\t{"name": ' + json.dumps(name) + ', "value": ' + json.dumps(specieCode) + '}'
-                if i < total - 1:
-                    name += ","
-                file_content += name + '\n'
-            else:
-                # continue
-                errorlog("Error while writting specie files" + specieCode)
-                raise Exception()
-    except Exception:
+        codes = [specie.get("organism_code") if isinstance(specie, dict) else specie
+                 for specie in VALID_SPECIES]
+        # A code without a display name aborts the file for EVERY species
+        # (see the note above): the file the dropdown reads must list what
+        # is installed, all of it, or the picker offers a half-installed
+        # server. Named in the error, so the fix is a lookup, not a hunt.
+        missing = sorted(code for code in set(codes) if not species.get(code))
+        if missing:
+            raise Exception("no display name in organisms_all.list or organisms_custom.list for "
+                            + ", ".join(missing))
+        # By display name, deterministic: the previous loop walked a set, so
+        # the file came out in hash order, different on every run.
+        rows = species_json_rows(codes, species)
+    except Exception as ex:
+        errorlog("Error while writing species.json: " + str(ex))
         errorlog(traceback.extract_stack())
-        raise Exception("Error while writting specie " + specieCode)
+        raise Exception("Error while writing species.json: " + str(ex))
 
-    if os.path.isfile(installed_species_file):
-        shutil.copy(installed_species_file, installed_species_file + "_prev")
-
-    output_file = open(installed_species_file, 'w')
-    output_file.write(file_content)
-    output_file.write(']}')
-    output_file.close()
+    write_species_json(installed_species_file, rows)
 
 
 # ------------------------------------------------------------------------------------------

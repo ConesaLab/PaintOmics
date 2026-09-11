@@ -123,8 +123,11 @@ PUBLISHED = {
     # dialog with its report button. That is #130's shape.
     "app/view/common/Util.js": (
         "2.9", "69c3bdaa628db402fd8e707c9a1d679b331df548301bf26316c8bebdfcddafaf"),
+    # v=1.1 lists the model organisms first and renders at most 200 rows
+    # (PR #156): a cached v=1.0 would still work, but would show a wall of
+    # 12,000 rows in species.json order.
     "app/view/common/OrganismSearch.js": (
-        "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
+        "1.1", "41d70c698a396b0e33d8e686b9a8c8a3462cf9bf8ca58177b81f2d774ccb0642"),
     # v=0.8 turns off ExtJS's own shadow element under every window
     # (`shadow: false` on Ext.window.Window): main.css draws the window's
     # shadow, and the framework's 5px-radius one only showed as a grey box

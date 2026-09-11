@@ -558,14 +558,14 @@ def regenerate_species_json(kegg_data_dir, mongo_host, mongo_port):
     if missing:
         raise SystemExit("These installed species are missing from "
                          "organisms_all.list: %s" % ", ".join(missing))
-    target = os.path.join(kegg_data_dir, "current", "species.json")
-    if os.path.isfile(target):
-        import shutil
-        shutil.copy(target, target + "_prev")
-    entries = ",\n".join('\t{"name": %s, "value": %s}'
-                         % (json.dumps(names[c]), json.dumps(c)) for c in codes)
-    with open(target, "w") as fh:
-        fh.write('{"success": true, "species": [\n' + entries + '\n]}')
+    # The same writer and the same order as DBManager's, so the file does
+    # not change shape depending on which installer ran last.
+    src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from AdminTools.species_json import species_json_rows, write_species_json
+    target = write_species_json(os.path.join(kegg_data_dir, "current", "species.json"),
+                                species_json_rows(codes, names))
     return target, len(codes)
 
 
