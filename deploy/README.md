@@ -268,9 +268,12 @@ descend outwards rather than agree:
 The application has to be the one that refuses, because it is the only layer
 that answers with a message the UI can show. If `limit-post` is not above
 `SERVER_MAX_CONTENT_LENGTH`, uWSGI aborts the connection at protocol-parse time
-with no HTTP response at all and nginx returns a bare 502 instead — the same
-empty-body symptom as the keepalive bug above. If `client_max_body_size` is not
-above `limit-post`, nginx cuts in first with its own 413.
+with no HTTP response at all and nginx returns a bare 502 instead. The browser
+then has an empty body to render and shows "Unable to parse the error message",
+which says nothing about the size of the upload — the same symptom the upstream
+`keepalive` pool used to produce on POSTs, and the reason there is no keepalive
+pool in `deploy/nginx/paintomics.conf`. If `client_max_body_size` is not above
+`limit-post`, nginx cuts in first with its own 413.
 
 ## Tests
 
