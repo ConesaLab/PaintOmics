@@ -256,6 +256,55 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
             kegg_errors = "";
             mapping_errors = "";
 
+            # STEP 2.B.1 IF USER SPECIFIED THAT KEGG DATA SHOULD BE DOWNLOADED, DOWNLOAD THE KEGG DATA, OTHERWISE COPY PREVIOUS DATA (IF EXISTS)
+            # 2 = updateKegg, 3 = updateKegg && updateMapping
+            if (SPECIES_DOWNLOAD[specie] > 1 or (not os.path.exists(KEGG_DATA_DIR + "current/" + specie))):
+                os.mkdir(datadir + "kgml")
+                kegg_errors = getSpecieKeggData(specie, downloadLog, datadir, str(step) + "/" + total)
+            else:
+                log("COPYING PREVIOUS KEGG DATA FOR " + specie + "...")
+                shutil.rmtree(datadir)
+                shutil.copytree(KEGG_DATA_DIR + "current/" + specie, datadir,
+                                symlinks=True)  # COPYT THE ENTIRE DIRECTORY
+                shutil.rmtree(datadir + "mapping")
+                if reactome:
+                    # The copy brought the installed Reactome crawl along, and
+                    # downloadReactome skips files that already exist -- so a
+                    # refresh would validate the old data and never reach the
+                    # network. Clear it so the fetch below is a real one.
+                    shutil.rmtree(datadir + "reactome", ignore_errors=True)
+                    for staleReactome in ("ReactomePathway.txt", "ReactomePathwayHierarchy.json", "REACTOME_VERSION"):
+                        if os.path.isfile(datadir + staleReactome):
+                            os.remove(datadir + staleReactome)
+                # Add the flag file "DOWNLOADING"
+                version = open(datadir + "DOWNLOADING", 'w')
+                version.write("# DOWNLOAD STARTS:" + strftime("%Y%m%d %H%M"))
+                version.close()
+                if os.path.isfile(datadir + "VERSION"):
+                    os.remove(datadir + "VERSION")
+
+            # STEP 2.B.2 IF SELECTED, GET THE MAPPING DATA, OTHERWISE COPY PREVIOUS DATA
+            # 1=updateMapping, 3 = updateKegg && updateMapping
+
+            if (SPECIES_DOWNLOAD[specie] == 1 or SPECIES_DOWNLOAD[specie] == 3 or (
+            not os.path.exists(KEGG_DATA_DIR + "species/" + specie + "/mapping/"))):
+                log("DOWNLOADING MAPPING DATA...")
+                os.mkdir(datadir + "mapping")
+                mapping_errors = getSpecieMappingData(specie, downloadLog, datadir + "mapping/",
+                                                      str(step) + "/" + total, ROOT_DIRECTORY + "AdminTools/scripts/")
+            else:
+                log("COPYING PREVIOUS MAPPING DATA...")
+                shutil.copytree(KEGG_DATA_DIR + "current/" + specie + "/mapping", datadir + "mapping",
+                                symlinks=True)  # COPYT THE ENTIRE DIRECTORY
+
+            # STEP 2.B.3 REACTOME, AFTER the KEGG staging above and not before it.
+            # `--kegg=0` on a species that already has current/<sp> takes the
+            # "COPYING PREVIOUS KEGG DATA" branch, which rmtree's download/<sp>
+            # and copies the installed tree over it. With Reactome fetched
+            # first, that rmtree destroyed the whole Reactome download (hsa:
+            # 2h08m of transfers, 2026-08-13) and the species still reported
+            # DOWNLOAD SUCCESS. Fetched here it lands in the staged tree that
+            # will actually be promoted, whichever branch staged it.
             if reactome:
                 log("STEP " + str(currentStep) + " Extra. DOWNLOADING REACTOME Files...")
                 try:
@@ -290,38 +339,6 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
                                          strftime("%Y%m%d %H%M") + "\n")
                     else:
                         raise
-
-            # STEP 2.B.1 IF USER SPECIFIED THAT KEGG DATA SHOULD BE DOWNLOADED, DOWNLOAD THE KEGG DATA, OTHERWISE COPY PREVIOUS DATA (IF EXISTS)
-            # 2 = updateKegg, 3 = updateKegg && updateMapping
-            if (SPECIES_DOWNLOAD[specie] > 1 or (not os.path.exists(KEGG_DATA_DIR + "current/" + specie))):
-                os.mkdir(datadir + "kgml")
-                kegg_errors = getSpecieKeggData(specie, downloadLog, datadir, str(step) + "/" + total)
-            else:
-                log("COPYING PREVIOUS KEGG DATA FOR " + specie + "...")
-                shutil.rmtree(datadir)
-                shutil.copytree(KEGG_DATA_DIR + "current/" + specie, datadir,
-                                symlinks=True)  # COPYT THE ENTIRE DIRECTORY
-                shutil.rmtree(datadir + "mapping")
-                # Add the flag file "DOWNLOADING"
-                version = open(datadir + "DOWNLOADING", 'w')
-                version.write("# DOWNLOAD STARTS:" + strftime("%Y%m%d %H%M"))
-                version.close()
-                if os.path.isfile(datadir + "VERSION"):
-                    os.remove(datadir + "VERSION")
-
-            # STEP 2.B.2 IF SELECTED, GET THE MAPPING DATA, OTHERWISE COPY PREVIOUS DATA
-            # 1=updateMapping, 3 = updateKegg && updateMapping
-
-            if (SPECIES_DOWNLOAD[specie] == 1 or SPECIES_DOWNLOAD[specie] == 3 or (
-            not os.path.exists(KEGG_DATA_DIR + "species/" + specie + "/mapping/"))):
-                log("DOWNLOADING MAPPING DATA...")
-                os.mkdir(datadir + "mapping")
-                mapping_errors = getSpecieMappingData(specie, downloadLog, datadir + "mapping/",
-                                                      str(step) + "/" + total, ROOT_DIRECTORY + "AdminTools/scripts/")
-            else:
-                log("COPYING PREVIOUS MAPPING DATA...")
-                shutil.copytree(KEGG_DATA_DIR + "current/" + specie + "/mapping", datadir + "mapping",
-                                symlinks=True)  # COPYT THE ENTIRE DIRECTORY
 
             # IF SOMETHING WENT WRONG DURING THE DOWNLOAD BUT THE PROCESS CONTINUED (TOLERANCE)
             if kegg_errors != "" or mapping_errors != "":
@@ -1106,11 +1123,25 @@ def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTrie
 
     Rows without an organism code (viral and addendum genomes are listed as a
     bare description) are skipped: they have no KEGG organism to install.
+
+    The taxonomy column is filled from KEGG's br08610 hierarchy (see
+    scripts/kegg_taxonomy.py), spelled the way /list/organism spelled it, so
+    `ensembl_census.py registry` -- which picks the eukaryotes by that column
+    -- keeps working. It resolved zero species while the column was empty.
+    If br08610 cannot be fetched the column is left empty and the run says so,
+    rather than failing the whole common download over the lineage.
     """
     log(message)
 
     url = "https://rest.kegg.jp/list/genome"
     outputPath = os.path.join(dirName, fileName)
+
+    from scripts.kegg_taxonomy import fetchOrganismTaxonomy, legacyLineage, parseGenomeList
+    try:
+        taxonomy = fetchOrganismTaxonomy()
+    except Exception as exc:
+        taxonomy = {}
+        log("                      WARNING: KEGG taxonomy (br08610) unavailable; the lineage column will be empty: " + str(exc))
 
     lastError = None
     for attempt in range(1, maxTries + 1):
@@ -1118,31 +1149,20 @@ def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTrie
             response = requests.get(url, timeout=120)
             response.raise_for_status()
 
-            rows = []
-            for line in response.text.splitlines():
-                if not line.strip():
-                    continue
-                parts = line.split("\t")
-                if len(parts) < 2:
-                    continue
-                entry, description = parts[0], parts[1]
-                # "hsa; Homo sapiens (human)" -> code "hsa", name "Homo sapiens (human)"
-                if "; " not in description:
-                    continue
-                code, name = description.split("; ", 1)
-                code = code.strip()
-                if not code or " " in code:
-                    continue
-                rows.append((entry, code, name.strip()))
+            # "hsa; Homo sapiens (human)" -> code "hsa", name "Homo sapiens (human)"
+            rows = [(entry, code, name) for code, (entry, name) in parseGenomeList(response.text).items()]
 
             if not rows:
                 raise Exception("no organism rows parsed from " + url)
 
             with open(outputPath, "w") as handle:
                 for entry, code, name in rows:
-                    handle.write("\t".join([entry, code, name, ""]) + "\n")
+                    lineage = legacyLineage(taxonomy[code]) if code in taxonomy else ""
+                    handle.write("\t".join([entry, code, name, lineage]) + "\n")
 
-            log("                      Parsed " + str(len(rows)) + " organisms from /list/genome")
+            withLineage = sum(1 for _, code, _ in rows if code in taxonomy)
+            log("                      Parsed " + str(len(rows)) + " organisms from /list/genome (" +
+                str(withLineage) + " with a br08610 lineage)")
             return True
         except Exception as exc:
             lastError = exc
