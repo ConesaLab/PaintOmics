@@ -259,8 +259,21 @@ docker compose -f deploy/compose.yaml exec app \
               if (!requireNamespace(p, quietly=TRUE)) stop("missing: ", p); cat("ok\n")'
 ```
 
-**Uploads rejected at ~100 MB.** `client_max_body_size` (nginx),
-`SERVER_MAX_CONTENT_LENGTH` (app) and `limit-post` (uWSGI) must all agree.
+**Uploads rejected at ~100 MB.** Three limits govern this, and they must
+descend outwards rather than agree:
+
+    nginx client_max_body_size (300m)  >=  uWSGI limit-post (300 MB)
+                                       >=  app SERVER_MAX_CONTENT_LENGTH (100 MB)
+
+The application has to be the one that refuses, because it is the only layer
+that answers with a message the UI can show. If `limit-post` is not above
+`SERVER_MAX_CONTENT_LENGTH`, uWSGI aborts the connection at protocol-parse time
+with no HTTP response at all and nginx returns a bare 502 instead. The browser
+then has an empty body to render and shows "Unable to parse the error message",
+which says nothing about the size of the upload — the same symptom the upstream
+`keepalive` pool used to produce on POSTs, and the reason there is no keepalive
+pool in `deploy/nginx/paintomics.conf`. If `client_max_body_size` is not above
+`limit-post`, nginx cuts in first with its own 413.
 
 ## Tests
 
