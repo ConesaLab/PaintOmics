@@ -37,6 +37,8 @@ def binomialOf(name):
     clean = " ".join(words)
     if len(words) >= 2 and words[1].lower() in ("sp.", "sp", "cf.", "aff."):
         return clean
+    if words and words[0].lower() in ("endosymbiont", "symbiont", "uncultured", "unidentified", "bacterium"):
+        return clean
     if words and words[0].lower() in ("candidatus", "uncultured"):
         return " ".join(words[:3]) if len(words) >= 3 else clean
     return " ".join(words[:2]) if len(words) >= 2 else clean

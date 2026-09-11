@@ -113,8 +113,10 @@ def fetch(url, cacheDir, name):
 
 
 def keggOrganisms(cacheDir):
-    organisms = {code: {"T": tNumber, "name": name}
-                 for code, (tNumber, name) in parseGenomeList(fetch(KEGG_GENOME_URL, cacheDir, "kegg_genome.tsv")).items()}
+    # KEGG's own order is kept: within a species the reference genome comes
+    # first, and that is the strain the popularity ranking keeps.
+    organisms = {code: {"T": tNumber, "name": name, "kegg_order": index}
+                 for index, (code, (tNumber, name)) in enumerate(parseGenomeList(fetch(KEGG_GENOME_URL, cacheDir, "kegg_genome.tsv")).items())}
     taxonomy = parseOrganismTaxonomy(fetch(KEGG_TAXONOMY_URL, cacheDir, "br08610.txt"))
     for code, entry in organisms.items():
         tax = taxonomy.get(code, {})
@@ -208,8 +210,8 @@ def rankByPopularity(rows, popularity, census, top):
             installedBinomials.add(popularity[code][0])
     seen = set()
     candidates = []
-    keggOrder = {r["code"]: i for i, r in enumerate(rows)}
-    for row in rows:
+    keggOrder = {r["code"]: r.get("kegg_order", i) for i, r in enumerate(rows)}
+    for row in sorted(rows, key=lambda r: keggOrder[r["code"]]):
         if row["action"] != "install":
             continue
         code = row["code"]
@@ -300,7 +302,10 @@ def main(argv=None):
         # KEGG ids only; a mapping refresh (download --kegg=0 --mapping=1 and a
         # rebuild) gives it the Ensembl tables without touching its pathways.
         tables = have.get("tables", {})
-        missingEnsembl = code in registry and installedKegg and tables.get("ensembl_gene", -1) <= 0
+        # Only a census that carries the identifier tables (species_report.py's
+        # TSV) can say a table is missing; the runner's pathway-count JSON
+        # cannot, and must not turn every registered species into a refresh.
+        missingEnsembl = bool(tables) and code in registry and installedKegg and tables.get("ensembl_gene", 0) <= 0
         if not installedKegg:
             action = "install"
         elif (wantReactome and not installedReactome) or (wantMapman and not installedMapman) \
@@ -325,6 +330,7 @@ def main(argv=None):
             "installed_mapman": installedMapman, "installed_omnipath": installedOmnipath,
             "reactome_pathways_published": reactome[code][1] if code in reactome else "",
             "mapman_source_code": gcode, "pubmed_count": "", "rank": "", "note": "; ".join(notes),
+            "kegg_order": entry["kegg_order"],
         })
 
     if args.popularity:
@@ -342,6 +348,8 @@ def main(argv=None):
         rows[-1].update({"code": code, "action": "keep", "priority": 9, "note": "installed but absent from KEGG's current organism list"})
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    for row in rows:
+        row.pop("kegg_order", None)
     with open(args.output, "w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
         writer.writeheader()

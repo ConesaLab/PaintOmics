@@ -84,14 +84,18 @@ def test_manifest_covers_every_kegg_organism_once_with_a_valid_action():
     assert len(codes) == len(set(codes)), "duplicate codes in manifest"
     assert len(rows) > 11000, "manifest has only %d rows; KEGG lists ~12,000 organisms" % len(rows)
     actions = {r["action"] for r in rows}
-    assert actions <= {"install", "keep", "refresh", "rebuild"}, actions
+    assert actions <= {"install", "keep", "refresh", "rebuild", "defer"}, actions
     kingdoms = {r["kingdom"] for r in rows}
     assert {"Eukaryota", "Bacteria", "Archaea"} <= kingdoms, kingdoms
     for r in rows:
         if r["kingdom"]:
-            assert r["priority"] in ("0", "1", "2", "3"), r
+            assert r["priority"].isdigit(), r
             if r["priority"] == "0":
                 assert r["action"] in ("refresh", "rebuild"), r
+        if r["action"] == "defer":
+            assert "deferred" in r["note"], r
+        if r["action"] == "install" and r["rank"]:
+            assert r["priority"] == r["rank"], "an installed organism's priority is its popularity rank: %r" % r
             assert r["kegg"] == "1", r
         if r["mapman"] == "1":
             assert r["code"] in ("ath", "osa", "sly", "sot"), r["code"] + " must not install MapMan"
@@ -103,10 +107,19 @@ def test_manifest_covers_every_kegg_organism_once_with_a_valid_action():
     assert byCode["eco"]["kingdom"] == "Bacteria" and byCode["eco"]["priority"] == "3"
 
 
-def test_eukaryotes_come_before_archaea_before_bacteria():
+def test_manifest_is_in_install_order_and_the_top_is_the_most_cited():
     rows = _manifestRows()
-    order = [r["priority"] for r in rows if r["kingdom"]]
+    order = [int(r["priority"]) for r in rows if r["kingdom"] and r["action"] in ("install", "refresh", "rebuild")]
     assert order == sorted(order), "manifest is not in install priority order"
+    ranked = [r for r in rows if r["action"] == "install" and r["rank"]]
+    if ranked:
+        counts = [int(r["pubmed_count"]) for r in sorted(ranked, key=lambda r: int(r["rank"]))]
+        assert counts == sorted(counts, reverse=True), "ranks do not follow the PubMed counts"
+        # One KEGG code per species: no two installed rows share a binomial
+        # (as the counter spells it: "Candidatus Liberibacter asiaticus" is three words).
+        binomialOf = _load("pubmed_popularity").binomialOf
+        binomials = [binomialOf(r["name"]) for r in ranked]
+        assert len(binomials) == len(set(binomials)), "two strains of one species are both installed"
 
 
 def test_runner_classifies_download_failures():
