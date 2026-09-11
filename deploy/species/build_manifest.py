@@ -27,10 +27,11 @@ Usage:
         [--census census.json] [--registry PaintomicsServer/src/AdminTools/scripts/common_resources/ensembl_genebuilds.json] \
         -o deploy/species/manifest.tsv
 
---census is the JSON written by `allspecies_runner.py census` (or the ad-hoc
-census in this session): [[code, {source: n_pathways}, {table: n_rows}], ...].
-Without it every KEGG organism not yet known is `install`; with it, organisms
-already carrying their sources are `keep`.
+--census is what the server already holds: the TSV of `species_report.py
+--no-reach` (preferred; carries the identifier tables), or the JSON object of
+`allspecies_runner.py census` ({code: pathway count}). Without it every KEGG
+organism is `install`; with it, organisms already carrying their sources are
+`keep` and registered genebuilds without Ensembl tables become `refresh`.
 """
 import argparse
 import csv
@@ -42,9 +43,8 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "PaintomicsServer", "src", "AdminTools", "scripts"))
-from kegg_taxonomy import parseOrganismTaxonomy, KEGG_TAXONOMY_URL  # noqa: E402
+from kegg_taxonomy import parseOrganismTaxonomy, parseGenomeList, KEGG_TAXONOMY_URL, KEGG_GENOME_URL  # noqa: E402
 
-KEGG_GENOME_URL = "https://rest.kegg.jp/list/genome"
 REACTOME_PATHWAYS_URL = "https://reactome.org/download/current/ReactomePathways.txt"
 GOMAPMAN_LISTING_URL = "https://gomapman.nib.si/api/GetFolderInfo/protein_2018-05-25%7Cpaintomics"
 
@@ -113,15 +113,8 @@ def fetch(url, cacheDir, name):
 
 
 def keggOrganisms(cacheDir):
-    organisms = {}
-    for line in fetch(KEGG_GENOME_URL, cacheDir, "kegg_genome.tsv").splitlines():
-        parts = line.split("\t")
-        if len(parts) < 2 or "; " not in parts[1]:
-            continue
-        code, name = parts[1].split("; ", 1)
-        code = code.strip()
-        if code and " " not in code:
-            organisms[code] = {"T": parts[0], "name": name.strip()}
+    organisms = {code: {"T": tNumber, "name": name}
+                 for code, (tNumber, name) in parseGenomeList(fetch(KEGG_GENOME_URL, cacheDir, "kegg_genome.tsv")).items()}
     taxonomy = parseOrganismTaxonomy(fetch(KEGG_TAXONOMY_URL, cacheDir, "br08610.txt"))
     for code, entry in organisms.items():
         tax = taxonomy.get(code, {})
@@ -154,18 +147,23 @@ def gomapmanCodes(cacheDir):
 def loadCensus(path):
     """{code: {"sources": {...}, "tables": {...}}} of what the server holds, or {}.
 
-    Two shapes are accepted: the JSON list [[code, {source: n}, {table: n}], ...]
-    and the TSV species_report.py writes (kind=source/table rows), which is the
-    one to use -- `species_report.py --no-reach` inside the app container is
-    the census of the live server.
+    Three shapes are accepted:
+      * the TSV species_report.py writes (kind=source/table rows) -- the one to
+        use: `species_report.py --no-reach` inside the app container is the
+        census of the live server, tables included;
+      * the JSON object `allspecies_runner.py census` prints, {code: n_kegg_pathways}
+        (pathway counts only, so the Ensembl-refresh rule cannot fire from it);
+      * a JSON list of [code, {source: n}, {table: n}] triples.
     """
     if not path:
         return {}
     census = {}
     if path.endswith(".json"):
         with open(path, encoding="utf-8") as handle:
-            rows = json.load(handle)
-        return {row[0]: {"sources": row[1], "tables": row[2]} for row in rows}
+            loaded = json.load(handle)
+        if isinstance(loaded, dict):
+            return {code: {"sources": {"KEGG": int(n or 0)}, "tables": {}} for code, n in loaded.items()}
+        return {row[0]: {"sources": row[1], "tables": row[2]} for row in loaded}
     with open(path, encoding="utf-8") as handle:
         for row in csv.DictReader(handle, delimiter="\t"):
             entry = census.setdefault(row["code"], {"sources": {}, "tables": {}})

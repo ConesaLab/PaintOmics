@@ -24,7 +24,7 @@ for extra in (_ADMIN_TOOLS, _SCRIPTS):
     if extra not in sys.path:
         sys.path.insert(0, extra)
 
-from kegg_taxonomy import (parseOrganismTaxonomy, legacyLineage, isEukaryote,   # noqa: E402
+from kegg_taxonomy import (parseOrganismTaxonomy, parseGenomeList, legacyLineage, isEukaryote,   # noqa: E402
                            LEGACY_KINGDOM)
 
 _PASSED = []
@@ -140,6 +140,26 @@ def test_lines_outside_the_hierarchy_are_ignored():
     assert parseOrganismTaxonomy("") == {}
     # A leaf with no enclosing kingdom has no lineage and is not an organism.
     assert parseOrganismTaxonomy("O   hsa  Homo sapiens\n") == {}
+
+
+def test_genome_list_parser_keeps_organisms_and_drops_bare_descriptions():
+    """One parser for /list/genome, shared by the organism list, the registry and the manifest."""
+    text = ("T01001\thsa; Homo sapiens (human)\n"
+            "T40001\tHuman papillomavirus type 16\n"      # viral: no code
+            "T90001\t\n"
+            "T03333\tabc; Some organism; strain X (weird)\n"
+            "\n")
+    parsed = parseGenomeList(text)
+    assert parsed == {"hsa": ("T01001", "Homo sapiens (human)"),
+                      "abc": ("T03333", "Some organism; strain X (weird)")}, parsed
+    assert parseGenomeList("") == {}
+    for path, name in ((os.path.join(_ADMIN_TOOLS, "DBManager.py"), "downloadKEGGOrganismList"),
+                       (os.path.join(_SCRIPTS, "ensembl_census.py"), "keggEukaryotes"),
+                       (os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+                           os.path.abspath(__file__))))), "deploy", "species", "build_manifest.py"), "keggOrganisms")):
+        fn = _functionSource(path, name)
+        calls = {n.func.id for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        assert "parseGenomeList" in calls, "%s() in %s must use the shared parser" % (name, os.path.basename(path))
 
 
 def _functionSource(path, name):

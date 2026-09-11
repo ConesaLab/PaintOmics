@@ -55,8 +55,12 @@ DEFAULTS = {
 DBMANAGER = "python /app/PaintomicsServer/src/AdminTools/DBManager.py"
 
 RUNNABLE = ("install", "refresh", "rebuild")
-NETWORK_FAILURE = re.compile(r"403|Forbidden|Max retries|Connection|Read timed out|Name or service|"
-                             r"Temporary failure|429|502|503|504", re.I)
+#: What a refused or unreachable KEGG looks like in a download log. The status
+#: codes are matched as requests spells them ("403 Client Error"), never as bare
+#: digit runs: pathway ids such as hsa04030 or hsa05030 contain them.
+NETWORK_FAILURE = re.compile(r"(?<!\d)(403|429|500|502|503|504)(?!\d)\s+(Client|Server)\s+Error|Forbidden|"
+                             r"Max retries|ConnectionError|Connection (refused|reset|aborted)|Read timed out|"
+                             r"Name or service not known|Temporary failure in name resolution", re.I)
 PERMANENT_FAILURE = re.compile(r"empty body|Unable to retrieve gene2pathway\.list|Unable to retrieve pathways\.list", re.I)
 #: Failures of the environment, not of the species: nothing about the organism
 #: caused them, so they must not consume its attempts. A run of these means the
@@ -424,6 +428,15 @@ class Runner(object):
         for code in codes:
             if code in summary.get("installed", set()):
                 n = self.pathwayCount(code)
+                if n is None:
+                    # The install said SUCCESS; only the check could not run
+                    # (mongosh hiccup). Not a failure of the species: keep it
+                    # installed, unverified, for the final census to count.
+                    self.setState(code, "installed", kegg_pathways=None, install_seconds=elapsed // max(len(codes), 1),
+                                  reason="pathway count unverified: mongosh failed after the install")
+                    self.log("%s: installed, pathway count unverified (mongosh failed)" % code)
+                    installedNow += 1
+                    continue
                 if n > 0:
                     self.setState(code, "installed", kegg_pathways=n, install_seconds=elapsed // max(len(codes), 1))
                     installedNow += 1
@@ -463,12 +476,15 @@ class Runner(object):
                 out.setdefault(key, set()).update(set(rest.split()) - {"-"})
         return out
 
-    def pathwayCount(self, code):
-        try:
-            return int(self.mongoEval("print(db.kegg.countDocuments({}))", code + "-paintomics") or 0)
-        except Exception as exc:
-            self.log("%s: could not count pathways: %s" % (code, exc))
-            return -1
+    def pathwayCount(self, code, tries=3):
+        """Pathway documents in <code>-paintomics, or None when mongosh cannot answer."""
+        for attempt in range(tries):
+            try:
+                return int(self.mongoEval("print(db.kegg.countDocuments({}))", code + "-paintomics") or 0)
+            except Exception as exc:
+                self.log("%s: could not count pathways (try %d/%d): %s" % (code, attempt + 1, tries, exc))
+                time.sleep(10)
+        return None
 
     def installWorker(self, rowsByCode, total):
         idle = 0

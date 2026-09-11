@@ -112,12 +112,58 @@ def test_eukaryotes_come_before_archaea_before_bacteria():
 def test_runner_classifies_download_failures():
     r = _load("allspecies_runner")
     assert r.NETWORK_FAILURE.search("HTTPError: 403 Client Error: Forbidden")
+    assert r.NETWORK_FAILURE.search("503 Server Error: Service Unavailable for url")
     assert r.NETWORK_FAILURE.search("Max retries exceeded with url")
     assert not r.NETWORK_FAILURE.search("Too many errors while downloading the KGML files")
+    # Pathway ids carry the same digits; a healthy log must not trip the breaker.
+    assert not r.NETWORK_FAILURE.search("- hsa04030 [12/161]\n- hsa05030 [13/161]\n- map00403 [14/161]")
+    # 400 is KEGG's contract answer, not a network fault.
+    assert not r.NETWORK_FAILURE.search("Error downloading uniprot2kegg.list: 400 Client Error: Bad Request")
     assert r.PERMANENT_FAILURE.search("empty body (HTTP 200) for https://rest.kegg.jp/link/pathway/xyz")
     assert r.ENV_FAILURE.search("PermissionError: [Errno 13] Permission denied: '/app/x/log/application.log'")
     assert r.ENV_FAILURE.search("OCI runtime exec failed")
     assert not r.ENV_FAILURE.search("Unable to retrieve pathways.list")
+
+
+def test_manifest_census_accepts_the_runner_json_and_the_report_tsv():
+    import json
+    import tempfile
+    m = _load("build_manifest")
+    tmp = tempfile.mkdtemp()
+    try:
+        jsonPath = os.path.join(tmp, "census.json")
+        with open(jsonPath, "w") as handle:
+            json.dump({"hsa": 372, "xyz": 0}, handle)
+        census = m.loadCensus(jsonPath)
+        assert census["hsa"]["sources"] == {"KEGG": 372} and census["xyz"]["sources"] == {"KEGG": 0}, census
+        tsvPath = os.path.join(tmp, "census.tsv")
+        with open(tsvPath, "w") as handle:
+            handle.write("kind\tcode\tname\tn\tsampled\treached\tfraction\ttarget\n"
+                         "source\tmmu\tKEGG\t364\t\t\t\t\n"
+                         "source\tmmu\tReactome\t524\t\t\t\t\n"
+                         "table\tmmu\tensembl_gene\t28311\t10\t10\t1.000\tentrezgene\n")
+        census = m.loadCensus(tsvPath)
+        assert census["mmu"]["sources"] == {"KEGG": 364, "Reactome": 524}, census
+        assert census["mmu"]["tables"] == {"ensembl_gene": 28311}, census
+    finally:
+        import shutil
+        shutil.rmtree(tmp)
+
+
+def test_report_sampler_spans_the_whole_table():
+    sys.path.insert(0, SCRIPTS)
+    import species_report
+    positions = species_report.stridePositions(45, 40)   # n <= total < 2n: floor division gave first-N
+    assert len(positions) == 40 and positions[0] == 0 and positions[-1] >= 43, positions
+    assert species_report.stridePositions(1000, 40)[-1] >= 975
+    assert species_report.stridePositions(5, 40) == [0, 1, 2, 3, 4]
+    assert species_report.stridePositions(0, 40) == []
+    try:
+        species_report.positiveInt("0")
+    except Exception as exc:
+        assert "sample" in str(exc)
+    else:
+        raise AssertionError("--sample 0 must be rejected")
 
 
 def test_runner_parses_the_install_summary_block():

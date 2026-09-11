@@ -75,6 +75,19 @@ def test_reactome_still_runs_inside_the_species_try_block():
     assert inner.lineno < kegg, "the KEGG staging and the Reactome fetch must share one species try block"
 
 
+def test_a_refresh_clears_the_reactome_files_the_copy_branch_brought_along():
+    """downloadReactome skips files that exist; a --kegg=0 refresh copies the old crawl in first."""
+    fn = _downloadCommand()
+    reactome = _calls(fn, "downloadReactome")[0]
+    copytree = min(n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
+                   and isinstance(n.func, ast.Attribute) and n.func.attr == "copytree")
+    clears = [n.lineno for n in ast.walk(fn)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "rmtree"
+              and n.args and "reactome" in ast.unparse(n.args[0])]
+    assert clears, "the copy branch must rmtree the staged reactome/ directory when a Reactome refresh is requested"
+    assert copytree < clears[0] < reactome, (copytree, clears, reactome)
+
+
 def main():
     failed = 0
     for name, fn in sorted(globals().items()):

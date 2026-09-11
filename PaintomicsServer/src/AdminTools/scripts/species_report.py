@@ -38,25 +38,47 @@ def speciesDatabases(client):
                   if name.endswith("-paintomics") and name != "global-paintomics")
 
 
+def stridePositions(total, n):
+    """n row indices spread evenly over [0, total), the last one near the end.
+
+    Floor division (`total // n`) as the stride collapsed to 1 whenever
+    n <= total < 2n and stopped after the first n rows -- the "first N" this
+    sampler exists to avoid. Every position here is `i * total / n`, so the
+    sample always spans the whole table; fewer rows than n means all of them.
+    """
+    if total <= n:
+        return list(range(total))
+    return sorted({(i * total) // n for i in range(n)})
+
+
 def strideSample(db, dbnameId, n):
     total = db.xref.count_documents({"dbname_id": dbnameId})
     if total == 0:
         return [], 0
-    step = max(total // n, 1)
+    wanted = stridePositions(total, n)
+    last = wanted[-1]
+    wantedSet = set(wanted)
     cursor = db.xref.find({"dbname_id": dbnameId}, {"display_id": 1}).sort("_id", 1)
     sample = []
     for index, row in enumerate(cursor):
-        if index % step == 0:
+        if index in wantedSet:
             sample.append(row["display_id"])
-            if len(sample) >= n:
-                break
+        if index >= last:
+            break
     return sample, total
+
+
+def positiveInt(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("--sample must be >= 1, got %s" % value)
+    return number
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--species", default=None, help="comma-separated codes (default: every installed)")
-    parser.add_argument("--sample", type=int, default=40)
+    parser.add_argument("--sample", type=positiveInt, default=40, help="ids per table (>= 1)")
     parser.add_argument("--out", default="-")
     parser.add_argument("--mongo-host", default=None)
     parser.add_argument("--mongo-port", type=int, default=None)

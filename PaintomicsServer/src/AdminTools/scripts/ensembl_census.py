@@ -212,17 +212,10 @@ def keggEukaryotes():
     command resolved zero species without saying why. The two live sources
     answer directly: /list/genome for codes and names, br08610 for the kingdom.
     """
-    from kegg_taxonomy import fetchOrganismTaxonomy, isEukaryote
+    from kegg_taxonomy import fetchOrganismTaxonomy, isEukaryote, parseGenomeList, KEGG_GENOME_URL
     taxonomy = fetchOrganismTaxonomy()
-    lineage = {}
-    for line in fetch("https://rest.kegg.jp/list/genome").splitlines():
-        parts = line.rstrip("\n").split("\t")
-        if len(parts) < 2 or "; " not in parts[1]:
-            continue
-        code, name = parts[1].split("; ", 1)
-        code = code.strip()
-        if code and " " not in code and isEukaryote(taxonomy.get(code)):
-            lineage[code] = (parts[0], name.strip())
+    lineage = {code: entry for code, entry in parseGenomeList(fetch(KEGG_GENOME_URL)).items()
+               if isEukaryote(taxonomy.get(code))}
     if not lineage:
         raise Exception("no eukaryotes found in KEGG's organism list; refusing to empty the registry")
     return lineage

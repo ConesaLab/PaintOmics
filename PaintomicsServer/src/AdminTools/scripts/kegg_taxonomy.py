@@ -32,6 +32,27 @@ import time
 from urllib.request import urlopen
 
 KEGG_TAXONOMY_URL = "https://rest.kegg.jp/get/br:br08610"
+KEGG_GENOME_URL = "https://rest.kegg.jp/list/genome"
+
+
+def parseGenomeList(text):
+    """{code: (T number, name)} from /list/genome text.
+
+    Rows look like `T01001<TAB>hsa; Homo sapiens (human)`. Viral and addendum
+    genomes are listed as a bare description with no `code; ` prefix and are
+    skipped: they have no KEGG organism to install. Only the first `; `
+    separates code from name, so a semicolon inside a name survives.
+    """
+    organisms = {}
+    for line in text.splitlines():
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) < 2 or "; " not in parts[1]:
+            continue
+        code, name = parts[1].split("; ", 1)
+        code = code.strip()
+        if code and " " not in code:
+            organisms[code] = (parts[0], name.strip())
+    return organisms
 
 #: How the retired /list/organism spelled the top level. Its prokaryote rows
 #: read "Prokaryotes;Bacteria;..." and "Prokaryotes;Archaea;..."; eukaryotes

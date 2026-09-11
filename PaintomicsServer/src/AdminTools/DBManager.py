@@ -267,6 +267,15 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
                 shutil.copytree(KEGG_DATA_DIR + "current/" + specie, datadir,
                                 symlinks=True)  # COPYT THE ENTIRE DIRECTORY
                 shutil.rmtree(datadir + "mapping")
+                if reactome:
+                    # The copy brought the installed Reactome crawl along, and
+                    # downloadReactome skips files that already exist -- so a
+                    # refresh would validate the old data and never reach the
+                    # network. Clear it so the fetch below is a real one.
+                    shutil.rmtree(datadir + "reactome", ignore_errors=True)
+                    for staleReactome in ("ReactomePathway.txt", "ReactomePathwayHierarchy.json", "REACTOME_VERSION"):
+                        if os.path.isfile(datadir + staleReactome):
+                            os.remove(datadir + staleReactome)
                 # Add the flag file "DOWNLOADING"
                 version = open(datadir + "DOWNLOADING", 'w')
                 version.write("# DOWNLOAD STARTS:" + strftime("%Y%m%d %H%M"))
@@ -1127,7 +1136,7 @@ def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTrie
     url = "https://rest.kegg.jp/list/genome"
     outputPath = os.path.join(dirName, fileName)
 
-    from scripts.kegg_taxonomy import fetchOrganismTaxonomy, legacyLineage
+    from scripts.kegg_taxonomy import fetchOrganismTaxonomy, legacyLineage, parseGenomeList
     try:
         taxonomy = fetchOrganismTaxonomy()
     except Exception as exc:
@@ -1140,22 +1149,8 @@ def downloadKEGGOrganismList(message, logFile, dirName, fileName, delay, maxTrie
             response = requests.get(url, timeout=120)
             response.raise_for_status()
 
-            rows = []
-            for line in response.text.splitlines():
-                if not line.strip():
-                    continue
-                parts = line.split("\t")
-                if len(parts) < 2:
-                    continue
-                entry, description = parts[0], parts[1]
-                # "hsa; Homo sapiens (human)" -> code "hsa", name "Homo sapiens (human)"
-                if "; " not in description:
-                    continue
-                code, name = description.split("; ", 1)
-                code = code.strip()
-                if not code or " " in code:
-                    continue
-                rows.append((entry, code, name.strip()))
+            # "hsa; Homo sapiens (human)" -> code "hsa", name "Homo sapiens (human)"
+            rows = [(entry, code, name) for code, (entry, name) in parseGenomeList(response.text).items()]
 
             if not rows:
                 raise Exception("no organism rows parsed from " + url)
