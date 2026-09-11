@@ -303,6 +303,25 @@ class ParserTests(unittest.TestCase):
         self.assertIsNone(self.builder.bareEnsemblIdentifier("ENSMUSG00000000001"))
         self.assertEqual(1, sum(1 for key in self.builder.ALL_ENTRIES if key.startswith("ENSMUSG00000000001#")))
 
+    def test_ncbi_style_gene_names_yield_their_entrez_id(self):
+        """RefSeq-derived genebuilds name genes LOC<GeneID> / GeneID_<GeneID> and cross-reference few of them."""
+        self.builder.SPECIE = "ptep"
+        self.builder.EXTERNAL_RESOURCES = {"ensembl": [{"output": "ensembl_mapping.list", "description": "t"}]}
+        self.writeMapping("ensembl_mapping.list", [
+            ("LOC107444053", "", "XP_015906880.1", "XM_016051394.2"),
+            ("GeneID_806169", "", "NP_758877", "GeneID_806169_df_mr"),
+            ("LOC107446990", "107446990", "XP_1", "XM_1"),
+            ("Zm00001eb056070", "", "Zm00001eb056070_P002", "Zm00001eb056070_T002"),
+        ])
+        self.builder.processEnsemblData()
+        self.assertEqual(self.groupsOf("LOC107444053", "ensembl_gene"), self.groupsOf("107444053", "entrezgene"))
+        self.assertEqual(self.groupsOf("GeneID_806169", "ensembl_gene"), self.groupsOf("806169", "entrezgene"))
+        self.assertEqual(self.groupsOf("LOC107446990", "ensembl_gene"), self.groupsOf("107446990", "entrezgene"))
+        self.assertIsNone(self.builder.entrezIdFromGeneName("Zm00001eb056070"))
+        self.assertEqual(3, sum(1 for key in self.builder.ALL_ENTRIES
+                                if key.endswith("#" + self.tableId("entrezgene"))),
+                         "a gene without an NCBI-style name and without an xref gets no Entrez id")
+
     def test_ensembl_uniprot_pass_joins_the_kegg_group(self):
         """An Ensembl gene reaches kegg_id in ONE hop through a KEGG-mapped accession."""
         self.builder.SPECIE = "spo"

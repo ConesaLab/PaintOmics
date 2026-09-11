@@ -212,6 +212,22 @@ def ensemblResourcesFor(specie, path=ENSEMBL_GENEBUILDS_FILE):
 ENSEMBL_ID_PREFIXES = ("gene-", "mRNA-", "rna-", "CDS-", "cds-")
 
 
+#: Genebuilds Ensembl Genomes imports from RefSeq (bombyx_mori_gca030269925v1rs,
+#: parasteatoda_tepidariorum_gca043381705v1rs, varroa_destructor, ...) name
+#: their genes after NCBI's own convention: `LOC107444053` is NCBI GeneID
+#: 107444053, `GeneID_806169` is GeneID 806169. Their entrez dumps carry an
+#: EntrezGene row for only a fraction of those genes (ptep: 27 of 300 sampled
+#: genes reached kegg_id on paintomics.org, 2026-09-11), although the id every
+#: other gene needs is spelled out in its name. Read it from there.
+NCBI_NAMED_GENE = re.compile(r"^(?:LOC|GeneID_)(\d+)$")
+
+
+def entrezIdFromGeneName(geneId):
+    """The NCBI GeneID an NCBI-style gene name carries, or None."""
+    match = NCBI_NAMED_GENE.match(geneId)
+    return match.group(1) if match else None
+
+
 def bareEnsemblIdentifier(identifier):
     """The identifier without a GenBank-style type prefix, or None if it has none."""
     for prefix in ENSEMBL_ID_PREFIXES:
@@ -570,6 +586,9 @@ def processEnsemblData():
 
                 if ensembl_gi != "": #ALWAYS TRUE
                     _insertEnsemblIdentifier(ensembl_gi, ensembl_gene_db_id, resource.get("description"), ensembl_ti)
+
+                if entrez_gi == "" and ensembl_gi != "":
+                    entrez_gi = entrezIdFromGeneName(ensembl_gi) or ""
 
                 if entrez_gi != "":
                     entrez_gi = insertXREF(XREF_Entry(entrez_gi, entrezgene_db_id, resource.get("description")))
