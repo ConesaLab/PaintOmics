@@ -465,6 +465,23 @@
         return '<li class="po-organism-group">' + text + "</li>";
     }
 
+    /* The store's rows that every enabled filter other than `own` accepts,
+       from the snapshot when one exists (the unfiltered rows) and from data
+       before the first filter. Mirrors how Ext.data.Store.filter() applies
+       its filters: each filterFn called on the record, disabled ones
+       skipped. */
+    function passingOtherFilters(store, own) {
+        var records = (store.snapshot || store.data).items, filters = store.filters.items || [], i;
+        function accepts(filter) {
+            return function (record) { return filter.filterFn.call(filter.scope || filter, record); };
+        }
+        for (i = 0; i < filters.length; i++) {
+            if (filters[i] === own || filters[i].disabled) continue;
+            records = records.filter(accepts(filters[i]));
+        }
+        return records;
+    }
+
     /*
      * xtype 'organismcombo': an Ext.form.field.ComboBox whose local query is
      * the ranking above instead of the display-name prefix filter, and whose
@@ -587,7 +604,14 @@
                     }));
                 }
 
-                records = (store.snapshot || store.data).items;
+                /* Only the rows the store's OTHER filters let through. The
+                   request dialog hangs a permanent filter on this same store
+                   that hides installed organisms (DataManagementController),
+                   and Store.filter() applies every filter it holds; ranking
+                   the raw snapshot spent the row budget on rows that filter
+                   then dropped, and put the counts and the "All organisms"
+                   label where nothing was (review catch on #156). */
+                records = passingOtherFilters(store, me.queryFilter);
                 ranked = rank(query, Ext.Array.map(records, function (record) { return record.data; }));
                 kept = ranked.length > limit ? ranked.slice(0, limit) : ranked;
                 order = {};

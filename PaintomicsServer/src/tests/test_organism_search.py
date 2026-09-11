@@ -487,6 +487,37 @@ class RenderCap(unittest.TestCase):
     def test_no_group_labels_when_every_shown_row_is_curated(self):
         self.assertFalse(self.run_js("(combo.maxRows = 3, query(''), combo.organismShown.groups)"))
 
+    def test_the_cap_and_the_counts_follow_the_stores_other_filters(self):
+        # The request dialog hangs a permanent filter that hides installed
+        # organisms on the very store this combo renders. Ranking the raw
+        # snapshot spent the row budget on rows that filter then dropped,
+        # reported them in the footer, and put the "All organisms" label
+        # inside the alphabet (review catch on #156). hsa, mmu, rno and naz
+        # "installed": the browse starts at dre, and every count is of what
+        # is left.
+        installed = ("store.addFilter(new Ext.util.Filter({id: 'installed-organisms', "
+                     "filterFn: r => !/^(hsa|mmu|rno|naz)$/.test(r.data.value)})), ")
+        out = self.run_js(installed + "(combo.maxRows = 5, query(''), {rows: rows(), count: store.getCount(), "
+                          "shown: combo.organismShown})")
+        self.assertEqual(["dre", "dme", "cel", "sce", "spo"], out["rows"])
+        self.assertEqual(5, out["count"])
+        self.assertEqual({"query": "", "shown": 5, "matched": FIXTURE_SIZE - 4, "total": FIXTURE_SIZE - 4,
+                          "model": 5, "groups": False}, out["shown"])
+        # Uncapped: the seam label sits exactly after the curated rows that
+        # are left, and the alphabet starts at Abrus precatorius, naz being gone.
+        out = self.run_js(installed + "(combo.maxRows = 0, query(''), {rows: rows(), model: combo.organismShown.model, "
+                          "groups: combo.organismShown.groups})")
+        self.assertTrue(out["groups"])
+        self.assertEqual(FIXTURE_SIZE - 4, len(out["rows"]))
+        self.assertNotIn("hsa", out["rows"])
+        self.assertEqual("aprc", out["rows"][out["model"]])
+        self.assertEqual("dre", out["rows"][0])
+        # A query is narrowed the same way: the mouse is installed, so
+        # "mouse" finds the others only.
+        out = self.run_js(installed + "(query('mouse'), {rows: rows(), matched: combo.organismShown.matched})")
+        self.assertNotIn("mmu", out["rows"])
+        self.assertEqual(len(out["rows"]), out["matched"])
+
     def test_a_browse_before_the_list_arrives_is_not_cached(self):
         # autoLoad is in flight, the user clicks the trigger: nothing to
         # show, and doQuery must not remember '' as answered, or the first
@@ -514,12 +545,12 @@ function collection(items) {
           add(x) { this.items.push(x); }, addAll(xs) { this.items = this.items.concat(xs); }, get length() { return this.items.length; }};
 }
 const store = {
-  snapshot: null, data: {items: organisms.slice()}, filters: [],
+  snapshot: null, data: {items: organisms.slice()}, filters: collection([]),
   sorters: collection([{property: 'name', sorterFn: (a, b) => a.data.name < b.data.name ? -1 : 1}]),
-  addFilter(f) { this.filters.push(f); },
+  addFilter(f) { this.filters.add(f); },
   filter() {
     this.snapshot = this.snapshot || {items: organisms.slice()};
-    const live = this.filters.filter(f => !f.disabled);
+    const live = this.filters.items.filter(f => !f.disabled);
     this.data = {items: this.snapshot.items.filter(r => live.every(f => f.filterFn(r)))};
     const sorter = this.sorters.items[0];
     if (sorter) this.data.items.sort(sorter.sorterFn);

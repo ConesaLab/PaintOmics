@@ -127,7 +127,7 @@ PUBLISHED = {
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
     "app/view/common/OrganismSearch.js": (
-        "1.1", "6469f5a3c48973a5470c2f97467bf722bca20d4670ce58ef514594d37dedd86c"),
+        "1.1", "41d70c698a396b0e33d8e686b9a8c8a3462cf9bf8ca58177b81f2d774ccb0642"),
     # v=0.8 turns off ExtJS's own shadow element under every window
     # (`shadow: false` on Ext.window.Window): main.css draws the window's
     # shadow, and the framework's 5px-radius one only showed as a grey box
