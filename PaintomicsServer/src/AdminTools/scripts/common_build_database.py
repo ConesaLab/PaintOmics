@@ -1044,7 +1044,15 @@ def processUniProtData():
     FAILED_LINES["UNIPROT"]=[]
     stderr.write("\n\nPROCESSING UniProt MAPPING FILE...\n")
 
-    resource = EXTERNAL_RESOURCES.get("uniprot")[0]
+    resources = (EXTERNAL_RESOURCES or {}).get("uniprot")
+    if not resources:
+        # A build script that calls this without declaring the id-mapping
+        # resource used to die on `None[0]` (acs, 2026-09-11) and lose the
+        # whole species; a missing source is a skipped identifier type.
+        skipSource("UNIPROT", "no \"uniprot\" resource declared for " + str(SPECIE),
+                   "UniProt accessions and identifiers will be absent for this species")
+        return
+    resource = resources[0]
     file_name= DATA_DIR + "mapping/" + resource.get("output")
     if not haveInputFile("UNIPROT", file_name,
                          "UniProt accessions and identifiers will be absent for this species"):

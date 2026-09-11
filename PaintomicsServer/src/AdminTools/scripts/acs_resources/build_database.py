@@ -16,6 +16,7 @@ LOG_FILE    = argv[4]
 
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")
 COMMON_BUILD_DB_TOOLS.SPECIE= SPECIE
+COMMON_BUILD_DB_TOOLS.ROOT_DIR= ROOT_DIR
 COMMON_BUILD_DB_TOOLS.DATA_DIR= DATA_DIR
 COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/" + SPECIE + "_resources/download_conf.py").EXTERNAL_RESOURCES
 
@@ -30,7 +31,13 @@ try:
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
-    COMMON_BUILD_DB_TOOLS.processUniProtData()
+    # KEGG's own conversions (kegg_id, ncbi_geneid, uniprot_acc), then the
+    # Ensembl-UniProt join, which can only link into groups that exist.
+    # processUniProtData() stood here: it reads a UniProt id-mapping file
+    # under a "uniprot" resource this species never declared, so every
+    # acs install died before it reached the pathways (2026-09-11).
+    COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
+    COMMON_BUILD_DB_TOOLS.processEnsemblUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
 
     #**************************************************************************
