@@ -86,11 +86,15 @@ rows are gone; the global `current/mapman` tree is intact at 71 PNG / 70 XML).
 ## What is running, and how the final numbers are produced
 
 `~/allspecies/allspecies_runner.py` on the VM (README in `~/allspecies/README.md`) walks the
-manifest with 8 parallel downloads and one install worker; state per species under
+manifest with 5 parallel downloads and one install worker; state per species under
 `~/allspecies/state/`, `python3 allspecies_runner.py status` prints progress, an `@reboot` cron
-restarts it. KEGG is the only rate-limited source: one KGML per ~3.4 s per worker
-(≈ 2.3 requests/s in total), a bacterium takes ~6.5 min to download and 2 s to install, so the
-11,772 organisms need roughly six days. Order: the 4 refreshes, then eukaryotes, archaea, bacteria.
+restarts it. KEGG is the only rate-limited source and it enforces the limit: at 8 workers
+(≈ 2.3 requests/s) KEGG answered **403 Forbidden** to everything from 13:20 to 13:50 UTC, and 292
+species were written off before the breaker tripped (the message matched the permanent-failure
+pattern first -- fixed, and they were requeued). At 5 workers (≈ 1.5 requests/s, one KGML per
+~3.4 s per worker) a bacterium takes ~6.5 min to download and 2 s to install, so the 11,772
+organisms need roughly nine to ten days; any further 403 pauses every download for an hour.
+Order: the refreshes, then eukaryotes, archaea, bacteria.
 
 When it finishes, `deploy/species/verify-all.sh` on the VM writes, under `~/allspecies/verify-<stamp>/`:
 `census.tsv` (Ensembl tables per species), `verify.tsv` (Ensembl gene → kegg_id reach),

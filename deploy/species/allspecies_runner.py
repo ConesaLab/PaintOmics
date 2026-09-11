@@ -18,9 +18,10 @@ recreate the container mid-run, which throws the copy away).
 
 KEGG is the only rate-limited source. Each download process makes one request
 per DOWNLOAD_DELAY_2 (2 s) plus latency, so --workers sets the aggregate rate:
-6 workers is about 2.2 requests/s. A run of consecutive network failures
-(HTTP 403, connection errors) trips a breaker that pauses every download for
---breaker-pause seconds instead of hammering a server that is refusing us.
+5 workers is about 1.5 requests/s. Eight workers (~2.3/s) earned a 403 block
+for half an hour on 2026-09-11, so a 403/429 pauses every download at once
+for --forbidden-pause seconds, and a run of other network failures pauses
+for --breaker-pause seconds, instead of hammering a server that is refusing us.
 
     allspecies_runner.py run     [--workers 6] [--batch 25] [--kinds Eukaryota,Archaea,Bacteria]
     allspecies_runner.py status  one line per state, plus rates and an ETA
@@ -61,7 +62,15 @@ RUNNABLE = ("install", "refresh", "rebuild")
 NETWORK_FAILURE = re.compile(r"(?<!\d)(403|429|500|502|503|504)(?!\d)\s+(Client|Server)\s+Error|Forbidden|"
                              r"Max retries|ConnectionError|Connection (refused|reset|aborted)|Read timed out|"
                              r"Name or service not known|Temporary failure in name resolution", re.I)
-PERMANENT_FAILURE = re.compile(r"empty body|Unable to retrieve gene2pathway\.list|Unable to retrieve pathways\.list", re.I)
+#: KEGG's contract answers for an organism it does not serve: an empty body
+#: (withdrawn entry) or HTTP 400 on its pathway lists. Retrying cannot help.
+#: "Unable to retrieve gene2pathway.list" on its own is NOT permanent -- on
+#: 2026-09-11 KEGG answered 403 for half an hour and 292 species were written
+#: off as permanent failures because the message matched here first.
+PERMANENT_FAILURE = re.compile(r"empty body|Unable to retrieve (gene2pathway|pathways)\.list[^\n]*400 Client Error", re.I)
+#: KEGG refusing us outright. One of these means the rate is too high, not
+#: that anything is wrong with the species: stop everything for a while.
+FORBIDDEN = re.compile(r"(?<!\d)(403|429)(?!\d)\s+Client\s+Error", re.I)
 #: Failures of the environment, not of the species: nothing about the organism
 #: caused them, so they must not consume its attempts. A run of these means the
 #: container is wrong (recreated without the installer, files owned by root
@@ -343,8 +352,18 @@ class Runner(object):
                              % (code, reason, self.args.env_pause))
             return
         network = bool(NETWORK_FAILURE.search(tail))
-        permanent = bool(PERMANENT_FAILURE.search(tail))
-        self.noteDownloadResult(False, network and not permanent)
+        permanent = bool(PERMANENT_FAILURE.search(tail)) and not network
+        if FORBIDDEN.search(tail):
+            # A refusal is never the species' fault: give the attempt back and
+            # stop every download at once, not after four more refusals.
+            self.setState(code, "retry", reason="forbidden: " + reason,
+                          attempts=max(self.getState(code).get("attempts", 1) - 1, 0))
+            with self.breakerLock:
+                if time.time() >= self.breakerUntil:
+                    self.breakerUntil = time.time() + self.args.forbidden_pause
+                    self.log("FORBIDDEN by KEGG on %s; pausing all downloads for %d s" % (code, self.args.forbidden_pause))
+            return
+        self.noteDownloadResult(False, network)
         attempts = self.getState(code).get("attempts", 0)
         if permanent:
             self.setState(code, "failed", reason="download: " + reason, download_seconds=elapsed)
@@ -605,7 +624,7 @@ def main(argv=None):
     parser.add_argument("command", choices=("run", "status", "census"))
     for key, value in DEFAULTS.items():
         parser.add_argument("--" + key.replace("_", "-"), default=value)
-    parser.add_argument("--workers", type=int, default=6)
+    parser.add_argument("--workers", type=int, default=5)
     parser.add_argument("--batch", type=int, default=25, help="species per install run")
     parser.add_argument("--kinds", default="Eukaryota,Archaea,Bacteria", help="kingdoms to run, in order")
     parser.add_argument("--only", default=None, help="comma-separated codes (smoke tests)")
@@ -615,6 +634,7 @@ def main(argv=None):
     parser.add_argument("--breaker-threshold", type=int, default=5)
     parser.add_argument("--breaker-pause", type=int, default=1800)
     parser.add_argument("--env-pause", type=int, default=300, help="pause after an environment failure")
+    parser.add_argument("--forbidden-pause", type=int, default=3600, help="pause after KEGG answers 403/429")
     parser.add_argument("--stagger", type=float, default=20.0, help="seconds between worker starts")
     parser.add_argument("--exec-user", default=None, help="user for docker compose exec (default: the container's)")
     args = parser.parse_args(argv)
