@@ -17,6 +17,7 @@ Run inside the server environment:
 
 Output: one TSV with two kinds of rows, distinguished by the `kind` column:
     kind=source   code  source  n_pathways
+    kind=stat     code  xref_avg_bytes  bytes   (mean xref document size)
     kind=table    code  table   rows  sampled  reached  fraction  target
 It is read-only.
 """
@@ -101,6 +102,14 @@ def main(argv=None):
         db = client[code + "-paintomics"]
         for row in db.kegg.aggregate([{"$group": {"_id": "$source", "n": {"$sum": 1}}}]):
             out.write("\t".join(("source", code, str(row["_id"]), str(row["n"]), "", "", "", "")) + "\n")
+        # The mean xref document size is the mate-set inflation signal: a
+        # normal species sits at 400-900 bytes; ambiguous EntrezGene
+        # cross-references took rainbow trout to 6,621 (3.1 GB).
+        try:
+            stats = db.command("collstats", "xref")
+            out.write("\t".join(("stat", code, "xref_avg_bytes", str(int(stats.get("avgObjSize", 0))), "", "", "", "")) + "\n")
+        except Exception:
+            pass
         tables = {row["dbname"]: row["_id"] for row in db.dbname.find({}, {"dbname": 1})}
         targetName = getDatabasesByOrganismCode(code)[0].get("KEGG")
         targetId = tables.get(targetName)

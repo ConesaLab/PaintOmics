@@ -163,6 +163,28 @@ def test_manifest_census_accepts_the_runner_json_and_the_report_tsv():
         shutil.rmtree(tmp)
 
 
+def test_inflated_species_are_refreshed_from_the_census_statistic():
+    """omy/amex/dre carry mate sets inflated by ambiguous EntrezGene xrefs; the report's
+    xref_avg_bytes statistic is what the manifest turns into a refresh."""
+    import tempfile
+    m = _load("build_manifest")
+    tmp = tempfile.mkdtemp()
+    try:
+        tsvPath = os.path.join(tmp, "census.tsv")
+        with open(tsvPath, "w") as handle:
+            handle.write("kind\tcode\tname\tn\tsampled\treached\tfraction\ttarget\n"
+                         "source\tomy\tKEGG\t196\t\t\t\t\n"
+                         "stat\tomy\txref_avg_bytes\t6621\t\t\t\t\n"
+                         "source\tmmu\tKEGG\t364\t\t\t\t\n"
+                         "stat\tmmu\txref_avg_bytes\t692\t\t\t\t\n")
+        census = m.loadCensus(tsvPath)
+        assert census["omy"]["stats"] == {"xref_avg_bytes": 6621}, census
+        assert census["omy"]["stats"]["xref_avg_bytes"] > m.XREF_INFLATED_BYTES > census["mmu"]["stats"]["xref_avg_bytes"]
+    finally:
+        import shutil
+        shutil.rmtree(tmp)
+
+
 def test_report_sampler_spans_the_whole_table():
     sys.path.insert(0, SCRIPTS)
     import species_report
@@ -201,6 +223,29 @@ def test_popularity_ranking_keeps_one_strain_per_species_and_caps_the_list():
     assert byCode["xyz"]["action"] == "defer" and "rank 4" in byCode["xyz"]["note"], byCode["xyz"]
     # Rows the manifest does not install are untouched.
     assert byCode["hsa"]["action"] == "keep" and byCode["hsa"]["priority"] == "9", byCode["hsa"]
+
+
+def test_rebuilding_the_manifest_keeps_the_ranks_it_gave_before():
+    """A species installed since the first ranking must not open a slot for a deferred one."""
+    m = _load("build_manifest")
+    def row(code, action="install"):
+        return {"code": code, "kingdom": "Bacteria", "action": action, "priority": "3", "note": "", "kegg_order": 0}
+    popularity = {"aaa": ("Alpha a", 100), "bbb": ("Beta b", 50), "ccc": ("Gamma c", 10), "ddd": ("Delta d", 1)}
+    previous = {"aaa": 1, "bbb": 2, "ccc": 3, "ddd": 4}
+    # aaa was installed by the run: it is `keep` now. With --top 2, bbb stays the
+    # last one inside the cut and ccc stays deferred -- no sliding.
+    rows = [row("aaa", "keep"), row("bbb"), row("ccc"), row("ddd")]
+    m.rankByPopularity(rows, popularity, {"aaa": {"sources": {"KEGG": 5}, "tables": {}}}, top=2, previous=previous)
+    byCode = {r["code"]: r for r in rows}
+    assert byCode["aaa"]["action"] == "keep" and byCode["aaa"]["rank"] == 1, byCode["aaa"]
+    assert byCode["bbb"]["action"] == "install" and byCode["bbb"]["rank"] == 2, byCode["bbb"]
+    assert byCode["ccc"]["action"] == "defer" and byCode["ccc"]["rank"] == 3, byCode["ccc"]
+    # An organism never ranked before is ranked after everything that was.
+    rows = [row("bbb"), row("eee")]
+    popularity["eee"] = ("Epsilon e", 10**9)
+    m.rankByPopularity(rows, popularity, {}, top=0, previous=previous)
+    byCode = {r["code"]: r for r in rows}
+    assert byCode["eee"]["rank"] == 5, byCode["eee"]
 
 
 def test_runner_priority_order_ignores_the_kingdom():

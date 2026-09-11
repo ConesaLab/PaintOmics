@@ -85,6 +85,13 @@ MAPMAN = {
     "cam": (None, "exclude", "not chickpea: ids are Pgl_GLEAN_*/UniVie_pm; KEGG cam is Cicer arietinum"),
 }
 
+#: A species whose xref documents average more than this many bytes carries
+#: inflated mate sets (ambiguous EntrezGene cross-references loaded before the
+#: fan-out cap: omy 6,621, amex 7,895, dre 2,899 against 400-900 for a normal
+#: genome) and is refreshed: the mapping is fetched again under the cap and
+#: the species rebuilt.
+XREF_INFLATED_BYTES = 1500
+
 #: Reactome species that publish too little to install, with the measurement.
 REACTOME_EXCLUDED = {
     "mtu": ("Reactome publishes 13 pathways for M. tuberculosis in one tree (R-MTU-870392) and draws a "
@@ -173,6 +180,8 @@ def loadCensus(path):
                 entry["sources"][row["name"]] = int(row["n"] or 0)
             elif row["kind"] == "table":
                 entry["tables"][row["name"]] = int(row["n"] or 0)
+            elif row["kind"] == "stat":
+                entry.setdefault("stats", {})[row["name"]] = int(row["n"] or 0)
     return census
 
 
@@ -198,7 +207,21 @@ def _defer(row, reason):
     row["note"] = "; ".join(filter(None, [row["note"], "deferred: " + reason]))
 
 
-def rankByPopularity(rows, popularity, census, top):
+def previousRanks(path):
+    """{code: rank} from the manifest already on disk, so a rebuild keeps the same
+    top-N: without it, every species installed since the first ranking left the
+    candidate set and the next deferred ones slid across the cut."""
+    if not path or not os.path.isfile(path):
+        return {}
+    ranks = {}
+    with open(path, encoding="utf-8") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row.get("rank"):
+                ranks[row["code"]] = int(row["rank"])
+    return ranks
+
+
+def rankByPopularity(rows, popularity, census, top, previous=None):
     """Order the organisms still to install by how much is written about them.
 
     Every `install` row gets a `pubmed_count` and a `rank`; the rank becomes
@@ -207,8 +230,15 @@ def rankByPopularity(rows, popularity, census, top):
     the server already holds a code of that species -- the other strains are
     `defer`red with the reason. With `top`, everything ranked below it is
     deferred too. Rows the manifest does not install (keep, refresh, rebuild)
-    are untouched.
+    are untouched, but an installed row keeps the rank it had so the set
+    stays the same across rebuilds: `previous` (code -> rank from the last
+    manifest) is honoured first, and only organisms never ranked are ranked
+    now, after it.
     """
+    previous = previous or {}
+    for row in rows:
+        if row["code"] in previous and not row.get("rank"):
+            row["rank"] = previous[row["code"]]
     installedBinomials = set()
     for code, entry in census.items():
         if entry.get("sources", {}).get("KEGG", 0) > 0 and code in popularity:
@@ -234,9 +264,19 @@ def rankByPopularity(rows, popularity, census, top):
         seen.add(binomial)
         candidates.append(row)
     # Most cited first; ties by KEGG's own order (reference genomes first).
-    candidates.sort(key=lambda r: (-int(r["pubmed_count"]), keggOrder[r["code"]]))
-    for rank, row in enumerate(candidates, start=1):
-        row["rank"] = rank
+    # A candidate ranked by an earlier manifest keeps that rank; the rest are
+    # ranked after the highest rank ever given.
+    ranked = [r for r in candidates if r["code"] in previous]
+    fresh = [r for r in candidates if r["code"] not in previous]
+    ranked.sort(key=lambda r: previous[r["code"]])
+    fresh.sort(key=lambda r: (-int(r["pubmed_count"]), keggOrder[r["code"]]))
+    nextRank = max(previous.values()) + 1 if previous else 1
+    for row in ranked:
+        row["rank"] = previous[row["code"]]
+    for offset, row in enumerate(fresh):
+        row["rank"] = nextRank + offset
+    for row in ranked + fresh:
+        rank = row["rank"]
         if top and rank > top:
             _defer(row, "rank %d by PubMed count, beyond the top %d" % (rank, top))
         else:
@@ -252,6 +292,8 @@ def main(argv=None):
     parser.add_argument("-o", "--output", default=os.path.join(HERE, "manifest.tsv"))
     parser.add_argument("--popularity", default=None,
                         help="popularity.tsv from pubmed_popularity.py; ranks the organisms still to install")
+    parser.add_argument("--previous-manifest", default=None,
+                        help="manifest whose ranks are kept (default: the output file, if it exists)")
     parser.add_argument("--top", type=int, default=0,
                         help="with --popularity: install only the N most cited species (one KEGG code per binomial), defer the rest")
     args = parser.parse_args(argv)
@@ -310,13 +352,18 @@ def main(argv=None):
         # rebuild) gives it the Ensembl tables without touching its pathways.
         tables = have.get("tables", {})
         missingEnsembl = censusHasTables and code in registry and installedKegg and tables.get("ensembl_gene", 0) <= 0
+        xrefBytes = have.get("stats", {}).get("xref_avg_bytes", 0)
+        inflated = installedKegg and xrefBytes > XREF_INFLATED_BYTES
         if not installedKegg:
             action = "install"
         elif (wantReactome and not installedReactome) or (wantMapman and not installedMapman) \
-                or (wantOmnipath and not installedOmnipath) or missingEnsembl:
+                or (wantOmnipath and not installedOmnipath) or missingEnsembl or inflated:
             action = "refresh"
             if missingEnsembl:
                 notes.append("registered Ensembl genebuild but no ensembl_gene table: mapping refresh")
+            if inflated:
+                notes.append("mate sets inflated (xref documents average %d bytes): ambiguous EntrezGene "
+                             "cross-references; refresh under the fan-out cap" % xrefBytes)
         elif installedMapman and not wantMapman:
             action = "rebuild"
             notes.append("carries MapMan data it must not (organism-code collision); rebuild drops it")
@@ -338,7 +385,8 @@ def main(argv=None):
         })
 
     if args.popularity:
-        rankByPopularity(rows, loadPopularity(args.popularity), census, args.top)
+        rankByPopularity(rows, loadPopularity(args.popularity), census, args.top,
+                         previous=previousRanks(args.previous_manifest or args.output))
 
     # Priority order is the install order: refreshes first, then (with
     # --popularity) the most cited organisms by rank, else eukaryotes, archaea,
