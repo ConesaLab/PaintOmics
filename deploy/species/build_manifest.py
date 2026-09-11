@@ -145,12 +145,28 @@ def gomapmanCodes(cacheDir):
 
 
 def loadCensus(path):
-    """{code: {"sources": {...}, "tables": {...}}} from the census JSON, or {}."""
+    """{code: {"sources": {...}, "tables": {...}}} of what the server holds, or {}.
+
+    Two shapes are accepted: the JSON list [[code, {source: n}, {table: n}], ...]
+    and the TSV species_report.py writes (kind=source/table rows), which is the
+    one to use -- `species_report.py --no-reach` inside the app container is
+    the census of the live server.
+    """
     if not path:
         return {}
+    census = {}
+    if path.endswith(".json"):
+        with open(path, encoding="utf-8") as handle:
+            rows = json.load(handle)
+        return {row[0]: {"sources": row[1], "tables": row[2]} for row in rows}
     with open(path, encoding="utf-8") as handle:
-        rows = json.load(handle)
-    return {row[0]: {"sources": row[1], "tables": row[2]} for row in rows}
+        for row in csv.DictReader(handle, delimiter="\t"):
+            entry = census.setdefault(row["code"], {"sources": {}, "tables": {}})
+            if row["kind"] == "source":
+                entry["sources"][row["name"]] = int(row["n"] or 0)
+            elif row["kind"] == "table":
+                entry["tables"][row["name"]] = int(row["n"] or 0)
+    return census
 
 
 def loadRegistry(path):
@@ -210,19 +226,29 @@ def main(argv=None):
         # `keep`: complete. MapMan contamination (a source present that the
         # manifest says must not be) is `rebuild`: rebuild from current/ with the
         # installer that no longer declares it.
+        # A species installed before its Ensembl genebuild was registered has
+        # KEGG ids only; a mapping refresh (download --kegg=0 --mapping=1 and a
+        # rebuild) gives it the Ensembl tables without touching its pathways.
+        tables = have.get("tables", {})
+        missingEnsembl = code in registry and installedKegg and tables.get("ensembl_gene", -1) <= 0
         if not installedKegg:
             action = "install"
         elif (wantReactome and not installedReactome) or (wantMapman and not installedMapman) \
-                or (wantOmnipath and not installedOmnipath):
+                or (wantOmnipath and not installedOmnipath) or missingEnsembl:
             action = "refresh"
+            if missingEnsembl:
+                notes.append("registered Ensembl genebuild but no ensembl_gene table: mapping refresh")
         elif installedMapman and not wantMapman:
             action = "rebuild"
             notes.append("carries MapMan data it must not (organism-code collision); rebuild drops it")
         else:
             action = "keep"
+        # A refresh or rebuild touches a species people already use; it goes
+        # first, before the thousands of new installs.
+        priority = 0 if action in ("refresh", "rebuild") else PRIORITY.get(entry["kingdom"], 9)
         rows.append({
             "code": code, "T": entry["T"], "kingdom": entry["kingdom"], "group": entry["group"],
-            "name": entry["name"], "priority": PRIORITY.get(entry["kingdom"], 9), "action": action,
+            "name": entry["name"], "priority": priority, "action": action,
             "kegg": 1, "reactome": wantReactome, "mapman": wantMapman, "omnipath": wantOmnipath,
             "ensembl_genebuild": int(code in registry),
             "installed_kegg": installedKegg, "installed_reactome": installedReactome,
@@ -230,6 +256,10 @@ def main(argv=None):
             "reactome_pathways_published": reactome[code][1] if code in reactome else "",
             "mapman_source_code": gcode, "note": "; ".join(notes),
         })
+
+    # Priority order is the install order: refreshes first, then eukaryotes,
+    # archaea, bacteria; alphabetical within a class.
+    rows.sort(key=lambda r: (r["priority"], PRIORITY.get(r["kingdom"], 9), r["code"]))
 
     # Species the server holds that KEGG no longer lists stay visible here.
     for code in sorted(set(census) - set(organisms)):

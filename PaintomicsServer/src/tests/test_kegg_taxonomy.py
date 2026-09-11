@@ -209,6 +209,30 @@ def test_registry_selects_eukaryotes_from_kegg_not_from_the_list_file():
     assert "KEGG_DATA_DIR" not in names, "registry() must not read organisms_all.list any more"
 
 
+def test_registry_resolves_a_strain_taxid_by_the_species_binomial():
+    """ang is A. niger CBS 513.88 (425011) in KEGG; Ensembl files A. niger under 5061."""
+    import ensembl_census
+    niger = ("fungi", "aspergillus_niger", "5061", "Aspergillus niger", "ASM285v2", "")
+    atcc = ("fungi", "aspergillus_niger_atcc_1015", "380704", "Aspergillus niger ATCC 1015", "v3", "")
+    byTaxid = {"5061": [niger], "380704": [atcc]}
+    byBinomial = {"Aspergillus niger": [niger]}
+    hit, how = ensembl_census.resolveGenebuild("Aspergillus niger (black aspergilli)", 425011, byTaxid, byBinomial)
+    assert hit == niger and how == "binomial", (hit, how)
+    # An exact taxid still wins over the name.
+    hit, how = ensembl_census.resolveGenebuild("Aspergillus niger ATCC 1015", 380704, byTaxid, byBinomial)
+    assert hit == atcc and how == "taxid", (hit, how)
+    # Several assemblies of ONE species (same taxid) are not an ambiguity: the
+    # shortest species path wins, as on the taxid route.
+    gca = ("fungi", "fungi_ascomycota3_collection/aspergillus_niger_gca_001515345", "5061", "Aspergillus niger", "ASM151534v1", "fungi_ascomycota3_collection")
+    hit, how = ensembl_census.resolveGenebuild("Aspergillus niger CBS", 1, byTaxid, {"Aspergillus niger": [gca, niger]})
+    assert hit == niger and how == "binomial", (hit, how)
+    # Two DIFFERENT taxids under one binomial is ambiguous: no match.
+    other = ("fungi", "aspergillus_niger_x", "9999", "Aspergillus niger", "X", "")
+    hit, how = ensembl_census.resolveGenebuild("Aspergillus niger CBS", 1, byTaxid, {"Aspergillus niger": [niger, other]})
+    assert hit is None and how is None, (hit, how)
+    assert ensembl_census.resolveGenebuild("Nothing here", 2, {}, {}) == (None, None)
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

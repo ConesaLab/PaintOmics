@@ -89,7 +89,9 @@ def test_manifest_covers_every_kegg_organism_once_with_a_valid_action():
     assert {"Eukaryota", "Bacteria", "Archaea"} <= kingdoms, kingdoms
     for r in rows:
         if r["kingdom"]:
-            assert r["priority"] in ("1", "2", "3"), r
+            assert r["priority"] in ("0", "1", "2", "3"), r
+            if r["priority"] == "0":
+                assert r["action"] in ("refresh", "rebuild"), r
             assert r["kegg"] == "1", r
         if r["mapman"] == "1":
             assert r["code"] in ("ath", "osa", "sly", "sot"), r["code"] + " must not install MapMan"

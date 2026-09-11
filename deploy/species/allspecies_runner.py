@@ -143,6 +143,26 @@ class Runner(object):
         except IOError:
             return ""
 
+    def pruneSpeciesDirectories(self):
+        """Remove scripts/<code>_resources directories the host installer no longer has.
+
+        docker cp adds and overwrites; it never deletes. A species directory
+        removed from the installer (bvu_resources, whose MapMan build put
+        plant pathways into a bacterium) therefore survived in the container
+        from the image, and DBManager -- which dispatches on the directory's
+        existence -- kept running the build that was removed.
+        """
+        scripts = os.path.join(self.args.installer_src, "scripts")
+        wanted = {name for name in os.listdir(scripts) if name.endswith("_resources")}
+        listing = self.sudo(["docker", "exec", self.args.container, "sh", "-c",
+                             "ls -d %s/scripts/*_resources 2>/dev/null" % self.args.installer_dst],
+                            capture_output=True, text=True)
+        for path in listing.stdout.split():
+            name = os.path.basename(path.rstrip("/"))
+            if name not in wanted:
+                self.log("removing %s from the container: not in the host installer" % path)
+                self.sudo(["docker", "exec", "-u", "0", self.args.container, "rm", "-rf", path])
+
     def installerWritable(self):
         probe = self.args.installer_dst + "/log/.write-probe"
         result = self.sudo(["docker", "exec", "-u", self.args.exec_user, self.args.container, "sh", "-c",
@@ -169,6 +189,7 @@ class Runner(object):
                 raise RuntimeError("docker cp failed: " + result.stderr.strip())
             if self.installerHash(True) != wanted:
                 raise RuntimeError("installer copy did not take (hash mismatch after docker cp)")
+            self.pruneSpeciesDirectories()
             # docker cp writes as root; the installer then runs as --exec-user and
             # must be able to write its own log/ directory and __pycache__.
             if self.args.exec_user:
@@ -245,7 +266,10 @@ class Runner(object):
         kinds = [k.strip() for k in self.args.kinds.split(",") if k.strip()]
         rows = [r for r in rows if r["kingdom"] in kinds]
         order = {k: i for i, k in enumerate(kinds)}
-        rows.sort(key=lambda r: (order.get(r["kingdom"], 99), int(r["priority"] or 9), r["code"]))
+        # Priority 0 (a refresh or rebuild of a species people already use)
+        # goes before everything, whatever its kingdom; then the kinds order.
+        rows.sort(key=lambda r: (0 if r["priority"] == "0" else 1, order.get(r["kingdom"], 99),
+                                 int(r["priority"] or 9), r["code"]))
         if self.args.only:
             wanted = set(self.args.only.split(","))
             rows = [r for r in rows if r["code"] in wanted]
@@ -385,6 +409,17 @@ class Runner(object):
             rc = rc or rc2
         elapsed = int(time.time() - start)
         summary = self.parseSummary(logPath)
+        if not summary and ENV_FAILURE.search(self.tail(logPath, 4000)):
+            # The run died before it looked at any species (root-owned
+            # summary.log, a recreated container): not their fault.
+            for code in codes:
+                self.setState(code, "downloaded", reason="environment: " + self.reasonFrom(self.tail(logPath, 4000)))
+            with self.breakerLock:
+                self.breakerUntil = max(self.breakerUntil, time.time() + self.args.env_pause)
+            self.log("ENVIRONMENT FAILURE in install batch (%s); species kept as downloaded, pausing %d s"
+                     % (self.reasonFrom(self.tail(logPath, 4000)), self.args.env_pause))
+            time.sleep(self.args.env_pause)
+            return
         installedNow = 0
         for code in codes:
             if code in summary.get("installed", set()):
@@ -438,7 +473,10 @@ class Runner(object):
     def installWorker(self, rowsByCode, total):
         idle = 0
         while True:
-            if self.controlFile("STOP") and not self.pending("downloaded"):
+            # On STOP, stay until every download in flight has landed and been
+            # installed: returning as soon as the queue looked empty left seven
+            # downloaded species uninstalled on 2026-09-11.
+            if self.controlFile("STOP") and not self.pending("downloaded") and not self.pending("downloading"):
                 return
             ready = [c for c in self.orderedCodes if self.getState(c)["state"] == "downloaded"]
             if not ready:

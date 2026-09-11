@@ -228,6 +228,31 @@ def keggEukaryotes():
     return lineage
 
 
+def resolveGenebuild(name, taxid, byTaxid, byBinomial):
+    """The Ensembl row for a KEGG organism: ((division, species, taxid, name, assembly, collection), how).
+
+    Exact taxid first. KEGG keys many fungi and plants on a STRAIN taxid
+    (ang = Aspergillus niger CBS 513.88, 425011) while Ensembl files the
+    genebuild under the species (5061), so a strain with no exact hit falls
+    back to the one Ensembl species whose two-word name equals the organism's
+    binomial -- and only when exactly one such species exists, so a genus
+    with several sequenced species cannot be matched to the wrong one.
+    (None, None) when nothing matches.
+    """
+    hits = byTaxid.get(str(taxid), [])
+    if hits:
+        return sorted(hits, key=lambda row: (len(row[1]), row[1]))[0], "taxid"
+    binomial = " ".join(name.split()[:2])
+    candidates = byBinomial.get(binomial, [])
+    # Ensembl Genomes files the same species several times (A. niger: the
+    # main genebuild plus three GCA assemblies in collections, all taxid 5061);
+    # one taxid is one species, so that is not an ambiguity -- pick the same
+    # way the taxid route does. Two taxids would be.
+    if candidates and len({row[2] for row in candidates}) == 1:
+        return sorted(candidates, key=lambda row: (len(row[1]), row[1]))[0], "binomial"
+    return None, None
+
+
 def registry(args):
     """Rebuild the registry for every eukaryote in KEGG's organism list, or for --species."""
     wanted = set(args.species.split(",")) if args.species else None
@@ -240,8 +265,11 @@ def registry(args):
 
     rows, release = ensemblSpecies()
     byTaxid = {}
+    byBinomial = {}
     for row in rows:
         byTaxid.setdefault(row[2], []).append(row)
+        if len(row[3].split()) == 2:
+            byBinomial.setdefault(row[3], []).append(row)
     with open(REGISTRY, encoding="utf-8") as handle:
         document = json.load(handle)
     # Merge by default: `registry --species gmx` re-resolves one entry and must
@@ -252,12 +280,14 @@ def registry(args):
     for code, (tNumber, name) in sorted(lineage.items()):
         taxid = keggTaxid(tNumber)
         time.sleep(0.35)
-        hits = byTaxid.get(str(taxid), [])
-        if not hits:
+        hit, how = resolveGenebuild(name, taxid, byTaxid, byBinomial)
+        if hit is None:
             sys.stderr.write("%s: no Ensembl genebuild for taxid %s (%s)\n" % (code, taxid, name))
             genebuilds.pop(code, None)
             continue
-        division, species, _, _, assembly, collection = sorted(hits, key=lambda row: (len(row[1]), row[1]))[0]
+        if how == "binomial":
+            sys.stderr.write("%s: taxid %s has no genebuild; matched the species %r by name\n" % (code, taxid, hit[3]))
+        division, species, _, _, assembly, collection = hit
         path = (collection + "/" if collection else "") + species
         dumps = dumpsPublished(division, path, release)
         if dumps is None:

@@ -1,73 +1,76 @@
 code	T	kingdom	group	name	priority	action	kegg	reactome	mapman	omnipath	ensembl_genebuild	installed_kegg	installed_reactome	installed_mapman	installed_omnipath	reactome_pathways_published	mapman_source_code	note
+aaf	T04134	Eukaryota	Sar	Aureococcus anophagefferens	0	refresh	1	0	0	0	1	1	0	0	0			registered Ensembl genebuild but no ensembl_gene table: mapping refresh
+aag	T01053	Eukaryota	Metazoa	Aedes aegypti (yellow fever mosquito)	0	refresh	1	0	0	0	1	1	0	0	0			registered Ensembl genebuild but no ensembl_gene table: mapping refresh
+aalb	T06060	Eukaryota	Metazoa	Aedes albopictus (Asian tiger mosquito)	0	refresh	1	0	0	0	1	1	0	0	0			registered Ensembl genebuild but no ensembl_gene table: mapping refresh
+mdm	T03194	Eukaryota	Viridiplantae	Malus domestica (apple)	0	refresh	1	0	0	0	1	1	0	0	0			registered Ensembl genebuild but no ensembl_gene table: mapping refresh
+bvu	T00546	Bacteria	Pseudomonadati	Phocaeicola vulgatus	0	rebuild	1	0	0	0	0	1	0	1	0			carries MapMan data it must not (organism-code collision); rebuild drops it
+mtu	T00015	Bacteria	Bacillati	Mycobacterium tuberculosis H37Rv	0	refresh	1	1	0	0	0	1	0	0	0	13		Reactome publishes only 13 pathways
 aacu	T11380	Eukaryota	Metazoa	Anas acuta (northern pintail)	1	install	1	0	0	0	0	0	0	0	0			
-aaf	T04134	Eukaryota	Sar	Aureococcus anophagefferens	1	install	1	0	0	0	0	0	0	0	0			
-aag	T01053	Eukaryota	Metazoa	Aedes aegypti (yellow fever mosquito)	1	install	1	0	0	0	0	0	0	0	0			
 aage	T09904	Eukaryota	Metazoa	Aricia agestis (brown argus)	1	install	1	0	0	0	0	0	0	0	0			
-aalb	T06060	Eukaryota	Metazoa	Aedes albopictus (Asian tiger mosquito)	1	install	1	0	0	0	0	0	0	0	0			
-aali	T08930	Eukaryota	Metazoa	Anopheles albimanus	1	install	1	0	0	0	0	0	0	0	0			
+aali	T08930	Eukaryota	Metazoa	Anopheles albimanus	1	install	1	0	0	0	1	0	0	0	0			
 aalt	T05291	Eukaryota	Fungi	Alternaria alternata	1	install	1	0	0	0	0	0	0	0	0			
 aam	T04298	Eukaryota	Metazoa	Apteryx mantelli mantelli (North Island brown kiwi)	1	install	1	0	0	0	0	0	0	0	0			
 aamp	T08327	Eukaryota	Metazoa	Arvicola amphibius (Eurasian water vole)	1	install	1	0	0	0	0	0	0	0	0			
 aamu	T10870	Eukaryota	Metazoa	Asterias amurensis (Northern Pacific seastar)	1	install	1	0	0	0	0	0	0	0	0			
 aang	T07545	Eukaryota	Metazoa	Anguilla anguilla (European eel)	1	install	1	0	0	0	0	0	0	0	0			
 aans	T10558	Eukaryota	Viridiplantae	Argentina anserina (silverweed cinquefoil)	1	install	1	0	0	0	0	0	0	0	0			
-aara	T07381	Eukaryota	Metazoa	Anopheles arabiensis	1	install	1	0	0	0	0	0	0	0	0			
+aara	T07381	Eukaryota	Metazoa	Anopheles arabiensis	1	install	1	0	0	0	1	0	0	0	0			
 abe	T01611	Eukaryota	Fungi	Trichophyton benhamiae	1	install	1	0	0	0	0	0	0	0	0			
-abp	T03136	Eukaryota	Fungi	Agaricus bisporus var. burnettii JB137-S8	1	install	1	0	0	0	0	0	0	0	0			
-abrc	T11989	Eukaryota	Metazoa	Anser brachyrhynchus (Pink-footed goose)	1	install	1	0	0	0	0	0	0	0	0			
-abru	T09870	Eukaryota	Metazoa	Argiope bruennichi (wasp spider)	1	install	1	0	0	0	0	0	0	0	0			
+abp	T03136	Eukaryota	Fungi	Agaricus bisporus var. burnettii JB137-S8	1	install	1	0	0	0	1	0	0	0	0			
+abrc	T11989	Eukaryota	Metazoa	Anser brachyrhynchus (Pink-footed goose)	1	install	1	0	0	0	1	0	0	0	0			
+abru	T09870	Eukaryota	Metazoa	Argiope bruennichi (wasp spider)	1	install	1	0	0	0	1	0	0	0	0			
 abv	T03140	Eukaryota	Fungi	Agaricus bisporus var. bisporus H97	1	install	1	0	0	0	0	0	0	0	0			
 acak	T10486	Eukaryota	Viridiplantae	Aristolochia californica	1	install	1	0	0	0	0	0	0	0	0			
-acan	T02667	Eukaryota	Amoebozoa	Acanthamoeba castellanii	1	install	1	0	0	0	0	0	0	0	0			
+acan	T02667	Eukaryota	Amoebozoa	Acanthamoeba castellanii	1	install	1	0	0	0	1	0	0	0	0			
 acar	T08541	Eukaryota	Metazoa	Antrostomus carolinensis (chuck-will's-widow)	1	install	1	0	0	0	0	0	0	0	0			
 acat	T11018	Eukaryota	Metazoa	Aquarana catesbeiana (American bullfrog)	1	install	1	0	0	0	0	0	0	0	0			
-acep	T04923	Eukaryota	Metazoa	Atta cephalotes (leaf cutting ant)	1	install	1	0	0	0	0	0	0	0	0			
+acep	T04923	Eukaryota	Metazoa	Atta cephalotes (leaf cutting ant)	1	install	1	0	0	0	1	0	0	0	0			
 acer	T07475	Eukaryota	Metazoa	Apis cerana (Asiatic honeybee)	1	install	1	0	0	0	0	0	0	0	0			
-achc	T08023	Eukaryota	Metazoa	Aquila chrysaetos chrysaetos (golden eagle)	1	install	1	0	0	0	0	0	0	0	0			
+achc	T08023	Eukaryota	Metazoa	Aquila chrysaetos chrysaetos (golden eagle)	1	install	1	0	0	0	1	0	0	0	0			
 ache	T08080	Eukaryota	Fungi	Aspergillus chevalieri	1	install	1	0	0	0	0	0	0	0	0			
 achl	T08456	Eukaryota	Metazoa	Acanthisitta chloris (rifleman)	1	install	1	0	0	0	0	0	0	0	0			
 acoc	T11098	Eukaryota	Metazoa	Atta colombica	1	install	1	0	0	0	0	0	0	0	0			
 acoe	T10543	Eukaryota	Metazoa	Aphelocoma coerulescens (scrub jay)	1	install	1	0	0	0	0	0	0	0	0			
-acoo	T09500	Eukaryota	Metazoa	Adelges cooleyi (spruce gall adelgid)	1	install	1	0	0	0	0	0	0	0	0			
+acoo	T09500	Eukaryota	Metazoa	Adelges cooleyi (spruce gall adelgid)	1	install	1	0	0	0	1	0	0	0	0			
 acos	T10908	Eukaryota	Metazoa	Anopheles coustani	1	install	1	0	0	0	0	0	0	0	0			
-acoz	T07312	Eukaryota	Metazoa	Anopheles coluzzii	1	install	1	0	0	0	0	0	0	0	0			
-acs	T01608	Eukaryota	Metazoa	Anolis carolinensis (green anole)	1	install	1	0	0	0	0	0	0	0	0			
-act	T01148	Eukaryota	Fungi	Aspergillus clavatus	1	install	1	0	0	0	0	0	0	0	0			
-acun	T05777	Eukaryota	Metazoa	Athene cunicularia (burrowing owl)	1	install	1	0	0	0	0	0	0	0	0			
-acyg	T04896	Eukaryota	Metazoa	Anser cygnoides (swan goose)	1	install	1	0	0	0	0	0	0	0	0			
+acoz	T07312	Eukaryota	Metazoa	Anopheles coluzzii	1	install	1	0	0	0	1	0	0	0	0			
+acs	T01608	Eukaryota	Metazoa	Anolis carolinensis (green anole)	1	install	1	0	0	0	1	0	0	0	0			
+act	T01148	Eukaryota	Fungi	Aspergillus clavatus	1	install	1	0	0	0	1	0	0	0	0			
+acun	T05777	Eukaryota	Metazoa	Athene cunicularia (burrowing owl)	1	install	1	0	0	0	1	0	0	0	0			
+acyg	T04896	Eukaryota	Metazoa	Anser cygnoides (swan goose)	1	install	1	0	0	0	1	0	0	0	0			
 adac	T10615	Eukaryota	Fungi	Alternaria dauci	1	install	1	0	0	0	0	0	0	0	0			
-adar	T11379	Eukaryota	Metazoa	Anopheles darlingi (American malaria mosquito)	1	install	1	0	0	0	0	0	0	0	0			
+adar	T11379	Eukaryota	Metazoa	Anopheles darlingi (American malaria mosquito)	1	install	1	0	0	0	1	0	0	0	0			
 adf	T04352	Eukaryota	Metazoa	Acropora digitifera (stony coral)	1	keep	1	0	0	0	0	1	0	0	0			
 adl	T03129	Eukaryota	Fungi	Auricularia subglabra	1	install	1	0	0	0	0	0	0	0	0			
-adr	T09121	Eukaryota	Metazoa	Apis dorsata (giant honeybee)	1	install	1	0	0	0	0	0	0	0	0			
+adr	T09121	Eukaryota	Metazoa	Apis dorsata (giant honeybee)	1	install	1	0	0	0	1	0	0	0	0			
 adu	T04300	Eukaryota	Viridiplantae	Arachis duranensis	1	install	1	0	0	0	0	0	0	0	0			
-aec	T03917	Eukaryota	Metazoa	Acromyrmex echinatior (Panamanian leafcutter ant)	1	install	1	0	0	0	0	0	0	0	0			
+aec	T03917	Eukaryota	Metazoa	Acromyrmex echinatior (Panamanian leafcutter ant)	1	install	1	0	0	0	1	0	0	0	0			
 aew	T09464	Eukaryota	Viridiplantae	Actinidia eriantha (wild kiwifruit)	1	install	1	0	0	0	0	0	0	0	0			
 afb	T09102	Eukaryota	Metazoa	Anoplopoma fimbria (sablefish)	1	install	1	0	0	0	0	0	0	0	0			
 afil	T10871	Eukaryota	Metazoa	Amphiura filiformis	1	install	1	0	0	0	0	0	0	0	0			
-aflr	T09140	Eukaryota	Metazoa	Apis florea (little honeybee)	1	install	1	0	0	0	0	0	0	0	0			
+aflr	T09140	Eukaryota	Metazoa	Apis florea (little honeybee)	1	install	1	0	0	0	1	0	0	0	0			
 afm	T01017	Eukaryota	Fungi	Aspergillus fumigatus	1	keep	1	0	0	0	1	1	0	0	0			
 afor	T08527	Eukaryota	Metazoa	Aptenodytes forsteri (emperor penguin)	1	install	1	0	0	0	0	0	0	0	0			
 afra	T10524	Eukaryota	Metazoa	Artemia franciscana	1	install	1	0	0	0	0	0	0	0	0			
 aful	T07966	Eukaryota	Metazoa	Aythya fuligula (tufted duck)	1	install	1	0	0	0	0	0	0	0	0			
-afun	T09273	Eukaryota	Metazoa	Anopheles funestus (African malaria mosquito)	1	install	1	0	0	0	0	0	0	0	0			
+afun	T09273	Eukaryota	Metazoa	Anopheles funestus (African malaria mosquito)	1	install	1	0	0	0	1	0	0	0	0			
 afv	T01090	Eukaryota	Fungi	Aspergillus flavus	1	keep	1	0	0	0	1	1	0	0	0			
 afz	T08818	Eukaryota	Metazoa	Antechinus flavipes (yellow-footed antechinus)	1	install	1	0	0	0	0	0	0	0	0			
 aga	T01036	Eukaryota	Metazoa	Anopheles gambiae (malaria mosquito)	1	keep	1	0	0	0	1	1	0	0	0			
-agb	T07402	Eukaryota	Metazoa	Anoplophora glabripennis (Asian longhorned beetle)	1	install	1	0	0	0	0	0	0	0	0			
+agb	T07402	Eukaryota	Metazoa	Anoplophora glabripennis (Asian longhorned beetle)	1	install	1	0	0	0	1	0	0	0	0			
 agen	T08649	Eukaryota	Metazoa	Astur gentilis (Northern goshawk)	1	install	1	0	0	0	0	0	0	0	0			
-agif	T07796	Eukaryota	Metazoa	Aphidius gifuensis	1	install	1	0	0	0	0	0	0	0	0			
+agif	T07796	Eukaryota	Metazoa	Aphidius gifuensis	1	install	1	0	0	0	1	0	0	0	0			
 aglu	T10577	Eukaryota	Viridiplantae	Alnus glutinosa (common alder)	1	install	1	0	0	0	0	0	0	0	0			
 ago	T00167	Eukaryota	Fungi	Eremothecium gossypii	1	install	1	0	0	0	0	0	0	0	0			
-agrg	T08911	Eukaryota	Metazoa	Anthonomus grandis grandis (boll weevil)	1	install	1	0	0	0	0	0	0	0	0			
+agrg	T08911	Eukaryota	Metazoa	Anthonomus grandis grandis (boll weevil)	1	install	1	0	0	0	1	0	0	0	0			
 agrv	T11340	Eukaryota	Viridiplantae	Apium graveolens (celery)	1	install	1	0	0	0	0	0	0	0	0			
 ags	T05869	Eukaryota	Metazoa	Aphis gossypii (cotton aphid)	1	install	1	0	0	0	0	0	0	0	0			
 ahf	T07294	Eukaryota	Viridiplantae	Arachis hypogaea (peanut)	1	keep	1	0	0	0	1	1	0	0	0			
 aib	T11605	Eukaryota	Metazoa	Anomalospiza imberbis (cuckoo-finch)	1	install	1	0	0	0	0	0	0	0	0			
 aip	T04301	Eukaryota	Viridiplantae	Arachis ipaensis	1	install	1	0	0	0	0	0	0	0	0			
 airr	T10542	Eukaryota	Metazoa	Argopecten irradians (bay scallop)	1	install	1	0	0	0	0	0	0	0	0			
-ajc	T08613	Eukaryota	Metazoa	Anneissia japonica (feather star)	1	install	1	0	0	0	0	0	0	0	0			
-aje	T02229	Eukaryota	Fungi	Histoplasma mississippiense	1	install	1	0	0	0	0	0	0	0	0			
+ajc	T08613	Eukaryota	Metazoa	Anneissia japonica (feather star)	1	install	1	0	0	0	1	0	0	0	0			
+aje	T02229	Eukaryota	Fungi	Histoplasma mississippiense	1	install	1	0	0	0	1	0	0	0	0			
 ajj	T10891	Eukaryota	Metazoa	Apostichopus japonicus (Japanese sea cucumber)	1	install	1	0	0	0	0	0	0	0	0			
 ajm	T07223	Eukaryota	Metazoa	Artibeus jamaicensis (Jamaican fruit-eating bat)	1	install	1	0	0	0	0	0	0	0	0			
 aju	T04657	Eukaryota	Metazoa	Acinonyx jubatus (cheetah)	1	keep	1	0	0	0	0	1	0	0	0			
@@ -75,37 +78,37 @@ alab	T07817	Eukaryota	Metazoa	Apis laboriosa (Himalayan honeybee)	1	install	1	0	
 alat	T08233	Eukaryota	Metazoa	Acanthopagrus latus (yellowfin seabream)	1	keep	1	0	0	0	0	1	0	0	0			
 alim	T06063	Eukaryota	Metazoa	Austrofundulus limnaeus (annual killifish)	1	install	1	0	0	0	0	0	0	0	0			
 aluc	T08060	Eukaryota	Fungi	Aspergillus luchuensis	1	install	1	0	0	0	0	0	0	0	0			
-alud	T10909	Eukaryota	Metazoa	Anastrepha ludens (Mexican fruit fly)	1	install	1	0	0	0	0	0	0	0	0			
-aly	T01578	Eukaryota	Viridiplantae	Arabidopsis lyrata (lyrate rockcress)	1	install	1	0	0	0	0	0	0	0	0			
+alud	T10909	Eukaryota	Metazoa	Anastrepha ludens (Mexican fruit fly)	1	install	1	0	0	0	1	0	0	0	0			
+aly	T01578	Eukaryota	Viridiplantae	Arabidopsis lyrata (lyrate rockcress)	1	install	1	0	0	0	1	0	0	0	0			
 amap	T10890	Eukaryota	Metazoa	Anopheles maculipalpis	1	install	1	0	0	0	0	0	0	0	0			
 ame	T01057	Eukaryota	Metazoa	Apis mellifera (honey bee)	1	keep	1	0	0	0	1	1	0	0	0			
 amen	T12084	Eukaryota	Metazoa	Ascidia mentula (solitary sea squirt)	1	install	1	0	0	0	0	0	0	0	0			
-amer	T08889	Eukaryota	Metazoa	Anopheles merus	1	install	1	0	0	0	0	0	0	0	0			
-amex	T05042	Eukaryota	Metazoa	Astyanax mexicanus (Mexican tetra)	1	install	1	0	0	0	0	0	0	0	0			
-amil	T06134	Eukaryota	Metazoa	Acropora millepora	1	install	1	0	0	0	0	0	0	0	0			
+amer	T08889	Eukaryota	Metazoa	Anopheles merus	1	install	1	0	0	0	1	0	0	0	0			
+amex	T05042	Eukaryota	Metazoa	Astyanax mexicanus (Mexican tetra)	1	install	1	0	0	0	1	0	0	0	0			
+amil	T06134	Eukaryota	Metazoa	Acropora millepora	1	install	1	0	0	0	1	0	0	0	0			
 amir	T11660	Eukaryota	Metazoa	Anarhichas minor (spotted wolffish)	1	install	1	0	0	0	0	0	0	0	0			
 amj	T03087	Eukaryota	Metazoa	Alligator mississippiensis (American alligator)	1	install	1	0	0	0	0	0	0	0	0			
-aml	T01329	Eukaryota	Metazoa	Ailuropoda melanoleuca (giant panda)	1	install	1	0	0	0	0	0	0	0	0			
+aml	T01329	Eukaryota	Metazoa	Ailuropoda melanoleuca (giant panda)	1	install	1	0	0	0	1	0	0	0	0			
 ammm	T12006	Eukaryota	Metazoa	Ammodytes marinus (lesser sand-eel)	1	install	1	0	0	0	0	0	0	0	0			
 amou	T09615	Eukaryota	Metazoa	Anopheles moucheti	1	install	1	0	0	0	0	0	0	0	0			
 amrs	T10928	Eukaryota	Metazoa	Anopheles marshallii	1	install	1	0	0	0	0	0	0	0	0			
 amua	T11512	Eukaryota	Metazoa	Acropora muricata (staghorn coral)	1	install	1	0	0	0	0	0	0	0	0			
 amus	T09501	Eukaryota	Fungi	Akanthomyces muscarius	1	install	1	0	0	0	0	0	0	0	0			
-anan	T10127	Eukaryota	Metazoa	Aotus nancymaae (Ma's night monkey)	1	install	1	0	0	0	0	0	0	0	0			
+anan	T10127	Eukaryota	Metazoa	Aotus nancymaae (Ma's night monkey)	1	install	1	0	0	0	1	0	0	0	0			
 ang	T01030	Eukaryota	Fungi	Aspergillus niger (black aspergilli)	1	keep	1	0	0	0	1	1	0	0	0			
-ani	T01016	Eukaryota	Fungi	Aspergillus nidulans	1	install	1	0	0	0	0	0	0	0	0			
+ani	T01016	Eukaryota	Fungi	Aspergillus nidulans	1	install	1	0	0	0	1	0	0	0	0			
 anil	T11473	Eukaryota	Metazoa	Anopheles nili	1	install	1	0	0	0	0	0	0	0	0			
 anoc	T11550	Eukaryota	Metazoa	Athene noctua (little owl)	1	install	1	0	0	0	0	0	0	0	0			
 anu	T08817	Eukaryota	Metazoa	Arvicanthis niloticus (African grass rat)	1	install	1	0	0	0	0	0	0	0	0			
-aoce	T06018	Eukaryota	Metazoa	Amphiprion ocellaris (clown anemonefish)	1	install	1	0	0	0	0	0	0	0	0			
-aof	T05243	Eukaryota	Viridiplantae	Asparagus officinalis (garden asparagus)	1	install	1	0	0	0	0	0	0	0	0			
-aoq	T09777	Eukaryota	Metazoa	Anastrepha obliqua (West Indian fruit fly)	1	install	1	0	0	0	0	0	0	0	0			
+aoce	T06018	Eukaryota	Metazoa	Amphiprion ocellaris (clown anemonefish)	1	install	1	0	0	0	1	0	0	0	0			
+aof	T05243	Eukaryota	Viridiplantae	Asparagus officinalis (garden asparagus)	1	install	1	0	0	0	1	0	0	0	0			
+aoq	T09777	Eukaryota	Metazoa	Anastrepha obliqua (West Indian fruit fly)	1	install	1	0	0	0	1	0	0	0	0			
 aor	T01018	Eukaryota	Fungi	Aspergillus oryzae	1	keep	1	0	0	0	1	1	0	0	0			
 apan	T08689	Eukaryota	Viridiplantae	Andrographis paniculata	1	install	1	0	0	0	0	0	0	0	0			
-api	T01076	Eukaryota	Metazoa	Acyrthosiphon pisum (pea aphid)	1	install	1	0	0	0	0	0	0	0	0			
-apla	T02816	Eukaryota	Metazoa	Anas platyrhynchos (mallard)	1	install	1	0	0	0	0	0	0	0	0			
-aplc	T05078	Eukaryota	Metazoa	Acanthaster planci (crown-of-thorns starfish)	1	install	1	0	0	0	0	0	0	0	0			
-apln	T07419	Eukaryota	Metazoa	Agrilus planipennis (emerald ash borer)	1	install	1	0	0	0	0	0	0	0	0			
+api	T01076	Eukaryota	Metazoa	Acyrthosiphon pisum (pea aphid)	1	install	1	0	0	0	1	0	0	0	0			
+apla	T02816	Eukaryota	Metazoa	Anas platyrhynchos (mallard)	1	install	1	0	0	0	1	0	0	0	0			
+aplc	T05078	Eukaryota	Metazoa	Acanthaster planci (crown-of-thorns starfish)	1	install	1	0	0	0	1	0	0	0	0			
+apln	T07419	Eukaryota	Metazoa	Agrilus planipennis (emerald ash borer)	1	install	1	0	0	0	1	0	0	0	0			
 aprc	T07330	Eukaryota	Viridiplantae	Abrus precatorius (Indian licorice)	1	keep	1	0	0	0	0	1	0	0	0			
 apri	T09329	Eukaryota	Metazoa	Ahaetulla prasina (Asian vine snake)	1	install	1	0	0	0	0	0	0	0	0			
 apro	T04132	Eukaryota	Viridiplantae	Auxenochlorella protothecoides	1	install	1	0	0	0	0	0	0	0	0			
@@ -113,75 +116,75 @@ apur	T11608	Eukaryota	Metazoa	Augochlora pura	1	install	1	0	0	0	0	0	0	0	0
 apuu	T08081	Eukaryota	Fungi	Aspergillus puulaauensis	1	install	1	0	0	0	0	0	0	0	0			
 aqu	T02284	Eukaryota	Metazoa	Amphimedon queenslandica (sponge)	1	keep	1	0	0	0	1	1	0	0	0			
 arab	T09445	Eukaryota	Fungi	Ascochyta rabiei	1	install	1	0	0	0	0	0	0	0	0			
-aroa	T09776	Eukaryota	Metazoa	Athalia rosae (coleseed sawfly)	1	install	1	0	0	0	0	0	0	0	0			
+aroa	T09776	Eukaryota	Metazoa	Athalia rosae (coleseed sawfly)	1	install	1	0	0	0	1	0	0	0	0			
 arot	T10705	Eukaryota	Metazoa	Anguilla rostrata (American eel)	1	install	1	0	0	0	0	0	0	0	0			
-arow	T07573	Eukaryota	Metazoa	Apteryx rowi (Okarito brown kiwi)	1	install	1	0	0	0	0	0	0	0	0			
+arow	T07573	Eukaryota	Metazoa	Apteryx rowi (Okarito brown kiwi)	1	install	1	0	0	0	1	0	0	0	0			
 arun	T10152	Eukaryota	Metazoa	Luidia clathrata (European starfish)	1	install	1	0	0	0	0	0	0	0	0			
 arut	T07327	Eukaryota	Metazoa	Acipenser ruthenus (sterlet)	1	install	1	0	0	0	0	0	0	0	0			
 asad	T11137	Eukaryota	Metazoa	Alosa sapidissima (American shad)	1	install	1	0	0	0	0	0	0	0	0			
 asao	T09595	Eukaryota	Metazoa	Anolis sagrei ordinatus (Brown anole)	1	install	1	0	0	0	0	0	0	0	0			
 asau	T10743	Eukaryota	Fungi	Australozyma saopauloensis	1	install	1	0	0	0	0	0	0	0	0			
 asn	T02922	Eukaryota	Metazoa	Alligator sinensis (Chinese alligator)	1	install	1	0	0	0	0	0	0	0	0			
-aste	T08252	Eukaryota	Metazoa	Anopheles stephensi (Asian malaria mosquito)	1	install	1	0	0	0	0	0	0	0	0			
+aste	T08252	Eukaryota	Metazoa	Anopheles stephensi (Asian malaria mosquito)	1	install	1	0	0	0	1	0	0	0	0			
 astr	T10427	Eukaryota	Metazoa	Antennarius striatus (striated frogfish)	1	install	1	0	0	0	0	0	0	0	0			
 asua	T09975	Eukaryota	Metazoa	Armigeres subalbatus	1	install	1	0	0	0	0	0	0	0	0			
 asyl	T10613	Eukaryota	Metazoa	Apodemus sylvaticus (European woodmouse)	1	install	1	0	0	0	0	0	0	0	0			
-atd	T06105	Eukaryota	Metazoa	Aethina tumida (small hive beetle)	1	install	1	0	0	0	0	0	0	0	0			
-aten	T07455	Eukaryota	Metazoa	Actinia tenebrosa (Australian red waratah sea anemone)	1	install	1	0	0	0	0	0	0	0	0			
-ath	T00041	Eukaryota	Viridiplantae	Arabidopsis thaliana (thale cress)	1	keep	1	0	1	0	0	1	0	1	0		ath	MapMan: Arabidopsis thaliana on both sides; GoMapMan ships gene-to-entrez_ath
-atr	T02990	Eukaryota	Viridiplantae	Amborella trichopoda	1	install	1	0	0	0	0	0	0	0	0			
-atra	T09957	Eukaryota	Metazoa	Amyelois transitella (navel orangeworm)	1	install	1	0	0	0	0	0	0	0	0			
+atd	T06105	Eukaryota	Metazoa	Aethina tumida (small hive beetle)	1	install	1	0	0	0	1	0	0	0	0			
+aten	T07455	Eukaryota	Metazoa	Actinia tenebrosa (Australian red waratah sea anemone)	1	install	1	0	0	0	1	0	0	0	0			
+ath	T00041	Eukaryota	Viridiplantae	Arabidopsis thaliana (thale cress)	1	keep	1	0	1	0	1	1	0	1	0		ath	MapMan: Arabidopsis thaliana on both sides; GoMapMan ships gene-to-entrez_ath
+atr	T02990	Eukaryota	Viridiplantae	Amborella trichopoda	1	install	1	0	0	0	1	0	0	0	0			
+atra	T09957	Eukaryota	Metazoa	Amyelois transitella (navel orangeworm)	1	install	1	0	0	0	1	0	0	0	0			
 atrc	T10815	Eukaryota	Metazoa	Agelaius tricolor (tricolored blackbird)	1	install	1	0	0	0	0	0	0	0	0			
 atri	T09367	Eukaryota	Viridiplantae	Amaranthus tricolor (tampala)	1	install	1	0	0	0	0	0	0	0	0			
-ats	T04345	Eukaryota	Viridiplantae	Aegilops tauschii (wheat D)	1	install	1	0	0	0	0	0	0	0	0			
+ats	T04345	Eukaryota	Viridiplantae	Aegilops tauschii (wheat D)	1	install	1	0	0	0	1	0	0	0	0			
 avit	T08559	Eukaryota	Metazoa	Apaloderma vittatum (bar-tailed trogon)	1	install	1	0	0	0	0	0	0	0	0			
 bacu	T03086	Eukaryota	Metazoa	Balaenoptera acutorostrata scammoni (minke whale)	1	install	1	0	0	0	0	0	0	0	0			
-baff	T09368	Eukaryota	Metazoa	Bombus affinis (rusty patched bumble bee)	1	install	1	0	0	0	0	0	0	0	0			
-bany	T07476	Eukaryota	Metazoa	Bicyclus anynana (squinting bush brown)	1	install	1	0	0	0	0	0	0	0	0			
+baff	T09368	Eukaryota	Metazoa	Bombus affinis (rusty patched bumble bee)	1	install	1	0	0	0	1	0	0	0	0			
+bany	T07476	Eukaryota	Metazoa	Bicyclus anynana (squinting bush brown)	1	install	1	0	0	0	1	0	0	0	0			
 barl	T11321	Eukaryota	Metazoa	Babylonia areolata (ivory shell)	1	install	1	0	0	0	0	0	0	0	0			
 bbel	T07532	Eukaryota	Metazoa	Branchiostoma belcheri (Belcher's lancelet)	1	install	1	0	0	0	0	0	0	0	0			
 bbes	T10139	Eukaryota	Sar	Besnoitia besnoiti	1	install	1	0	0	0	0	0	0	0	0			
 bbif	T07537	Eukaryota	Metazoa	Bombus bifarius (two-form bumblebee)	1	install	1	0	0	0	0	0	0	0	0			
-bbig	T08062	Eukaryota	Sar	Babesia bigemina	1	install	1	0	0	0	0	0	0	0	0			
-bbis	T08726	Eukaryota	Metazoa	Bison bison bison (American bison)	1	install	1	0	0	0	0	0	0	0	0			
-bbo	T01085	Eukaryota	Sar	Babesia bovis	1	install	1	0	0	0	0	0	0	0	0			
-bbrx	T07183	Eukaryota	Fungi	Brettanomyces bruxellensis	1	install	1	0	0	0	0	0	0	0	0			
+bbig	T08062	Eukaryota	Sar	Babesia bigemina	1	install	1	0	0	0	1	0	0	0	0			
+bbis	T08726	Eukaryota	Metazoa	Bison bison bison (American bison)	1	install	1	0	0	0	1	0	0	0	0			
+bbo	T01085	Eukaryota	Sar	Babesia bovis	1	install	1	0	0	0	1	0	0	0	0			
+bbrx	T07183	Eukaryota	Fungi	Brettanomyces bruxellensis	1	install	1	0	0	0	1	0	0	0	0			
 bbub	T05912	Eukaryota	Metazoa	Bubalus bubalis (water buffalo)	1	install	1	0	0	0	0	0	0	0	0			
 bbuf	T07950	Eukaryota	Metazoa	Bufo bufo (common toad)	1	keep	1	0	0	0	0	1	0	0	0			
 bbut	T11399	Eukaryota	Metazoa	Buteo buteo (common buzzard)	1	install	1	0	0	0	0	0	0	0	0			
 bcla	T11949	Eukaryota	Metazoa	Bucephala clangula (common goldeneye)	1	install	1	0	0	0	0	0	0	0	0			
 bcom	T03106	Eukaryota	Fungi	Baudoinia panamericana	1	install	1	0	0	0	0	0	0	0	0			
-bcoo	T08269	Eukaryota	Metazoa	Bradysia coprophila	1	install	1	0	0	0	0	0	0	0	0			
-bdi	T01717	Eukaryota	Viridiplantae	Brachypodium distachyon (stiff brome)	1	install	1	0	0	0	0	0	0	0	0			
-bdr	T09719	Eukaryota	Metazoa	Bactrocera dorsalis (oriental fruit fly)	1	install	1	0	0	0	0	0	0	0	0			
+bcoo	T08269	Eukaryota	Metazoa	Bradysia coprophila	1	install	1	0	0	0	1	0	0	0	0			
+bdi	T01717	Eukaryota	Viridiplantae	Brachypodium distachyon (stiff brome)	1	install	1	0	0	0	1	0	0	0	0			
+bdr	T09719	Eukaryota	Metazoa	Bactrocera dorsalis (oriental fruit fly)	1	install	1	0	0	0	1	0	0	0	0			
 bdw	T10391	Eukaryota	Sar	Babesia duncani	1	install	1	0	0	0	0	0	0	0	0			
-beq	T02820	Eukaryota	Sar	Theileria equi	1	install	1	0	0	0	0	0	0	0	0			
+beq	T02820	Eukaryota	Sar	Theileria equi	1	install	1	0	0	0	1	0	0	0	0			
 bfer	T12025	Eukaryota	Metazoa	Bombus fervidus (golden northern bumble bee)	1	install	1	0	0	0	0	0	0	0	0			
 bfo	T01074	Eukaryota	Metazoa	Branchiostoma floridae (Florida lancelet)	1	install	1	0	0	0	0	0	0	0	0			
 bfre	T10614	Eukaryota	Metazoa	Brachyistius frenatus (kelp perch)	1	install	1	0	0	0	0	0	0	0	0			
-bfu	T01072	Eukaryota	Fungi	Botrytis cinerea (gray mold)	1	install	1	0	0	0	0	0	0	0	0			
+bfu	T01072	Eukaryota	Fungi	Botrytis cinerea (gray mold)	1	install	1	0	0	0	1	0	0	0	0			
 bgar	T07965	Eukaryota	Metazoa	Bufo gargarizans (Asiatic toad)	1	install	1	0	0	0	0	0	0	0	0			
 bgh	T06540	Eukaryota	Fungi	Blastomyces gilchristii	1	install	1	0	0	0	0	0	0	0	0			
-bgt	T07368	Eukaryota	Metazoa	Biomphalaria glabrata (bloodfluke planorb)	1	install	1	0	0	0	0	0	0	0	0			
+bgt	T07368	Eukaryota	Metazoa	Biomphalaria glabrata (bloodfluke planorb)	1	install	1	0	0	0	1	0	0	0	0			
 bhj	T07258	Eukaryota	Viridiplantae	Benincasa hispida (wax gourd)	1	install	1	0	0	0	0	0	0	0	0			
-bhun	T10446	Eukaryota	Metazoa	Bombus huntii (Hunt bumble bee)	1	install	1	0	0	0	0	0	0	0	0			
+bhun	T10446	Eukaryota	Metazoa	Bombus huntii (Hunt bumble bee)	1	install	1	0	0	0	1	0	0	0	0			
 bhw	T11418	Eukaryota	Viridiplantae	Bidens hawaiensis	1	install	1	0	0	0	0	0	0	0	0			
-bim	T04362	Eukaryota	Metazoa	Bombus impatiens (common eastern bumble bee)	1	install	1	0	0	0	0	0	0	0	0			
+bim	T04362	Eukaryota	Metazoa	Bombus impatiens (common eastern bumble bee)	1	install	1	0	0	0	1	0	0	0	0			
 biu	T04792	Eukaryota	Metazoa	Bos indicus (zebu cattle)	1	install	1	0	0	0	0	0	0	0	0			
 bjv	T11659	Eukaryota	Metazoa	Bos javanicus (banteng)	1	install	1	0	0	0	0	0	0	0	0			
 bke	T11435	Eukaryota	Metazoa	Bubalus kerabau (carabao)	1	install	1	0	0	0	0	0	0	0	0			
 blac	T10371	Eukaryota	Sar	Bremia lactucae (lettuce downy mildew)	1	install	1	0	0	0	0	0	0	0	0			
-bman	T05882	Eukaryota	Metazoa	Bombyx mandarina (wild silkworm)	1	install	1	0	0	0	0	0	0	0	0			
+bman	T05882	Eukaryota	Metazoa	Bombyx mandarina (wild silkworm)	1	install	1	0	0	0	1	0	0	0	0			
 bmic	T05554	Eukaryota	Sar	Babesia microti	1	install	1	0	0	0	0	0	0	0	0			
 bmor	T02817	Eukaryota	Metazoa	Bombyx mori (domestic silkworm)	1	keep	1	0	0	0	1	1	0	0	0			
-bmus	T09887	Eukaryota	Metazoa	Balaenoptera musculus (blue whale)	1	install	1	0	0	0	0	0	0	0	0			
-bmy	T01050	Eukaryota	Metazoa	Brugia malayi (filaria)	1	install	1	0	0	0	0	0	0	0	0			
-bna	T04128	Eukaryota	Viridiplantae	Brassica napus (rape)	1	install	1	0	0	0	0	0	0	0	0			
+bmus	T09887	Eukaryota	Metazoa	Balaenoptera musculus (blue whale)	1	install	1	0	0	0	1	0	0	0	0			
+bmy	T01050	Eukaryota	Metazoa	Brugia malayi (filaria)	1	install	1	0	0	0	1	0	0	0	0			
+bna	T04128	Eukaryota	Viridiplantae	Brassica napus (rape)	1	install	1	0	0	0	1	0	0	0	0			
 bnn	T07002	Eukaryota	Fungi	Brettanomyces nanus	1	install	1	0	0	0	0	0	0	0	0			
 bobo	T11568	Eukaryota	Metazoa	Brevipalpus obovatus	1	install	1	0	0	0	0	0	0	0	0			
-bod	T07646	Eukaryota	Metazoa	Bactrocera oleae (olive fruit fly)	1	install	1	0	0	0	0	0	0	0	0			
+bod	T07646	Eukaryota	Metazoa	Bactrocera oleae (olive fruit fly)	1	install	1	0	0	0	1	0	0	0	0			
 boe	T04124	Eukaryota	Viridiplantae	Brassica oleracea (wild cabbage)	1	keep	1	0	0	0	1	1	0	0	0			
-bom	T02919	Eukaryota	Metazoa	Bos mutus (wild yak)	1	install	1	0	0	0	0	0	0	0	0			
+bom	T02919	Eukaryota	Metazoa	Bos mutus (wild yak)	1	install	1	0	0	0	1	0	0	0	0			
 bor	T03125	Eukaryota	Fungi	Bipolaris oryzae	1	install	1	0	0	0	0	0	0	0	0			
 bpas	T09597	Eukaryota	Metazoa	Bombus pascuorum (common carder bee)	1	install	1	0	0	0	0	0	0	0	0			
 bpec	T05002	Eukaryota	Metazoa	Boleophthalmus pectinirostris (great blue-spotted mudskipper)	1	install	1	0	0	0	0	0	0	0	0			
@@ -191,50 +194,50 @@ bpyo	T07776	Eukaryota	Metazoa	Bombus pyrosoma	1	install	1	0	0	0	0	0	0	0	0
 breg	T09009	Eukaryota	Metazoa	Balearica regulorum gibbericeps (East African grey crowned-crane)	1	install	1	0	0	0	0	0	0	0	0			
 brhi	T08612	Eukaryota	Metazoa	Buceros rhinoceros silvestris (rhinoceros hornbill)	1	install	1	0	0	0	0	0	0	0	0			
 bror	T09888	Eukaryota	Metazoa	Bacillus rossius redtenbacheri	1	install	1	0	0	0	0	0	0	0	0			
-brp	T03449	Eukaryota	Viridiplantae	Brassica rapa (field mustard)	1	install	1	0	0	0	0	0	0	0	0			
+brp	T03449	Eukaryota	Viridiplantae	Brassica rapa (field mustard)	1	install	1	0	0	0	1	0	0	0	0			
 bsc	T03124	Eukaryota	Fungi	Bipolaris sorokiniana	1	install	1	0	0	0	0	0	0	0	0			
-bspl	T08231	Eukaryota	Metazoa	Betta splendens (Siamese fighting fish)	1	install	1	0	0	0	0	0	0	0	0			
-bta	T01008	Eukaryota	Metazoa	Bos taurus (cow)	1	keep	1	1	0	0	0	1	1	0	0	1822		
-btab	T06019	Eukaryota	Metazoa	Bemisia tabaci (sweet potato whitefly)	1	install	1	0	0	0	0	0	0	0	0			
+bspl	T08231	Eukaryota	Metazoa	Betta splendens (Siamese fighting fish)	1	install	1	0	0	0	1	0	0	0	0			
+bta	T01008	Eukaryota	Metazoa	Bos taurus (cow)	1	keep	1	1	0	0	1	1	1	0	0	1822		
+btab	T06019	Eukaryota	Metazoa	Bemisia tabaci (sweet potato whitefly)	1	install	1	0	0	0	1	0	0	0	0			
 btax	T08909	Eukaryota	Metazoa	Budorcas taxicolor (takin)	1	install	1	0	0	0	0	0	0	0	0			
-bter	T04364	Eukaryota	Metazoa	Bombus terrestris (buff-tailed bumblebee)	1	install	1	0	0	0	0	0	0	0	0			
+bter	T04364	Eukaryota	Metazoa	Bombus terrestris (buff-tailed bumblebee)	1	install	1	0	0	0	1	0	0	0	0			
 bvan	T07628	Eukaryota	Metazoa	Bombus vancouverensis nearcticus	1	install	1	0	0	0	0	0	0	0	0			
-bvg	T03548	Eukaryota	Viridiplantae	Beta vulgaris (sugar beet)	1	install	1	0	0	0	0	0	0	0	0		bvu	MapMan excluded: Beta vulgaris (KEGG bvu is the bacterium Phocaeicola vulgatus); RefBeet1.1 ids (Bv1_000020_oary) have no cross-reference in NCBI Gene or UniProt to KEGG bvg's GeneIDs
+bvg	T03548	Eukaryota	Viridiplantae	Beta vulgaris (sugar beet)	1	install	1	0	0	0	1	0	0	0	0		bvu	MapMan excluded: Beta vulgaris (KEGG bvu is the bacterium Phocaeicola vulgatus); RefBeet1.1 ids (Bv1_000020_oary) have no cross-reference in NCBI Gene or UniProt to KEGG bvg's GeneIDs
 bvk	T07592	Eukaryota	Metazoa	Bombus vosnesenskii (yellow-faced bumblebee)	1	install	1	0	0	0	0	0	0	0	0			
 bze	T03110	Eukaryota	Fungi	Bipolaris zeicola	1	install	1	0	0	0	0	0	0	0	0			
-cabi	T07367	Eukaryota	Metazoa	Chelonoidis abingdonii (Abingdon island giant tortoise)	1	install	1	0	0	0	0	0	0	0	0			
+cabi	T07367	Eukaryota	Metazoa	Chelonoidis abingdonii (Abingdon island giant tortoise)	1	install	1	0	0	0	1	0	0	0	0			
 cal	T00189	Eukaryota	Fungi	Candida albicans	1	keep	1	0	0	0	1	1	0	0	0			
 calb	T11950	Eukaryota	Viridiplantae	Chenopodium album (lamb's quarters)	1	install	1	0	0	0	0	0	0	0	0			
 cam	T02819	Eukaryota	Viridiplantae	Cicer arietinum (chickpea)	1	install	1	0	0	0	0	0	0	0	0			
 camb	T12063	Eukaryota	Metazoa	Carcharhinus amblyrhynchos (grey reef shark)	1	install	1	0	0	0	0	0	0	0	0			
 cana	T10471	Eukaryota	Metazoa	Clinocottus analis (woolly sculpin)	1	install	1	0	0	0	0	0	0	0	0			
-cang	T08744	Eukaryota	Metazoa	Colobus angolensis palliatus (Angola colobus)	1	install	1	0	0	0	0	0	0	0	0			
-cann	T04646	Eukaryota	Viridiplantae	Capsicum annuum (peppers)	1	install	1	0	0	0	0	0	0	0	0			
-canu	T09348	Eukaryota	Metazoa	Magallana angulata (Portugese oyster)	1	install	1	0	0	0	0	0	0	0	0			
+cang	T08744	Eukaryota	Metazoa	Colobus angolensis palliatus (Angola colobus)	1	install	1	0	0	0	1	0	0	0	0			
+cann	T04646	Eukaryota	Viridiplantae	Capsicum annuum (peppers)	1	install	1	0	0	0	1	0	0	0	0			
+canu	T09348	Eukaryota	Metazoa	Magallana angulata (Portugese oyster)	1	install	1	0	0	0	1	0	0	0	0			
 carb	T11342	Eukaryota	Viridiplantae	Coffea arabica (coffee)	1	install	1	0	0	0	0	0	0	0	0			
 cata	T09349	Eukaryota	Metazoa	Cygnus atratus (black swan)	1	install	1	0	0	0	0	0	0	0	0			
-caty	T07242	Eukaryota	Metazoa	Cercocebus atys (sooty mangabey)	1	install	1	0	0	0	0	0	0	0	0			
-caua	T07313	Eukaryota	Metazoa	Carassius auratus (goldfish)	1	install	1	0	0	0	0	0	0	0	0			
-caur	T04850	Eukaryota	Fungi	Candidozyma auris	1	install	1	0	0	0	0	0	0	0	0			
-cave	T09426	Eukaryota	Viridiplantae	Corylus avellana (European hazelnut)	1	install	1	0	0	0	0	0	0	0	0			
+caty	T07242	Eukaryota	Metazoa	Cercocebus atys (sooty mangabey)	1	install	1	0	0	0	1	0	0	0	0			
+caua	T07313	Eukaryota	Metazoa	Carassius auratus (goldfish)	1	install	1	0	0	0	1	0	0	0	0			
+caur	T04850	Eukaryota	Fungi	Candidozyma auris	1	install	1	0	0	0	1	0	0	0	0			
+cave	T09426	Eukaryota	Viridiplantae	Corylus avellana (European hazelnut)	1	install	1	0	0	0	1	0	0	0	0			
 cbai	T07534	Eukaryota	Metazoa	Camelus bactrianus (Bactrian camel)	1	install	1	0	0	0	0	0	0	0	0			
-cbas	T11001	Eukaryota	Fungi	Cryptococcus bacillisporus	1	install	1	0	0	0	0	0	0	0	0			
+cbas	T11001	Eukaryota	Fungi	Cryptococcus bacillisporus	1	install	1	0	0	0	1	0	0	0	0			
 cbet	T09388	Eukaryota	Fungi	Cercospora beticola	1	install	1	0	0	0	0	0	0	0	0			
 cbor	T11211	Eukaryota	Metazoa	Calonectris borealis (Cory's shearwater)	1	install	1	0	0	0	0	0	0	0	0			
 cboy	T10948	Eukaryota	Metazoa	Ciconia boyciana (Oriental stork)	1	install	1	0	0	0	0	0	0	0	0			
-cbr	T01054	Eukaryota	Metazoa	Caenorhabditis briggsae (nematode)	1	install	1	0	0	0	0	0	0	0	0			
+cbr	T01054	Eukaryota	Metazoa	Caenorhabditis briggsae (nematode)	1	install	1	0	0	0	1	0	0	0	0			
 cbrc	T08418	Eukaryota	Metazoa	Corvus brachyrhynchos (American crow)	1	install	1	0	0	0	0	0	0	0	0			
-cbri	T10947	Eukaryota	Metazoa	Culicoides brevitarsis	1	install	1	0	0	0	0	0	0	0	0			
+cbri	T10947	Eukaryota	Metazoa	Culicoides brevitarsis	1	install	1	0	0	0	1	0	0	0	0			
 cbrm	T11894	Eukaryota	Metazoa	Coenobita brevimanus (land hermit crab)	1	install	1	0	0	0	0	0	0	0	0			
 ccac	T09540	Eukaryota	Fungi	Cutaneotrichosporon cavernicola	1	install	1	0	0	0	0	0	0	0	0			
 ccad	T07554	Eukaryota	Metazoa	Cervus canadensis (wapiti)	1	install	1	0	0	0	0	0	0	0	0			
-ccae	T05602	Eukaryota	Metazoa	Cyanistes caeruleus (blue tit)	1	install	1	0	0	0	0	0	0	0	0			
-ccaj	T04868	Eukaryota	Viridiplantae	Cajanus cajan (pigeon pea)	1	install	1	0	0	0	0	0	0	0	0			
+ccae	T05602	Eukaryota	Metazoa	Cyanistes caeruleus (blue tit)	1	install	1	0	0	0	1	0	0	0	0			
+ccaj	T04868	Eukaryota	Viridiplantae	Cajanus cajan (pigeon pea)	1	install	1	0	0	0	1	0	0	0	0			
 ccal	T06061	Eukaryota	Metazoa	Ceratina calcarata (carpenter bee)	1	install	1	0	0	0	0	0	0	0	0			
-ccan	T04791	Eukaryota	Metazoa	Castor canadensis (American beaver)	1	install	1	0	0	0	0	0	0	0	0			
-ccar	T05134	Eukaryota	Metazoa	Cyprinus carpio (common carp)	1	install	1	0	0	0	0	0	0	0	0			
-ccat	T07533	Eukaryota	Metazoa	Ceratitis capitata (Mediterranean fruit fly)	1	install	1	0	0	0	0	0	0	0	0			
-ccav	T05604	Eukaryota	Viridiplantae	Cynara cardunculus var. scolymus (artichoke)	1	install	1	0	0	0	0	0	0	0	0			
+ccan	T04791	Eukaryota	Metazoa	Castor canadensis (American beaver)	1	install	1	0	0	0	1	0	0	0	0			
+ccar	T05134	Eukaryota	Metazoa	Cyprinus carpio (common carp)	1	install	1	0	0	0	1	0	0	0	0			
+ccat	T07533	Eukaryota	Metazoa	Ceratitis capitata (Mediterranean fruit fly)	1	install	1	0	0	0	1	0	0	0	0			
+ccav	T05604	Eukaryota	Viridiplantae	Cynara cardunculus var. scolymus (artichoke)	1	install	1	0	0	0	1	0	0	0	0			
 ccay	T09292	Eukaryota	Metazoa	Caretta caretta (Loggerhead turtle)	1	install	1	0	0	0	0	0	0	0	0			
 cci	T01275	Eukaryota	Fungi	Coprinopsis cinerea (gray shag)	1	keep	1	0	0	0	1	1	0	0	0			
 ccic	T10813	Eukaryota	Metazoa	Cinclus cinclus (white-throated dipper)	1	install	1	0	0	0	0	0	0	0	0			
@@ -243,27 +246,27 @@ cclm	T11492	Eukaryota	Metazoa	Corticium candelabrum	1	install	1	0	0	0	0	0	0	0	0
 cclu	T08357	Eukaryota	Metazoa	Coregonus clupeaformis (lake whitefish)	1	install	1	0	0	0	0	0	0	0	0			
 ccoa	T11118	Eukaryota	Metazoa	Cyphomyrmex costatus	1	install	1	0	0	0	0	0	0	0	0			
 ccog	T10633	Eukaryota	Metazoa	Conger conger (European conger)	1	install	1	0	0	0	0	0	0	0	0			
-ccp	T02916	Eukaryota	Rhodophyta	Chondrus crispus (carragheen)	1	install	1	0	0	0	0	0	0	0	0			
+ccp	T02916	Eukaryota	Rhodophyta	Chondrus crispus (carragheen)	1	install	1	0	0	0	1	0	0	0	0			
 ccrc	T08651	Eukaryota	Metazoa	Colias croceus (clouded yellow)	1	install	1	0	0	0	0	0	0	0	0			
 ccri	T08341	Eukaryota	Metazoa	Cariama cristata (Red-legged seriema)	1	install	1	0	0	0	0	0	0	0	0			
-ccrn	T09255	Eukaryota	Metazoa	Chrysoperla carnea	1	install	1	0	0	0	0	0	0	0	0			
+ccrn	T09255	Eukaryota	Metazoa	Chrysoperla carnea	1	install	1	0	0	0	1	0	0	0	0			
 ccru	T11532	Eukaryota	Metazoa	Crocuta crocuta (spotted hyena)	1	install	1	0	0	0	0	0	0	0	0			
 ccw	T03546	Eukaryota	Metazoa	Corvus cornix (hooded crow)	1	install	1	0	0	0	0	0	0	0	0			
 cdec	T10966	Eukaryota	Fungi	Cryptococcus decagattii	1	install	1	0	0	0	0	0	0	0	0			
-cdep	T10265	Eukaryota	Fungi	Cryptococcus depauperatus	1	install	1	0	0	0	0	0	0	0	0			
+cdep	T10265	Eukaryota	Fungi	Cryptococcus depauperatus	1	install	1	0	0	0	1	0	0	0	0			
 cdet	T10409	Eukaryota	Fungi	Colletotrichum destructivum	1	install	1	0	0	0	0	0	0	0	0			
-cdeu	T09796	Eukaryota	Fungi	Cryptococcus deuterogattii	1	install	1	0	0	0	0	0	0	0	0			
-cdk	T04642	Eukaryota	Metazoa	Camelus dromedarius (Arabian camel)	1	install	1	0	0	0	0	0	0	0	0			
+cdeu	T09796	Eukaryota	Fungi	Cryptococcus deuterogattii	1	install	1	0	0	0	1	0	0	0	0			
+cdk	T04642	Eukaryota	Metazoa	Camelus dromedarius (Arabian camel)	1	install	1	0	0	0	1	0	0	0	0			
 cdu	T01140	Eukaryota	Fungi	Candida dubliniensis	1	install	1	0	0	0	0	0	0	0	0			
-cel	T00019	Eukaryota	Metazoa	Caenorhabditis elegans (nematode)	1	keep	1	1	0	0	0	1	1	0	0	1409		
+cel	T00019	Eukaryota	Metazoa	Caenorhabditis elegans (nematode)	1	keep	1	1	0	0	1	1	1	0	0	1409		
 cery	T10334	Eukaryota	Metazoa	Chanodichthys erythropterus (predatory carp)	1	install	1	0	0	0	0	0	0	0	0			
 ceur	T11931	Eukaryota	Metazoa	Caprimulgus europaeus (Eurasian nightjar)	1	install	1	0	0	0	0	0	0	0	0			
-cfa	T01007	Eukaryota	Metazoa	Canis lupus familiaris (dog)	1	keep	1	1	0	0	0	1	1	0	0	1784		
+cfa	T01007	Eukaryota	Metazoa	Canis lupus familiaris (dog)	1	keep	1	1	0	0	1	1	1	0	0	1784		
 cfai	T11360	Eukaryota	Metazoa	Chamaea fasciata (wrentit)	1	install	1	0	0	0	0	0	0	0	0			
-cfel	T08578	Eukaryota	Metazoa	Ctenocephalides felis (cat flea)	1	install	1	0	0	0	0	0	0	0	0			
+cfel	T08578	Eukaryota	Metazoa	Ctenocephalides felis (cat flea)	1	install	1	0	0	0	1	0	0	0	0			
 cfj	T04796	Eukaryota	Fungi	Colletotrichum fioriniae	1	install	1	0	0	0	0	0	0	0	0			
 cflo	T11641	Eukaryota	Viridiplantae	Cornus florida (flowering dogwood)	1	install	1	0	0	0	0	0	0	0	0			
-cfo	T03919	Eukaryota	Metazoa	Camponotus floridanus (Florida carpenter ant)	1	install	1	0	0	0	0	0	0	0	0			
+cfo	T03919	Eukaryota	Metazoa	Camponotus floridanus (Florida carpenter ant)	1	install	1	0	0	0	1	0	0	0	0			
 cfr	T02979	Eukaryota	Metazoa	Camelus ferus (Wild Bactrian camel)	1	install	1	0	0	0	0	0	0	0	0			
 cfum	T11020	Eukaryota	Metazoa	Choristoneura fumiferana (eastern spruce budworm)	1	install	1	0	0	0	0	0	0	0	0			
 cgar	T10780	Eukaryota	Metazoa	Clarias gariepinus (North African catfish)	1	install	1	0	0	0	0	0	0	0	0			
@@ -271,10 +274,10 @@ cge	T02813	Eukaryota	Metazoa	Cricetulus griseus (Chinese hamster)	1	keep	1	0	0	0
 cgi	T02232	Eukaryota	Fungi	Cryptococcus gattii	1	keep	1	0	0	0	1	1	0	0	0			
 cgib	T08819	Eukaryota	Metazoa	Carassius gibelio (silver crucian carp)	1	install	1	0	0	0	0	0	0	0	0			
 cgig	T07492	Eukaryota	Metazoa	Colletes gigas	1	install	1	0	0	0	0	0	0	0	0			
-cglo	T07738	Eukaryota	Metazoa	Cotesia glomerata	1	install	1	0	0	0	0	0	0	0	0			
-cgob	T07513	Eukaryota	Metazoa	Cottoperca gobio	1	install	1	0	0	0	0	0	0	0	0			
-cgr	T01024	Eukaryota	Fungi	Nakaseomyces glabratus	1	install	1	0	0	0	0	0	0	0	0			
-char	T09045	Eukaryota	Metazoa	Clupea harengus (Atlantic herring)	1	install	1	0	0	0	0	0	0	0	0			
+cglo	T07738	Eukaryota	Metazoa	Cotesia glomerata	1	install	1	0	0	0	1	0	0	0	0			
+cgob	T07513	Eukaryota	Metazoa	Cottoperca gobio	1	install	1	0	0	0	1	0	0	0	0			
+cgr	T01024	Eukaryota	Fungi	Nakaseomyces glabratus	1	install	1	0	0	0	1	0	0	0	0			
+char	T09045	Eukaryota	Metazoa	Clupea harengus (Atlantic herring)	1	install	1	0	0	0	1	0	0	0	0			
 chig	T08176	Eukaryota	Fungi	Colletotrichum higginsianum	1	install	1	0	0	0	0	0	0	0	0			
 cho	T00210	Eukaryota	Sar	Cryptosporidium hominis	1	install	1	0	0	0	0	0	0	0	0			
 chx	T02910	Eukaryota	Metazoa	Capra hircus (goat)	1	keep	1	0	0	0	1	1	0	0	0			
@@ -282,19 +285,19 @@ cic	T02982	Eukaryota	Viridiplantae	Citrus x clementina (clementine)	1	keep	1	0	0
 cide	T08802	Eukaryota	Metazoa	Ctenopharyngodon idella (grass carp)	1	install	1	0	0	0	0	0	0	0	0			
 cill	T08745	Eukaryota	Viridiplantae	Carya illinoinensis (pecan)	1	install	1	0	0	0	0	0	0	0	0			
 cim	T01114	Eukaryota	Fungi	Coccidioides immitis	1	install	1	0	0	0	0	0	0	0	0			
-cimi	T08783	Eukaryota	Metazoa	Cebus imitator (Panamanian white-faced capuchin)	1	install	1	0	0	0	0	0	0	0	0			
-cin	T01056	Eukaryota	Metazoa	Ciona intestinalis (yellow sea squirt)	1	install	1	0	0	0	0	0	0	0	0			
+cimi	T08783	Eukaryota	Metazoa	Cebus imitator (Panamanian white-faced capuchin)	1	install	1	0	0	0	1	0	0	0	0			
+cin	T01056	Eukaryota	Metazoa	Ciona intestinalis (yellow sea squirt)	1	install	1	0	0	0	1	0	0	0	0			
 cins	T08669	Eukaryota	Metazoa	Chelonus insularis	1	install	1	0	0	0	0	0	0	0	0			
 cit	T02983	Eukaryota	Viridiplantae	Citrus sinensis (Valencia orange)	1	keep	1	0	0	0	0	1	0	0	0			
 ciz	T11194	Eukaryota	Metazoa	Carettochelys insculpta (pitted-shelled turtle)	1	install	1	0	0	0	0	0	0	0	0			
-cjc	T03264	Eukaryota	Metazoa	Callithrix jacchus (white-tufted-ear marmoset)	1	install	1	0	0	0	0	0	0	0	0			
+cjc	T03264	Eukaryota	Metazoa	Callithrix jacchus (white-tufted-ear marmoset)	1	install	1	0	0	0	1	0	0	0	0			
 cjf	T10556	Eukaryota	Viridiplantae	Cryptomeria japonica (Japanese cedar)	1	install	1	0	0	0	0	0	0	0	0			
-cjo	T04297	Eukaryota	Metazoa	Coturnix japonica (Japanese quail)	1	install	1	0	0	0	0	0	0	0	0			
-clec	T05603	Eukaryota	Metazoa	Cimex lectularius (bed bug)	1	install	1	0	0	0	0	0	0	0	0			
+cjo	T04297	Eukaryota	Metazoa	Coturnix japonica (Japanese quail)	1	install	1	0	0	0	1	0	0	0	0			
+clec	T05603	Eukaryota	Metazoa	Cimex lectularius (bed bug)	1	install	1	0	0	0	1	0	0	0	0			
 clep	T11416	Eukaryota	Metazoa	Clavelina lepadiformis (light-bulb sea squirt)	1	install	1	0	0	0	0	0	0	0	0			
 clon	T09756	Eukaryota	Metazoa	Condylostylus longicornis	1	install	1	0	0	0	0	0	0	0	0			
 clu	T01149	Eukaryota	Fungi	Clavispora lusitaniae ATCC 42720	1	install	1	0	0	0	0	0	0	0	0			
-clud	T08371	Eukaryota	Metazoa	Canis lupus dingo (dingo)	1	install	1	0	0	0	0	0	0	0	0			
+clud	T08371	Eukaryota	Metazoa	Canis lupus dingo (dingo)	1	install	1	0	0	0	1	0	0	0	0			
 clum	T09199	Eukaryota	Metazoa	Cyclopterus lumpus (lumpfish)	1	keep	1	0	0	0	1	1	0	0	0			
 clup	T08561	Eukaryota	Fungi	Colletotrichum lupini	1	install	1	0	0	0	0	0	0	0	0			
 clus	T05147	Eukaryota	Fungi	Clavispora lusitaniae CBS 6936	1	install	1	0	0	0	0	0	0	0	0			
@@ -303,15 +306,15 @@ cmac	T08437	Eukaryota	Metazoa	Chlamydotis macqueenii (Macqueen's bustard)	1	inst
 cmam	T12026	Eukaryota	Metazoa	Cetorhinus maximus (basking shark)	1	install	1	0	0	0	0	0	0	0	0			
 cmao	T09004	Eukaryota	Metazoa	Colossoma macropomum (tambaqui)	1	install	1	0	0	0	0	0	0	0	0			
 cmax	T05246	Eukaryota	Viridiplantae	Cucurbita maxima (winter squash)	1	install	1	0	0	0	0	0	0	0	0			
-cme	T00175	Eukaryota	Rhodophyta	Cyanidioschyzon merolae	1	install	1	0	0	0	0	0	0	0	0			
-cmk	T03088	Eukaryota	Metazoa	Callorhinchus milii (elephant shark)	1	install	1	0	0	0	0	0	0	0	0			
-cmo	T03195	Eukaryota	Viridiplantae	Cucumis melo (muskmelon)	1	install	1	0	0	0	0	0	0	0	0			
+cme	T00175	Eukaryota	Rhodophyta	Cyanidioschyzon merolae	1	install	1	0	0	0	1	0	0	0	0			
+cmk	T03088	Eukaryota	Metazoa	Callorhinchus milii (elephant shark)	1	install	1	0	0	0	1	0	0	0	0			
+cmo	T03195	Eukaryota	Viridiplantae	Cucumis melo (muskmelon)	1	install	1	0	0	0	1	0	0	0	0			
 cmos	T05248	Eukaryota	Viridiplantae	Cucurbita moschata (crookneck pumpkin)	1	install	1	0	0	0	0	0	0	0	0			
 cmt	T03108	Eukaryota	Fungi	Cordyceps militaris	1	install	1	0	0	0	0	0	0	0	0			
 cmy	T02989	Eukaryota	Metazoa	Chelonia mydas (green sea turtle)	1	keep	1	0	0	0	0	1	0	0	0			
 cnb	T01040	Eukaryota	Fungi	Cryptococcus deneoformans B-3501A	1	keep	1	0	0	0	1	1	0	0	0			
 cne	T00243	Eukaryota	Fungi	Cryptococcus deneoformans JEC21	1	keep	1	0	0	0	1	1	0	0	0			
-cng	T08175	Eukaryota	Fungi	Cryptococcus neoformans var. grubii H99	1	install	1	0	0	0	0	0	0	0	0			
+cng	T08175	Eukaryota	Fungi	Cryptococcus neoformans var. grubii H99	1	install	1	0	0	0	1	0	0	0	0			
 cnic	T11056	Eukaryota	Metazoa	Caloenas nicobarica (Nicobar pigeon)	1	install	1	0	0	0	0	0	0	0	0			
 cnl	T11437	Eukaryota	Metazoa	Chionomys nivalis (European snow vole)	1	install	1	0	0	0	0	0	0	0	0			
 cns	T08003	Eukaryota	Metazoa	Contarinia nasturtii (swede midge)	1	install	1	0	0	0	0	0	0	0	0			
@@ -320,32 +323,32 @@ cot	T02488	Eukaryota	Fungi	Lodderomyces orthopsilosis	1	install	1	0	0	0	0	0	0	0	
 cpap	T05151	Eukaryota	Viridiplantae	Carica papaya (papaya)	1	keep	1	0	0	0	0	1	0	0	0			
 cpea	T08631	Eukaryota	Metazoa	Chaetura pelagica (chimney swift)	1	install	1	0	0	0	0	0	0	0	0			
 cpep	T05351	Eukaryota	Viridiplantae	Cucurbita pepo subsp. pepo (vegetable marrow)	1	install	1	0	0	0	0	0	0	0	0			
-cpic	T04662	Eukaryota	Metazoa	Chrysemys picta (western painted turtle)	1	install	1	0	0	0	0	0	0	0	0			
-cpii	T07310	Eukaryota	Metazoa	Culex pipiens pallens (northern house mosquito)	1	install	1	0	0	0	0	0	0	0	0			
+cpic	T04662	Eukaryota	Metazoa	Chrysemys picta (western painted turtle)	1	install	1	0	0	0	1	0	0	0	0			
+cpii	T07310	Eukaryota	Metazoa	Culex pipiens pallens (northern house mosquito)	1	install	1	0	0	0	1	0	0	0	0			
 cpla	T08871	Eukaryota	Metazoa	Chiloscyllium plagiosum (whitespotted bambooshark)	1	install	1	0	0	0	0	0	0	0	0			
-cpoc	T07777	Eukaryota	Metazoa	Cavia porcellus (domestic guinea pig)	1	install	1	0	0	0	0	0	0	0	0			
+cpoc	T07777	Eukaryota	Metazoa	Cavia porcellus (domestic guinea pig)	1	install	1	0	0	0	1	0	0	0	0			
 cpoo	T07440	Eukaryota	Metazoa	Crocodylus porosus (Australian saltwater crocodile)	1	keep	1	0	0	0	1	1	0	0	0			
 cpun	T11285	Eukaryota	Metazoa	Chiloscyllium punctatum (brownbanded bambooshark)	1	install	1	0	0	0	0	0	0	0	0			
-cput	T03134	Eukaryota	Fungi	Coniophora puteana	1	install	1	0	0	0	0	0	0	0	0			
-cpv	T00168	Eukaryota	Sar	Cryptosporidium parvum	1	install	1	0	0	0	0	0	0	0	0			
+cput	T03134	Eukaryota	Fungi	Coniophora puteana	1	install	1	0	0	0	1	0	0	0	0			
+cpv	T00168	Eukaryota	Sar	Cryptosporidium parvum	1	install	1	0	0	0	1	0	0	0	0			
 cpw	T01332	Eukaryota	Fungi	Coccidioides posadasii	1	install	1	0	0	0	0	0	0	0	0			
-cqd	T09502	Eukaryota	Metazoa	Cherax quadricarinatus (Australian red claw crayfish)	1	install	1	0	0	0	0	0	0	0	0			
-cqi	T05764	Eukaryota	Viridiplantae	Chenopodium quinoa (quinoa)	1	install	1	0	0	0	0	0	0	0	0			
-cqu	T01079	Eukaryota	Metazoa	Culex quinquefasciatus (southern house mosquito)	1	install	1	0	0	0	0	0	0	0	0			
+cqd	T09502	Eukaryota	Metazoa	Cherax quadricarinatus (Australian red claw crayfish)	1	install	1	0	0	0	1	0	0	0	0			
+cqi	T05764	Eukaryota	Viridiplantae	Chenopodium quinoa (quinoa)	1	install	1	0	0	0	1	0	0	0	0			
+cqu	T01079	Eukaryota	Metazoa	Culex quinquefasciatus (southern house mosquito)	1	install	1	0	0	0	1	0	0	0	0			
 crb	T02984	Eukaryota	Viridiplantae	Capsella rubella (pink shepherd's-purse)	1	install	1	0	0	0	0	0	0	0	0			
 cre	T01039	Eukaryota	Viridiplantae	Chlamydomonas reinhardtii	1	keep	1	0	0	0	1	1	0	0	0			
 crg	T03920	Eukaryota	Metazoa	Magallana gigas (Pacific oyster)	1	keep	1	0	0	0	1	1	0	0	0			
 crid	T10910	Eukaryota	Metazoa	Chroicocephalus ridibundus (black-headed gull)	1	install	1	0	0	0	0	0	0	0	0			
 crot	T11623	Eukaryota	Viridiplantae	Carex rostrata (bottle sedge)	1	install	1	0	0	0	0	0	0	0	0			
-crq	T09085	Eukaryota	Metazoa	Caenorhabditis remanei (nematode)	1	install	1	0	0	0	0	0	0	0	0			
+crq	T09085	Eukaryota	Metazoa	Caenorhabditis remanei (nematode)	1	install	1	0	0	0	1	0	0	0	0			
 csaa	T11266	Eukaryota	Viridiplantae	Castanea sativa (European chestnut)	1	install	1	0	0	0	0	0	0	0	0			
-csab	T04361	Eukaryota	Metazoa	Chlorocebus sabaeus (green monkey)	1	install	1	0	0	0	0	0	0	0	0			
+csab	T04361	Eukaryota	Metazoa	Chlorocebus sabaeus (green monkey)	1	install	1	0	0	0	1	0	0	0	0			
 csai	T09849	Eukaryota	Metazoa	Cololabis saira (Pacific saury)	1	install	1	0	0	0	0	0	0	0	0			
-csat	T05044	Eukaryota	Viridiplantae	Camelina sativa (false flax)	1	install	1	0	0	0	0	0	0	0	0			
-csav	T08987	Eukaryota	Viridiplantae	Cannabis sativa (hemp)	1	install	1	0	0	0	0	0	0	0	0			
-cscu	T06064	Eukaryota	Metazoa	Centruroides sculpturatus (bark scorpion)	1	install	1	0	0	0	0	0	0	0	0			
-csec	T07421	Eukaryota	Metazoa	Cryptotermes secundus (drywood termite)	1	install	1	0	0	0	0	0	0	0	0			
-csem	T04866	Eukaryota	Metazoa	Cynoglossus semilaevis (tongue sole)	1	install	1	0	0	0	0	0	0	0	0			
+csat	T05044	Eukaryota	Viridiplantae	Camelina sativa (false flax)	1	install	1	0	0	0	1	0	0	0	0			
+csav	T08987	Eukaryota	Viridiplantae	Cannabis sativa (hemp)	1	install	1	0	0	0	1	0	0	0	0			
+cscu	T06064	Eukaryota	Metazoa	Centruroides sculpturatus (bark scorpion)	1	install	1	0	0	0	1	0	0	0	0			
+csec	T07421	Eukaryota	Metazoa	Cryptotermes secundus (drywood termite)	1	install	1	0	0	0	1	0	0	0	0			
+csem	T04866	Eukaryota	Metazoa	Cynoglossus semilaevis (tongue sole)	1	install	1	0	0	0	1	0	0	0	0			
 cset	T07873	Eukaryota	Metazoa	Coccinella septempunctata (seven-spotted ladybird)	1	install	1	0	0	0	0	0	0	0	0			
 csin	T07364	Eukaryota	Viridiplantae	Camellia sinensis (tea plant)	1	install	1	0	0	0	0	0	0	0	0			
 csl	T02914	Eukaryota	Viridiplantae	Coccomyxa subellipsoidea	1	install	1	0	0	0	0	0	0	0	0			
@@ -353,9 +356,9 @@ csol	T06056	Eukaryota	Metazoa	Ceratosolen solmsi marchali (fig wasp)	1	install	1
 cstb	T10503	Eukaryota	Metazoa	Cydia strobilella (spruce-seed moth)	1	install	1	0	0	0	0	0	0	0	0			
 csti	T08355	Eukaryota	Metazoa	Colius striatus (speckled mousebird)	1	install	1	0	0	0	0	0	0	0	0			
 csum	T10522	Eukaryota	Metazoa	Capricornis sumatraensis (Sumatran serow)	1	install	1	0	0	0	0	0	0	0	0			
-csv	T02486	Eukaryota	Viridiplantae	Cucumis sativus (cucumber)	1	install	1	0	0	0	0	0	0	0	0			
-csyr	T07836	Eukaryota	Metazoa	Carlito syrichta (Philippine tarsier)	1	install	1	0	0	0	0	0	0	0	0			
-cteg	T10981	Eukaryota	Fungi	Cryptococcus tetragattii	1	install	1	0	0	0	0	0	0	0	0			
+csv	T02486	Eukaryota	Viridiplantae	Cucumis sativus (cucumber)	1	install	1	0	0	0	1	0	0	0	0			
+csyr	T07836	Eukaryota	Metazoa	Carlito syrichta (Philippine tarsier)	1	install	1	0	0	0	1	0	0	0	0			
+cteg	T10981	Eukaryota	Fungi	Cryptococcus tetragattii	1	install	1	0	0	0	1	0	0	0	0			
 cten	T03099	Eukaryota	Fungi	Yamadazyma tenuis	1	install	1	0	0	0	0	0	0	0	0			
 cthr	T03100	Eukaryota	Fungi	Thermochaetoides thermophila	1	install	1	0	0	0	0	0	0	0	0			
 ctig	T08476	Eukaryota	Metazoa	Crotalus tigris (Tiger rattlesnake)	1	install	1	0	0	0	0	0	0	0	0			
@@ -366,74 +369,74 @@ cuca	T08597	Eukaryota	Metazoa	Cuculus canorus (common cuckoo)	1	install	1	0	0	0	
 cud	T07473	Eukaryota	Metazoa	Cheilinus undulatus (humphead wrasse)	1	install	1	0	0	0	0	0	0	0	0			
 cve	T10484	Eukaryota	Metazoa	Cebidichthys violaceus (monkeyface prickleback)	1	install	1	0	0	0	0	0	0	0	0			
 cvf	T08577	Eukaryota	Metazoa	Charadrius vociferus (killdeer)	1	install	1	0	0	0	0	0	0	0	0			
-cvg	T06110	Eukaryota	Metazoa	Cyprinodon variegatus (sheepshead minnow)	1	install	1	0	0	0	0	0	0	0	0			
+cvg	T06110	Eukaryota	Metazoa	Cyprinodon variegatus (sheepshead minnow)	1	install	1	0	0	0	1	0	0	0	0			
 cvj	T10781	Eukaryota	Metazoa	Calliphora vicina (urban bluebottle blowfly)	1	install	1	0	0	0	0	0	0	0	0			
-cvn	T09197	Eukaryota	Metazoa	Crassostrea virginica (eastern oyster)	1	install	1	0	0	0	0	0	0	0	0			
+cvn	T09197	Eukaryota	Metazoa	Crassostrea virginica (eastern oyster)	1	install	1	0	0	0	1	0	0	0	0			
 cvr	T02924	Eukaryota	Viridiplantae	Chlorella variabilis	1	install	1	0	0	0	0	0	0	0	0			
 cvs	T10332	Eukaryota	Metazoa	Centruroides vittatus (striped bark scorpion)	1	install	1	0	0	0	0	0	0	0	0			
 daes	T11734	Eukaryota	Metazoa	Danio aesculapii (panther danio)	1	install	1	0	0	0	0	0	0	0	0			
 dalb	T11267	Eukaryota	Metazoa	Dermacentor albipictus (winter tick)	1	install	1	0	0	0	0	0	0	0	0			
 dam	T07663	Eukaryota	Metazoa	Diachasma alloeum	1	install	1	0	0	0	0	0	0	0	0			
-dan	T01059	Eukaryota	Metazoa	Drosophila ananassae	1	install	1	0	0	0	0	0	0	0	0			
-daz	T05886	Eukaryota	Metazoa	Drosophila arizonae	1	install	1	0	0	0	0	0	0	0	0			
-dcar	T11669	Eukaryota	Metazoa	Daphnia carinata	1	install	1	0	0	0	0	0	0	0	0			
+dan	T01059	Eukaryota	Metazoa	Drosophila ananassae	1	install	1	0	0	0	1	0	0	0	0			
+daz	T05886	Eukaryota	Metazoa	Drosophila arizonae	1	install	1	0	0	0	1	0	0	0	0			
+dcar	T11669	Eukaryota	Metazoa	Daphnia carinata	1	install	1	0	0	0	1	0	0	0	0			
 dcc	T09064	Eukaryota	Metazoa	Dermochelys coriacea (leatherback sea turtle)	1	install	1	0	0	0	0	0	0	0	0			
-dci	T07332	Eukaryota	Metazoa	Diaphorina citri (Asian citrus psyllid)	1	install	1	0	0	0	0	0	0	0	0			
+dci	T07332	Eukaryota	Metazoa	Diaphorina citri (Asian citrus psyllid)	1	install	1	0	0	0	1	0	0	0	0			
 dcon	T11322	Eukaryota	Fungi	Drechmeria coniospora	1	install	1	0	0	0	0	0	0	0	0			
 dcor	T10370	Eukaryota	Metazoa	Dalotia coriaria (greenhouse rove beetle)	1	install	1	0	0	0	0	0	0	0	0			
-dcr	T05350	Eukaryota	Viridiplantae	Daucus carota (carrot)	1	install	1	0	0	0	0	0	0	0	0			
+dcr	T05350	Eukaryota	Viridiplantae	Daucus carota (carrot)	1	install	1	0	0	0	1	0	0	0	0			
 dct	T05027	Eukaryota	Viridiplantae	Dendrobium catenatum	1	install	1	0	0	0	0	0	0	0	0			
 ddi	T00245	Eukaryota	Amoebozoa	Dictyostelium discoideum (cellular slime mold)	1	keep	1	1	0	0	1	1	1	0	0	1085		
 ddp	T11117	Eukaryota	Metazoa	Delphinus delphis (saddleback dolphin)	1	install	1	0	0	0	0	0	0	0	0			
-der	T01060	Eukaryota	Metazoa	Drosophila erecta	1	install	1	0	0	0	0	0	0	0	0			
-dfa	T02668	Eukaryota	Amoebozoa	Cavenderia fasciculata (cellular slime mold)	1	install	1	0	0	0	0	0	0	0	0			
+der	T01060	Eukaryota	Metazoa	Drosophila erecta	1	install	1	0	0	0	1	0	0	0	0			
+dfa	T02668	Eukaryota	Amoebozoa	Cavenderia fasciculata (cellular slime mold)	1	install	1	0	0	0	1	0	0	0	0			
 dfr	T08043	Eukaryota	Metazoa	Dermatophagoides farinae (American house dust mite)	1	install	1	0	0	0	0	0	0	0	0			
-dgr	T01061	Eukaryota	Metazoa	Drosophila grimshawi	1	install	1	0	0	0	0	0	0	0	0			
-dgt	T06112	Eukaryota	Metazoa	Dendronephthya gigantea (soft corals)	1	install	1	0	0	0	0	0	0	0	0			
+dgr	T01061	Eukaryota	Metazoa	Drosophila grimshawi	1	install	1	0	0	0	1	0	0	0	0			
+dgt	T06112	Eukaryota	Metazoa	Dendronephthya gigantea (soft corals)	1	install	1	0	0	0	1	0	0	0	0			
 dha	T01026	Eukaryota	Fungi	Debaryomyces hansenii	1	install	1	0	0	0	0	0	0	0	0			
-dhe	T05888	Eukaryota	Metazoa	Drosophila hydei	1	install	1	0	0	0	0	0	0	0	0			
-dle	T05885	Eukaryota	Metazoa	Delphinapterus leucas (beluga whale)	1	install	1	0	0	0	0	0	0	0	0			
+dhe	T05888	Eukaryota	Metazoa	Drosophila hydei	1	install	1	0	0	0	1	0	0	0	0			
+dle	T05885	Eukaryota	Metazoa	Delphinapterus leucas (beluga whale)	1	install	1	0	0	0	1	0	0	0	0			
 dlt	T10632	Eukaryota	Viridiplantae	Diospyros lotus (date-plum)	1	install	1	0	0	0	0	0	0	0	0			
-dme	T00030	Eukaryota	Metazoa	Drosophila melanogaster (fruit fly)	1	keep	1	1	0	0	0	1	1	0	0	1591		
+dme	T00030	Eukaryota	Metazoa	Drosophila melanogaster (fruit fly)	1	keep	1	1	0	0	1	1	1	0	0	1591		
 dmer	T11079	Eukaryota	Metazoa	Dipodomys merriami (Merriam's kangaroo rat)	1	install	1	0	0	0	0	0	0	0	0			
-dmk	T07514	Eukaryota	Metazoa	Daphnia magna (water flea)	1	install	1	0	0	0	0	0	0	0	0			
-dmn	T06132	Eukaryota	Metazoa	Drosophila miranda	1	install	1	0	0	0	0	0	0	0	0			
-dmo	T01062	Eukaryota	Metazoa	Drosophila mojavensis	1	install	1	0	0	0	0	0	0	0	0			
-dne	T07572	Eukaryota	Metazoa	Dromaius novaehollandiae (emu)	1	install	1	0	0	0	0	0	0	0	0			
-dnm	T07872	Eukaryota	Metazoa	Dasypus novemcinctus (nine-banded armadillo)	1	install	1	0	0	0	0	0	0	0	0			
-dnv	T05898	Eukaryota	Metazoa	Drosophila navojoa	1	install	1	0	0	0	0	0	0	0	0			
-dnx	T04900	Eukaryota	Metazoa	Diuraphis noxia (Russian wheat aphid)	1	install	1	0	0	0	0	0	0	0	0			
-dord	T07834	Eukaryota	Metazoa	Dipodomys ordii (Ord's kangaroo rat)	1	install	1	0	0	0	0	0	0	0	0			
+dmk	T07514	Eukaryota	Metazoa	Daphnia magna (water flea)	1	install	1	0	0	0	1	0	0	0	0			
+dmn	T06132	Eukaryota	Metazoa	Drosophila miranda	1	install	1	0	0	0	1	0	0	0	0			
+dmo	T01062	Eukaryota	Metazoa	Drosophila mojavensis	1	install	1	0	0	0	1	0	0	0	0			
+dne	T07572	Eukaryota	Metazoa	Dromaius novaehollandiae (emu)	1	install	1	0	0	0	1	0	0	0	0			
+dnm	T07872	Eukaryota	Metazoa	Dasypus novemcinctus (nine-banded armadillo)	1	install	1	0	0	0	1	0	0	0	0			
+dnv	T05898	Eukaryota	Metazoa	Drosophila navojoa	1	install	1	0	0	0	1	0	0	0	0			
+dnx	T04900	Eukaryota	Metazoa	Diuraphis noxia (Russian wheat aphid)	1	install	1	0	0	0	1	0	0	0	0			
+dord	T07834	Eukaryota	Metazoa	Dipodomys ordii (Ord's kangaroo rat)	1	install	1	0	0	0	1	0	0	0	0			
 dosa	T02163	Eukaryota	Viridiplantae	Oryza sativa japonica (Japanese rice) (RAPDB)	1	keep	1	0	0	0	1	1	0	0	0			
-dpa	T04899	Eukaryota	Metazoa	Dendroctonus ponderosae (mountain pine beetle)	1	install	1	0	0	0	0	0	0	0	0			
-dpe	T01063	Eukaryota	Metazoa	Drosophila persimilis	1	install	1	0	0	0	0	0	0	0	0			
-dpl	T04344	Eukaryota	Metazoa	Danaus plexippus (monarch butterfly)	1	install	1	0	0	0	0	0	0	0	0			
-dpo	T01032	Eukaryota	Metazoa	Drosophila pseudoobscura	1	install	1	0	0	0	0	0	0	0	0			
-dpol	T08834	Eukaryota	Metazoa	Dreissena polymorpha (zebra mussel)	1	install	1	0	0	0	0	0	0	0	0			
-dpp	T02090	Eukaryota	Amoebozoa	Dictyostelium purpureum (cellular slime mold)	1	install	1	0	0	0	0	0	0	0	0			
-dpte	T05775	Eukaryota	Metazoa	Dermatophagoides pteronyssinus (European house dust mite)	1	install	1	0	0	0	0	0	0	0	0			
+dpa	T04899	Eukaryota	Metazoa	Dendroctonus ponderosae (mountain pine beetle)	1	install	1	0	0	0	1	0	0	0	0			
+dpe	T01063	Eukaryota	Metazoa	Drosophila persimilis	1	install	1	0	0	0	1	0	0	0	0			
+dpl	T04344	Eukaryota	Metazoa	Danaus plexippus (monarch butterfly)	1	install	1	0	0	0	1	0	0	0	0			
+dpo	T01032	Eukaryota	Metazoa	Drosophila pseudoobscura	1	install	1	0	0	0	1	0	0	0	0			
+dpol	T08834	Eukaryota	Metazoa	Dreissena polymorpha (zebra mussel)	1	install	1	0	0	0	1	0	0	0	0			
+dpp	T02090	Eukaryota	Amoebozoa	Dictyostelium purpureum (cellular slime mold)	1	install	1	0	0	0	1	0	0	0	0			
+dpte	T05775	Eukaryota	Metazoa	Dermatophagoides pteronyssinus (European house dust mite)	1	install	1	0	0	0	1	0	0	0	0			
 dpub	T08526	Eukaryota	Metazoa	Dryobates pubescens (Downy woodpecker)	1	install	1	0	0	0	0	0	0	0	0			
-dpx	T04347	Eukaryota	Metazoa	Daphnia pulex (common water flea)	1	install	1	0	0	0	0	0	0	0	0			
-dpz	T08670	Eukaryota	Metazoa	Daphnia pulicaria	1	install	1	0	0	0	0	0	0	0	0			
+dpx	T04347	Eukaryota	Metazoa	Daphnia pulex (common water flea)	1	install	1	0	0	0	1	0	0	0	0			
+dpz	T08670	Eukaryota	Metazoa	Daphnia pulicaria	1	install	1	0	0	0	1	0	0	0	0			
 dqu	T05610	Eukaryota	Metazoa	Dinoponera quadriceps	1	install	1	0	0	0	0	0	0	0	0			
 dre	T01004	Eukaryota	Metazoa	Danio rerio (zebrafish)	1	keep	1	1	0	0	1	1	1	0	0	1696		
 dro	T05907	Eukaryota	Metazoa	Desmodus rotundus (common vampire bat)	1	install	1	0	0	0	0	0	0	0	0			
-dse	T01064	Eukaryota	Metazoa	Drosophila sechellia	1	install	1	0	0	0	0	0	0	0	0			
-dsi	T01065	Eukaryota	Metazoa	Drosophila simulans	1	install	1	0	0	0	0	0	0	0	0			
+dse	T01064	Eukaryota	Metazoa	Drosophila sechellia	1	install	1	0	0	0	1	0	0	0	0			
+dsi	T01065	Eukaryota	Metazoa	Drosophila simulans	1	install	1	0	0	0	1	0	0	0	0			
 dsm	T08947	Eukaryota	Metazoa	Diprion similis	1	install	1	0	0	0	0	0	0	0	0			
 dsp	T07891	Eukaryota	Metazoa	Dipodomys spectabilis (banner-tailed kangaroo rat)	1	install	1	0	0	0	0	0	0	0	0			
 dsq	T03133	Eukaryota	Fungi	Dichomitus squalens	1	keep	1	0	0	0	1	1	0	0	0			
-dsr	T06108	Eukaryota	Metazoa	Drosophila serrata	1	install	1	0	0	0	0	0	0	0	0			
-dsv	T07348	Eukaryota	Metazoa	Dermacentor silvarum	1	install	1	0	0	0	0	0	0	0	0			
+dsr	T06108	Eukaryota	Metazoa	Drosophila serrata	1	install	1	0	0	0	1	0	0	0	0			
+dsv	T07348	Eukaryota	Metazoa	Dermacentor silvarum	1	install	1	0	0	0	1	0	0	0	0			
 dtc	T11000	Eukaryota	Metazoa	Dendrobates tinctorius (dyeing poison frog)	1	install	1	0	0	0	0	0	0	0	0			
-dvi	T01066	Eukaryota	Metazoa	Drosophila virilis	1	install	1	0	0	0	0	0	0	0	0			
-dvt	T09738	Eukaryota	Metazoa	Daktulosphaira vitifoliae (grape phylloxera)	1	install	1	0	0	0	0	0	0	0	0			
-dvv	T09922	Eukaryota	Metazoa	Diabrotica virgifera virgifera (western corn rootworm)	1	install	1	0	0	0	0	0	0	0	0			
-dwi	T01067	Eukaryota	Metazoa	Drosophila willistoni	1	install	1	0	0	0	0	0	0	0	0			
-dya	T01068	Eukaryota	Metazoa	Drosophila yakuba	1	install	1	0	0	0	0	0	0	0	0			
+dvi	T01066	Eukaryota	Metazoa	Drosophila virilis	1	install	1	0	0	0	1	0	0	0	0			
+dvt	T09738	Eukaryota	Metazoa	Daktulosphaira vitifoliae (grape phylloxera)	1	install	1	0	0	0	1	0	0	0	0			
+dvv	T09922	Eukaryota	Metazoa	Diabrotica virgifera virgifera (western corn rootworm)	1	install	1	0	0	0	1	0	0	0	0			
+dwi	T01067	Eukaryota	Metazoa	Drosophila willistoni	1	install	1	0	0	0	1	0	0	0	0			
+dya	T01068	Eukaryota	Metazoa	Drosophila yakuba	1	install	1	0	0	0	1	0	0	0	0			
 dzi	T05242	Eukaryota	Viridiplantae	Durio zibethinus (durian)	1	install	1	0	0	0	0	0	0	0	0			
 eaf	T07296	Eukaryota	Metazoa	Eurytemora carolleeae	1	install	1	0	0	0	0	0	0	0	0			
-eai	T04645	Eukaryota	Metazoa	Equus asinus (ass)	1	install	1	0	0	0	0	0	0	0	0			
+eai	T04645	Eukaryota	Metazoa	Equus asinus (ass)	1	install	1	0	0	0	1	0	0	0	0			
 earm	T11455	Eukaryota	Metazoa	Enoplosus armatus (old wife)	1	install	1	0	0	0	0	0	0	0	0			
 ecad	T07610	Eukaryota	Viridiplantae	Erigeron canadensis (horseweed)	1	install	1	0	0	0	0	0	0	0	0			
 ecb	T01058	Eukaryota	Metazoa	Equus caballus (horse)	1	keep	1	0	0	0	1	1	0	0	0			
@@ -441,50 +444,50 @@ eclr	T11494	Eukaryota	Metazoa	Epargyreus clarus	1	install	1	0	0	0	0	0	0	0	0
 ecoe	T09463	Eukaryota	Metazoa	Eupeodes corollae	1	install	1	0	0	0	0	0	0	0	0			
 ecra	T07493	Eukaryota	Metazoa	Etheostoma cragini (Arkansas darter)	1	install	1	0	0	0	0	0	0	0	0			
 ecu	T00105	Eukaryota	Fungi	Encephalitozoon cuniculi	1	install	1	0	0	0	0	0	0	0	0			
-edi	T01083	Eukaryota	Amoebozoa	Entamoeba dispar	1	install	1	0	0	0	0	0	0	0	0			
-eee	T05787	Eukaryota	Metazoa	Electrophorus electricus (electric eel)	1	install	1	0	0	0	0	0	0	0	0			
+edi	T01083	Eukaryota	Amoebozoa	Entamoeba dispar	1	install	1	0	0	0	1	0	0	0	0			
+eee	T05787	Eukaryota	Metazoa	Electrophorus electricus (electric eel)	1	install	1	0	0	0	1	0	0	0	0			
 efo	T08419	Eukaryota	Metazoa	Epinephelus fuscoguttatus (brown-marbled grouper)	1	install	1	0	0	0	0	0	0	0	0			
 efor	T10685	Eukaryota	Metazoa	Euwallacea fornicatus (polyphagous shot-hole borer)	1	install	1	0	0	0	0	0	0	0	0			
 efus	T09083	Eukaryota	Metazoa	Eptesicus fuscus (big brown bat)	1	install	1	0	0	0	0	0	0	0	0			
-egl	T05553	Eukaryota	Metazoa	Echinococcus granulosus (hydatid tapeworm)	1	install	1	0	0	0	0	0	0	0	0			
-egr	T03547	Eukaryota	Viridiplantae	Eucalyptus grandis (rose gum)	1	install	1	0	0	0	0	0	0	0	0			
+egl	T05553	Eukaryota	Metazoa	Echinococcus granulosus (hydatid tapeworm)	1	install	1	0	0	0	1	0	0	0	0			
+egr	T03547	Eukaryota	Viridiplantae	Eucalyptus grandis (rose gum)	1	install	1	0	0	0	1	0	0	0	0			
 egt	T07346	Eukaryota	Viridiplantae	Erythranthe guttata (spotted monkey flower)	1	install	1	0	0	0	0	0	0	0	0			
 egu	T03921	Eukaryota	Viridiplantae	Elaeis guineensis (African oil palm)	1	install	1	0	0	0	0	0	0	0	0			
 egz	T05152	Eukaryota	Metazoa	Egretta garzetta (little egret)	1	install	1	0	0	0	0	0	0	0	0			
 ehe	T02287	Eukaryota	Fungi	Encephalitozoon hellem	1	install	1	0	0	0	0	0	0	0	0			
-ehi	T00238	Eukaryota	Amoebozoa	Entamoeba histolytica	1	install	1	0	0	0	0	0	0	0	0			
+ehi	T00238	Eukaryota	Amoebozoa	Entamoeba histolytica	1	install	1	0	0	0	1	0	0	0	0			
 ehs	T08356	Eukaryota	Metazoa	Eurypyga helias (sunbittern)	1	install	1	0	0	0	0	0	0	0	0			
-ehx	T02915	Eukaryota	Haptista	Emiliania huxleyi	1	install	1	0	0	0	0	0	0	0	0			
+ehx	T02915	Eukaryota	Haptista	Emiliania huxleyi	1	install	1	0	0	0	1	0	0	0	0			
 ein	T02238	Eukaryota	Fungi	Encephalitozoon intestinalis	1	install	1	0	0	0	0	0	0	0	0			
-eiv	T04133	Eukaryota	Amoebozoa	Entamoeba invadens	1	install	1	0	0	0	0	0	0	0	0			
+eiv	T04133	Eukaryota	Amoebozoa	Entamoeba invadens	1	install	1	0	0	0	1	0	0	0	0			
 eja	T10523	Eukaryota	Metazoa	Embiotoca jacksoni (black perch)	1	install	1	0	0	0	0	0	0	0	0			
 eju	T07240	Eukaryota	Metazoa	Eumetopias jubatus (Steller sea lion)	1	install	1	0	0	0	0	0	0	0	0			
 ela	T03103	Eukaryota	Fungi	Eutypa lata	1	install	1	0	0	0	0	0	0	0	0			
 elk	T05871	Eukaryota	Metazoa	Enhydra lutris kenyoni (northern sea otter)	1	install	1	0	0	0	0	0	0	0	0			
-els	T04894	Eukaryota	Metazoa	Esox lucius (northern pike)	1	install	1	0	0	0	0	0	0	0	0			
+els	T04894	Eukaryota	Metazoa	Esox lucius (northern pike)	1	install	1	0	0	0	1	0	0	0	0			
 ely	T07331	Eukaryota	Metazoa	Epinephelus lanceolatus (giant grouper)	1	install	1	0	0	0	0	0	0	0	0			
 emac	T09869	Eukaryota	Metazoa	Eleginops maclovinus (Patagonian blennie)	1	install	1	0	0	0	0	0	0	0	0			
 emc	T09084	Eukaryota	Metazoa	Eublepharis macularius (Leopard gecko)	1	install	1	0	0	0	0	0	0	0	0			
 emq	T11697	Eukaryota	Metazoa	Emydura macquarii macquarii (eastern short-necked turtle)	1	install	1	0	0	0	0	0	0	0	0			
 eny	T10929	Eukaryota	Metazoa	Eucyclogobius newberryi (tidewater goby)	1	install	1	0	0	0	0	0	0	0	0			
 eob	T11511	Eukaryota	Metazoa	Emys orbicularis (European pond turtle)	1	install	1	0	0	0	0	0	0	0	0			
-epa	T05080	Eukaryota	Metazoa	Exaiptasia diaphana (Aiptasia)	1	install	1	0	0	0	0	0	0	0	0			
+epa	T05080	Eukaryota	Metazoa	Exaiptasia diaphana (Aiptasia)	1	install	1	0	0	0	1	0	0	0	0			
 epz	T04644	Eukaryota	Metazoa	Equus przewalskii (Przewalski's horse)	1	install	1	0	0	0	0	0	0	0	0			
 erc	T02237	Eukaryota	Fungi	Eremothecium cymbalariae	1	install	1	0	0	0	0	0	0	0	0			
 ero	T03458	Eukaryota	Fungi	Encephalitozoon romaleae	1	install	1	0	0	0	0	0	0	0	0			
 eruf	T11398	Eukaryota	Metazoa	Eulemur rufifrons (Bennett's brown lemur)	1	install	1	0	0	0	0	0	0	0	0			
 esim	T10684	Eukaryota	Metazoa	Euwallacea similis	1	install	1	0	0	0	0	0	0	0	0			
-esn	T08870	Eukaryota	Metazoa	Eriocheir sinensis (Chinese mitten crab)	1	install	1	0	0	0	0	0	0	0	0			
+esn	T08870	Eukaryota	Metazoa	Eriocheir sinensis (Chinese mitten crab)	1	install	1	0	0	0	1	0	0	0	0			
 esp	T08457	Eukaryota	Metazoa	Etheostoma spectabile (orangethroat darter)	1	install	1	0	0	0	0	0	0	0	0			
-etf	T08707	Eukaryota	Metazoa	Echinops telfairi (small Madagascar hedgehog)	1	install	1	0	0	0	0	0	0	0	0			
+etf	T08707	Eukaryota	Metazoa	Echinops telfairi (small Madagascar hedgehog)	1	install	1	0	0	0	1	0	0	0	0			
 etl	T05887	Eukaryota	Metazoa	Empidonax traillii (willow flycatcher)	1	install	1	0	0	0	0	0	0	0	0			
-eus	T02985	Eukaryota	Viridiplantae	Eutrema salsugineum (saltwater cress)	1	install	1	0	0	0	0	0	0	0	0			
-fab	T02815	Eukaryota	Metazoa	Ficedula albicollis (collared flycatcher)	1	install	1	0	0	0	0	0	0	0	0			
+eus	T02985	Eukaryota	Viridiplantae	Eutrema salsugineum (saltwater cress)	1	install	1	0	0	0	1	0	0	0	0			
+fab	T02815	Eukaryota	Metazoa	Ficedula albicollis (collared flycatcher)	1	install	1	0	0	0	1	0	0	0	0			
 fas	T07645	Eukaryota	Metazoa	Fopius arisanus	1	install	1	0	0	0	0	0	0	0	0			
-fca	T02385	Eukaryota	Metazoa	Felis catus (domestic cat)	1	install	1	0	0	0	0	0	0	0	0			
-fcd	T05043	Eukaryota	Metazoa	Folsomia candida	1	install	1	0	0	0	0	0	0	0	0			
+fca	T02385	Eukaryota	Metazoa	Felis catus (domestic cat)	1	install	1	0	0	0	1	0	0	0	0			
+fcd	T05043	Eukaryota	Metazoa	Folsomia candida	1	install	1	0	0	0	1	0	0	0	0			
 fch	T02911	Eukaryota	Metazoa	Falco cherrug (Saker falcon)	1	install	1	0	0	0	0	0	0	0	0			
-fcy	T04784	Eukaryota	Sar	Fragilariopsis cylindrus	1	install	1	0	0	0	0	0	0	0	0			
+fcy	T04784	Eukaryota	Sar	Fragilariopsis cylindrus	1	install	1	0	0	0	1	0	0	0	0			
 fex	T07422	Eukaryota	Metazoa	Formica exsecta (narrow-headed ant)	1	install	1	0	0	0	0	0	0	0	0			
 ffc	T09198	Eukaryota	Fungi	Fusarium falciforme	1	install	1	0	0	0	0	0	0	0	0			
 ffu	T08195	Eukaryota	Fungi	Fulvia fulva	1	install	1	0	0	0	0	0	0	0	0			
@@ -497,118 +500,118 @@ foc	T07591	Eukaryota	Metazoa	Frankliniella occidentalis (western flower thrips)	
 fox	T04882	Eukaryota	Fungi	Fusarium oxysporum	1	keep	1	0	0	0	1	1	0	0	0			
 fpg	T02856	Eukaryota	Metazoa	Falco peregrinus (peregrine falcon)	1	install	1	0	0	0	0	0	0	0	0			
 fpoa	T09519	Eukaryota	Fungi	Fusarium poae	1	install	1	0	0	0	0	0	0	0	0			
-fpu	T03456	Eukaryota	Fungi	Fusarium pseudograminearum	1	install	1	0	0	0	0	0	0	0	0			
+fpu	T03456	Eukaryota	Fungi	Fusarium pseudograminearum	1	install	1	0	0	0	1	0	0	0	0			
 frs	T11606	Eukaryota	Metazoa	Falco rusticolus (gyrfalcon)	1	install	1	0	0	0	0	0	0	0	0			
 fve	T02666	Eukaryota	Viridiplantae	Fragaria vesca (woodland strawberry)	1	keep	1	0	0	0	0	1	0	0	0			
 fvi	T09482	Eukaryota	Metazoa	Frieseomelitta varia	1	install	1	0	0	0	0	0	0	0	0			
-fvn	T09539	Eukaryota	Fungi	Fusarium venenatum	1	install	1	0	0	0	0	0	0	0	0			
-fvr	T04869	Eukaryota	Fungi	Fusarium verticillioides	1	install	1	0	0	0	0	0	0	0	0			
+fvn	T09539	Eukaryota	Fungi	Fusarium venenatum	1	install	1	0	0	0	1	0	0	0	0			
+fvr	T04869	Eukaryota	Fungi	Fusarium verticillioides	1	install	1	0	0	0	1	0	0	0	0			
 gab	T05776	Eukaryota	Viridiplantae	Gossypium arboreum (tree cotton)	1	install	1	0	0	0	0	0	0	0	0			
 gacu	T09661	Eukaryota	Metazoa	Gymnodraco acuticeps	1	install	1	0	0	0	0	0	0	0	0			
-gae	T07458	Eukaryota	Metazoa	Gigantopelta aegis (peltospirid snail)	1	install	1	0	0	0	0	0	0	0	0			
-gaf	T07758	Eukaryota	Metazoa	Gambusia affinis (western mosquitofish)	1	install	1	0	0	0	0	0	0	0	0			
+gae	T07458	Eukaryota	Metazoa	Gigantopelta aegis (peltospirid snail)	1	install	1	0	0	0	1	0	0	0	0			
+gaf	T07758	Eukaryota	Metazoa	Gambusia affinis (western mosquitofish)	1	install	1	0	0	0	1	0	0	0	0			
 game	T11359	Eukaryota	Metazoa	Grus americana (Whooping crane)	1	install	1	0	0	0	0	0	0	0	0			
 gas	T07702	Eukaryota	Metazoa	Gracilinanus agilis (agile gracile opossum)	1	install	1	0	0	0	0	0	0	0	0			
-gat	T07457	Eukaryota	Metazoa	Gasterosteus aculeatus (three-spined stickleback)	1	install	1	0	0	0	0	0	0	0	0			
+gat	T07457	Eukaryota	Metazoa	Gasterosteus aculeatus (three-spined stickleback)	1	install	1	0	0	0	1	0	0	0	0			
 gcl	T08687	Eukaryota	Metazoa	Gymnogyps californianus (California condor)	1	install	1	0	0	0	0	0	0	0	0			
-gfr	T03755	Eukaryota	Metazoa	Geospiza fortis (medium ground-finch)	1	install	1	0	0	0	0	0	0	0	0			
-gfs	T09630	Eukaryota	Metazoa	Glossina fuscipes (tsetse fly)	1	install	1	0	0	0	0	0	0	0	0			
-gga	T01006	Eukaryota	Metazoa	Gallus gallus (chicken)	1	keep	1	1	0	0	0	1	1	0	0	1841		
+gfr	T03755	Eukaryota	Metazoa	Geospiza fortis (medium ground-finch)	1	install	1	0	0	0	1	0	0	0	0			
+gfs	T09630	Eukaryota	Metazoa	Glossina fuscipes (tsetse fly)	1	install	1	0	0	0	1	0	0	0	0			
+gga	T01006	Eukaryota	Metazoa	Gallus gallus (chicken)	1	keep	1	1	0	0	1	1	1	0	0	1841		
 ggn	T07453	Eukaryota	Metazoa	Gavialis gangeticus (Gharial)	1	install	1	0	0	0	0	0	0	0	0			
-ggo	T02442	Eukaryota	Metazoa	Gorilla gorilla gorilla (western lowland gorilla)	1	install	1	0	0	0	0	0	0	0	0			
+ggo	T02442	Eukaryota	Metazoa	Gorilla gorilla gorilla (western lowland gorilla)	1	install	1	0	0	0	1	0	0	0	0			
 ghi	T04793	Eukaryota	Viridiplantae	Gossypium hirsutum (upland cotton)	1	install	1	0	0	0	0	0	0	0	0			
 gja	T04299	Eukaryota	Metazoa	Gekko japonicus (Schlegel's Japanese gecko)	1	install	1	0	0	0	0	0	0	0	0			
 gla	T01047	Eukaryota	Metamonada	Giardia lamblia	1	install	1	0	0	0	0	0	0	0	0			
 glz	T04883	Eukaryota	Fungi	Glarea lozoyensis	1	install	1	0	0	0	0	0	0	0	0			
 gmf	T11080	Eukaryota	Metazoa	Globicephala melas (long-finned pilot whale)	1	install	1	0	0	0	0	0	0	0	0			
-gmh	T10832	Eukaryota	Metazoa	Gadus morhua (Atlantic cod)	1	install	1	0	0	0	0	0	0	0	0			
+gmh	T10832	Eukaryota	Metazoa	Gadus morhua (Atlantic cod)	1	install	1	0	0	0	1	0	0	0	0			
 gmu	T08099	Eukaryota	Metazoa	Girardinichthys multiradiatus (darkedged splitfin)	1	install	1	0	0	0	0	0	0	0	0			
 gmw	T09996	Eukaryota	Metazoa	Galleria mellonella (greater wax moth)	1	install	1	0	0	0	0	0	0	0	0			
 gmx	T01710	Eukaryota	Viridiplantae	Glycine max (soybean)	1	keep	1	0	0	0	1	1	0	0	0			
-goe	T11057	Eukaryota	Metazoa	Galendromus occidentalis (western predatory mite)	1	install	1	0	0	0	0	0	0	0	0			
-gra	T04129	Eukaryota	Viridiplantae	Gossypium raimondii	1	install	1	0	0	0	0	0	0	0	0			
+goe	T11057	Eukaryota	Metazoa	Galendromus occidentalis (western predatory mite)	1	install	1	0	0	0	1	0	0	0	0			
+gra	T04129	Eukaryota	Viridiplantae	Gossypium raimondii	1	install	1	0	0	0	1	0	0	0	0			
 grf	T11039	Eukaryota	Metazoa	Garra rufa (doctor fish)	1	install	1	0	0	0	0	0	0	0	0			
 gsh	T09159	Eukaryota	Metazoa	Geotrypetes seraphini (Gaboon caecilian)	1	install	1	0	0	0	0	0	0	0	0			
-gsj	T06057	Eukaryota	Viridiplantae	Glycine soja (wild soybean)	1	install	1	0	0	0	0	0	0	0	0			
-gsl	T02926	Eukaryota	Rhodophyta	Galdieria sulphuraria	1	install	1	0	0	0	0	0	0	0	0			
+gsj	T06057	Eukaryota	Viridiplantae	Glycine soja (wild soybean)	1	install	1	0	0	0	1	0	0	0	0			
+gsl	T02926	Eukaryota	Rhodophyta	Galdieria sulphuraria	1	install	1	0	0	0	1	0	0	0	0			
 gste	T08384	Eukaryota	Metazoa	Gavia stellata (red-throated loon)	1	install	1	0	0	0	0	0	0	0	0			
 gtr	T03130	Eukaryota	Fungi	Gloeophyllum trabeum	1	keep	1	0	0	0	1	1	0	0	0			
-gtt	T02925	Eukaryota	Cryptophyceae	Guillardia theta	1	install	1	0	0	0	0	0	0	0	0			
+gtt	T02925	Eukaryota	Cryptophyceae	Guillardia theta	1	install	1	0	0	0	1	0	0	0	0			
 gvr	T08727	Eukaryota	Metazoa	Galeopterus variegatus (Sunda flying lemur)	1	install	1	0	0	0	0	0	0	0	0			
 hai	T04661	Eukaryota	Metazoa	Hipposideros armiger (great roundleaf bat)	1	install	1	0	0	0	0	0	0	0	0			
 haka	T11019	Eukaryota	Metazoa	Hemitrygon akajei (red stingray)	1	install	1	0	0	0	0	0	0	0	0			
 hald	T08398	Eukaryota	Metazoa	Haliaeetus albicilla (white-tailed eagle)	1	install	1	0	0	0	0	0	0	0	0			
-hame	T07477	Eukaryota	Metazoa	Homarus americanus (American lobster)	1	install	1	0	0	0	0	0	0	0	0			
+hame	T07477	Eukaryota	Metazoa	Homarus americanus (American lobster)	1	install	1	0	0	0	1	0	0	0	0			
 hamp	T11951	Eukaryota	Metazoa	Hyperoodon ampullatus (northern bottlenose whale)	1	install	1	0	0	0	0	0	0	0	0			
 hamr	T10852	Eukaryota	Metazoa	Hetaerina americana (American ruby spot damselfly)	1	install	1	0	0	0	0	0	0	0	0			
-han	T05101	Eukaryota	Viridiplantae	Helianthus annuus (common sunflower)	1	install	1	0	0	0	0	0	0	0	0			
+han	T05101	Eukaryota	Viridiplantae	Helianthus annuus (common sunflower)	1	install	1	0	0	0	1	0	0	0	0			
 hasi	T10448	Eukaryota	Metazoa	Haliotis asinina (tropical abalone)	1	install	1	0	0	0	0	0	0	0	0			
-haw	T05609	Eukaryota	Metazoa	Helicoverpa armigera (cotton bollworm)	1	install	1	0	0	0	0	0	0	0	0			
+haw	T05609	Eukaryota	Metazoa	Helicoverpa armigera (cotton bollworm)	1	install	1	0	0	0	1	0	0	0	0			
 haxr	T10650	Eukaryota	Metazoa	Harmonia axyridis (harlequin ladybird)	1	install	1	0	0	0	0	0	0	0	0			
-hazt	T07535	Eukaryota	Metazoa	Hyalella azteca	1	install	1	0	0	0	0	0	0	0	0			
+hazt	T07535	Eukaryota	Metazoa	Hyalella azteca	1	install	1	0	0	0	1	0	0	0	0			
 hbr	T05150	Eukaryota	Viridiplantae	Hevea brasiliensis (rubber tree)	1	install	1	0	0	0	0	0	0	0	0			
 hcg	T08891	Eukaryota	Metazoa	Hemicordylus capensis (graceful crag lizard)	1	install	1	0	0	0	0	0	0	0	0			
-hcq	T04969	Eukaryota	Metazoa	Hippocampus comes (tiger tail seahorse)	1	install	1	0	0	0	0	0	0	0	0			
+hcq	T04969	Eukaryota	Metazoa	Hippocampus comes (tiger tail seahorse)	1	install	1	0	0	0	1	0	0	0	0			
 hcra	T10814	Eukaryota	Metazoa	Haliotis cracherodii (black abalone)	1	install	1	0	0	0	0	0	0	0	0			
 hek	T12045	Eukaryota	Metazoa	Heliangelus exortis (tourmaline sunangel)	1	install	1	0	0	0	0	0	0	0	0			
-hgl	T02812	Eukaryota	Metazoa	Heterocephalus glaber (naked mole-rat)	1	install	1	0	0	0	0	0	0	0	0			
-hhal	T07536	Eukaryota	Metazoa	Halyomorpha halys (brown marmorated stink bug)	1	install	1	0	0	0	0	0	0	0	0			
+hgl	T02812	Eukaryota	Metazoa	Heterocephalus glaber (naked mole-rat)	1	install	1	0	0	0	1	0	0	0	0			
+hhal	T07536	Eukaryota	Metazoa	Halyomorpha halys (brown marmorated stink bug)	1	install	1	0	0	0	1	0	0	0	0			
 hhar	T10541	Eukaryota	Metazoa	Harpia harpyja (harpy eagle)	1	install	1	0	0	0	0	0	0	0	0			
 hhip	T07778	Eukaryota	Metazoa	Hippoglossus hippoglossus (Atlantic halibut)	1	install	1	0	0	0	0	0	0	0	0			
 hhv	T07257	Eukaryota	Metazoa	Hyaena hyaena (striped hyena)	1	install	1	0	0	0	0	0	0	0	0			
 hir	T03455	Eukaryota	Fungi	Heterobasidion irregulare	1	keep	1	0	0	0	1	1	0	0	0			
-his	T08287	Eukaryota	Metazoa	Hermetia illucens (black soldier fly)	1	install	1	0	0	0	0	0	0	0	0			
+his	T08287	Eukaryota	Metazoa	Hermetia illucens (black soldier fly)	1	install	1	0	0	0	1	0	0	0	0			
 hle	T08630	Eukaryota	Metazoa	Haliaeetus leucocephalus (bald eagle)	1	install	1	0	0	0	0	0	0	0	0			
-hlg	T11551	Eukaryota	Metazoa	Haemaphysalis longicornis (longhorned tick)	1	install	1	0	0	0	0	0	0	0	0			
+hlg	T11551	Eukaryota	Metazoa	Haemaphysalis longicornis (longhorned tick)	1	install	1	0	0	0	1	0	0	0	0			
 hlp	T11341	Eukaryota	Viridiplantae	Humulus lupulus (common hop)	1	install	1	0	0	0	0	0	0	0	0			
 hmg	T01080	Eukaryota	Metazoa	Hydra vulgaris (swiftwater hydra)	1	keep	1	0	0	0	1	1	0	0	0			
 hmh	T08803	Eukaryota	Metazoa	Hylobates moloch (silvery gibbon)	1	install	1	0	0	0	0	0	0	0	0			
 hoc	T09720	Eukaryota	Metazoa	Hemiscyllium ocellatum (epaulette shark)	1	install	1	0	0	0	0	0	0	0	0			
 hpum	T11037	Eukaryota	Viridiplantae	Henckelia pumila	1	install	1	0	0	0	0	0	0	0	0			
-hrf	T07893	Eukaryota	Metazoa	Haliotis rufescens (red abalone)	1	install	1	0	0	0	0	0	0	0	0			
-hrj	T07967	Eukaryota	Metazoa	Haliotis rubra (blacklip abalone)	1	install	1	0	0	0	0	0	0	0	0			
-hro	T03272	Eukaryota	Metazoa	Helobdella robusta	1	install	1	0	0	0	0	0	0	0	0			
+hrf	T07893	Eukaryota	Metazoa	Haliotis rufescens (red abalone)	1	install	1	0	0	0	1	0	0	0	0			
+hrj	T07967	Eukaryota	Metazoa	Haliotis rubra (blacklip abalone)	1	install	1	0	0	0	1	0	0	0	0			
+hro	T03272	Eukaryota	Metazoa	Helobdella robusta	1	install	1	0	0	0	1	0	0	0	0			
 hrt	T09369	Eukaryota	Metazoa	Hirundo rustica (Barn swallow)	1	install	1	0	0	0	0	0	0	0	0			
-hsa	T01001	Eukaryota	Metazoa	Homo sapiens (human)	1	keep	1	1	0	1	0	1	1	0	1	2883		
+hsa	T01001	Eukaryota	Metazoa	Homo sapiens (human)	1	keep	1	1	0	1	1	1	1	0	1	2883		
 hsp	T08308	Eukaryota	Metazoa	Hippoglossus stenolepis (Pacific halibut)	1	install	1	0	0	0	0	0	0	0	0			
 hsq	T11475	Eukaryota	Metazoa	Hyla sarda (Sardinian treefrog)	1	install	1	0	0	0	0	0	0	0	0			
-hst	T03918	Eukaryota	Metazoa	Harpegnathos saltator (Jerdon's jumping ant)	1	install	1	0	0	0	0	0	0	0	0			
-hsy	T09218	Eukaryota	Metazoa	Hydractinia symbiolongicarpus	1	install	1	0	0	0	0	0	0	0	0			
+hst	T03918	Eukaryota	Metazoa	Harpegnathos saltator (Jerdon's jumping ant)	1	install	1	0	0	0	1	0	0	0	0			
+hsy	T09218	Eukaryota	Metazoa	Hydractinia symbiolongicarpus	1	install	1	0	0	0	1	0	0	0	0			
 hsyr	T09559	Eukaryota	Viridiplantae	Hibiscus syriacus (Rose-of-Sharon)	1	install	1	0	0	0	0	0	0	0	0			
 htc	T11192	Eukaryota	Metazoa	Halichoeres trimaculatus (threespot wrasse)	1	install	1	0	0	0	0	0	0	0	0			
-hvg	T11213	Eukaryota	Viridiplantae	Hordeum vulgare subsp. vulgare (domesticated barley)	1	install	1	0	0	0	0	0	0	0	0			
-hvi	T09217	Eukaryota	Metazoa	Homalodisca vitripennis (glassy-winged sharpshooter)	1	install	1	0	0	0	0	0	0	0	0			
-hze	T08400	Eukaryota	Metazoa	Helicoverpa zea (corn earworm)	1	install	1	0	0	0	0	0	0	0	0			
-iel	T09104	Eukaryota	Metazoa	Ischnura elegans (blue-tailed damselfly)	1	install	1	0	0	0	0	0	0	0	0			
+hvg	T11213	Eukaryota	Viridiplantae	Hordeum vulgare subsp. vulgare (domesticated barley)	1	install	1	0	0	0	1	0	0	0	0			
+hvi	T09217	Eukaryota	Metazoa	Homalodisca vitripennis (glassy-winged sharpshooter)	1	install	1	0	0	0	1	0	0	0	0			
+hze	T08400	Eukaryota	Metazoa	Helicoverpa zea (corn earworm)	1	install	1	0	0	0	1	0	0	0	0			
+iel	T09104	Eukaryota	Metazoa	Ischnura elegans (blue-tailed damselfly)	1	install	1	0	0	0	1	0	0	0	0			
 ifu	T09387	Eukaryota	Metazoa	Ictalurus furcatus (blue catfish)	1	install	1	0	0	0	0	0	0	0	0			
 iin	T11604	Eukaryota	Metazoa	Indicator indicator (greater honeyguide)	1	install	1	0	0	0	0	0	0	0	0			
 ini	T04663	Eukaryota	Viridiplantae	Ipomoea nil (Japanese morning glory)	1	install	1	0	0	0	0	0	0	0	0			
-ipu	T04658	Eukaryota	Metazoa	Ictalurus punctatus (channel catfish)	1	install	1	0	0	0	0	0	0	0	0			
-isc	T01131	Eukaryota	Metazoa	Ixodes scapularis (black-legged tick)	1	install	1	0	0	0	0	0	0	0	0			
+ipu	T04658	Eukaryota	Metazoa	Ictalurus punctatus (channel catfish)	1	install	1	0	0	0	1	0	0	0	0			
+isc	T01131	Eukaryota	Metazoa	Ixodes scapularis (black-legged tick)	1	install	1	0	0	0	1	0	0	0	0			
 iti	T10664	Eukaryota	Metazoa	Ictidomys tridecemlineatus (thirteen-lined ground squirrel)	1	keep	1	0	0	0	1	1	0	0	0			
-itr	T07384	Eukaryota	Viridiplantae	Ipomoea triloba (trilobed morning glory)	1	install	1	0	0	0	0	0	0	0	0			
+itr	T07384	Eukaryota	Viridiplantae	Ipomoea triloba (trilobed morning glory)	1	install	1	0	0	0	1	0	0	0	0			
 ity	T11912	Eukaryota	Metazoa	Ips typographus (European spruce bark beetle)	1	install	1	0	0	0	0	0	0	0	0			
 jcu	T03922	Eukaryota	Viridiplantae	Jatropha curcas (Barbados nut)	1	install	1	0	0	0	0	0	0	0	0			
-jre	T05245	Eukaryota	Viridiplantae	Juglans regia (English walnut)	1	install	1	0	0	0	0	0	0	0	0			
+jre	T05245	Eukaryota	Viridiplantae	Juglans regia (English walnut)	1	install	1	0	0	0	1	0	0	0	0			
 kaf	T02487	Eukaryota	Fungi	Kazachstania africana	1	install	1	0	0	0	0	0	0	0	0			
-kbi	T10967	Eukaryota	Fungi	Kwoniella bestiolae	1	install	1	0	0	0	0	0	0	0	0			
+kbi	T10967	Eukaryota	Fungi	Kwoniella bestiolae	1	install	1	0	0	0	1	0	0	0	0			
 kbo	T11304	Eukaryota	Fungi	Kwoniella botswanensis	1	install	1	0	0	0	0	0	0	0	0			
-kdj	T10965	Eukaryota	Fungi	Kwoniella dejecticola	1	install	1	0	0	0	0	0	0	0	0			
+kdj	T10965	Eukaryota	Fungi	Kwoniella dejecticola	1	install	1	0	0	0	1	0	0	0	0			
 kep	T11323	Eukaryota	Fungi	Kwoniella dendrophila	1	install	1	0	0	0	0	0	0	0	0			
 ker	T10999	Eukaryota	Fungi	Kwoniella europaea	1	install	1	0	0	0	0	0	0	0	0			
 kla	T01025	Eukaryota	Fungi	Kluyveromyces lactis	1	install	1	0	0	0	0	0	0	0	0			
-kmg	T10313	Eukaryota	Fungi	Kwoniella mangroviensis	1	install	1	0	0	0	0	0	0	0	0			
-kmr	T05608	Eukaryota	Metazoa	Kryptolebias marmoratus (mangrove rivulus)	1	install	1	0	0	0	0	0	0	0	0			
+kmg	T10313	Eukaryota	Fungi	Kwoniella mangroviensis	1	install	1	0	0	0	1	0	0	0	0			
+kmr	T05608	Eukaryota	Metazoa	Kryptolebias marmoratus (mangrove rivulus)	1	install	1	0	0	0	1	0	0	0	0			
 kmx	T05269	Eukaryota	Fungi	Kluyveromyces marxianus	1	install	1	0	0	0	0	0	0	0	0			
 kne	T10314	Eukaryota	Fungi	Kwoniella newhampshirensis	1	install	1	0	0	0	0	0	0	0	0			
 kng	T08174	Eukaryota	Fungi	Huiozyma naganishii	1	install	1	0	0	0	0	0	0	0	0			
-kpin	T10980	Eukaryota	Fungi	Kwoniella pini	1	install	1	0	0	0	0	0	0	0	0			
+kpin	T10980	Eukaryota	Fungi	Kwoniella pini	1	install	1	0	0	0	1	0	0	0	0			
 ksh	T10982	Eukaryota	Fungi	Kwoniella shivajii	1	install	1	0	0	0	0	0	0	0	0			
-ksn	T11156	Eukaryota	Fungi	Kwoniella shandongensis	1	install	1	0	0	0	0	0	0	0	0			
-lak	T04921	Eukaryota	Metazoa	Lingula anatina	1	install	1	0	0	0	0	0	0	0	0			
+ksn	T11156	Eukaryota	Fungi	Kwoniella shandongensis	1	install	1	0	0	0	1	0	0	0	0			
+lak	T04921	Eukaryota	Metazoa	Lingula anatina	1	install	1	0	0	0	1	0	0	0	0			
 lalb	T10760	Eukaryota	Metazoa	Lagenorhynchus albirostris (white-beaked dolphin)	1	install	1	0	0	0	0	0	0	0	0			
-lang	T04664	Eukaryota	Viridiplantae	Lupinus angustifolius (narrow-leaved blue lupine)	1	install	1	0	0	0	0	0	0	0	0			
-lav	T04351	Eukaryota	Metazoa	Loxodonta africana (African savanna elephant)	1	install	1	0	0	0	0	0	0	0	0			
+lang	T04664	Eukaryota	Viridiplantae	Lupinus angustifolius (narrow-leaved blue lupine)	1	install	1	0	0	0	1	0	0	0	0			
+lav	T04351	Eukaryota	Metazoa	Loxodonta africana (African savanna elephant)	1	install	1	0	0	0	1	0	0	0	0			
 lbb	T09483	Eukaryota	Viridiplantae	Lycium barbarum (goji berry)	1	install	1	0	0	0	0	0	0	0	0			
 lbc	T01044	Eukaryota	Fungi	Laccaria bicolor	1	keep	1	0	0	0	1	1	0	0	0			
 lbd	T08910	Eukaryota	Metazoa	Leptopilina boulardi	1	install	1	0	0	0	0	0	0	0	0			
@@ -616,30 +619,30 @@ lbg	T10315	Eukaryota	Fungi	Lodderomyces beijingensis	1	install	1	0	0	0	0	0	0	0	0
 lbz	T01113	Eukaryota	Discoba	Leishmania braziliensis	1	install	1	0	0	0	0	0	0	0	0			
 lcai	T12101	Eukaryota	Metazoa	Lichenostomus cassidix (helmeted honeyeater)	1	install	1	0	0	0	0	0	0	0	0			
 lcat	T08326	Eukaryota	Metazoa	Lemur catta (Ring-tailed lemur)	1	install	1	0	0	0	0	0	0	0	0			
-lcf	T04895	Eukaryota	Metazoa	Lates calcarifer (barramundi perch)	1	install	1	0	0	0	0	0	0	0	0			
-lcm	T02913	Eukaryota	Metazoa	Latimeria chalumnae (coelacanth)	1	install	1	0	0	0	0	0	0	0	0			
-lco	T04659	Eukaryota	Metazoa	Larimichthys crocea (large yellow croaker)	1	install	1	0	0	0	0	0	0	0	0			
-lcq	T06013	Eukaryota	Metazoa	Lucilia cuprina (Australian sheep blowfly)	1	install	1	0	0	0	0	0	0	0	0			
+lcf	T04895	Eukaryota	Metazoa	Lates calcarifer (barramundi perch)	1	install	1	0	0	0	1	0	0	0	0			
+lcm	T02913	Eukaryota	Metazoa	Latimeria chalumnae (coelacanth)	1	install	1	0	0	0	1	0	0	0	0			
+lco	T04659	Eukaryota	Metazoa	Larimichthys crocea (large yellow croaker)	1	install	1	0	0	0	1	0	0	0	0			
+lcq	T06013	Eukaryota	Metazoa	Lucilia cuprina (Australian sheep blowfly)	1	install	1	0	0	0	1	0	0	0	0			
 lda	T11193	Eukaryota	Metazoa	Lycorma delicatula (spotted lanternfly)	1	install	1	0	0	0	0	0	0	0	0			
-ldc	T07512	Eukaryota	Metazoa	Leptinotarsa decemlineata (Colorado potato beetle)	1	install	1	0	0	0	0	0	0	0	0			
+ldc	T07512	Eukaryota	Metazoa	Leptinotarsa decemlineata (Colorado potato beetle)	1	install	1	0	0	0	1	0	0	0	0			
 ldi	T08399	Eukaryota	Metazoa	Leptosomus discolor (cuckoo roller)	1	install	1	0	0	0	0	0	0	0	0			
-ldo	T02289	Eukaryota	Discoba	Leishmania donovani	1	install	1	0	0	0	0	0	0	0	0			
+ldo	T02289	Eukaryota	Discoba	Leishmania donovani	1	install	1	0	0	0	1	0	0	0	0			
 lein	T10410	Eukaryota	Discoba	Leishmania sp. Namibia	1	install	1	0	0	0	0	0	0	0	0			
 leis	T10390	Eukaryota	Discoba	Leishmania sp. Ghana 2012 LV757	1	install	1	0	0	0	0	0	0	0	0			
 lel	T01116	Eukaryota	Fungi	Lodderomyces elongisporus	1	install	1	0	0	0	0	0	0	0	0			
 lenr	T10389	Eukaryota	Discoba	Leishmania enriettii	1	install	1	0	0	0	0	0	0	0	0			
 leri	T09122	Eukaryota	Metazoa	Leucoraja erinaceus (little skate)	1	install	1	0	0	0	0	0	0	0	0			
 lgf	T10761	Eukaryota	Metazoa	Leopardus geoffroyi (Geoffroy's cat)	1	install	1	0	0	0	0	0	0	0	0			
-lgi	T03273	Eukaryota	Metazoa	Lottia gigantea (owl limpet)	1	install	1	0	0	0	0	0	0	0	0			
-lgly	T09956	Eukaryota	Metazoa	Leguminivora glycinivorella (soybean pod borer)	1	install	1	0	0	0	0	0	0	0	0			
+lgi	T03273	Eukaryota	Metazoa	Lottia gigantea (owl limpet)	1	install	1	0	0	0	1	0	0	0	0			
+lgly	T09956	Eukaryota	Metazoa	Leguminivora glycinivorella (soybean pod borer)	1	install	1	0	0	0	1	0	0	0	0			
 lht	T08438	Eukaryota	Metazoa	Leptopilina heterotoma	1	install	1	0	0	0	0	0	0	0	0			
-lhu	T04898	Eukaryota	Metazoa	Linepithema humile (Argentine ant)	1	install	1	0	0	0	0	0	0	0	0			
+lhu	T04898	Eukaryota	Metazoa	Linepithema humile (Argentine ant)	1	install	1	0	0	0	1	0	0	0	0			
 lif	T01112	Eukaryota	Discoba	Leishmania infantum	1	install	1	0	0	0	0	0	0	0	0			
 lja	T04348	Eukaryota	Viridiplantae	Lotus japonicus	1	install	1	0	0	0	0	0	0	0	0			
-ljp	T09976	Eukaryota	Metazoa	Liolophura japonica (common chiton)	1	install	1	0	0	0	0	0	0	0	0			
+ljp	T09976	Eukaryota	Metazoa	Liolophura japonica (common chiton)	1	install	1	0	0	0	1	0	0	0	0			
 lkp	T11378	Eukaryota	Metazoa	Lepidochelys kempii (Atlantic ridley)	1	install	1	0	0	0	0	0	0	0	0			
-lll	T10428	Eukaryota	Metazoa	Lutzomyia longipalpis	1	install	1	0	0	0	0	0	0	0	0			
-llon	T09977	Eukaryota	Metazoa	Lineus longissimus (bootlace worm)	1	install	1	0	0	0	0	0	0	0	0			
+lll	T10428	Eukaryota	Metazoa	Lutzomyia longipalpis	1	install	1	0	0	0	1	0	0	0	0			
+llon	T09977	Eukaryota	Metazoa	Lineus longissimus (bootlace worm)	1	install	1	0	0	0	1	0	0	0	0			
 llv	T08100	Eukaryota	Metazoa	Lutra lutra (Eurasian river otter)	1	install	1	0	0	0	0	0	0	0	0			
 lma	T01014	Eukaryota	Discoba	Leishmania major	1	keep	1	0	0	0	1	1	0	0	0			
 lmat	T10333	Eukaryota	Discoba	Leishmania martiniquensis	1	install	1	0	0	0	0	0	0	0	0			
@@ -647,58 +650,57 @@ lmi	T02288	Eukaryota	Discoba	Leishmania mexicana	1	install	1	0	0	0	0	0	0	0	0
 lmic	T11135	Eukaryota	Metazoa	Larus michahellis (yellow-legged gull)	1	install	1	0	0	0	0	0	0	0	0			
 lmix	T10666	Eukaryota	Metazoa	Labrus mixtus (cuckoo wrasse)	1	install	1	0	0	0	0	0	0	0	0			
 lmut	T09141	Eukaryota	Metazoa	Lagopus muta (rock ptarmigan)	1	install	1	0	0	0	0	0	0	0	0			
-loa	T02664	Eukaryota	Metazoa	Loa loa (eye worm)	1	install	1	0	0	0	0	0	0	0	0			
-loc	T07349	Eukaryota	Metazoa	Lepisosteus oculatus (spotted gar)	1	install	1	0	0	0	0	0	0	0	0			
+loa	T02664	Eukaryota	Metazoa	Loa loa (eye worm)	1	install	1	0	0	0	1	0	0	0	0			
+loc	T07349	Eukaryota	Metazoa	Lepisosteus oculatus (spotted gar)	1	install	1	0	0	0	1	0	0	0	0			
 loi	T10351	Eukaryota	Discoba	Leishmania orientalis	1	install	1	0	0	0	0	0	0	0	0			
-lpan	T06539	Eukaryota	Discoba	Leishmania panamensis	1	install	1	0	0	0	0	0	0	0	0			
-lper	T08650	Eukaryota	Viridiplantae	Lolium perenne (perennial ryegrass)	1	install	1	0	0	0	0	0	0	0	0			
-lpic	T09066	Eukaryota	Metazoa	Lytechinus pictus (painted urchin)	1	install	1	0	0	0	0	0	0	0	0			
-lpol	T08968	Eukaryota	Metazoa	Limulus polyphemus (Atlantic horseshoe crab)	1	install	1	0	0	0	0	0	0	0	0			
+lpan	T06539	Eukaryota	Discoba	Leishmania panamensis	1	install	1	0	0	0	1	0	0	0	0			
+lper	T08650	Eukaryota	Viridiplantae	Lolium perenne (perennial ryegrass)	1	install	1	0	0	0	1	0	0	0	0			
+lpic	T09066	Eukaryota	Metazoa	Lytechinus pictus (painted urchin)	1	install	1	0	0	0	1	0	0	0	0			
+lpol	T08968	Eukaryota	Metazoa	Limulus polyphemus (Atlantic horseshoe crab)	1	install	1	0	0	0	1	0	0	0	0			
 lrd	T09103	Eukaryota	Viridiplantae	Lolium rigidum (rigid ryegrass)	1	install	1	0	0	0	0	0	0	0	0			
 lrj	T09663	Eukaryota	Metazoa	Lethenteron reissneri (Far Eastern brook lamprey)	1	install	1	0	0	0	0	0	0	0	0			
 lroh	T09007	Eukaryota	Metazoa	Labeo rohita (rohu)	1	install	1	0	0	0	0	0	0	0	0			
 lruf	T08475	Eukaryota	Metazoa	Lynx rufus (bobcat)	1	install	1	0	0	0	0	0	0	0	0			
 lsax	T10665	Eukaryota	Metazoa	Littorina saxatilis	1	install	1	0	0	0	0	0	0	0	0			
 lsin	T09272	Eukaryota	Metazoa	Leptidea sinapis (Wood White)	1	install	1	0	0	0	0	0	0	0	0			
-lsm	T08214	Eukaryota	Metazoa	Lepeophtheirus salmonis (salmon louse)	1	install	1	0	0	0	0	0	0	0	0			
-lsq	T08270	Eukaryota	Metazoa	Lucilia sericata (common green bottle fly)	1	install	1	0	0	0	0	0	0	0	0			
-lsr	T05897	Eukaryota	Metazoa	Lonchura striata (white-rumped munia)	1	install	1	0	0	0	0	0	0	0	0			
+lsm	T08214	Eukaryota	Metazoa	Lepeophtheirus salmonis (salmon louse)	1	install	1	0	0	0	1	0	0	0	0			
+lsq	T08270	Eukaryota	Metazoa	Lucilia sericata (common green bottle fly)	1	install	1	0	0	0	1	0	0	0	0			
+lsr	T05897	Eukaryota	Metazoa	Lonchura striata (white-rumped munia)	1	install	1	0	0	0	1	0	0	0	0			
 lsv	T05352	Eukaryota	Viridiplantae	Lactuca sativa (garden lettuce)	1	keep	1	0	0	0	1	1	0	0	0			
 lth	T01117	Eukaryota	Fungi	Lachancea thermotolerans	1	install	1	0	0	0	0	0	0	0	0			
 ltu	T11698	Eukaryota	Metazoa	Leuresthes tenuis (California grunion)	1	install	1	0	0	0	0	0	0	0	0			
 lve	T03090	Eukaryota	Metazoa	Lipotes vexillifer (Yangtze River dolphin)	1	install	1	0	0	0	0	0	0	0	0			
-lvg	T11173	Eukaryota	Metazoa	Lytechinus variegatus (green sea urchin)	1	install	1	0	0	0	0	0	0	0	0			
+lvg	T11173	Eukaryota	Metazoa	Lytechinus variegatus (green sea urchin)	1	install	1	0	0	0	1	0	0	0	0			
 lww	T08708	Eukaryota	Metazoa	Leptonychotes weddellii (Weddell seal)	1	install	1	0	0	0	0	0	0	0	0			
-maea	T09995	Eukaryota	Metazoa	Mya arenaria (softshell)	1	install	1	0	0	0	0	0	0	0	0			
+maea	T09995	Eukaryota	Metazoa	Mya arenaria (softshell)	1	install	1	0	0	0	1	0	0	0	0			
 maen	T11621	Eukaryota	Metazoa	Molothrus aeneus (bronzed cowbird)	1	install	1	0	0	0	0	0	0	0	0			
 maj	T03107	Eukaryota	Fungi	Metarhizium robertsii	1	install	1	0	0	0	0	0	0	0	0			
-malb	T05607	Eukaryota	Metazoa	Monopterus albus (swamp eel)	1	install	1	0	0	0	0	0	0	0	0			
+malb	T05607	Eukaryota	Metazoa	Monopterus albus (swamp eel)	1	install	1	0	0	0	1	0	0	0	0			
 mamb	T08212	Eukaryota	Metazoa	Megalobrama amblycephala (Wuchang bream)	1	install	1	0	0	0	0	0	0	0	0			
 mame	T11228	Eukaryota	Metazoa	Mycteria americana (wood stork)	1	install	1	0	0	0	0	0	0	0	0			
 mano	T11530	Eukaryota	Metazoa	Mirounga angustirostris (Northern elephant seal)	1	install	1	0	0	0	0	0	0	0	0			
 manu	T09481	Eukaryota	Metazoa	Misgurnus anguillicaudatus (oriental weatherfish)	1	install	1	0	0	0	0	0	0	0	0			
 masi	T08782	Eukaryota	Metazoa	Myxocyprinus asiaticus (Chinese sucker)	1	install	1	0	0	0	0	0	0	0	0			
 mate	T11569	Eukaryota	Metazoa	Molothrus ater (brown-headed cowbird)	1	install	1	0	0	0	0	0	0	0	0			
-maua	T08306	Eukaryota	Metazoa	Mesocricetus auratus (golden hamster)	1	install	1	0	0	0	0	0	0	0	0			
+maua	T08306	Eukaryota	Metazoa	Mesocricetus auratus (golden hamster)	1	install	1	0	0	0	1	0	0	0	0			
 mave	T11987	Eukaryota	Metazoa	Muscardinus avellanarius (hazel dormouse)	1	install	1	0	0	0	0	0	0	0	0			
 maw	T03104	Eukaryota	Fungi	Metarhizium acridum	1	install	1	0	0	0	0	0	0	0	0			
 mbe	T03105	Eukaryota	Fungi	Drepanopeziza brunnea	1	install	1	0	0	0	0	0	0	0	0			
 mbez	T09065	Eukaryota	Metazoa	Moschus berezovskii (Chinese forest musk deer)	1	install	1	0	0	0	0	0	0	0	0			
-mbr	T01042	Eukaryota	Choanoflagellata	Monosiga brevicollis	1	install	1	0	0	0	0	0	0	0	0			
-mbrn	T10216	Eukaryota	Fungi	Metarhizium brunneum	1	install	1	0	0	0	0	0	0	0	0			
-mcaf	T08804	Eukaryota	Metazoa	Mytilus californianus (California mussel)	1	install	1	0	0	0	0	0	0	0	0			
-mcal	T05910	Eukaryota	Metazoa	Mus caroli (Ryukyu mouse)	1	install	1	0	0	0	0	0	0	0	0			
+mbr	T01042	Eukaryota	Choanoflagellata	Monosiga brevicollis	1	install	1	0	0	0	1	0	0	0	0			
+mbrn	T10216	Eukaryota	Fungi	Metarhizium brunneum	1	install	1	0	0	0	1	0	0	0	0			
+mcaf	T08804	Eukaryota	Metazoa	Mytilus californianus (California mussel)	1	install	1	0	0	0	1	0	0	0	0			
+mcal	T05910	Eukaryota	Metazoa	Mus caroli (Ryukyu mouse)	1	install	1	0	0	0	1	0	0	0	0			
 mcaz	T10557	Eukaryota	Metazoa	Montipora capricornis (leaf plate montipora)	1	install	1	0	0	0	0	0	0	0	0			
-mcc	T01028	Eukaryota	Metazoa	Macaca mulatta (rhesus monkey)	1	install	1	0	0	0	0	0	0	0	0			
+mcc	T01028	Eukaryota	Metazoa	Macaca mulatta (rhesus monkey)	1	install	1	0	0	0	1	0	0	0	0			
 mcep	T08342	Eukaryota	Metazoa	Mugil cephalus (flathead mullet)	1	install	1	0	0	0	0	0	0	0	0			
-mcf	T02918	Eukaryota	Metazoa	Macaca fascicularis (crab-eating macaque)	1	install	1	0	0	0	0	0	0	0	0			
+mcf	T02918	Eukaryota	Metazoa	Macaca fascicularis (crab-eating macaque)	1	install	1	0	0	0	1	0	0	0	0			
 mcha	T05045	Eukaryota	Viridiplantae	Momordica charantia (bitter melon)	1	install	1	0	0	0	0	0	0	0	0			
-mcix	T09237	Eukaryota	Metazoa	Melitaea cinxia (Glanville fritillary)	1	install	1	0	0	0	0	0	0	0	0			
+mcix	T09237	Eukaryota	Metazoa	Melitaea cinxia (Glanville fritillary)	1	install	1	0	0	0	1	0	0	0	0			
 mcoc	T07224	Eukaryota	Metazoa	Mastomys coucha (southern multimammate mouse)	1	install	1	0	0	0	0	0	0	0	0			
-mde	T03448	Eukaryota	Metazoa	Musca domestica (house fly)	1	install	1	0	0	0	0	0	0	0	0			
-mdl	T05600	Eukaryota	Metazoa	Microplitis demolitor	1	install	1	0	0	0	0	0	0	0	0			
-mdm	T03194	Eukaryota	Viridiplantae	Malus domestica (apple)	1	keep	1	0	0	0	0	1	0	0	0			
-mdo	T01031	Eukaryota	Metazoa	Monodelphis domestica (gray short-tailed opossum)	1	install	1	0	0	0	0	0	0	0	0			
+mde	T03448	Eukaryota	Metazoa	Musca domestica (house fly)	1	install	1	0	0	0	1	0	0	0	0			
+mdl	T05600	Eukaryota	Metazoa	Microplitis demolitor	1	install	1	0	0	0	1	0	0	0	0			
+mdo	T01031	Eukaryota	Metazoa	Monodelphis domestica (gray short-tailed opossum)	1	install	1	0	0	0	1	0	0	0	0			
 mdt	T10294	Eukaryota	Metazoa	Myotis daubentonii (Daubenton's bat)	1	install	1	0	0	0	0	0	0	0	0			
 mean	T10153	Eukaryota	Viridiplantae	Mercurialis annua (annual mercury)	1	install	1	0	0	0	0	0	0	0	0			
 mesc	T05761	Eukaryota	Viridiplantae	Manihot esculenta (cassava)	1	keep	1	0	0	0	1	1	0	0	0			
@@ -708,8 +710,8 @@ mfot	T08493	Eukaryota	Metazoa	Alexandromys fortis (reed vole)	1	install	1	0	0	0	
 mgen	T07400	Eukaryota	Metazoa	Megalopta genalis	1	install	1	0	0	0	0	0	0	0	0			
 mgl	T01043	Eukaryota	Fungi	Malassezia globosa	1	install	1	0	0	0	0	0	0	0	0			
 mglt	T12065	Eukaryota	Metazoa	Myxine glutinosa (Atlantic hagfish)	1	install	1	0	0	0	0	0	0	0	0			
-mgp	T01523	Eukaryota	Metazoa	Meleagris gallopavo (turkey)	1	install	1	0	0	0	0	0	0	0	0			
-mgr	T01027	Eukaryota	Fungi	Pyricularia oryzae	1	install	1	0	0	0	0	0	0	0	0			
+mgp	T01523	Eukaryota	Metazoa	Meleagris gallopavo (turkey)	1	install	1	0	0	0	1	0	0	0	0			
+mgr	T01027	Eukaryota	Fungi	Pyricularia oryzae	1	install	1	0	0	0	1	0	0	0	0			
 minc	T07684	Eukaryota	Viridiplantae	Mangifera indica (mango)	1	install	1	0	0	0	0	0	0	0	0			
 ming	T07436	Eukaryota	Viridiplantae	Macadamia integrifolia (macadamia nut)	1	install	1	0	0	0	0	0	0	0	0			
 mis	T02695	Eukaryota	Viridiplantae	Micromonas commoda	1	install	1	0	0	0	0	0	0	0	0			
@@ -717,157 +719,157 @@ mjp	T11680	Eukaryota	Fungi	Malassezia japonica	1	install	1	0	0	0	0	0	0	0	0
 mju	T09254	Eukaryota	Metazoa	Maniola jurtina (meadow brown)	1	install	1	0	0	0	0	0	0	0	0			
 mjv	T06054	Eukaryota	Metazoa	Manis javanica (Malayan pangolin)	1	keep	1	0	0	0	0	1	0	0	0			
 mlao	T11097	Eukaryota	Metazoa	Macrotis lagotis (bilby)	1	install	1	0	0	0	0	0	0	0	0			
-mleu	T08763	Eukaryota	Metazoa	Mandrillus leucophaeus (drill)	1	install	1	0	0	0	0	0	0	0	0			
-mlf	T07795	Eukaryota	Metazoa	Myotis lucifugus (little brown bat)	1	install	1	0	0	0	0	0	0	0	0			
+mleu	T08763	Eukaryota	Metazoa	Mandrillus leucophaeus (drill)	1	install	1	0	0	0	1	0	0	0	0			
+mlf	T07795	Eukaryota	Metazoa	Myotis lucifugus (little brown bat)	1	install	1	0	0	0	1	0	0	0	0			
 mlk	T09578	Eukaryota	Metazoa	Mustela lutreola (European mink)	1	install	1	0	0	0	0	0	0	0	0			
-mlr	T03138	Eukaryota	Fungi	Melampsora larici-populina	1	install	1	0	0	0	0	0	0	0	0			
+mlr	T03138	Eukaryota	Fungi	Melampsora larici-populina	1	install	1	0	0	0	1	0	0	0	0			
 mlx	T07472	Eukaryota	Metazoa	Mirounga leonina (Southern elephant seal)	1	install	1	0	0	0	0	0	0	0	0			
 mmaq	T12008	Eukaryota	Metazoa	Martes martes (European pine marten)	1	install	1	0	0	0	0	0	0	0	0			
 mmea	T09178	Eukaryota	Metazoa	Malurus melanocephalus (red-backed fairy wren)	1	install	1	0	0	0	0	0	0	0	0			
-mmer	T07835	Eukaryota	Metazoa	Mercenaria mercenaria (northern quahog)	1	install	1	0	0	0	0	0	0	0	0			
+mmer	T07835	Eukaryota	Metazoa	Mercenaria mercenaria (northern quahog)	1	install	1	0	0	0	1	0	0	0	0			
 mmf	T07221	Eukaryota	Metazoa	Molossus molossus (Pallas's mastiff bat)	1	install	1	0	0	0	0	0	0	0	0			
 mmiu	T12044	Eukaryota	Metazoa	Micromys minutus (European harvest mouse)	1	install	1	0	0	0	0	0	0	0	0			
-mmma	T09644	Eukaryota	Metazoa	Marmota marmota marmota (Alpine marmot)	1	install	1	0	0	0	0	0	0	0	0			
-mmu	T01002	Eukaryota	Metazoa	Mus musculus (house mouse)	1	keep	1	1	0	1	0	1	1	0	1	1845		
-mmur	T07238	Eukaryota	Metazoa	Microcebus murinus (gray mouse lemur)	1	install	1	0	0	0	0	0	0	0	0			
+mmma	T09644	Eukaryota	Metazoa	Marmota marmota marmota (Alpine marmot)	1	install	1	0	0	0	1	0	0	0	0			
+mmu	T01002	Eukaryota	Metazoa	Mus musculus (house mouse)	1	keep	1	1	0	1	1	1	1	0	1	1845		
+mmur	T07238	Eukaryota	Metazoa	Microcebus murinus (gray mouse lemur)	1	install	1	0	0	0	1	0	0	0	0			
 mmyo	T07220	Eukaryota	Metazoa	Myotis myotis (greater mouse-eared bat)	1	install	1	0	0	0	0	0	0	0	0			
 mna	T05883	Eukaryota	Metazoa	Miniopterus natalensis (Natal long-fingered bat)	1	install	1	0	0	0	0	0	0	0	0			
 mnb	T08417	Eukaryota	Metazoa	Merops nubicus (carmine bee-eater)	1	install	1	0	0	0	0	0	0	0	0			
 mng	T05028	Eukaryota	Viridiplantae	Monoraphidium neglectum	1	install	1	0	0	0	0	0	0	0	0			
-mni	T08765	Eukaryota	Metazoa	Macaca nemestrina (pig-tailed macaque)	1	install	1	0	0	0	0	0	0	0	0			
+mni	T08765	Eukaryota	Metazoa	Macaca nemestrina (pig-tailed macaque)	1	install	1	0	0	0	1	0	0	0	0			
 mnp	T09425	Eukaryota	Metazoa	Mustela nigripes (black-footed ferret)	1	install	1	0	0	0	0	0	0	0	0			
 mnt	T07292	Eukaryota	Viridiplantae	Morus notabilis	1	install	1	0	0	0	0	0	0	0	0			
-mnz	T09903	Eukaryota	Metazoa	Macrobrachium nipponense (oriental river prawn)	1	install	1	0	0	0	0	0	0	0	0			
+mnz	T09903	Eukaryota	Metazoa	Macrobrachium nipponense (oriental river prawn)	1	install	1	0	0	0	1	0	0	0	0			
 mof	T09312	Eukaryota	Viridiplantae	Malania oleifera	1	install	1	0	0	0	0	0	0	0	0			
 more	T08156	Eukaryota	Fungi	Marasmius oreades (fairy-ring mushroom)	1	install	1	0	0	0	0	0	0	0	0			
 morg	T08307	Eukaryota	Metazoa	Microtus oregoni (creeping vole)	1	install	1	0	0	0	0	0	0	0	0			
-mpah	T05929	Eukaryota	Metazoa	Mus pahari (shrew mouse)	1	install	1	0	0	0	0	0	0	0	0			
+mpah	T05929	Eukaryota	Metazoa	Mus pahari (shrew mouse)	1	install	1	0	0	0	1	0	0	0	0			
 mpha	T05760	Eukaryota	Metazoa	Monomorium pharaonis (pharaoh ant)	1	install	1	0	0	0	0	0	0	0	0			
 mpp	T02696	Eukaryota	Viridiplantae	Micromonas pusilla	1	install	1	0	0	0	0	0	0	0	0			
 mpr	T01089	Eukaryota	Fungi	Moniliophthora perniciosa	1	install	1	0	0	0	0	0	0	0	0			
-mpuf	T07239	Eukaryota	Metazoa	Mustela putorius furo (domestic ferret)	1	install	1	0	0	0	0	0	0	0	0			
-mqu	T09739	Eukaryota	Metazoa	Macrosteles quadrilineatus (aster leafhopper)	1	install	1	0	0	0	0	0	0	0	0			
+mpuf	T07239	Eukaryota	Metazoa	Mustela putorius furo (domestic ferret)	1	install	1	0	0	0	1	0	0	0	0			
+mqu	T09739	Eukaryota	Metazoa	Macrosteles quadrilineatus (aster leafhopper)	1	install	1	0	0	0	1	0	0	0	0			
 mree	T10466	Eukaryota	Metazoa	Muntiacus reevesi (Reeves' muntjac)	1	install	1	0	0	0	0	0	0	0	0			
 mrj	T10429	Eukaryota	Metazoa	Macrobrachium rosenbergii (giant freshwater prawn)	1	install	1	0	0	0	0	0	0	0	0			
-mrr	T03137	Eukaryota	Fungi	Moniliophthora roreri	1	install	1	0	0	0	0	0	0	0	0			
-mrt	T06113	Eukaryota	Fungi	Malassezia restricta	1	install	1	0	0	0	0	0	0	0	0			
+mrr	T03137	Eukaryota	Fungi	Moniliophthora roreri	1	install	1	0	0	0	1	0	0	0	0			
+mrt	T06113	Eukaryota	Fungi	Malassezia restricta	1	install	1	0	0	0	1	0	0	0	0			
 mrv	T07797	Eukaryota	Metazoa	Mauremys reevesii (Reeves's turtle)	1	install	1	0	0	0	0	0	0	0	0			
 msam	T07309	Eukaryota	Metazoa	Micropterus salmoides (largemouth bass)	1	install	1	0	0	0	0	0	0	0	0			
-msex	T07401	Eukaryota	Metazoa	Manduca sexta (tobacco hornworm)	1	install	1	0	0	0	0	0	0	0	0			
+msex	T07401	Eukaryota	Metazoa	Manduca sexta (tobacco hornworm)	1	install	1	0	0	0	1	0	0	0	0			
 msin	T09699	Eukaryota	Viridiplantae	Magnolia sinica	1	install	1	0	0	0	0	0	0	0	0			
 msyl	T09027	Eukaryota	Viridiplantae	Malus sylvestris (European crab apple)	1	install	1	0	0	0	0	0	0	0	0			
-msym	T06541	Eukaryota	Fungi	Malassezia sympodialis	1	install	1	0	0	0	0	0	0	0	0			
+msym	T06541	Eukaryota	Fungi	Malassezia sympodialis	1	install	1	0	0	0	1	0	0	0	0			
 mthb	T08579	Eukaryota	Metazoa	Macaca thibetana thibetana (Pere David's macaque)	1	install	1	0	0	0	0	0	0	0	0			
 mtm	T02231	Eukaryota	Fungi	Thermothelomyces thermophilus	1	install	1	0	0	0	0	0	0	0	0			
-mtr	T01716	Eukaryota	Viridiplantae	Medicago truncatula (barrel medic)	1	install	1	0	0	0	0	0	0	0	0			
+mtr	T01716	Eukaryota	Viridiplantae	Medicago truncatula (barrel medic)	1	install	1	0	0	0	1	0	0	0	0			
 mui	T08455	Eukaryota	Metazoa	Mesitornis unicolor (brown roatelo)	1	install	1	0	0	0	0	0	0	0	0			
-mun	T05884	Eukaryota	Metazoa	Meriones unguiculatus (Mongolian gerbil)	1	install	1	0	0	0	0	0	0	0	0			
+mun	T05884	Eukaryota	Metazoa	Meriones unguiculatus (Mongolian gerbil)	1	install	1	0	0	0	1	0	0	0	0			
 muo	T09142	Eukaryota	Metazoa	Microcaecilia unicolor	1	install	1	0	0	0	0	0	0	0	0			
-mus	T03447	Eukaryota	Viridiplantae	Musa acuminata (dessert banana)	1	install	1	0	0	0	0	0	0	0	0			
-mves	T11699	Eukaryota	Fungi	Malassezia vespertilionis	1	install	1	0	0	0	0	0	0	0	0			
+mus	T03447	Eukaryota	Viridiplantae	Musa acuminata (dessert banana)	1	install	1	0	0	0	1	0	0	0	0			
+mves	T11699	Eukaryota	Fungi	Malassezia vespertilionis	1	install	1	0	0	0	1	0	0	0	0			
 myb	T02920	Eukaryota	Metazoa	Myotis brandtii (Brandt's bat)	1	install	1	0	0	0	0	0	0	0	0			
 myd	T02992	Eukaryota	Metazoa	Myotis davidii (David's myotis)	1	install	1	0	0	0	0	0	0	0	0			
-myi	T05079	Eukaryota	Metazoa	Mizuhopecten yessoensis (Yesso scallop)	1	install	1	0	0	0	0	0	0	0	0			
+myi	T05079	Eukaryota	Metazoa	Mizuhopecten yessoensis (Yesso scallop)	1	install	1	0	0	0	1	0	0	0	0			
 myum	T10762	Eukaryota	Metazoa	Myotis yumanensis (Yuma myotis)	1	install	1	0	0	0	0	0	0	0	0			
-mze	T02814	Eukaryota	Metazoa	Maylandia zebra (zebra mbuna)	1	install	1	0	0	0	0	0	0	0	0			
+mze	T02814	Eukaryota	Metazoa	Maylandia zebra (zebra mbuna)	1	install	1	0	0	0	1	0	0	0	0			
 mzt	T11078	Eukaryota	Metazoa	Mycetomoellerius zeteki	1	install	1	0	0	0	0	0	0	0	0			
-nai	T04867	Eukaryota	Metazoa	Necator americanus (New World hookworm)	1	install	1	0	0	0	0	0	0	0	0			
+nai	T04867	Eukaryota	Metazoa	Necator americanus (New World hookworm)	1	install	1	0	0	0	1	0	0	0	0			
 narq	T11436	Eukaryota	Metazoa	Numenius arquata (Eurasian curlew)	1	install	1	0	0	0	0	0	0	0	0			
 nasi	T08872	Eukaryota	Metazoa	Neophocaena asiaeorientalis asiaeorientalis (Yangtze finless porpoise)	1	install	1	0	0	0	0	0	0	0	0			
-nau	T05870	Eukaryota	Viridiplantae	Nicotiana attenuata (coyote tobacco)	1	install	1	0	0	0	0	0	0	0	0			
+nau	T05870	Eukaryota	Viridiplantae	Nicotiana attenuata (coyote tobacco)	1	install	1	0	0	0	1	0	0	0	0			
 ncar	T08117	Eukaryota	Metazoa	Sciurus carolinensis (gray squirrel)	1	install	1	0	0	0	0	0	0	0	0			
 ncc	T04920	Eukaryota	Metazoa	Notothenia coriiceps (black rockcod)	1	install	1	0	0	0	0	0	0	0	0			
 nce	T01614	Eukaryota	Fungi	Vairimorpha ceranae	1	install	1	0	0	0	0	0	0	0	0			
-ncol	T07418	Eukaryota	Viridiplantae	Nymphaea colorata (blue-petal water lily)	1	install	1	0	0	0	0	0	0	0	0			
+ncol	T07418	Eukaryota	Viridiplantae	Nymphaea colorata (blue-petal water lily)	1	install	1	0	0	0	1	0	0	0	0			
 ncr	T01034	Eukaryota	Fungi	Neurospora crassa	1	keep	1	0	0	0	1	1	0	0	0			
 ncs	T02233	Eukaryota	Fungi	Naumovozyma castellii	1	install	1	0	0	0	0	0	0	0	0			
 ndi	T02234	Eukaryota	Fungi	Naumovozyma dairenensis	1	install	1	0	0	0	0	0	0	0	0			
 nds	T11397	Eukaryota	Metazoa	Natator depressus (flatback sea turtle)	1	install	1	0	0	0	0	0	0	0	0			
 nfb	T08986	Eukaryota	Metazoa	Neodiprion fabricii	1	install	1	0	0	0	0	0	0	0	0			
-nfi	T01070	Eukaryota	Fungi	Aspergillus fischeri	1	install	1	0	0	0	0	0	0	0	0			
+nfi	T01070	Eukaryota	Fungi	Aspergillus fischeri	1	install	1	0	0	0	1	0	0	0	0			
 nfo	T12119	Eukaryota	Discoba	Naegleria fowleri (brain-eating amoeba)	1	install	1	0	0	0	0	0	0	0	0			
-nfu	T05163	Eukaryota	Metazoa	Nothobranchius furzeri (turquoise killifish)	1	install	1	0	0	0	0	0	0	0	0			
-ngd	T02917	Eukaryota	Sar	Microchloropsis gaditana	1	install	1	0	0	0	0	0	0	0	0			
-ngi	T03372	Eukaryota	Metazoa	Nannospalax galili (Upper Galilee mountains blind mole rat)	1	install	1	0	0	0	0	0	0	0	0			
+nfu	T05163	Eukaryota	Metazoa	Nothobranchius furzeri (turquoise killifish)	1	install	1	0	0	0	1	0	0	0	0			
+ngd	T02917	Eukaryota	Sar	Microchloropsis gaditana	1	install	1	0	0	0	1	0	0	0	0			
+ngi	T03372	Eukaryota	Metazoa	Nannospalax galili (Upper Galilee mountains blind mole rat)	1	install	1	0	0	0	1	0	0	0	0			
 ngr	T01241	Eukaryota	Discoba	Naegleria gruberi	1	install	1	0	0	0	0	0	0	0	0			
 ngra	T10798	Eukaryota	Metazoa	Neoarius graeffei (lesser salmon catfish)	1	install	1	0	0	0	0	0	0	0	0			
-nhe	T01612	Eukaryota	Fungi	Fusarium vanettenii	1	install	1	0	0	0	0	0	0	0	0			
+nhe	T01612	Eukaryota	Fungi	Fusarium vanettenii	1	install	1	0	0	0	1	0	0	0	0			
 niq	T08495	Eukaryota	Metazoa	Nymphalis io (European peacock)	1	install	1	0	0	0	0	0	0	0	0			
-nle	T03265	Eukaryota	Metazoa	Nomascus leucogenys (northern white-cheeked gibbon)	1	install	1	0	0	0	0	0	0	0	0			
-nlo	T09006	Eukaryota	Metazoa	Neodiprion lecontei (redheaded pine sawfly)	1	install	1	0	0	0	0	0	0	0	0			
-nlu	T07276	Eukaryota	Metazoa	Nilaparvata lugens (brown planthopper)	1	install	1	0	0	0	0	0	0	0	0			
+nle	T03265	Eukaryota	Metazoa	Nomascus leucogenys (northern white-cheeked gibbon)	1	install	1	0	0	0	1	0	0	0	0			
+nlo	T09006	Eukaryota	Metazoa	Neodiprion lecontei (redheaded pine sawfly)	1	install	1	0	0	0	1	0	0	0	0			
+nlu	T07276	Eukaryota	Metazoa	Nilaparvata lugens (brown planthopper)	1	install	1	0	0	0	1	0	0	0	0			
 nmay	T11968	Eukaryota	Metazoa	Nesoenas mayeri (pink pigeon)	1	install	1	0	0	0	0	0	0	0	0			
 nmea	T07404	Eukaryota	Metazoa	Nomia melanderi (Alkali bee)	1	install	1	0	0	0	0	0	0	0	0			
-nmel	T06015	Eukaryota	Metazoa	Numida meleagris (helmeted guineafowl)	1	install	1	0	0	0	0	0	0	0	0			
+nmel	T06015	Eukaryota	Metazoa	Numida meleagris (helmeted guineafowl)	1	install	1	0	0	0	1	0	0	0	0			
 nni	T05756	Eukaryota	Metazoa	Nipponia nippon (crested ibis)	1	install	1	0	0	0	0	0	0	0	0			
 nnt	T08494	Eukaryota	Metazoa	Nestor notabilis (Kea)	1	install	1	0	0	0	0	0	0	0	0			
 nnu	T04131	Eukaryota	Viridiplantae	Nelumbo nucifera (sacred lotus)	1	install	1	0	0	0	0	0	0	0	0			
 npa	T03126	Eukaryota	Fungi	Neofusicoccum parvum	1	keep	1	0	0	0	0	1	0	0	0			
-npd	T07556	Eukaryota	Metazoa	Nothoprocta perdicaria (Chilean tinamou)	1	install	1	0	0	0	0	0	0	0	0			
+npd	T07556	Eukaryota	Metazoa	Nothoprocta perdicaria (Chilean tinamou)	1	install	1	0	0	0	1	0	0	0	0			
 npo	T09008	Eukaryota	Metazoa	Nyctereutes procyonoides (raccoon dog)	1	install	1	0	0	0	0	0	0	0	0			
 npr	T04897	Eukaryota	Metazoa	Nanorana parkeri (Xizang Plateau frog)	1	install	1	0	0	0	0	0	0	0	0			
-npt	T08966	Eukaryota	Metazoa	Neodiprion pinetum (white pine sawfly)	1	install	1	0	0	0	0	0	0	0	0			
-nss	T09026	Eukaryota	Metazoa	Notechis scutatus (mainland tiger snake)	1	install	1	0	0	0	0	0	0	0	0			
+npt	T08966	Eukaryota	Metazoa	Neodiprion pinetum (white pine sawfly)	1	install	1	0	0	0	1	0	0	0	0			
+nss	T09026	Eukaryota	Metazoa	Notechis scutatus (mainland tiger snake)	1	install	1	0	0	0	1	0	0	0	0			
 nsu	T08474	Eukaryota	Metazoa	Neomonachus schauinslandi (Hawaiian monk seal)	1	install	1	0	0	0	0	0	0	0	0			
 nsy	T05026	Eukaryota	Viridiplantae	Nicotiana sylvestris (wood tobacco)	1	install	1	0	0	0	0	0	0	0	0			
 nta	T04643	Eukaryota	Viridiplantae	Nicotiana tabacum (common tobacco)	1	install	1	0	0	0	0	0	0	0	0			
 nte	T03451	Eukaryota	Fungi	Neurospora tetrasperma	1	install	1	0	0	0	0	0	0	0	0			
 nto	T05025	Eukaryota	Viridiplantae	Nicotiana tomentosiformis	1	install	1	0	0	0	0	0	0	0	0			
-nve	T01037	Eukaryota	Metazoa	Nematostella vectensis (starlet sea anemone)	1	install	1	0	0	0	0	0	0	0	0			
+nve	T01037	Eukaryota	Metazoa	Nematostella vectensis (starlet sea anemone)	1	install	1	0	0	0	1	0	0	0	0			
 nvg	T09046	Eukaryota	Metazoa	Neodiprion virginianus	1	install	1	0	0	0	0	0	0	0	0			
-nvi	T01081	Eukaryota	Metazoa	Nasonia vitripennis (jewel wasp)	1	install	1	0	0	0	0	0	0	0	0			
+nvi	T01081	Eukaryota	Metazoa	Nasonia vitripennis (jewel wasp)	1	install	1	0	0	0	1	0	0	0	0			
 nvl	T04922	Eukaryota	Metazoa	Nicrophorus vespilloides (burying beetle)	1	install	1	0	0	0	0	0	0	0	0			
-nvs	T08764	Eukaryota	Metazoa	Neogale vison (American mink)	1	install	1	0	0	0	0	0	0	0	0			
+nvs	T08764	Eukaryota	Metazoa	Neogale vison (American mink)	1	install	1	0	0	0	1	0	0	0	0			
 nwh	T08042	Eukaryota	Metazoa	Nematolebias whitei (Rio pearlfish)	1	install	1	0	0	0	0	0	0	0	0			
-oaa	T01045	Eukaryota	Metazoa	Ornithorhynchus anatinus (platypus)	1	install	1	0	0	0	0	0	0	0	0			
+oaa	T01045	Eukaryota	Metazoa	Ornithorhynchus anatinus (platypus)	1	install	1	0	0	0	1	0	0	0	0			
 oas	T03117	Eukaryota	Metazoa	Ovis aries (sheep)	1	keep	1	0	0	0	1	1	0	0	0			
-oau	T07295	Eukaryota	Metazoa	Oreochromis aureus (blue tilapia)	1	install	1	0	0	0	0	0	0	0	0			
+oau	T07295	Eukaryota	Metazoa	Oreochromis aureus (blue tilapia)	1	install	1	0	0	0	1	0	0	0	0			
 obb	T06109	Eukaryota	Metazoa	Osmia bicornis bicornis (red mason bee)	1	install	1	0	0	0	0	0	0	0	0			
-obi	T04127	Eukaryota	Metazoa	Octopus bimaculoides (California two-spot octopus)	1	install	1	0	0	0	0	0	0	0	0			
-obo	T05778	Eukaryota	Metazoa	Ooceraea biroi (clonal raider ant)	1	install	1	0	0	0	0	0	0	0	0			
-obr	T02995	Eukaryota	Viridiplantae	Oryza brachyantha (malo sina)	1	install	1	0	0	0	0	0	0	0	0			
+obi	T04127	Eukaryota	Metazoa	Octopus bimaculoides (California two-spot octopus)	1	install	1	0	0	0	1	0	0	0	0			
+obo	T05778	Eukaryota	Metazoa	Ooceraea biroi (clonal raider ant)	1	install	1	0	0	0	1	0	0	0	0			
+obr	T02995	Eukaryota	Viridiplantae	Oryza brachyantha (malo sina)	1	install	1	0	0	0	1	0	0	0	0			
 ocan	T11679	Eukaryota	Metazoa	Ovis canadensis (bighorn sheep)	1	install	1	0	0	0	0	0	0	0	0			
 ocla	T10872	Eukaryota	Metazoa	Oncorhynchus clarkii lewisi (westslope cutthroat trout)	1	install	1	0	0	0	0	0	0	0	0			
 ocu	T03373	Eukaryota	Metazoa	Oryctolagus cuniculus (rabbit)	1	keep	1	0	0	0	1	1	0	0	0			
 ocz	T11174	Eukaryota	Metazoa	Ochotona curzoniae (black-lipped pika)	1	install	1	0	0	0	0	0	0	0	0			
 oda	T07255	Eukaryota	Metazoa	Oryx dammah (scimitar-horned oryx)	1	install	1	0	0	0	0	0	0	0	0			
 odo	T11913	Eukaryota	Metazoa	Oikopleura dioica	1	install	1	0	0	0	0	0	0	0	0			
-oed	T09123	Eukaryota	Metazoa	Ostrea edulis (European flat oyster)	1	install	1	0	0	0	0	0	0	0	0			
+oed	T09123	Eukaryota	Metazoa	Ostrea edulis (European flat oyster)	1	install	1	0	0	0	1	0	0	0	0			
 oep	T10927	Eukaryota	Metazoa	Osmerus eperlanus (European smelt)	1	install	1	0	0	0	0	0	0	0	0			
-oeu	T05244	Eukaryota	Viridiplantae	Olea europaea var. sylvestris (wild olive)	1	install	1	0	0	0	0	0	0	0	0			
+oeu	T05244	Eukaryota	Viridiplantae	Olea europaea var. sylvestris (wild olive)	1	install	1	0	0	0	1	0	0	0	0			
 ofu	T07986	Eukaryota	Metazoa	Ostrinia furnacalis (Asian corn borer)	1	install	1	0	0	0	0	0	0	0	0			
-oga	T07855	Eukaryota	Metazoa	Otolemur garnettii (small-eared galago)	1	install	1	0	0	0	0	0	0	0	0			
+oga	T07855	Eukaryota	Metazoa	Otolemur garnettii (small-eared galago)	1	install	1	0	0	0	1	0	0	0	0			
 ogl	T08853	Eukaryota	Viridiplantae	Oryza glaberrima (African rice)	1	keep	1	0	0	0	1	1	0	0	0			
 ogo	T07892	Eukaryota	Metazoa	Oncorhynchus gorbuscha (pink salmon)	1	install	1	0	0	0	0	0	0	0	0			
 oha	T08436	Eukaryota	Metazoa	Opisthocomus hoazin (hoatzin)	1	install	1	0	0	0	0	0	0	0	0			
 oja	T11549	Eukaryota	Metazoa	Oxyura jamaicensis (ruddy duck)	1	install	1	0	0	0	0	0	0	0	0			
 oke	T09424	Eukaryota	Metazoa	Oncorhynchus keta (chum salmon)	1	install	1	0	0	0	0	0	0	0	0			
-oki	T09179	Eukaryota	Metazoa	Oncorhynchus kisutch (coho salmon)	1	install	1	0	0	0	0	0	0	0	0			
-ola	T02443	Eukaryota	Metazoa	Oryzias latipes (Japanese medaka)	1	install	1	0	0	0	0	0	0	0	0			
+oki	T09179	Eukaryota	Metazoa	Oncorhynchus kisutch (coho salmon)	1	install	1	0	0	0	1	0	0	0	0			
+ola	T02443	Eukaryota	Metazoa	Oryzias latipes (Japanese medaka)	1	install	1	0	0	0	1	0	0	0	0			
 olg	T09775	Eukaryota	Metazoa	Osmia lignaria (orchard mason bee)	1	install	1	0	0	0	0	0	0	0	0			
-olu	T01029	Eukaryota	Viridiplantae	Ostreococcus lucimarinus	1	install	1	0	0	0	0	0	0	0	0			
+olu	T01029	Eukaryota	Viridiplantae	Ostreococcus lucimarinus	1	install	1	0	0	0	1	0	0	0	0			
 oma	T09236	Eukaryota	Metazoa	Oenanthe melanoleuca (Eastern black-eared wheatear)	1	install	1	0	0	0	0	0	0	0	0			
 omc	T09350	Eukaryota	Metazoa	Onychostoma macrolepis	1	install	1	0	0	0	0	0	0	0	0			
-oml	T07439	Eukaryota	Metazoa	Oryzias melastigma (Indian medaka)	1	install	1	0	0	0	0	0	0	0	0			
+oml	T07439	Eukaryota	Metazoa	Oryzias melastigma (Indian medaka)	1	install	1	0	0	0	1	0	0	0	0			
 omm	T10723	Eukaryota	Metazoa	Oncorhynchus masou masou (cherry salmon)	1	install	1	0	0	0	0	0	0	0	0			
-omy	T07259	Eukaryota	Metazoa	Oncorhynchus mykiss (rainbow trout)	1	install	1	0	0	0	0	0	0	0	0			
+omy	T07259	Eukaryota	Metazoa	Oncorhynchus mykiss (rainbow trout)	1	install	1	0	0	0	1	0	0	0	0			
 one	T07952	Eukaryota	Metazoa	Oncorhynchus nerka (sockeye salmon)	1	install	1	0	0	0	0	0	0	0	0			
-onl	T06104	Eukaryota	Metazoa	Oreochromis niloticus (Nile tilapia)	1	install	1	0	0	0	0	0	0	0	0			
+onl	T06104	Eukaryota	Metazoa	Oreochromis niloticus (Nile tilapia)	1	install	1	0	0	0	1	0	0	0	0			
 ont	T11717	Eukaryota	Metazoa	Oppia nitens	1	install	1	0	0	0	0	0	0	0	0			
 onu	T10851	Eukaryota	Metazoa	Ostrinia nubilalis (European corn borer)	1	install	1	0	0	0	0	0	0	0	0			
 oor	T05247	Eukaryota	Metazoa	Orcinus orca (killer whale)	1	install	1	0	0	0	0	0	0	0	0			
 oot	T11268	Eukaryota	Metazoa	Oratosquilla oratoria (Japanese mantis shrimp)	1	install	1	0	0	0	0	0	0	0	0			
 opa	T08137	Eukaryota	Fungi	Ogataea parapolymorpha	1	install	1	0	0	0	0	0	0	0	0			
 opg	T11970	Eukaryota	Metazoa	Oculina patagonica	1	install	1	0	0	0	0	0	0	0	0			
-opi	T07609	Eukaryota	Metazoa	Ochotona princeps (American pika)	1	install	1	0	0	0	0	0	0	0	0			
+opi	T07609	Eukaryota	Metazoa	Ochotona princeps (American pika)	1	install	1	0	0	0	1	0	0	0	0			
 oro	T05148	Eukaryota	Metazoa	Odobenus rosmarus divergens (Pacific walrus)	1	install	1	0	0	0	0	0	0	0	0			
 osa	T01015	Eukaryota	Viridiplantae	Oryza sativa japonica (Japanese rice)	1	keep	1	0	1	0	1	1	0	1	0		osa	MapMan: Oryza sativa japonica on both sides; cross-link derived in osa_resources (PR #42)
-osn	T07665	Eukaryota	Metazoa	Octopus sinensis (East Asian common octopus)	1	install	1	0	0	0	0	0	0	0	0			
+osn	T07665	Eukaryota	Metazoa	Octopus sinensis (East Asian common octopus)	1	install	1	0	0	0	1	0	0	0	0			
 ota	T01358	Eukaryota	Viridiplantae	Ostreococcus tauri	1	install	1	0	0	0	0	0	0	0	0			
 otc	T07590	Eukaryota	Metazoa	Onychostruthus taczanowskii (white-rumped snowfinch)	1	install	1	0	0	0	0	0	0	0	0			
-oti	T11155	Eukaryota	Metazoa	Ornithodoros turicata (relapsing fever tick)	1	install	1	0	0	0	0	0	0	0	0			
-otu	T07420	Eukaryota	Metazoa	Onthophagus taurus (bull-headed dung beetle)	1	install	1	0	0	0	0	0	0	0	0			
-otw	T05605	Eukaryota	Metazoa	Oncorhynchus tshawytscha (Chinook salmon)	1	install	1	0	0	0	0	0	0	0	0			
+oti	T11155	Eukaryota	Metazoa	Ornithodoros turicata (relapsing fever tick)	1	install	1	0	0	0	1	0	0	0	0			
+otu	T07420	Eukaryota	Metazoa	Onthophagus taurus (bull-headed dung beetle)	1	install	1	0	0	0	1	0	0	0	0			
+otw	T05605	Eukaryota	Metazoa	Oncorhynchus tshawytscha (Chinook salmon)	1	install	1	0	0	0	1	0	0	0	0			
 ovi	T04902	Eukaryota	Metazoa	Opisthorchis viverrini (Southeast Asian liver fluke)	1	install	1	0	0	0	0	0	0	0	0			
 ovr	T10722	Eukaryota	Metazoa	Odocoileus virginianus (white-tailed deer)	1	install	1	0	0	0	0	0	0	0	0			
 padl	T06012	Eukaryota	Metazoa	Pygoscelis adeliae (Adelie penguin)	1	install	1	0	0	0	0	0	0	0	0			
@@ -876,12 +878,12 @@ pale	T02993	Eukaryota	Metazoa	Pteropus alecto (black flying fox)	1	install	1	0	0
 palz	T07314	Eukaryota	Viridiplantae	Populus alba (white poplar)	1	install	1	0	0	0	0	0	0	0	0			
 pame	T10946	Eukaryota	Metazoa	Periplaneta americana (American cockroach)	1	install	1	0	0	0	0	0	0	0	0			
 pan	T01048	Eukaryota	Fungi	Podospora anserina	1	install	1	0	0	0	0	0	0	0	0			
-panu	T07474	Eukaryota	Metazoa	Papio anubis (olive baboon)	1	install	1	0	0	0	0	0	0	0	0			
+panu	T07474	Eukaryota	Metazoa	Papio anubis (olive baboon)	1	install	1	0	0	0	1	0	0	0	0			
 parx	T11493	Eukaryota	Metazoa	Phalacrocorax aristotelis (European shag)	1	install	1	0	0	0	0	0	0	0	0			
 paua	T10575	Eukaryota	Viridiplantae	Phragmites australis (common reed)	1	install	1	0	0	0	0	0	0	0	0			
-pavi	T05161	Eukaryota	Viridiplantae	Prunus avium (sweet cherry)	1	install	1	0	0	0	0	0	0	0	0			
-pbar	T04903	Eukaryota	Metazoa	Pogonomyrmex barbatus (red harvester ant)	1	install	1	0	0	0	0	0	0	0	0			
-pbe	T01111	Eukaryota	Sar	Plasmodium berghei	1	install	1	0	0	0	0	0	0	0	0			
+pavi	T05161	Eukaryota	Viridiplantae	Prunus avium (sweet cherry)	1	install	1	0	0	0	1	0	0	0	0			
+pbar	T04903	Eukaryota	Metazoa	Pogonomyrmex barbatus (red harvester ant)	1	install	1	0	0	0	1	0	0	0	0			
+pbe	T01111	Eukaryota	Sar	Plasmodium berghei	1	install	1	0	0	0	1	0	0	0	0			
 pbel	T09795	Eukaryota	Fungi	Podospora bellae-mahoneyi	1	install	1	0	0	0	0	0	0	0	0			
 pbg	T07574	Eukaryota	Metazoa	Prionailurus bengalensis (leopard cat)	1	install	1	0	0	0	0	0	0	0	0			
 pbi	T03091	Eukaryota	Metazoa	Python bivittatus (Burmese python)	1	install	1	0	0	0	0	0	0	0	0			
@@ -890,33 +892,33 @@ pbn	T03549	Eukaryota	Fungi	Paracoccidioides brasiliensis	1	install	1	0	0	0	0	0	0
 pbrs	T10352	Eukaryota	Sar	Plasmodium brasilianum	1	install	1	0	0	0	0	0	0	0	0			
 pbrv	T10505	Eukaryota	Metazoa	Petaurus breviceps papuanus (sugar glider)	1	install	1	0	0	0	0	0	0	0	0			
 pbx	T08632	Eukaryota	Metazoa	Pieris brassicae (large cabbage white)	1	install	1	0	0	0	0	0	0	0	0			
-pcad	T06011	Eukaryota	Metazoa	Physeter macrocephalus (sperm whale)	1	install	1	0	0	0	0	0	0	0	0			
+pcad	T06011	Eukaryota	Metazoa	Physeter macrocephalus (sperm whale)	1	install	1	0	0	0	1	0	0	0	0			
 pcae	T11059	Eukaryota	Metazoa	Pituophis catenifer annectens (San Diego gophersnake)	1	install	1	0	0	0	0	0	0	0	0			
-pcan	T05881	Eukaryota	Metazoa	Pomacea canaliculata (golden apple snail)	1	install	1	0	0	0	0	0	0	0	0			
+pcan	T05881	Eukaryota	Metazoa	Pomacea canaliculata (golden apple snail)	1	install	1	0	0	0	1	0	0	0	0			
 pcao	T08596	Eukaryota	Metazoa	Phalacrocorax carbo (great cormorant)	1	install	1	0	0	0	0	0	0	0	0			
-pcb	T01108	Eukaryota	Sar	Plasmodium chabaudi	1	install	1	0	0	0	0	0	0	0	0			
-pcf	T05611	Eukaryota	Metazoa	Polistes canadensis	1	install	1	0	0	0	0	0	0	0	0			
+pcb	T01108	Eukaryota	Sar	Plasmodium chabaudi	1	install	1	0	0	0	1	0	0	0	0			
+pcf	T05611	Eukaryota	Metazoa	Polistes canadensis	1	install	1	0	0	0	1	0	0	0	0			
 pchm	T09407	Eukaryota	Fungi	Pochonia chlamydosporia	1	install	1	0	0	0	0	0	0	0	0			
-pchn	T08118	Eukaryota	Metazoa	Penaeus chinensis (fleshy prawn)	1	install	1	0	0	0	0	0	0	0	0			
+pchn	T08118	Eukaryota	Metazoa	Penaeus chinensis (fleshy prawn)	1	install	1	0	0	0	1	0	0	0	0			
 pcin	T09047	Eukaryota	Viridiplantae	Prosopis cineraria	1	install	1	0	0	0	0	0	0	0	0			
-pcla	T07930	Eukaryota	Metazoa	Procambarus clarkii (red swamp crayfish)	1	install	1	0	0	0	0	0	0	0	0			
+pcla	T07930	Eukaryota	Metazoa	Procambarus clarkii (red swamp crayfish)	1	install	1	0	0	0	1	0	0	0	0			
 pco	T03128	Eukaryota	Fungi	Phanerochaete carnosa	1	keep	1	0	0	0	1	1	0	0	0			
 pcob	T11513	Eukaryota	Metazoa	Pseudophryne corroboree (corroboree frog)	1	install	1	0	0	0	0	0	0	0	0			
-pcoc	T07365	Eukaryota	Metazoa	Phasianus colchicus (Ring-necked pheasant)	1	install	1	0	0	0	0	0	0	0	0			
+pcoc	T07365	Eukaryota	Metazoa	Phasianus colchicus (Ring-necked pheasant)	1	install	1	0	0	0	1	0	0	0	0			
 pcoo	T08890	Eukaryota	Metazoa	Puma concolor (puma)	1	install	1	0	0	0	0	0	0	0	0			
-pcoq	T08746	Eukaryota	Metazoa	Propithecus coquereli (Coquerel's sifaka)	1	install	1	0	0	0	0	0	0	0	0			
-pcot	T10133	Eukaryota	Sar	Plasmodium coatneyi	1	install	1	0	0	0	0	0	0	0	0			
+pcoq	T08746	Eukaryota	Metazoa	Propithecus coquereli (Coquerel's sifaka)	1	install	1	0	0	0	1	0	0	0	0			
+pcot	T10133	Eukaryota	Sar	Plasmodium coatneyi	1	install	1	0	0	0	1	0	0	0	0			
 pcox	T10779	Eukaryota	Viridiplantae	Pyrus communis (pear)	1	install	1	0	0	0	0	0	0	0	0			
 pcri	T08340	Eukaryota	Metazoa	Pelecanus crispus (Dalmatian pelican)	1	install	1	0	0	0	0	0	0	0	0			
 pcrs	T12027	Eukaryota	Metazoa	Pseudorca crassidens (false killer whale)	1	install	1	0	0	0	0	0	0	0	0			
 pcs	T01091	Eukaryota	Fungi	Penicillium rubens	1	keep	1	0	0	0	0	1	0	0	0			
 pcub	T08288	Eukaryota	Fungi	Psilocybe cubensis (magic mushroom)	1	install	1	0	0	0	0	0	0	0	0			
 pcur	T11607	Eukaryota	Metazoa	Phaenicophaeus curvirostris (chestnut-breasted malkoha)	1	install	1	0	0	0	0	0	0	0	0			
-pcw	T05867	Eukaryota	Metazoa	Phascolarctos cinereus (koala)	1	install	1	0	0	0	0	0	0	0	0			
-pcy	T02490	Eukaryota	Sar	Plasmodium cynomolgi	1	install	1	0	0	0	0	0	0	0	0			
+pcw	T05867	Eukaryota	Metazoa	Phascolarctos cinereus (koala)	1	install	1	0	0	0	1	0	0	0	0			
+pcy	T02490	Eukaryota	Sar	Plasmodium cynomolgi	1	install	1	0	0	0	1	0	0	0	0			
 pda	T03274	Eukaryota	Viridiplantae	Phoenix dactylifera (date palm)	1	install	1	0	0	0	0	0	0	0	0			
 pdab	T10799	Eukaryota	Metazoa	Paramisgurnus dabryanus (large-scale loach)	1	install	1	0	0	0	0	0	0	0	0			
-pdam	T05773	Eukaryota	Metazoa	Pocillopora damicornis (lace coral)	1	install	1	0	0	0	0	0	0	0	0			
+pdam	T05773	Eukaryota	Metazoa	Pocillopora damicornis (lace coral)	1	install	1	0	0	0	1	0	0	0	0			
 pdic	T07739	Eukaryota	Metazoa	Phyllostomus discolor (pale spear-nosed bat)	1	install	1	0	0	0	0	0	0	0	0			
 pdp	T04849	Eukaryota	Fungi	Penicillium digitatum	1	install	1	0	0	0	0	0	0	0	0			
 pdul	T07328	Eukaryota	Viridiplantae	Prunus dulcis (almond)	1	keep	1	0	0	0	1	1	0	0	0			
@@ -926,92 +928,92 @@ pee	T09682	Eukaryota	Metazoa	Phycodurus eques (leafy seadragon)	1	install	1	0	0	
 peq	T05601	Eukaryota	Viridiplantae	Phalaenopsis equestris	1	install	1	0	0	0	0	0	0	0	0			
 peu	T05872	Eukaryota	Viridiplantae	Populus euphratica (Euphrates poplar)	1	install	1	0	0	0	0	0	0	0	0			
 pfa	T00095	Eukaryota	Sar	Plasmodium falciparum 3D7	1	keep	1	1	0	0	1	1	1	0	0	658		
-pfd	T01051	Eukaryota	Sar	Plasmodium falciparum Dd2	1	install	1	0	0	0	0	0	0	0	0			
-pfh	T01052	Eukaryota	Sar	Plasmodium falciparum HB3	1	install	1	0	0	0	0	0	0	0	0			
+pfd	T01051	Eukaryota	Sar	Plasmodium falciparum Dd2	1	install	1	0	0	0	1	0	0	0	0			
+pfh	T01052	Eukaryota	Sar	Plasmodium falciparum HB3	1	install	1	0	0	0	1	0	0	0	0			
 pfj	T03109	Eukaryota	Fungi	Pseudocercospora fijiensis	1	install	1	0	0	0	0	0	0	0	0			
 pfll	T10724	Eukaryota	Metazoa	Ptychodera flava	1	install	1	0	0	0	0	0	0	0	0			
 pflt	T11622	Eukaryota	Metazoa	Perca fluviatilis (European perch)	1	install	1	0	0	0	0	0	0	0	0			
 pflv	T07494	Eukaryota	Metazoa	Perca flavescens (yellow perch)	1	install	1	0	0	0	0	0	0	0	0			
-pfor	T07984	Eukaryota	Metazoa	Poecilia formosa (Amazon molly)	1	install	1	0	0	0	0	0	0	0	0			
-pfp	T03141	Eukaryota	Fungi	Pseudozyma flocculosa	1	install	1	0	0	0	0	0	0	0	0			
-pfuc	T07683	Eukaryota	Metazoa	Polistes fuscatus (common paper wasp)	1	install	1	0	0	0	0	0	0	0	0			
+pfor	T07984	Eukaryota	Metazoa	Poecilia formosa (Amazon molly)	1	install	1	0	0	0	1	0	0	0	0			
+pfp	T03141	Eukaryota	Fungi	Pseudozyma flocculosa	1	install	1	0	0	0	1	0	0	0	0			
+pfuc	T07683	Eukaryota	Metazoa	Polistes fuscatus (common paper wasp)	1	install	1	0	0	0	1	0	0	0	0			
 pfy	T04924	Eukaryota	Fungi	Pestalotiopsis fici	1	install	1	0	0	0	0	0	0	0	0			
-pgab	T08136	Eukaryota	Sar	Plasmodium gaboni	1	install	1	0	0	0	0	0	0	0	0			
+pgab	T08136	Eukaryota	Sar	Plasmodium gaboni	1	install	1	0	0	0	1	0	0	0	0			
 pgc	T05003	Eukaryota	Metazoa	Pseudomyrmex gracilis (graceful twig ant)	1	install	1	0	0	0	0	0	0	0	0			
 pgeo	T09629	Eukaryota	Metazoa	Pseudochaenichthys georgianus (South Georgia icefish)	1	install	1	0	0	0	0	0	0	0	0			
-pgig	T07511	Eukaryota	Metazoa	Pteropus vampyrus (Indian flying fox)	1	install	1	0	0	0	0	0	0	0	0			
-pgr	T02226	Eukaryota	Fungi	Puccinia graminis	1	install	1	0	0	0	0	0	0	0	0			
+pgig	T07511	Eukaryota	Metazoa	Pteropus vampyrus (Indian flying fox)	1	install	1	0	0	0	1	0	0	0	0			
+pgr	T02226	Eukaryota	Fungi	Puccinia graminis	1	install	1	0	0	0	1	0	0	0	0			
 pgri	T09406	Eukaryota	Fungi	Pyricularia grisea	1	install	1	0	0	0	0	0	0	0	0			
 pgu	T01150	Eukaryota	Fungi	Meyerozyma guilliermondii	1	install	1	0	0	0	0	0	0	0	0			
 pgut	T07329	Eukaryota	Metazoa	Pantherophis guttatus (corn snake)	1	install	1	0	0	0	0	0	0	0	0			
 pguu	T08540	Eukaryota	Metazoa	Pterocles gutturalis (yellow-throated sandgrouse)	1	install	1	0	0	0	0	0	0	0	0			
-pgw	T09293	Eukaryota	Metazoa	Pectinophora gossypiella (pink bollworm)	1	install	1	0	0	0	0	0	0	0	0			
-phai	T07366	Eukaryota	Viridiplantae	Panicum hallii (Hall's panicgrass)	1	install	1	0	0	0	0	0	0	0	0			
+pgw	T09293	Eukaryota	Metazoa	Pectinophora gossypiella (pink bollworm)	1	install	1	0	0	0	1	0	0	0	0			
+phai	T07366	Eukaryota	Viridiplantae	Panicum hallii (Hall's panicgrass)	1	install	1	0	0	0	1	0	0	0	0			
 phas	T07912	Eukaryota	Metazoa	Phyllostomus hastatus (greater spear-nosed bat)	1	install	1	0	0	0	0	0	0	0	0			
 phet	T10408	Eukaryota	Discoba	Porcisia hertigi	1	install	1	0	0	0	0	0	0	0	0			
 phi	T02921	Eukaryota	Metazoa	Pseudopodoces humilis (Tibetan ground-tit)	1	install	1	0	0	0	0	0	0	0	0			
-phu	T01223	Eukaryota	Metazoa	Pediculus humanus corporis (human body louse)	1	install	1	0	0	0	0	0	0	0	0			
+phu	T01223	Eukaryota	Metazoa	Pediculus humanus corporis (human body louse)	1	install	1	0	0	0	1	0	0	0	0			
 phua	T11038	Eukaryota	Viridiplantae	Primulina huaijiensis	1	install	1	0	0	0	0	0	0	0	0			
 phyp	T05759	Eukaryota	Metazoa	Pangasianodon hypophthalmus (striped catfish)	1	install	1	0	0	0	0	0	0	0	0			
 pic	T01023	Eukaryota	Fungi	Scheffersomyces stipitis	1	install	1	0	0	0	0	0	0	0	0			
-pif	T01333	Eukaryota	Sar	Phytophthora infestans	1	install	1	0	0	0	0	0	0	0	0			
-pja	T07703	Eukaryota	Metazoa	Penaeus japonicus (kuruma prawn)	1	install	1	0	0	0	0	0	0	0	0			
-pki	T05788	Eukaryota	Metazoa	Paramormyrops kingsleyae	1	install	1	0	0	0	0	0	0	0	0			
+pif	T01333	Eukaryota	Sar	Phytophthora infestans	1	install	1	0	0	0	1	0	0	0	0			
+pja	T07703	Eukaryota	Metazoa	Penaeus japonicus (kuruma prawn)	1	install	1	0	0	0	1	0	0	0	0			
+pki	T05788	Eukaryota	Metazoa	Paramormyrops kingsleyae	1	install	1	0	0	0	1	0	0	0	0			
 pkl	T07682	Eukaryota	Metazoa	Pipistrellus kuhlii (Kuhl's pipistrelle)	1	install	1	0	0	0	0	0	0	0	0			
 pklu	T11454	Eukaryota	Metazoa	Pempheris klunzingeri	1	install	1	0	0	0	0	0	0	0	0			
-pkn	T01094	Eukaryota	Sar	Plasmodium knowlesi	1	install	1	0	0	0	0	0	0	0	0			
+pkn	T01094	Eukaryota	Sar	Plasmodium knowlesi	1	install	1	0	0	0	1	0	0	0	0			
 pkz	T06133	Eukaryota	Fungi	Pichia kudriavzevii	1	install	1	0	0	0	0	0	0	0	0			
 plag	T10353	Eukaryota	Sar	Plasmodium adleri	1	install	1	0	0	0	0	0	0	0	0			
-plai	T08005	Eukaryota	Metazoa	Poecilia latipinna (sailfin molly)	1	install	1	0	0	0	0	0	0	0	0			
+plai	T08005	Eukaryota	Metazoa	Poecilia latipinna (sailfin molly)	1	install	1	0	0	0	1	0	0	0	0			
 plec	T12103	Eukaryota	Metazoa	Platalea leucorodia (Eurasian spoonbill)	1	install	1	0	0	0	0	0	0	0	0			
 plep	T07454	Eukaryota	Metazoa	Plectropomus leopardus (leopard coralgrouper)	1	install	1	0	0	0	0	0	0	0	0			
 plet	T08325	Eukaryota	Metazoa	Phaethon lepturus (White-tailed tropicbird)	1	install	1	0	0	0	0	0	0	0	0			
 pleu	T07241	Eukaryota	Metazoa	Peromyscus leucopus (white-footed mouse)	1	install	1	0	0	0	0	0	0	0	0			
-plez	T10741	Eukaryota	Metazoa	Panthera leo (lion)	1	install	1	0	0	0	0	0	0	0	0			
+plez	T10741	Eukaryota	Metazoa	Panthera leo (lion)	1	install	1	0	0	0	1	0	0	0	0			
 plj	T05029	Eukaryota	Fungi	Purpureocillium lilacinum	1	install	1	0	0	0	0	0	0	0	0			
 plop	T08928	Eukaryota	Metazoa	Perognathus longimembris pacificus (Pacific pocket mouse)	1	install	1	0	0	0	0	0	0	0	0			
 pmac	T05138	Eukaryota	Metazoa	Papilio machaon (common yellow swallowtail)	1	install	1	0	0	0	0	0	0	0	0			
-pmaj	T04864	Eukaryota	Metazoa	Parus major (Great Tit)	1	install	1	0	0	0	0	0	0	0	0			
+pmaj	T04864	Eukaryota	Metazoa	Parus major (Great Tit)	1	install	1	0	0	0	1	0	0	0	0			
 pmal	T09444	Eukaryota	Sar	Plasmodium malariae	1	install	1	0	0	0	0	0	0	0	0			
-pmav	T11302	Eukaryota	Metazoa	Peromyscus maniculatus bairdii (prairie deer mouse)	1	install	1	0	0	0	0	0	0	0	0			
-pmax	T07399	Eukaryota	Metazoa	Pecten maximus (king scallop)	1	install	1	0	0	0	0	0	0	0	0			
+pmav	T11302	Eukaryota	Metazoa	Peromyscus maniculatus bairdii (prairie deer mouse)	1	install	1	0	0	0	1	0	0	0	0			
+pmax	T07399	Eukaryota	Metazoa	Pecten maximus (king scallop)	1	install	1	0	0	0	1	0	0	0	0			
 pmec	T10742	Eukaryota	Metazoa	Polyergus mexicanus	1	install	1	0	0	0	0	0	0	0	0			
-pmei	T08022	Eukaryota	Metazoa	Poecilia mexicana (shortfin molly)	1	install	1	0	0	0	0	0	0	0	0			
-pmeo	T09028	Eukaryota	Metazoa	Paramacrobiotus metropolitanus	1	install	1	0	0	0	0	0	0	0	0			
-pmin	T11642	Eukaryota	Metazoa	Patiria miniata (bat star)	1	install	1	0	0	0	0	0	0	0	0			
+pmei	T08022	Eukaryota	Metazoa	Poecilia mexicana (shortfin molly)	1	install	1	0	0	0	1	0	0	0	0			
+pmeo	T09028	Eukaryota	Metazoa	Paramacrobiotus metropolitanus	1	install	1	0	0	0	1	0	0	0	0			
+pmin	T11642	Eukaryota	Metazoa	Patiria miniata (bat star)	1	install	1	0	0	0	1	0	0	0	0			
 pmoa	T07277	Eukaryota	Metazoa	Passer montanus (Eurasian tree sparrow)	1	install	1	0	0	0	0	0	0	0	0			
-pmoo	T08784	Eukaryota	Metazoa	Penaeus monodon (black tiger shrimp)	1	install	1	0	0	0	0	0	0	0	0			
-pmrn	T09614	Eukaryota	Metazoa	Petromyzon marinus (sea lamprey)	1	install	1	0	0	0	0	0	0	0	0			
-pmua	T06059	Eukaryota	Metazoa	Podarcis muralis (common wall lizard)	1	install	1	0	0	0	0	0	0	0	0			
+pmoo	T08784	Eukaryota	Metazoa	Penaeus monodon (black tiger shrimp)	1	install	1	0	0	0	1	0	0	0	0			
+pmrn	T09614	Eukaryota	Metazoa	Petromyzon marinus (sea lamprey)	1	install	1	0	0	0	1	0	0	0	0			
+pmua	T06059	Eukaryota	Metazoa	Podarcis muralis (common wall lizard)	1	install	1	0	0	0	1	0	0	0	0			
 pmum	T03196	Eukaryota	Viridiplantae	Prunus mume (Japanese apricot)	1	keep	1	0	0	0	0	1	0	0	0			
 pmur	T05763	Eukaryota	Metazoa	Protobothrops mucrosquamatus (Taiwan habu)	1	install	1	0	0	0	0	0	0	0	0			
 pnap	T08706	Eukaryota	Metazoa	Pieris napi (green-veined white)	1	install	1	0	0	0	0	0	0	0	0			
-pno	T01161	Eukaryota	Fungi	Parastagonospora nodorum	1	install	1	0	0	0	0	0	0	0	0			
-pnx	T12120	Eukaryota	Fungi	Pyrrhoderma noxium	1	install	1	0	0	0	0	0	0	0	0			
+pno	T01161	Eukaryota	Fungi	Parastagonospora nodorum	1	install	1	0	0	0	1	0	0	0	0			
+pnx	T12120	Eukaryota	Fungi	Pyrrhoderma noxium	1	install	1	0	0	0	1	0	0	0	0			
 pnz	T10372	Eukaryota	Viridiplantae	Populus nigra (Lombardy poplar)	1	install	1	0	0	0	0	0	0	0	0			
 pocc	T11716	Eukaryota	Metazoa	Pezoporus occidentalis (night parrot)	1	install	1	0	0	0	0	0	0	0	0			
-pon	T01416	Eukaryota	Metazoa	Pongo abelii (Sumatran orangutan)	1	install	1	0	0	0	0	0	0	0	0			
+pon	T01416	Eukaryota	Metazoa	Pongo abelii (Sumatran orangutan)	1	install	1	0	0	0	1	0	0	0	0			
 pop	T01077	Eukaryota	Viridiplantae	Populus trichocarpa (black cottonwood)	1	keep	1	0	0	0	1	1	0	0	0			
 porn	T10834	Eukaryota	Metazoa	Panulirus ornatus (ornate spiny lobster)	1	install	1	0	0	0	0	0	0	0	0			
 pots	T11911	Eukaryota	Metazoa	Plecotus auritus (brown big-eared bat)	1	install	1	0	0	0	0	0	0	0	0			
 pou	T09521	Eukaryota	Fungi	Penicillium oxalicum	1	install	1	0	0	0	0	0	0	0	0			
 pov	T06037	Eukaryota	Metazoa	Paralichthys olivaceus (Japanese flounder)	1	install	1	0	0	0	0	0	0	0	0			
-ppa	T01092	Eukaryota	Fungi	Komagataella phaffii	1	install	1	0	0	0	0	0	0	0	0			
-ppad	T06062	Eukaryota	Metazoa	Panthera pardus (leopard)	1	install	1	0	0	0	0	0	0	0	0			
+ppa	T01092	Eukaryota	Fungi	Komagataella phaffii	1	install	1	0	0	0	1	0	0	0	0			
+ppad	T06062	Eukaryota	Metazoa	Panthera pardus (leopard)	1	install	1	0	0	0	1	0	0	0	0			
 ppam	T09558	Eukaryota	Metazoa	Pteronotus mesoamericanus (Parnell's mustached bat)	1	install	1	0	0	0	0	0	0	0	0			
-ppap	T10447	Eukaryota	Metazoa	Phlebotomus papatasi	1	install	1	0	0	0	0	0	0	0	0			
+ppap	T10447	Eukaryota	Metazoa	Phlebotomus papatasi	1	install	1	0	0	0	1	0	0	0	0			
 ppei	T08194	Eukaryota	Fungi	Pyricularia pennisetigena	1	install	1	0	0	0	0	0	0	0	0			
 pper	T03092	Eukaryota	Viridiplantae	Prunus persica (peach)	1	keep	1	0	0	0	1	1	0	0	0			
 pphc	T11058	Eukaryota	Metazoa	Phocoena phocoena (harbor porpoise)	1	install	1	0	0	0	0	0	0	0	0			
 pphx	T12064	Eukaryota	Metazoa	Phoxinus phoxinus (Eurasian minnow)	1	install	1	0	0	0	0	0	0	0	0			
-ppl	T01162	Eukaryota	Fungi	Postia placenta	1	install	1	0	0	0	0	0	0	0	0			
+ppl	T01162	Eukaryota	Fungi	Postia placenta	1	install	1	0	0	0	1	0	0	0	0			
 pplt	T09923	Eukaryota	Metazoa	Pleuronectes platessa (European plaice)	1	install	1	0	0	0	0	0	0	0	0			
-ppoi	T08250	Eukaryota	Metazoa	Pollicipes pollicipes (gooseneck barnacle)	1	install	1	0	0	0	0	0	0	0	0			
+ppoi	T08250	Eukaryota	Metazoa	Pollicipes pollicipes (gooseneck barnacle)	1	install	1	0	0	0	1	0	0	0	0			
 ppot	T07437	Eukaryota	Metazoa	Papilio polytes (common Mormon)	1	install	1	0	0	0	0	0	0	0	0			
 ppp	T01041	Eukaryota	Viridiplantae	Physcomitrium patens (spreading earthmoss)	1	keep	1	0	0	0	1	1	0	0	0			
 pprl	T09758	Eukaryota	Metazoa	Poeciliopsis prolifica (blackstripe livebearer)	1	install	1	0	0	0	0	0	0	0	0			
 pprm	T08155	Eukaryota	Metazoa	Pimephales promelas (fathead minnow)	1	install	1	0	0	0	0	0	0	0	0			
-pps	T02283	Eukaryota	Metazoa	Pan paniscus (bonobo)	1	install	1	0	0	0	0	0	0	0	0			
+pps	T02283	Eukaryota	Metazoa	Pan paniscus (bonobo)	1	install	1	0	0	0	1	0	0	0	0			
 ppsa	T09816	Eukaryota	Fungi	Podospora pseudoanserina	1	install	1	0	0	0	0	0	0	0	0			
 ppsd	T09797	Eukaryota	Fungi	Podospora pseudocomata	1	install	1	0	0	0	0	0	0	0	0			
 ppsf	T11417	Eukaryota	Fungi	Penicillium psychrofluorescens	1	install	1	0	0	0	0	0	0	0	0			
@@ -1019,79 +1021,79 @@ ppsp	T09815	Eukaryota	Fungi	Podospora pseudopauciseta	1	install	1	0	0	0	0	0	0	0	
 ppug	T07626	Eukaryota	Metazoa	Pungitius pungitius (ninespine stickleback)	1	install	1	0	0	0	0	0	0	0	0			
 ppus	T10504	Eukaryota	Metazoa	Pogoniulus pusillus (red-fronted tinkerbird)	1	install	1	0	0	0	0	0	0	0	0			
 ppyg	T10128	Eukaryota	Metazoa	Pongo pygmaeus (Bornean orangutan)	1	install	1	0	0	0	0	0	0	0	0			
-ppyr	T07438	Eukaryota	Metazoa	Photinus pyralis (common eastern firefly)	1	install	1	0	0	0	0	0	0	0	0			
+ppyr	T07438	Eukaryota	Metazoa	Photinus pyralis (common eastern firefly)	1	install	1	0	0	0	1	0	0	0	0			
 praf	T09310	Eukaryota	Metazoa	Podarcis raffonei (Aeolian wall lizard)	1	install	1	0	0	0	0	0	0	0	0			
 prap	T05162	Eukaryota	Metazoa	Pieris rapae (cabbage white)	1	install	1	0	0	0	0	0	0	0	0			
-prei	T08079	Eukaryota	Sar	Plasmodium reichenowi	1	install	1	0	0	0	0	0	0	0	0			
+prei	T08079	Eukaryota	Sar	Plasmodium reichenowi	1	install	1	0	0	0	1	0	0	0	0			
 prel	T09405	Eukaryota	Sar	Plasmodium relictum	1	install	1	0	0	0	0	0	0	0	0			
-pret	T05149	Eukaryota	Metazoa	Poecilia reticulata (guppy)	1	install	1	0	0	0	0	0	0	0	0			
+pret	T05149	Eukaryota	Metazoa	Poecilia reticulata (guppy)	1	install	1	0	0	0	1	0	0	0	0			
 prob	T08852	Eukaryota	Metazoa	Phodopus roborovskii (desert hamster)	1	install	1	0	0	0	0	0	0	0	0			
 pruf	T07608	Eukaryota	Metazoa	Pyrgilauda ruficollis (rufous-necked snowfinch)	1	install	1	0	0	0	0	0	0	0	0			
-psat	T08598	Eukaryota	Viridiplantae	Lathyrus oleraceus (garden pea)	1	install	1	0	0	0	0	0	0	0	0			
+psat	T08598	Eukaryota	Viridiplantae	Lathyrus oleraceus (garden pea)	1	install	1	0	0	0	1	0	0	0	0			
 psco	T04865	Eukaryota	Fungi	Mollisia scopiformis	1	install	1	0	0	0	0	0	0	0	0			
 psex	T08668	Eukaryota	Metazoa	Polypterus senegalus (gray bichir)	1	install	1	0	0	0	0	0	0	0	0			
-psiu	T07759	Eukaryota	Metazoa	Phocoena sinus (vaquita)	1	install	1	0	0	0	0	0	0	0	0			
-psoj	T03459	Eukaryota	Sar	Phytophthora sojae	1	install	1	0	0	0	0	0	0	0	0			
-psom	T05758	Eukaryota	Viridiplantae	Papaver somniferum (opium poppy)	1	install	1	0	0	0	0	0	0	0	0			
+psiu	T07759	Eukaryota	Metazoa	Phocoena sinus (vaquita)	1	install	1	0	0	0	1	0	0	0	0			
+psoj	T03459	Eukaryota	Sar	Phytophthora sojae	1	install	1	0	0	0	1	0	0	0	0			
+psom	T05758	Eukaryota	Viridiplantae	Papaver somniferum (opium poppy)	1	install	1	0	0	0	1	0	0	0	0			
 pspa	T07273	Eukaryota	Metazoa	Polyodon spathula (Mississippi paddlefish)	1	install	1	0	0	0	0	0	0	0	0			
 psq	T03131	Eukaryota	Fungi	Punctularia strigosozonata	1	keep	1	0	0	0	1	1	0	0	0			
-pss	T02980	Eukaryota	Metazoa	Pelodiscus sinensis (Chinese soft-shelled turtle)	1	install	1	0	0	0	0	0	0	0	0			
-pstr	T09520	Eukaryota	Fungi	Puccinia striiformis f. sp. tritici (wheat yellow rust fungus)	1	install	1	0	0	0	0	0	0	0	0			
+pss	T02980	Eukaryota	Metazoa	Pelodiscus sinensis (Chinese soft-shelled turtle)	1	install	1	0	0	0	1	0	0	0	0			
+pstr	T09520	Eukaryota	Fungi	Puccinia striiformis f. sp. tritici (wheat yellow rust fungus)	1	install	1	0	0	0	1	0	0	0	0			
 pswi	T09868	Eukaryota	Metazoa	Pseudoliparis swirei (Mariana hadal snailfish)	1	install	1	0	0	0	0	0	0	0	0			
 ptab	T11246	Eukaryota	Viridiplantae	Primulina tabacum	1	install	1	0	0	0	0	0	0	0	0			
 ptao	T09737	Eukaryota	Metazoa	Phyllopteryx taeniolatus (common seadragon)	1	install	1	0	0	0	0	0	0	0	0			
-pte	T01613	Eukaryota	Fungi	Pyrenophora teres	1	install	1	0	0	0	0	0	0	0	0			
-pteh	T07491	Eukaryota	Metazoa	Piliocolobus tephrosceles (Ugandan red Colobus)	1	install	1	0	0	0	0	0	0	0	0			
+pte	T01613	Eukaryota	Fungi	Pyrenophora teres	1	install	1	0	0	0	1	0	0	0	0			
+pteh	T07491	Eukaryota	Metazoa	Piliocolobus tephrosceles (Ugandan red Colobus)	1	install	1	0	0	0	1	0	0	0	0			
 ptep	T06106	Eukaryota	Metazoa	Parasteatoda tepidariorum (common house spider)	1	keep	1	0	0	0	1	1	0	0	0			
 ptet	T08985	Eukaryota	Metazoa	Puntigrus tetrazona (Sumatra barb)	1	install	1	0	0	0	0	0	0	0	0			
-ptex	T09005	Eukaryota	Metazoa	Pseudonaja textilis (eastern brown snake)	1	install	1	0	0	0	0	0	0	0	0			
-ptg	T02988	Eukaryota	Metazoa	Panthera tigris altaica (Amur tiger)	1	install	1	0	0	0	0	0	0	0	0			
-pti	T01075	Eukaryota	Sar	Phaeodactylum tricornutum	1	install	1	0	0	0	0	0	0	0	0			
+ptex	T09005	Eukaryota	Metazoa	Pseudonaja textilis (eastern brown snake)	1	install	1	0	0	0	1	0	0	0	0			
+ptg	T02988	Eukaryota	Metazoa	Panthera tigris altaica (Amur tiger)	1	install	1	0	0	0	1	0	0	0	0			
+pti	T01075	Eukaryota	Sar	Phaeodactylum tricornutum	1	install	1	0	0	0	1	0	0	0	0			
 ptkz	T08929	Eukaryota	Fungi	Purpureocillium takamizusanense	1	install	1	0	0	0	0	0	0	0	0			
-ptm	T01055	Eukaryota	Sar	Paramecium tetraurelia	1	install	1	0	0	0	0	0	0	0	0			
-ptr	T01005	Eukaryota	Metazoa	Pan troglodytes (chimpanzee)	1	keep	1	0	0	0	0	1	0	0	0			
+ptm	T01055	Eukaryota	Sar	Paramecium tetraurelia	1	install	1	0	0	0	1	0	0	0	0			
+ptr	T01005	Eukaryota	Metazoa	Pan troglodytes (chimpanzee)	1	keep	1	0	0	0	1	1	0	0	0			
 ptrc	T09180	Eukaryota	Fungi	Puccinia triticina (wheat leaf rust)	1	install	1	0	0	0	0	0	0	0	0			
-ptrr	T10215	Eukaryota	Fungi	Pyrenophora tritici-repentis	1	install	1	0	0	0	0	0	0	0	0			
-ptru	T07853	Eukaryota	Metazoa	Portunus trituberculatus (swimming crab)	1	install	1	0	0	0	0	0	0	0	0			
+ptrr	T10215	Eukaryota	Fungi	Pyrenophora tritici-repentis	1	install	1	0	0	0	1	0	0	0	0			
+ptru	T07853	Eukaryota	Metazoa	Portunus trituberculatus (swimming crab)	1	install	1	0	0	0	1	0	0	0	0			
 puc	T08832	Eukaryota	Metazoa	Panthera uncia (snow leopard)	1	install	1	0	0	0	0	0	0	0	0			
 pvir	T07260	Eukaryota	Viridiplantae	Panicum virgatum (switchgrass)	1	install	1	0	0	0	0	0	0	0	0			
 pviv	T09889	Eukaryota	Metazoa	Prionailurus viverrinus (fishing cat)	1	install	1	0	0	0	0	0	0	0	0			
-pvm	T06111	Eukaryota	Metazoa	Penaeus vannamei (Pacific white shrimp)	1	install	1	0	0	0	0	0	0	0	0			
-pvp	T07815	Eukaryota	Metazoa	Pteropus vampyrus (large flying fox)	1	install	1	0	0	0	0	0	0	0	0			
-pvt	T05000	Eukaryota	Metazoa	Pogona vitticeps (central bearded dragon)	1	install	1	0	0	0	0	0	0	0	0			
-pvu	T03093	Eukaryota	Viridiplantae	Phaseolus vulgaris (common bean)	1	install	1	0	0	0	0	0	0	0	0			
-pvul	T09576	Eukaryota	Metazoa	Patella vulgata (common limpet)	1	install	1	0	0	0	0	0	0	0	0			
-pvv	T08061	Eukaryota	Sar	Plasmodium vinckei vinckei	1	install	1	0	0	0	0	0	0	0	0			
+pvm	T06111	Eukaryota	Metazoa	Penaeus vannamei (Pacific white shrimp)	1	install	1	0	0	0	1	0	0	0	0			
+pvp	T07815	Eukaryota	Metazoa	Pteropus vampyrus (large flying fox)	1	install	1	0	0	0	1	0	0	0	0			
+pvt	T05000	Eukaryota	Metazoa	Pogona vitticeps (central bearded dragon)	1	install	1	0	0	0	1	0	0	0	0			
+pvu	T03093	Eukaryota	Viridiplantae	Phaseolus vulgaris (common bean)	1	install	1	0	0	0	1	0	0	0	0			
+pvul	T09576	Eukaryota	Metazoa	Patella vulgata (common limpet)	1	install	1	0	0	0	1	0	0	0	0			
+pvv	T08061	Eukaryota	Sar	Plasmodium vinckei vinckei	1	install	1	0	0	0	1	0	0	0	0			
 pvx	T01073	Eukaryota	Sar	Plasmodium vivax	1	install	1	0	0	0	0	0	0	0	0			
-pvy	T07386	Eukaryota	Viridiplantae	Pistacia vera (pistachio)	1	install	1	0	0	0	0	0	0	0	0			
+pvy	T07386	Eukaryota	Viridiplantae	Pistacia vera (pistachio)	1	install	1	0	0	0	1	0	0	0	0			
 pwl	T10800	Eukaryota	Metazoa	Pleurodeles waltl (Iberian ribbed newt)	1	install	1	0	0	0	0	0	0	0	0			
 pxb	T03446	Eukaryota	Viridiplantae	Pyrus x bretschneideri (Chinese white pear)	1	install	1	0	0	0	0	0	0	0	0			
 pxu	T07456	Eukaryota	Metazoa	Papilio xuthus (Asian swallowtail)	1	install	1	0	0	0	0	0	0	0	0			
 pxy	T03915	Eukaryota	Metazoa	Plutella xylostella (diamondback moth)	1	install	1	0	0	0	0	0	0	0	0			
-pyo	T01035	Eukaryota	Sar	Plasmodium yoelii	1	install	1	0	0	0	0	0	0	0	0			
+pyo	T01035	Eukaryota	Sar	Plasmodium yoelii	1	install	1	0	0	0	1	0	0	0	0			
 pyu	T07555	Eukaryota	Metazoa	Herpailurus yagouaroundi (jaguarundi)	1	install	1	0	0	0	0	0	0	0	0			
-qlo	T07350	Eukaryota	Viridiplantae	Quercus lobata (valley oak)	1	install	1	0	0	0	0	0	0	0	0			
+qlo	T07350	Eukaryota	Viridiplantae	Quercus lobata (valley oak)	1	install	1	0	0	0	1	0	0	0	0			
 qsa	T09778	Eukaryota	Viridiplantae	Quillaja saponaria (soapbark tree)	1	install	1	0	0	0	0	0	0	0	0			
-qsu	T05868	Eukaryota	Viridiplantae	Quercus suber (cork oak)	1	install	1	0	0	0	0	0	0	0	0			
+qsu	T05868	Eukaryota	Viridiplantae	Quercus suber (cork oak)	1	install	1	0	0	0	1	0	0	0	0			
 rarg	T10595	Eukaryota	Viridiplantae	Rhodamnia argentea (silver malletwood)	1	install	1	0	0	0	0	0	0	0	0			
 ray	T06036	Eukaryota	Metazoa	Rousettus aegyptiacus (Egyptian rousette)	1	install	1	0	0	0	0	0	0	0	0			
-rbb	T04641	Eukaryota	Metazoa	Rhinopithecus bieti (black snub-nosed monkey)	1	install	1	0	0	0	0	0	0	0	0			
+rbb	T04641	Eukaryota	Metazoa	Rhinopithecus bieti (black snub-nosed monkey)	1	install	1	0	0	0	1	0	0	0	0			
 rbra	T12046	Eukaryota	Metazoa	Raja brachyura (blonde ray)	1	install	1	0	0	0	0	0	0	0	0			
-rcn	T06020	Eukaryota	Viridiplantae	Rosa chinensis (China rose)	1	install	1	0	0	0	0	0	0	0	0			
+rcn	T06020	Eukaryota	Viridiplantae	Rosa chinensis (China rose)	1	install	1	0	0	0	1	0	0	0	0			
 rcu	T01087	Eukaryota	Viridiplantae	Ricinus communis (castor bean)	1	install	1	0	0	0	0	0	0	0	0			
 res	T09994	Eukaryota	Metazoa	Rhopilema esculentum	1	install	1	0	0	0	0	0	0	0	0			
 rfg	T11283	Eukaryota	Metazoa	Rhynchophorus ferrugineus (red palm weevil)	1	install	1	0	0	0	0	0	0	0	0			
-rfq	T07722	Eukaryota	Metazoa	Rhinolophus ferrumequinum (greater horseshoe bat)	1	install	1	0	0	0	0	0	0	0	0			
+rfq	T07722	Eukaryota	Metazoa	Rhinolophus ferrumequinum (greater horseshoe bat)	1	install	1	0	0	0	1	0	0	0	0			
 rhii	T12007	Eukaryota	Metazoa	Rhinolophus hipposideros (lesser horseshoe bat)	1	install	1	0	0	0	0	0	0	0	0			
 rie	T10295	Eukaryota	Fungi	Rhizophagus irregularis	1	install	1	0	0	0	0	0	0	0	0			
 rkg	T09701	Eukaryota	Metazoa	Rhinichthys klamathensis goyatoka (western speckled dace)	1	install	1	0	0	0	0	0	0	0	0			
-rmd	T06065	Eukaryota	Metazoa	Rhopalosiphum maidis (corn leaf aphid)	1	install	1	0	0	0	0	0	0	0	0			
-rmp	T07403	Eukaryota	Metazoa	Rhipicephalus microplus (southern cattle tick)	1	install	1	0	0	0	0	0	0	0	0			
-rno	T01003	Eukaryota	Metazoa	Rattus norvegicus (rat)	1	keep	1	1	0	1	0	1	1	0	1	1833		
+rmd	T06065	Eukaryota	Metazoa	Rhopalosiphum maidis (corn leaf aphid)	1	install	1	0	0	0	1	0	0	0	0			
+rmp	T07403	Eukaryota	Metazoa	Rhipicephalus microplus (southern cattle tick)	1	install	1	0	0	0	1	0	0	0	0			
+rno	T01003	Eukaryota	Metazoa	Rattus norvegicus (rat)	1	keep	1	1	0	1	1	1	1	0	1	1833		
 rphi	T09557	Eukaryota	Metazoa	Ruditapes philippinarum (Manila clam)	1	install	1	0	0	0	0	0	0	0	0			
-rro	T03989	Eukaryota	Metazoa	Rhinopithecus roxellana (golden snub-nosed monkey)	1	install	1	0	0	0	0	0	0	0	0			
-rsan	T07382	Eukaryota	Metazoa	Rhipicephalus sanguineus (brown dog tick)	1	install	1	0	0	0	0	0	0	0	0			
-rsx	T09256	Eukaryota	Fungi	Rhizoctonia solani	1	install	1	0	0	0	0	0	0	0	0			
+rro	T03989	Eukaryota	Metazoa	Rhinopithecus roxellana (golden snub-nosed monkey)	1	install	1	0	0	0	1	0	0	0	0			
+rsan	T07382	Eukaryota	Metazoa	Rhipicephalus sanguineus (brown dog tick)	1	install	1	0	0	0	1	0	0	0	0			
+rsx	T09256	Eukaryota	Fungi	Rhizoctonia solani	1	install	1	0	0	0	1	0	0	0	0			
 rsz	T06014	Eukaryota	Viridiplantae	Raphanus sativus (radish)	1	keep	1	0	0	0	0	1	0	0	0			
 rtd	T09443	Eukaryota	Metazoa	Rissa tridactyla (black-legged kittiwake)	1	install	1	0	0	0	0	0	0	0	0			
 rtem	T07929	Eukaryota	Metazoa	Rana temporaria (common frog)	1	install	1	0	0	0	0	0	0	0	0			
@@ -1100,80 +1102,80 @@ rtp	T06055	Eukaryota	Metazoa	Rhincodon typus (whale shark)	1	install	1	0	0	0	0	0
 rvl	T09330	Eukaryota	Viridiplantae	Rhododendron vialii	1	install	1	0	0	0	0	0	0	0	0			
 rze	T08513	Eukaryota	Metazoa	Rhagoletis zephyria (snowberry fruit fly)	1	install	1	0	0	0	0	0	0	0	0			
 salp	T05762	Eukaryota	Metazoa	Salvelinus sp. IW2-2015 (Arctic char)	1	install	1	0	0	0	0	0	0	0	0			
-sanh	T04917	Eukaryota	Metazoa	Sinocyclocheilus anshuiensis	1	install	1	0	0	0	0	0	0	0	0			
+sanh	T04917	Eukaryota	Metazoa	Sinocyclocheilus anshuiensis	1	install	1	0	0	0	1	0	0	0	0			
 sapo	T06367	Eukaryota	Fungi	Scedosporium apiospermum	1	install	1	0	0	0	0	0	0	0	0			
-sara	T07854	Eukaryota	Metazoa	Sorex araneus (European shrew)	1	install	1	0	0	0	0	0	0	0	0			
-sasa	T04363	Eukaryota	Metazoa	Salmo salar (Atlantic salmon)	1	install	1	0	0	0	0	0	0	0	0			
+sara	T07854	Eukaryota	Metazoa	Sorex araneus (European shrew)	1	install	1	0	0	0	1	0	0	0	0			
+sasa	T04363	Eukaryota	Metazoa	Salmo salar (Atlantic salmon)	1	install	1	0	0	0	1	0	0	0	0			
 sati	T10263	Eukaryota	Metazoa	Sylvia atricapilla (blackcap)	1	install	1	0	0	0	0	0	0	0	0			
 sbi	T01086	Eukaryota	Viridiplantae	Sorghum bicolor (sorghum)	1	keep	1	0	0	0	1	1	0	0	0			
 sbia	T09681	Eukaryota	Metazoa	Syngnathoides biaculeatus (alligator pipefish)	1	install	1	0	0	0	0	0	0	0	0			
-sbq	T04350	Eukaryota	Metazoa	Saimiri boliviensis boliviensis (Bolivian squirrel monkey)	1	install	1	0	0	0	0	0	0	0	0			
-scac	T07664	Eukaryota	Metazoa	Stomoxys calcitrans (stable fly)	1	install	1	0	0	0	0	0	0	0	0			
-scam	T08512	Eukaryota	Metazoa	Struthio camelus australis (South African ostrich)	1	install	1	0	0	0	0	0	0	0	0			
-scan	T05755	Eukaryota	Metazoa	Serinus canaria (common canary)	1	install	1	0	0	0	0	0	0	0	0			
+sbq	T04350	Eukaryota	Metazoa	Saimiri boliviensis boliviensis (Bolivian squirrel monkey)	1	install	1	0	0	0	1	0	0	0	0			
+scac	T07664	Eukaryota	Metazoa	Stomoxys calcitrans (stable fly)	1	install	1	0	0	0	1	0	0	0	0			
+scam	T08512	Eukaryota	Metazoa	Struthio camelus australis (South African ostrich)	1	install	1	0	0	0	1	0	0	0	0			
+scan	T05755	Eukaryota	Metazoa	Serinus canaria (common canary)	1	install	1	0	0	0	1	0	0	0	0			
 scau	T11175	Eukaryota	Metazoa	Scyliorhinus canicula (smaller spotted catshark)	1	install	1	0	0	0	0	0	0	0	0			
-sce	T00005	Eukaryota	Fungi	Saccharomyces cerevisiae (budding yeast)	1	keep	1	1	0	0	0	1	1	0	0	847		
+sce	T00005	Eukaryota	Fungi	Saccharomyces cerevisiae (budding yeast)	1	keep	1	1	0	0	1	1	1	0	0	847		
 scep	T11930	Eukaryota	Metazoa	Squalius cephalus (European chub)	1	install	1	0	0	0	0	0	0	0	0			
 schu	T08948	Eukaryota	Metazoa	Siniperca chuatsi (mandarin fish)	1	install	1	0	0	0	0	0	0	0	0			
 scil	T11988	Eukaryota	Metazoa	Spermophilus citellus (European ground squirrel)	1	install	1	0	0	0	0	0	0	0	0			
 sclv	T07291	Eukaryota	Metazoa	Styela clava (leathery sea squirt)	1	install	1	0	0	0	0	0	0	0	0			
 scm	T01331	Eukaryota	Fungi	Schizophyllum commune	1	keep	1	0	0	0	1	1	0	0	0			
 scoo	T11893	Eukaryota	Metazoa	Stenella coeruleoalba (striped dolphin)	1	install	1	0	0	0	0	0	0	0	0			
-sdm	T07385	Eukaryota	Metazoa	Stegodyphus dumicola	1	install	1	0	0	0	0	0	0	0	0			
-sdu	T05606	Eukaryota	Metazoa	Seriola dumerili (greater amberjack)	1	install	1	0	0	0	0	0	0	0	0			
+sdm	T07385	Eukaryota	Metazoa	Stegodyphus dumicola	1	install	1	0	0	0	1	0	0	0	0			
+sdu	T05606	Eukaryota	Metazoa	Seriola dumerili (greater amberjack)	1	install	1	0	0	0	1	0	0	0	0			
 sdul	T09577	Eukaryota	Viridiplantae	Solanum dulcamara (climbing nightshade)	1	install	1	0	0	0	0	0	0	0	0			
 setr	T09902	Eukaryota	Metazoa	Suncus etruscus (white-toothed pygmy shrew)	1	install	1	0	0	0	0	0	0	0	0			
 seub	T08138	Eukaryota	Fungi	Saccharomyces eubayanus	1	install	1	0	0	0	0	0	0	0	0			
-sfm	T04919	Eukaryota	Metazoa	Scleropages formosus (Asian bonytongue)	1	install	1	0	0	0	0	0	0	0	0			
+sfm	T04919	Eukaryota	Metazoa	Scleropages formosus (Asian bonytongue)	1	install	1	0	0	0	1	0	0	0	0			
 sfon	T11136	Eukaryota	Metazoa	Salvelinus fontinalis (brook trout)	1	install	1	0	0	0	0	0	0	0	0			
 sfum	T10594	Eukaryota	Metazoa	Sorex fumeus (smoky shrew)	1	install	1	0	0	0	0	0	0	0	0			
-sgh	T04918	Eukaryota	Metazoa	Sinocyclocheilus grahami (golden-line barbel)	1	install	1	0	0	0	0	0	0	0	0			
-sgra	T09331	Eukaryota	Fungi	Sporisorium graminicola	1	install	1	0	0	0	0	0	0	0	0			
-sgre	T08688	Eukaryota	Metazoa	Schistocerca gregaria (desert locust)	1	install	1	0	0	0	0	0	0	0	0			
-shab	T08851	Eukaryota	Metazoa	Strigops habroptila (Kakapo)	1	install	1	0	0	0	0	0	0	0	0			
+sgh	T04918	Eukaryota	Metazoa	Sinocyclocheilus grahami (golden-line barbel)	1	install	1	0	0	0	1	0	0	0	0			
+sgra	T09331	Eukaryota	Fungi	Sporisorium graminicola	1	install	1	0	0	0	1	0	0	0	0			
+sgre	T08688	Eukaryota	Metazoa	Schistocerca gregaria (desert locust)	1	install	1	0	0	0	1	0	0	0	0			
+shab	T08851	Eukaryota	Metazoa	Strigops habroptila (Kakapo)	1	install	1	0	0	0	1	0	0	0	0			
 shis	T09851	Eukaryota	Viridiplantae	Salvia hispanica (chia)	1	install	1	0	0	0	0	0	0	0	0			
 shon	T07222	Eukaryota	Metazoa	Sturnira hondurensis	1	install	1	0	0	0	0	0	0	0	0			
-shr	T02286	Eukaryota	Metazoa	Sarcophilus harrisii (Tasmanian devil)	1	install	1	0	0	0	0	0	0	0	0			
+shr	T02286	Eukaryota	Metazoa	Sarcophilus harrisii (Tasmanian devil)	1	install	1	0	0	0	1	0	0	0	0			
 shs	T03127	Eukaryota	Fungi	Stereum hirsutum	1	keep	1	0	0	0	1	1	0	0	0			
-shx	T05004	Eukaryota	Metazoa	Schistosoma haematobium (urinary blood fluke)	1	install	1	0	0	0	0	0	0	0	0			
-sind	T04135	Eukaryota	Viridiplantae	Sesamum indicum (sesame)	1	install	1	0	0	0	0	0	0	0	0			
-sita	T02818	Eukaryota	Viridiplantae	Setaria italica (foxtail millet)	1	install	1	0	0	0	0	0	0	0	0			
+shx	T05004	Eukaryota	Metazoa	Schistosoma haematobium (urinary blood fluke)	1	install	1	0	0	0	1	0	0	0	0			
+sind	T04135	Eukaryota	Viridiplantae	Sesamum indicum (sesame)	1	install	1	0	0	0	1	0	0	0	0			
+sita	T02818	Eukaryota	Viridiplantae	Setaria italica (foxtail millet)	1	install	1	0	0	0	1	0	0	0	0			
 sjo	T09718	Eukaryota	Metazoa	Scomber japonicus (chub mackerel)	1	install	1	0	0	0	0	0	0	0	0			
-sko	T04123	Eukaryota	Metazoa	Saccoglossus kowalevskii (acorn worm)	1	install	1	0	0	0	0	0	0	0	0			
-sla	T03135	Eukaryota	Fungi	Serpula lacrymans	1	install	1	0	0	0	0	0	0	0	0			
+sko	T04123	Eukaryota	Metazoa	Saccoglossus kowalevskii (acorn worm)	1	install	1	0	0	0	1	0	0	0	0			
+sla	T03135	Eukaryota	Fungi	Serpula lacrymans	1	install	1	0	0	0	1	0	0	0	0			
 slaf	T11116	Eukaryota	Viridiplantae	Silene latifolia (white campion)	1	install	1	0	0	0	0	0	0	0	0			
-slal	T06058	Eukaryota	Metazoa	Seriola lalandi dorsalis (Yellowtail amberjack)	1	install	1	0	0	0	0	0	0	0	0			
+slal	T06058	Eukaryota	Metazoa	Seriola lalandi dorsalis (Yellowtail amberjack)	1	install	1	0	0	0	1	0	0	0	0			
 slb	T05270	Eukaryota	Fungi	Sugiyamaella lignohabitans	1	install	1	0	0	0	0	0	0	0	0			
 sliu	T08157	Eukaryota	Metazoa	Spodoptera litura (tobacco cutworm)	1	install	1	0	0	0	0	0	0	0	0			
-sluc	T07345	Eukaryota	Metazoa	Sander lucioperca (pikeperch)	1	install	1	0	0	0	0	0	0	0	0			
-slud	T08289	Eukaryota	Fungi	Saccharomycodes ludwigii	1	install	1	0	0	0	0	0	0	0	0			
-sly	T02665	Eukaryota	Viridiplantae	Solanum lycopersicum (tomato)	1	keep	1	0	1	0	0	1	0	1	0		sly	MapMan: Solanum lycopersicum on both sides; GoMapMan ships gene-to-entrez_sly
-smau	T09850	Eukaryota	Metazoa	Scophthalmus maximus (turbot)	1	install	1	0	0	0	0	0	0	0	0			
+sluc	T07345	Eukaryota	Metazoa	Sander lucioperca (pikeperch)	1	install	1	0	0	0	1	0	0	0	0			
+slud	T08289	Eukaryota	Fungi	Saccharomycodes ludwigii	1	install	1	0	0	0	1	0	0	0	0			
+sly	T02665	Eukaryota	Viridiplantae	Solanum lycopersicum (tomato)	1	keep	1	0	1	0	1	1	0	1	0		sly	MapMan: Solanum lycopersicum on both sides; GoMapMan ships gene-to-entrez_sly
+smau	T09850	Eukaryota	Metazoa	Scophthalmus maximus (turbot)	1	install	1	0	0	0	1	0	0	0	0			
 smeo	T08004	Eukaryota	Metazoa	Silurus meridionalis (southern catfish)	1	install	1	0	0	0	0	0	0	0	0			
 smil	T09291	Eukaryota	Viridiplantae	Salvia miltiorrhiza (redroot sage)	1	install	1	0	0	0	0	0	0	0	0			
-smm	T01095	Eukaryota	Metazoa	Schistosoma mansoni	1	install	1	0	0	0	0	0	0	0	0			
-smo	T01496	Eukaryota	Viridiplantae	Selaginella moellendorffii	1	install	1	0	0	0	0	0	0	0	0			
+smm	T01095	Eukaryota	Metazoa	Schistosoma mansoni	1	install	1	0	0	0	1	0	0	0	0			
+smo	T01496	Eukaryota	Viridiplantae	Selaginella moellendorffii	1	install	1	0	0	0	1	0	0	0	0			
 smp	T01610	Eukaryota	Fungi	Sordaria macrospora	1	install	1	0	0	0	0	0	0	0	0			
 snh	T07522	Eukaryota	Metazoa	Salvelinus namaycush (lake trout)	1	install	1	0	0	0	0	0	0	0	0			
-soc	T03916	Eukaryota	Metazoa	Solenopsis invicta (red fire ant)	1	install	1	0	0	0	0	0	0	0	0			
+soc	T03916	Eukaryota	Metazoa	Solenopsis invicta (red fire ant)	1	install	1	0	0	0	1	0	0	0	0			
 soe	T05137	Eukaryota	Viridiplantae	Spinacia oleracea (spinach)	1	install	1	0	0	0	0	0	0	0	0			
 som	T09274	Eukaryota	Fungi	Schizosaccharomyces osmophilus (fission yeast)	1	install	1	0	0	0	0	0	0	0	0			
 sot	T02981	Eukaryota	Viridiplantae	Solanum tuberosum (potato)	1	keep	1	0	1	0	1	1	0	1	0		stu	MapMan: Solanum tuberosum: GoMapMan stu = KEGG sot; GoMapMan ships stu_pgsc_ncbi
-soy	T07985	Eukaryota	Metazoa	Sitophilus oryzae (rice weevil)	1	install	1	0	0	0	0	0	0	0	0			
+soy	T07985	Eukaryota	Metazoa	Sitophilus oryzae (rice weevil)	1	install	1	0	0	0	1	0	0	0	0			
 spaa	T03101	Eukaryota	Fungi	Spathaspora passalidarum	1	install	1	0	0	0	0	0	0	0	0			
 spao	T08193	Eukaryota	Fungi	Saccharomyces paradoxus	1	install	1	0	0	0	0	0	0	0	0			
-spar	T04137	Eukaryota	Sar	Saprolegnia parasitica	1	install	1	0	0	0	0	0	0	0	0			
+spar	T04137	Eukaryota	Sar	Saprolegnia parasitica	1	install	1	0	0	0	1	0	0	0	0			
 spen	T04130	Eukaryota	Viridiplantae	Solanum pennellii	1	install	1	0	0	0	0	0	0	0	0			
 spil	T10667	Eukaryota	Metazoa	Sardina pilchardus (sardine)	1	install	1	0	0	0	0	0	0	0	0			
-spis	T05774	Eukaryota	Metazoa	Stylophora pistillata (Smooth Cauliflower Coral)	1	install	1	0	0	0	0	0	0	0	0			
+spis	T05774	Eukaryota	Metazoa	Stylophora pistillata (Smooth Cauliflower Coral)	1	install	1	0	0	0	1	0	0	0	0			
 spo	T00076	Eukaryota	Fungi	Schizosaccharomyces pombe (fission yeast)	1	keep	1	1	0	0	1	1	1	0	0	870		
 sprm	T11531	Eukaryota	Metazoa	Scylla paramamosain (green mud crab)	1	install	1	0	0	0	0	0	0	0	0			
-spu	T01019	Eukaryota	Metazoa	Strongylocentrotus purpuratus (purple sea urchin)	1	install	1	0	0	0	0	0	0	0	0			
+spu	T01019	Eukaryota	Metazoa	Strongylocentrotus purpuratus (purple sea urchin)	1	install	1	0	0	0	1	0	0	0	0			
 spul	T10596	Eukaryota	Metazoa	Semicossyphus pulcher (California sheephead)	1	install	1	0	0	0	0	0	0	0	0			
-sre	T04136	Eukaryota	Choanoflagellata	Salpingoeca rosetta	1	install	1	0	0	0	0	0	0	0	0			
-srx	T04916	Eukaryota	Metazoa	Sinocyclocheilus rhinocerous	1	install	1	0	0	0	0	0	0	0	0			
-ssao	T10465	Eukaryota	Metamonada	Spironucleus salmonicida	1	install	1	0	0	0	0	0	0	0	0			
-ssc	T01009	Eukaryota	Metazoa	Sus scrofa (pig)	1	keep	1	1	0	0	0	1	1	0	0	1805		
+sre	T04136	Eukaryota	Choanoflagellata	Salpingoeca rosetta	1	install	1	0	0	0	1	0	0	0	0			
+srx	T04916	Eukaryota	Metazoa	Sinocyclocheilus rhinocerous	1	install	1	0	0	0	1	0	0	0	0			
+ssao	T10465	Eukaryota	Metamonada	Spironucleus salmonicida	1	install	1	0	0	0	1	0	0	0	0			
+ssc	T01009	Eukaryota	Metazoa	Sus scrofa (pig)	1	keep	1	1	0	0	1	1	1	0	0	1805		
 ssck	T05555	Eukaryota	Fungi	Sporothrix schenckii	1	install	1	0	0	0	0	0	0	0	0			
 ssco	T10651	Eukaryota	Metazoa	Scomber scombrus (Atlantic mackerel)	1	install	1	0	0	0	0	0	0	0	0			
 sscv	T08785	Eukaryota	Metazoa	Syngnathus scovelli (Gulf pipefish)	1	install	1	0	0	0	0	0	0	0	0			
@@ -1185,85 +1187,85 @@ sstn	T08385	Eukaryota	Viridiplantae	Solanum stenotomum	1	install	1	0	0	0	0	0	0	0
 ssyn	T10134	Eukaryota	Metazoa	Symphalangus syndactylus (siamang)	1	install	1	0	0	0	0	0	0	0	0			
 stow	T08213	Eukaryota	Metazoa	Sphaerodactylus townsendi (Townsend's least gecko)	1	install	1	0	0	0	0	0	0	0	0			
 stoz	T11303	Eukaryota	Metazoa	Scyliorhinus torazame (cloudy catshark)	1	install	1	0	0	0	0	0	0	0	0			
-stru	T08542	Eukaryota	Metazoa	Salmo trutta (river trout)	1	install	1	0	0	0	0	0	0	0	0			
+stru	T08542	Eukaryota	Metazoa	Salmo trutta (river trout)	1	install	1	0	0	0	1	0	0	0	0			
 sund	T07740	Eukaryota	Metazoa	Sceloporus undulatus (fence lizard)	1	install	1	0	0	0	0	0	0	0	0			
 sura	T11361	Eukaryota	Metazoa	Strix uralensis (Ural owl)	1	install	1	0	0	0	0	0	0	0	0			
 sver	T11474	Eukaryota	Viridiplantae	Solanum verrucosum	1	install	1	0	0	0	0	0	0	0	0			
 svg	T08833	Eukaryota	Metazoa	Sturnus vulgaris (common starling)	1	install	1	0	0	0	0	0	0	0	0			
 svit	T11640	Eukaryota	Metazoa	Sander vitreus (walleye)	1	install	1	0	0	0	0	0	0	0	0			
-svs	T07951	Eukaryota	Viridiplantae	Setaria viridis (green foxtail)	1	install	1	0	0	0	0	0	0	0	0			
-svul	T11892	Eukaryota	Metazoa	Sciurus vulgaris (Eurasian red squirrel)	1	install	1	0	0	0	0	0	0	0	0			
+svs	T07951	Eukaryota	Viridiplantae	Setaria viridis (green foxtail)	1	install	1	0	0	0	1	0	0	0	0			
+svul	T11892	Eukaryota	Metazoa	Sciurus vulgaris (Eurasian red squirrel)	1	install	1	0	0	0	1	0	0	0	0			
 tacu	T10703	Eukaryota	Metazoa	Tachyglossus aculeatus (Australian echidna)	1	install	1	0	0	0	0	0	0	0	0			
-tad	T01069	Eukaryota	Metazoa	Trichoplax adhaerens (placozoan)	1	install	1	0	0	0	0	0	0	0	0			
+tad	T01069	Eukaryota	Metazoa	Trichoplax adhaerens (placozoan)	1	install	1	0	0	0	1	0	0	0	0			
 taes	T07757	Eukaryota	Viridiplantae	Triticum aestivum (bread wheat)	1	keep	1	0	0	0	1	1	0	0	0		tae	MapMan excluded: Triticum aestivum (KEGG tae is the bacterium Tepidanaerobacter acetatoxydans); keyed on 2018 TrEMBL accessions of which 1,385 of 69,215 are in KEGG taes's UniProt conversion (2%): a mapman_gene_id island
 tala	T07816	Eukaryota	Metazoa	Tyto alba (Barn owl)	1	install	1	0	0	0	0	0	0	0	0			
 tame	T11456	Eukaryota	Metazoa	Temnothorax americanus	1	install	1	0	0	0	0	0	0	0	0			
 tan	T00253	Eukaryota	Sar	Theileria annulata	1	install	1	0	0	0	0	0	0	0	0			
 tang	T11061	Eukaryota	Viridiplantae	Typha angustifolia (narrow-leaf cattail)	1	install	1	0	0	0	0	0	0	0	0			
-tasa	T06566	Eukaryota	Fungi	Trichosporon asahii var. asahii	1	install	1	0	0	0	0	0	0	0	0			
-tasp	T10296	Eukaryota	Fungi	Trichoderma asperellum	1	install	1	0	0	0	0	0	0	0	0			
+tasa	T06566	Eukaryota	Fungi	Trichosporon asahii var. asahii	1	install	1	0	0	0	1	0	0	0	0			
+tasp	T10296	Eukaryota	Fungi	Trichoderma asperellum	1	install	1	0	0	0	1	0	0	0	0			
 tatv	T10217	Eukaryota	Fungi	Trichoderma atroviride	1	install	1	0	0	0	0	0	0	0	0			
 tben	T09643	Eukaryota	Metazoa	Trematomus bernacchii (emerald rockcod)	1	install	1	0	0	0	0	0	0	0	0			
 tbg	T06526	Eukaryota	Discoba	Trypanosoma brucei gambiense	1	install	1	0	0	0	0	0	0	0	0			
 tbl	T02489	Eukaryota	Fungi	Henningerozyma blattae	1	install	1	0	0	0	0	0	0	0	0			
-tbr	T01013	Eukaryota	Discoba	Trypanosoma brucei brucei	1	install	1	0	0	0	0	0	0	0	0			
+tbr	T01013	Eukaryota	Discoba	Trypanosoma brucei brucei	1	install	1	0	0	0	1	0	0	0	0			
 tbt	T12083	Eukaryota	Metazoa	Telmatherina bonti	1	install	1	0	0	0	0	0	0	0	0			
 tbu	T11969	Eukaryota	Metazoa	Taurulus bubalis (long-spined sea-scorpion)	1	install	1	0	0	0	0	0	0	0	0			
-tca	T01046	Eukaryota	Metazoa	Tribolium castaneum (red flour beetle)	1	install	1	0	0	0	0	0	0	0	0			
-tcc	T02994	Eukaryota	Viridiplantae	Theobroma cacao (cacao)	1	install	1	0	0	0	0	0	0	0	0		tca	MapMan excluded: Theobroma cacao (KEGG tca is the beetle Tribolium castaneum); Phytozome9.1 Thecc1EG ids have no published bridge to KEGG tcc's NCBI GeneIDs (KEGG maps only 4,106 tcc genes to UniProt)
-tcf	T09700	Eukaryota	Metazoa	Tigriopus californicus (tidepool copepod)	1	install	1	0	0	0	0	0	0	0	0			
+tca	T01046	Eukaryota	Metazoa	Tribolium castaneum (red flour beetle)	1	install	1	0	0	0	1	0	0	0	0			
+tcc	T02994	Eukaryota	Viridiplantae	Theobroma cacao (cacao)	1	install	1	0	0	0	1	0	0	0	0		tca	MapMan excluded: Theobroma cacao (KEGG tca is the beetle Tribolium castaneum); Phytozome9.1 Thecc1EG ids have no published bridge to KEGG tcc's NCBI GeneIDs (KEGG maps only 4,106 tcc genes to UniProt)
+tcf	T09700	Eukaryota	Metazoa	Tigriopus californicus (tidepool copepod)	1	install	1	0	0	0	1	0	0	0	0			
 tcr	T01012	Eukaryota	Discoba	Trypanosoma cruzi	1	install	1	0	0	0	0	0	0	0	0			
 tcz	T11212	Eukaryota	Metazoa	Trachymyrmex cornetzi	1	install	1	0	0	0	0	0	0	0	0			
-tda	T09311	Eukaryota	Metazoa	Teleopsis dalmanni (Malaysian stalk-eyed fly)	1	install	1	0	0	0	0	0	0	0	0			
-tdc	T07278	Eukaryota	Viridiplantae	Triticum dicoccoides (wild emmer wheat)	1	install	1	0	0	0	0	0	0	0	0			
+tda	T09311	Eukaryota	Metazoa	Teleopsis dalmanni (Malaysian stalk-eyed fly)	1	install	1	0	0	0	1	0	0	0	0			
+tdc	T07278	Eukaryota	Viridiplantae	Triticum dicoccoides (wild emmer wheat)	1	install	1	0	0	0	1	0	0	0	0			
 tdl	T02236	Eukaryota	Fungi	Torulaspora delbrueckii	1	install	1	0	0	0	0	0	0	0	0			
 tdw	T09616	Eukaryota	Metazoa	Triplophysa dalaica	1	install	1	0	0	0	0	0	0	0	0			
 teo	T08611	Eukaryota	Metazoa	Tauraco erythrolophus (red-crested turaco)	1	install	1	0	0	0	0	0	0	0	0			
-tet	T01020	Eukaryota	Sar	Tetrahymena thermophila	1	install	1	0	0	0	0	0	0	0	0			
+tet	T01020	Eukaryota	Sar	Tetrahymena thermophila	1	install	1	0	0	0	1	0	0	0	0			
 tfd	T08119	Eukaryota	Metazoa	Tachysurus fulvidraco (yellow catfish)	1	install	1	0	0	0	0	0	0	0	0			
 tfn	T07225	Eukaryota	Metazoa	Trachypithecus francoisi (Francois's langur)	1	install	1	0	0	0	0	0	0	0	0			
 tfs	T09160	Eukaryota	Metazoa	Takifugu flavidus (sansaifugu)	1	install	1	0	0	0	0	0	0	0	0			
-tgb	T06981	Eukaryota	Fungi	Torulaspora globosa	1	install	1	0	0	0	0	0	0	0	0			
-tge	T08041	Eukaryota	Metazoa	Theropithecus gelada (gelada)	1	install	1	0	0	0	0	0	0	0	0			
-tgo	T01093	Eukaryota	Sar	Toxoplasma gondii	1	install	1	0	0	0	0	0	0	0	0			
+tgb	T06981	Eukaryota	Fungi	Torulaspora globosa	1	install	1	0	0	0	1	0	0	0	0			
+tge	T08041	Eukaryota	Metazoa	Theropithecus gelada (gelada)	1	install	1	0	0	0	1	0	0	0	0			
+tgo	T01093	Eukaryota	Sar	Toxoplasma gondii	1	install	1	0	0	0	1	0	0	0	0			
 tgt	T08560	Eukaryota	Metazoa	Tinamus guttatus (white-throated tinamou)	1	install	1	0	0	0	0	0	0	0	0			
 tgu	T01082	Eukaryota	Metazoa	Taeniopygia guttata (zebra finch)	1	keep	1	0	0	0	1	1	0	0	0			
 thj	T04125	Eukaryota	Viridiplantae	Tarenaya hassleriana (spider flower)	1	install	1	0	0	0	0	0	0	0	0			
 tln	T10889	Eukaryota	Metazoa	Temnothorax longispinosus	1	install	1	0	0	0	0	0	0	0	0			
-tmf	T06392	Eukaryota	Fungi	Talaromyces marneffei	1	install	1	0	0	0	0	0	0	0	0			
-tml	T01282	Eukaryota	Fungi	Tuber melanosporum	1	install	1	0	0	0	0	0	0	0	0			
+tmf	T06392	Eukaryota	Fungi	Talaromyces marneffei	1	install	1	0	0	0	1	0	0	0	0			
+tml	T01282	Eukaryota	Fungi	Tuber melanosporum	1	install	1	0	0	0	1	0	0	0	0			
 tmn	T03102	Eukaryota	Fungi	Phaeoacremonium minimum	1	install	1	0	0	0	0	0	0	0	0			
-tmol	T10686	Eukaryota	Metazoa	Tenebrio molitor (yellow mealworm)	1	install	1	0	0	0	0	0	0	0	0			
+tmol	T10686	Eukaryota	Metazoa	Tenebrio molitor (yellow mealworm)	1	install	1	0	0	0	1	0	0	0	0			
 tms	T03139	Eukaryota	Fungi	Tremella mesenterica	1	keep	1	0	0	0	1	1	0	0	0			
 tmu	T05135	Eukaryota	Metazoa	Trichechus manatus latirostris (Florida manatee)	1	install	1	0	0	0	0	0	0	0	0			
-tng	T04346	Eukaryota	Metazoa	Tetraodon nigroviridis (spotted green pufferfish)	1	install	1	0	0	0	0	0	0	0	0			
+tng	T04346	Eukaryota	Metazoa	Tetraodon nigroviridis (spotted green pufferfish)	1	install	1	0	0	0	1	0	0	0	0			
 tnl	T05757	Eukaryota	Metazoa	Trichoplusia ni (cabbage looper)	1	install	1	0	0	0	0	0	0	0	0			
 tny	T11678	Eukaryota	Metazoa	Temnothorax nylanderi	1	install	1	0	0	0	0	0	0	0	0			
 tod	T07495	Eukaryota	Metazoa	Talpa occidentalis (Iberian mole)	1	install	1	0	0	0	0	0	0	0	0			
-tot	T03460	Eukaryota	Sar	Theileria orientalis	1	install	1	0	0	0	0	0	0	0	0			
+tot	T03460	Eukaryota	Sar	Theileria orientalis	1	install	1	0	0	0	1	0	0	0	0			
 tpai	T08967	Eukaryota	Metazoa	Tympanuchus pallidicinctus (lesser prairie-chicken)	1	install	1	0	0	0	0	0	0	0	0			
-tpal	T08251	Eukaryota	Metazoa	Thrips palmi (melon thrips)	1	install	1	0	0	0	0	0	0	0	0			
+tpal	T08251	Eukaryota	Metazoa	Thrips palmi (melon thrips)	1	install	1	0	0	0	1	0	0	0	0			
 tpf	T02235	Eukaryota	Fungi	Tetrapisispora phaffii	1	install	1	0	0	0	0	0	0	0	0			
-tpra	T08949	Eukaryota	Viridiplantae	Trifolium pratense (red clover)	1	install	1	0	0	0	0	0	0	0	0			
-tpre	T07644	Eukaryota	Metazoa	Trichogramma pretiosum	1	install	1	0	0	0	0	0	0	0	0			
-tps	T01078	Eukaryota	Sar	Thalassiosira pseudonana	1	install	1	0	0	0	0	0	0	0	0			
+tpra	T08949	Eukaryota	Viridiplantae	Trifolium pratense (red clover)	1	install	1	0	0	0	1	0	0	0	0			
+tpre	T07644	Eukaryota	Metazoa	Trichogramma pretiosum	1	install	1	0	0	0	1	0	0	0	0			
+tps	T01078	Eukaryota	Sar	Thalassiosira pseudonana	1	install	1	0	0	0	1	0	0	0	0			
 tpv	T00254	Eukaryota	Sar	Theileria parva	1	install	1	0	0	0	0	0	0	0	0			
 tre	T02991	Eukaryota	Fungi	Trichoderma reesei QM6a	1	keep	1	0	0	0	1	1	0	0	0			
-trg	T06879	Eukaryota	Fungi	Talaromyces rugulosus	1	install	1	0	0	0	0	0	0	0	0			
+trg	T06879	Eukaryota	Fungi	Talaromyces rugulosus	1	install	1	0	0	0	1	0	0	0	0			
 trn	T09921	Eukaryota	Metazoa	Trichomycterus rosablanca	1	install	1	0	0	0	0	0	0	0	0			
 tros	T09216	Eukaryota	Metazoa	Triplophysa rosa	1	install	1	0	0	0	0	0	0	0	0			
 trr	T06031	Eukaryota	Fungi	Trichoderma reesei RUT C-30	1	install	1	0	0	0	0	0	0	0	0			
-tru	T02386	Eukaryota	Metazoa	Takifugu rubripes (torafugu)	1	install	1	0	0	0	0	0	0	0	0			
+tru	T02386	Eukaryota	Metazoa	Takifugu rubripes (torafugu)	1	install	1	0	0	0	1	0	0	0	0			
 tsep	T11226	Eukaryota	Metazoa	Trachymyrmex septentrionalis	1	install	1	0	0	0	0	0	0	0	0			
-tsp	T01609	Eukaryota	Metazoa	Trichinella spiralis	1	install	1	0	0	0	0	0	0	0	0			
+tsp	T01609	Eukaryota	Metazoa	Trichinella spiralis	1	install	1	0	0	0	1	0	0	0	0			
 tsr	T06107	Eukaryota	Metazoa	Thamnophis sirtalis (common garter snake)	1	install	1	0	0	0	0	0	0	0	0			
 tss	T07910	Eukaryota	Viridiplantae	Telopea speciosissima (New South Wales waratah)	1	install	1	0	0	0	0	0	0	0	0			
 tst	T07347	Eukaryota	Metazoa	Trachemys scripta elegans (red-eared slider)	1	install	1	0	0	0	0	0	0	0	0			
 ttt	T02228	Eukaryota	Fungi	Thermothielavioides terrestris	1	install	1	0	0	0	0	0	0	0	0			
 tty	T11154	Eukaryota	Metazoa	Thunnus thynnus (Atlantic bluefin tuna)	1	install	1	0	0	0	0	0	0	0	0			
-tua	T08232	Eukaryota	Viridiplantae	Triticum urartu (red wild einkorn wheat)	1	install	1	0	0	0	0	0	0	0	0			
+tua	T08232	Eukaryota	Viridiplantae	Triticum urartu (red wild einkorn wheat)	1	install	1	0	0	0	1	0	0	0	0			
 tup	T02978	Eukaryota	Metazoa	Tupaia belangeri chinensis (Chinese tree shrew)	1	install	1	0	0	0	0	0	0	0	0			
-tut	T04901	Eukaryota	Metazoa	Tetranychus urticae (two-spotted spider mite)	1	install	1	0	0	0	0	0	0	0	0			
+tut	T04901	Eukaryota	Metazoa	Tetranychus urticae (two-spotted spider mite)	1	install	1	0	0	0	1	0	0	0	0			
 tva	T01022	Eukaryota	Metamonada	Trichomonas vaginalis	1	install	1	0	0	0	0	0	0	0	0			
 tvc	T09596	Eukaryota	Metazoa	Tachysurus vachellii	1	install	1	0	0	0	0	0	0	0	0			
 tve	T01615	Eukaryota	Fungi	Trichophyton verrucosum	1	install	1	0	0	0	0	0	0	0	0			
@@ -1271,69 +1273,69 @@ tvp	T10126	Eukaryota	Metazoa	Trichosurus vulpecula (common brushtail)	1	install	
 tvs	T04795	Eukaryota	Fungi	Trametes versicolor	1	keep	1	0	0	0	1	1	0	0	0			
 twl	T07256	Eukaryota	Viridiplantae	Tripterygium wilfordii (thunder duke vine)	1	install	1	0	0	0	0	0	0	0	0			
 uah	T05909	Eukaryota	Metazoa	Ursus arctos (brown bear)	1	install	1	0	0	0	0	0	0	0	0			
-uar	T07931	Eukaryota	Metazoa	Ursus americanus (American black bear)	1	install	1	0	0	0	0	0	0	0	0			
-udv	T09235	Eukaryota	Metazoa	Uloborus diversus	1	install	1	0	0	0	0	0	0	0	0			
-uma	T01021	Eukaryota	Fungi	Mycosarcoma maydis	1	install	1	0	0	0	0	0	0	0	0			
-umr	T03271	Eukaryota	Metazoa	Ursus maritimus (polar bear)	1	install	1	0	0	0	0	0	0	0	0			
+uar	T07931	Eukaryota	Metazoa	Ursus americanus (American black bear)	1	install	1	0	0	0	1	0	0	0	0			
+udv	T09235	Eukaryota	Metazoa	Uloborus diversus	1	install	1	0	0	0	1	0	0	0	0			
+uma	T01021	Eukaryota	Fungi	Mycosarcoma maydis	1	install	1	0	0	0	1	0	0	0	0			
+umr	T03271	Eukaryota	Metazoa	Ursus maritimus (polar bear)	1	install	1	0	0	0	1	0	0	0	0			
 ure	T01132	Eukaryota	Fungi	Uncinocarpus reesii	1	install	1	0	0	0	0	0	0	0	0			
 uvi	T11247	Eukaryota	Fungi	Ustilaginoidea virens	1	install	1	0	0	0	0	0	0	0	0			
 val	T02227	Eukaryota	Fungi	Verticillium alfalfae	1	install	1	0	0	0	0	0	0	0	0			
-var	T04660	Eukaryota	Viridiplantae	Vigna angularis (adzuki bean)	1	install	1	0	0	0	0	0	0	0	0			
-vcan	T09386	Eukaryota	Metazoa	Venturia canescens	1	install	1	0	0	0	0	0	0	0	0			
+var	T04660	Eukaryota	Viridiplantae	Vigna angularis (adzuki bean)	1	install	1	0	0	0	1	0	0	0	0			
+vcan	T09386	Eukaryota	Metazoa	Venturia canescens	1	install	1	0	0	0	1	0	0	0	0			
 vcd	T09161	Eukaryota	Metazoa	Vanessa cardui (painted lady)	1	install	1	0	0	0	0	0	0	0	0			
 vcha	T11587	Eukaryota	Metazoa	Vidua chalybeata (village indigobird)	1	install	1	0	0	0	0	0	0	0	0			
 vcn	T01330	Eukaryota	Viridiplantae	Volvox carteri f. nagariensis	1	install	1	0	0	0	0	0	0	0	0			
 vcrb	T09462	Eukaryota	Metazoa	Vespa crabro (European hornet)	1	install	1	0	0	0	0	0	0	0	0			
-vda	T03450	Eukaryota	Fungi	Verticillium dahliae	1	install	1	0	0	0	0	0	0	0	0			
+vda	T03450	Eukaryota	Fungi	Verticillium dahliae	1	install	1	0	0	0	1	0	0	0	0			
 vde	T07383	Eukaryota	Metazoa	Varroa destructor (honeybee mite)	1	keep	1	0	0	0	1	1	0	0	0			
 vem	T06016	Eukaryota	Metazoa	Vollenhovia emeryi	1	install	1	0	0	0	0	0	0	0	0			
-vja	T07417	Eukaryota	Metazoa	Varroa jacobsoni	1	install	1	0	0	0	0	0	0	0	0			
-vko	T07701	Eukaryota	Metazoa	Varanus komodoensis (Komodo dragon)	1	install	1	0	0	0	0	0	0	0	0			
+vja	T07417	Eukaryota	Metazoa	Varroa jacobsoni	1	install	1	0	0	0	1	0	0	0	0			
+vko	T07701	Eukaryota	Metazoa	Varanus komodoensis (Komodo dragon)	1	install	1	0	0	0	1	0	0	0	0			
 vlg	T07435	Eukaryota	Metazoa	Vulpes lagopus (Arctic fox)	1	install	1	0	0	0	0	0	0	0	0			
 vmc	T11570	Eukaryota	Metazoa	Vidua macroura (Pin-tailed whydah)	1	install	1	0	0	0	0	0	0	0	0			
 vnx	T10154	Eukaryota	Fungi	Vairimorpha necatrix	1	install	1	0	0	0	0	0	0	0	0			
-vpc	T08098	Eukaryota	Metazoa	Vicugna pacos (alpaca)	1	install	1	0	0	0	0	0	0	0	0			
+vpc	T08098	Eukaryota	Metazoa	Vicugna pacos (alpaca)	1	install	1	0	0	0	1	0	0	0	0			
 vpo	T01049	Eukaryota	Fungi	Vanderwaltozyma polyspora	1	install	1	0	0	0	0	0	0	0	0			
 vps	T07720	Eukaryota	Metazoa	Vespula pensylvanica (western yellowjacket)	1	install	1	0	0	0	0	0	0	0	0			
 vra	T04126	Eukaryota	Viridiplantae	Vigna radiata (mung bean)	1	keep	1	0	0	0	1	1	0	0	0			
 vri	T07274	Eukaryota	Viridiplantae	Vitis riparia (riverbank grape)	1	install	1	0	0	0	0	0	0	0	0			
 vum	T09662	Eukaryota	Viridiplantae	Vigna umbellata (ricebean)	1	install	1	0	0	0	0	0	0	0	0			
-vun	T06017	Eukaryota	Viridiplantae	Vigna unguiculata (cowpea)	1	install	1	0	0	0	0	0	0	0	0			
+vun	T06017	Eukaryota	Viridiplantae	Vigna unguiculata (cowpea)	1	install	1	0	0	0	1	0	0	0	0			
 vve	T09814	Eukaryota	Metazoa	Vespa velutina (Asian hornet)	1	install	1	0	0	0	0	0	0	0	0			
 vvi	T01084	Eukaryota	Viridiplantae	Vitis vinifera (wine grape)	1	keep	1	0	0	0	1	1	0	0	0			
 vvo	T09680	Eukaryota	Viridiplantae	Vicia villosa (hairy vetch)	1	install	1	0	0	0	0	0	0	0	0			
-vvp	T05911	Eukaryota	Metazoa	Vulpes vulpes (red fox)	1	install	1	0	0	0	0	0	0	0	0			
+vvp	T05911	Eukaryota	Metazoa	Vulpes vulpes (red fox)	1	install	1	0	0	0	1	0	0	0	0			
 wau	T11932	Eukaryota	Viridiplantae	Wolffia australiana	1	install	1	0	0	0	0	0	0	0	0			
-wic	T03457	Eukaryota	Fungi	Wallemia ichthyophaga	1	install	1	0	0	0	0	0	0	0	0			
+wic	T03457	Eukaryota	Fungi	Wallemia ichthyophaga	1	install	1	0	0	0	1	0	0	0	0			
 wsb	T11735	Eukaryota	Metazoa	Watersipora subatra (red ripple bryozoan)	1	install	1	0	0	0	0	0	0	0	0			
-wse	T03142	Eukaryota	Fungi	Wallemia mellicola	1	install	1	0	0	0	0	0	0	0	0			
-xco	T05908	Eukaryota	Metazoa	Xiphophorus couchianus (Monterrey platyfish)	1	install	1	0	0	0	0	0	0	0	0			
+wse	T03142	Eukaryota	Fungi	Wallemia mellicola	1	install	1	0	0	0	1	0	0	0	0			
+xco	T05908	Eukaryota	Metazoa	Xiphophorus couchianus (Monterrey platyfish)	1	install	1	0	0	0	1	0	0	0	0			
 xen	T08024	Eukaryota	Metazoa	Xenia sp. Carnegie-2017 (soft corals)	1	install	1	0	0	0	0	0	0	0	0			
 xgl	T07311	Eukaryota	Metazoa	Xiphias gladius (swordfish)	1	install	1	0	0	0	0	0	0	0	0			
 xhe	T07363	Eukaryota	Metazoa	Xiphophorus hellerii (green swordtail)	1	install	1	0	0	0	0	0	0	0	0			
 xla	T01010	Eukaryota	Metazoa	Xenopus laevis (African clawed frog)	1	install	1	0	0	0	0	0	0	0	0			
-xma	T02923	Eukaryota	Metazoa	Xiphophorus maculatus (southern platyfish)	1	install	1	0	0	0	0	0	0	0	0			
-xtr	T01011	Eukaryota	Metazoa	Xenopus tropicalis (tropical clawed frog)	1	keep	1	1	0	0	0	1	1	0	0	1621		
+xma	T02923	Eukaryota	Metazoa	Xiphophorus maculatus (southern platyfish)	1	install	1	0	0	0	1	0	0	0	0			
+xtr	T01011	Eukaryota	Metazoa	Xenopus tropicalis (tropical clawed frog)	1	keep	1	1	0	0	1	1	1	0	0	1621		
 yba	T11245	Eukaryota	Metazoa	Ylistrum balloti (Ballot's saucer scallop)	1	install	1	0	0	0	0	0	0	0	0			
 yli	T01033	Eukaryota	Fungi	Yarrowia lipolytica	1	keep	1	0	0	0	1	1	0	0	0			
-zab	T07911	Eukaryota	Metazoa	Zonotrichia albicollis (white-throated sparrow)	1	install	1	0	0	0	0	0	0	0	0			
-zca	T07874	Eukaryota	Metazoa	Zalophus californianus (California sea lion)	1	install	1	0	0	0	0	0	0	0	0			
-zce	T07293	Eukaryota	Metazoa	Zerene cesonia (dogface butterfly)	1	install	1	0	0	0	0	0	0	0	0			
+zab	T07911	Eukaryota	Metazoa	Zonotrichia albicollis (white-throated sparrow)	1	install	1	0	0	0	1	0	0	0	0			
+zca	T07874	Eukaryota	Metazoa	Zalophus californianus (California sea lion)	1	install	1	0	0	0	1	0	0	0	0			
+zce	T07293	Eukaryota	Metazoa	Zerene cesonia (dogface butterfly)	1	install	1	0	0	0	1	0	0	0	0			
 zfa	T12102	Eukaryota	Metazoa	Zeus faber (John dory)	1	install	1	0	0	0	0	0	0	0	0			
 zju	T04794	Eukaryota	Viridiplantae	Ziziphus jujuba (Chinese jujube)	1	install	1	0	0	0	0	0	0	0	0			
 zle	T09958	Eukaryota	Metazoa	Zonotrichia leucophrys gambelii (white-crowned sparrow)	1	install	1	0	0	0	0	0	0	0	0			
 zma	T01088	Eukaryota	Viridiplantae	Zea mays (maize)	1	keep	1	0	0	0	1	1	0	0	0			
-zmk	T06976	Eukaryota	Fungi	Zygotorulaspora mrakii	1	install	1	0	0	0	0	0	0	0	0			
-zne	T05136	Eukaryota	Metazoa	Zootermopsis nevadensis (dampwood termite)	1	install	1	0	0	0	0	0	0	0	0			
+zmk	T06976	Eukaryota	Fungi	Zygotorulaspora mrakii	1	install	1	0	0	0	1	0	0	0	0			
+zne	T05136	Eukaryota	Metazoa	Zootermopsis nevadensis (dampwood termite)	1	install	1	0	0	0	1	0	0	0	0			
 zof	T08725	Eukaryota	Viridiplantae	Zingiber officinale (ginger)	1	install	1	0	0	0	0	0	0	0	0			
 zro	T01118	Eukaryota	Fungi	Zygosaccharomyces rouxii	1	keep	1	0	0	0	0	1	0	0	0			
-ztr	T02285	Eukaryota	Fungi	Zymoseptoria tritici	1	install	1	0	0	0	0	0	0	0	0			
+ztr	T02285	Eukaryota	Fungi	Zymoseptoria tritici	1	install	1	0	0	0	1	0	0	0	0			
 zvi	T07275	Eukaryota	Metazoa	Zootoca vivipara (common lizard)	1	install	1	0	0	0	0	0	0	0	0			
-aamb	T06309	Archaea	Thermoproteati	Acidianus ambivalens	2	install	1	0	0	0	0	0	0	0	0			
-abi	T01180	Archaea	Methanobacteriati	Aciduliprofundum boonei	2	install	1	0	0	0	0	0	0	0	0			
+aamb	T06309	Archaea	Thermoproteati	Acidianus ambivalens	2	keep	1	0	0	0	0	1	0	0	0			
+abi	T01180	Archaea	Methanobacteriati	Aciduliprofundum boonei	2	keep	1	0	0	0	0	1	0	0	0			
 abri	T05472	Archaea	Thermoproteati	Acidianus brierleyi	2	install	1	0	0	0	0	0	0	0	0			
-acf	T02396	Archaea	Methanobacteriati	Candidatus Aciduliprofundum sp. MAR08-339	2	install	1	0	0	0	0	0	0	0	0			
-acia	T05595	Archaea	Thermoproteati	Acidilobus sp. 7A	2	install	1	0	0	0	0	0	0	0	0			
+acf	T02396	Archaea	Methanobacteriati	Candidatus Aciduliprofundum sp. MAR08-339	2	keep	1	0	0	0	0	1	0	0	0			
+acia	T05595	Archaea	Thermoproteati	Acidilobus sp. 7A	2	keep	1	0	0	0	0	1	0	0	0			
 acih	T07980	Archaea	Thermoproteati	Acidianus sp. HS-5	2	install	1	0	0	0	0	0	0	0	0			
 acj	T02858	Archaea	Thermoproteati	Aeropyrum camini	2	install	1	0	0	0	0	0	0	0	0			
 afg	T03231	Archaea	Methanobacteriati	Archaeoglobus fulgidus DSM 8774	2	install	1	0	0	0	0	0	0	0	0			
@@ -3566,7 +3568,6 @@ bvq	T07200	Bacteria	Bacillati	Rossellomorea vietnamensis	3	install	1	0	0	0	0	0	0
 bvr	T04109	Bacteria	Pseudomonadati	Blastochloris viridis	3	install	1	0	0	0	0	0	0	0	0			
 bvs	T02986	Bacteria	Pseudomonadati	Barnesiella viscericola	3	install	1	0	0	0	0	0	0	0	0			
 bvt	T03221	Bacteria	Pseudomonadati	Borreliella valaisiana	3	install	1	0	0	0	0	0	0	0	0			
-bvu	T00546	Bacteria	Pseudomonadati	Phocaeicola vulgatus	3	rebuild	1	0	0	0	0	1	0	1	0			carries MapMan data it must not (organism-code collision); rebuild drops it
 bvv	T04483	Bacteria	Pseudomonadati	Allobosea vaviloviae	3	install	1	0	0	0	0	0	0	0	0			
 bvw	T08848	Bacteria	Pseudomonadati	Borrelia venezuelensis	3	install	1	0	0	0	0	0	0	0	0			
 bvx	T08509	Bacteria	Pseudomonadati	Candidatus Blochmannia vicinus (nom. nud.)	3	install	1	0	0	0	0	0	0	0	0			
@@ -7655,7 +7656,6 @@ mto	T01993	Bacteria	Bacillati	Mycobacterium tuberculosis CTRI-2	3	install	1	0	0	
 mtq	T03154	Bacteria	Bacillati	Mycobacterium tuberculosis HKBS1	3	install	1	0	0	0	0	0	0	0	0			
 mts	T01423	Bacteria	Bacillati	Microbacterium testaceum	3	install	1	0	0	0	0	0	0	0	0			
 mtt	T01365	Bacteria	Pseudomonadati	Marivirga tractuosa	3	install	1	0	0	0	0	0	0	0	0			
-mtu	T00015	Bacteria	Bacillati	Mycobacterium tuberculosis H37Rv	3	refresh	1	1	0	0	0	1	0	0	0	13		Reactome publishes only 13 pathways
 mtua	T05651	Bacteria	Bacillati	Micromonospora tulbaghiae	3	install	1	0	0	0	0	0	0	0	0			
 mtub	T02617	Bacteria	Bacillati	Mycobacterium tuberculosis 7199-99	3	install	1	0	0	0	0	0	0	0	0			
 mtuc	T02652	Bacteria	Bacillati	Mycobacterium tuberculosis CAS/NITR204	3	install	1	0	0	0	0	0	0	0	0			
