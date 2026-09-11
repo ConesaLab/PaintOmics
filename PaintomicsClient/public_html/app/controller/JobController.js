@@ -166,9 +166,22 @@ function showInvalidStep1FormMessage(jobView) {
 /* Tells the server the answer for `jobID` arrived, so it can drop its copy of
    the result. Fire-and-forget: nothing waits on it, and a lost
    acknowledgement only means the server keeps the entry until its ten-minute
-   TTL (Queue.DELIVERED_RESULT_TTL). */
-function acknowledgeJobResult(jobID) {
-	$.ajax({type: "POST", url: SERVER_URL_JOB_RESULT_ACK + "/" + jobID, error: function () {}});
+   TTL (Queue.DELIVERED_RESULT_TTL).
+
+   `jqXHR` is the answer that arrived. The server names each delivery in an
+   X-Paintomics-Delivery header and removes the entry only for an
+   acknowledgement that hands the same token back: this request is not
+   sequenced before the next step, and the next step reuses the job id, so
+   an acknowledgement for step 1 that is slow on the wire could otherwise
+   land on step 2's finished result and remove it before the client had it.
+   An answer without the header (a job that is already gone) is not
+   acknowledged at all. */
+function acknowledgeJobResult(jobID, jqXHR) {
+	var delivery = (jqXHR && typeof jqXHR.getResponseHeader === "function")
+		? jqXHR.getResponseHeader("X-Paintomics-Delivery") : null;
+	if (!delivery) { return; }
+	$.ajax({type: "POST", url: SERVER_URL_JOB_RESULT_ACK + "/" + jobID,
+	        data: {delivery: delivery}, error: function () {}});
 }
 
 /* The response a status poll hands its error handler once it has given up
@@ -250,7 +263,7 @@ function JobController() {
 			// browser abandoning a request the server thread is still working
 			// on. See ServerConfiguration.js for the numbers.
 			timeout: JOB_STATUS_REQUEST_TIMEOUT,
-			success: function (response) {
+			success: function (response, textStatus, jqXHR) {
 				other.statusOutage = null;   // the server answered: any outage is over
 				if (response.success === false) {
 					if (response.status === "JobStatus.STARTED" || response.status === "started") {
@@ -280,7 +293,7 @@ function JobController() {
 					// copy. Until this lands (or the server's ten-minute TTL
 					// passes) a retried poll could still have collected it --
 					// see Queue.deliver_result in PySiQ.py.
-					acknowledgeJobResult(jobID);
+					acknowledgeJobResult(jobID, jqXHR);
 					callback(response, jobID, jobView, other);
 				}
 			},
@@ -301,7 +314,7 @@ function JobController() {
 				// The user came back five hours later and redid every step.
 				if (readableAnswer(response)) {
 					other.statusOutage = null;
-					acknowledgeJobResult(jobID);   // a failed job's message was received too
+					acknowledgeJobResult(jobID, response);   // a failed job's message was received too
 					errorHandler(response, jobID, jobView, other);
 					return;
 				}

@@ -593,6 +593,19 @@ class Application(object):
         #
         #  CHECK JOB STATUS
         #*******************************************************************************************
+        # The token that names this delivery of a result travels as a header on
+        # the finished (or failed) answer, and the client hands it back with
+        # its acknowledgement. See Queue.acknowledge for why the id alone
+        # would not do.
+        DELIVERY_HEADER = "X-Paintomics-Delivery"
+
+        def withDeliveryToken(rendered, jobID):
+            response, status = rendered
+            token = self.queue.delivery_token(jobID)
+            if token:
+                response.headers[DELIVERY_HEADER] = token
+            return response, status
+
         @self.app.route(SERVER_SUBDOMAIN + '/check_job_status/<path:jobID>', methods=['OPTIONS', 'POST'])
         def checkJobStatus(jobID):
             # Results that were handed out and never acknowledged are dropped
@@ -628,13 +641,13 @@ class Application(object):
                 result = self.queue.deliver_result(jobID)
                 if not hasattr(result, "getResponse"):
                     return jobGoneResponse()
-                return result.getResponse()
+                return withDeliveryToken(result.getResponse(), jobID)
             elif jobInstance.is_failed():
                 # Same rule as a finished job: the failure is delivered, not
                 # consumed, so a retry after a lost 400 still learns WHY the
                 # job failed instead of "not on the queue anymore".
                 self.queue.deliver_result(jobID)
-                return Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse()
+                return withDeliveryToken(Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse(), jobID)
             else:
                 # The job reports its own position now (src/common/JobProgress.py).
                 # What was here before was a closed-form guess,
@@ -690,12 +703,17 @@ class Application(object):
         #
         #  No ownership check, on purpose. /check_job_status has none either --
         #  a job id is a 10-character random string handed only to the browser
-        #  that submitted it -- and the worst this route can do with a guessed id
-        #  is what the old destructive read did on every poll.
+        #  that submitted it -- and a guessed id is not enough here anyway: the
+        #  entry goes only to an acknowledgement carrying the delivery token
+        #  that the finished answer itself carried.
         #*******************************************************************************************
         @self.app.route(SERVER_SUBDOMAIN + '/ack_job_result/<path:jobID>', methods=['OPTIONS', 'POST'])
         def acknowledgeJobResult(jobID):
-            removed = self.queue.acknowledge(jobID)
+            # `delivery` is the token the status answer carried in its
+            # X-Paintomics-Delivery header. Without it, or with one from an
+            # earlier run under the same id, nothing is removed.
+            delivery = request.form.get("delivery") or request.headers.get(DELIVERY_HEADER)
+            removed = self.queue.acknowledge(jobID, delivery)
             return Response().setContent({"success": True, "removed": removed}).getResponse()
         #*******************************************************************************************
         ##* COMMON JOB HANDLERS - END

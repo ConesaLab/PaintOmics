@@ -129,7 +129,10 @@ function drive(respond, options) {
 
     $ = function () { return {}; };
     $.ajax = function (opts) {
-        if (opts.url.indexOf(SERVER_URL_JOB_RESULT_ACK) === 0) { acks.push(opts.url); return; }
+        if (opts.url.indexOf(SERVER_URL_JOB_RESULT_ACK) === 0) {
+            acks.push({url: opts.url, delivery: opts.data && opts.data.delivery});
+            return;
+        }
         statusRequests.push({url: opts.url, timeout: opts.timeout, at: clock});
         respond(opts, statusRequests.length);
     };
@@ -176,72 +179,98 @@ function drive(respond, options) {
 
 const results = {};
 
+// What jQuery hands the handlers: the parsed body to `success`, the jqXHR to
+// both. A finished or failed answer carries the server's delivery token in
+// X-Paintomics-Delivery; nginx's pages and a job that is gone carry none.
+function answer(status, statusText, responseText, delivery) {
+    return {status: status, statusText: statusText, responseText: responseText,
+            getResponseHeader: function (name) {
+                return (name === "X-Paintomics-Delivery") ? (delivery || null) : null;
+            }};
+}
+function finished(opts, delivery) {
+    const body = {success: true, jobID: "JOB1"};
+    opts.success(body, "success", answer(200, "OK", JSON.stringify(body), delivery));
+}
+function running(opts) {
+    const body = {success: false, status: "JobStatus.STARTED", timeSpent: 10, estimatedFinishTime: 0};
+    opts.success(body, "success", answer(200, "OK", JSON.stringify(body), null));
+}
+
 // THE INCIDENT: one poll answered by nginx's 504 page, the next by the job.
 results.one504ThenDone = drive(function (opts, n) {
-    if (n === 1) { opts.error({status: 504, statusText: "Gateway Time-out", responseText: %(nginx504)s}, "error"); }
-    else { opts.success({success: true, jobID: "JOB1"}); }
+    if (n === 1) { opts.error(answer(504, "Gateway Time-out", %(nginx504)s), "error"); }
+    else { finished(opts, "deliv-1"); }
 });
 
 // A 502 from a proxy that reused a closed upstream connection (Drago, 09-08).
 results.one502ThenRunning = drive(function (opts, n) {
-    if (n === 1) { opts.error({status: 502, statusText: "Bad Gateway", responseText: %(nginx502)s}, "error"); }
-    else if (n === 2) { opts.success({success: false, status: "JobStatus.STARTED", timeSpent: 10, estimatedFinishTime: 0}); }
-    else { opts.success({success: true, jobID: "JOB1"}); }
+    if (n === 1) { opts.error(answer(502, "Bad Gateway", %(nginx502)s), "error"); }
+    else if (n === 2) { running(opts); }
+    else { finished(opts, "deliv-1"); }
 });
 
 // A dropped connection: status 0, no body.
 results.droppedThenDone = drive(function (opts, n) {
-    if (n === 1) { opts.error({status: 0, statusText: "error", responseText: ""}, "error"); }
-    else { opts.success({success: true, jobID: "JOB1"}); }
+    if (n === 1) { opts.error(answer(0, "error", ""), "error"); }
+    else { finished(opts, "deliv-1"); }
 });
 
 // The request's own timeout.
 results.timeoutThenDone = drive(function (opts, n) {
-    if (n === 1) { opts.error({status: 0, statusText: "timeout", responseText: undefined}, "timeout"); }
-    else { opts.success({success: true, jobID: "JOB1"}); }
+    if (n === 1) { opts.error(answer(0, "timeout", undefined), "timeout"); }
+    else { finished(opts, "deliv-1"); }
 });
 
 // A readable refusal: the job is gone. Final, whatever the status code.
 const JOB_GONE = JSON.stringify({success: false, status: "failed",
     message: "Your job is not on the queue anymore. Check your job list, if it's not there the process stopped and you must resend the data again."});
 results.jobGone = drive(function (opts) {
-    opts.error({status: 400, statusText: "BAD REQUEST", responseText: JOB_GONE}, "error");
+    opts.error(answer(400, "BAD REQUEST", JOB_GONE), "error");
 });
 results.jobGoneCustomHandler = drive(function (opts) {
-    opts.error({status: 400, statusText: "BAD REQUEST", responseText: JOB_GONE}, "error");
+    opts.error(answer(400, "BAD REQUEST", JOB_GONE), "error");
 }, {customHandler: true});
 
 // A failed job's own message: also final, and acknowledged.
 results.jobFailed = drive(function (opts) {
-    opts.error({status: 400, statusText: "BAD REQUEST", responseText: JSON.stringify(
-        {success: false, status: "JobStatus.FAILED", message: "Exception: AT PathwayAcquisitionServlet.py: pathwayAcquisitionStep1_PART2. ERROR MESSAGE: Errors detected in input files"})}, "error");
+    opts.error(answer(400, "BAD REQUEST", JSON.stringify(
+        {success: false, status: "JobStatus.FAILED", message: "Exception: AT PathwayAcquisitionServlet.py: pathwayAcquisitionStep1_PART2. ERROR MESSAGE: Errors detected in input files"}),
+        "deliv-failed"), "error");
 });
 
 // A server that never comes back: 504 on every attempt.
 results.persistent504 = drive(function (opts) {
-    opts.error({status: 504, statusText: "Gateway Time-out", responseText: %(nginx504)s}, "error");
+    opts.error(answer(504, "Gateway Time-out", %(nginx504)s), "error");
 });
 results.persistent504CustomHandler = drive(function (opts) {
-    opts.error({status: 504, statusText: "Gateway Time-out", responseText: %(nginx504)s}, "error");
+    opts.error(answer(504, "Gateway Time-out", %(nginx504)s), "error");
 }, {customHandler: true});
 results.persistent504NoURL = drive(function (opts) {
-    opts.error({status: 504, statusText: "Gateway Time-out", responseText: %(nginx504)s}, "error");
+    opts.error(answer(504, "Gateway Time-out", %(nginx504)s), "error");
 }, {showURL: false});
 
 // Every attempt takes the full request timeout to fail: the budget is time,
 // so this must give up after far fewer attempts than instant failures do.
 results.persistentTimeouts = drive(function (opts) {
     Date.now = (function (previous) { const t = previous() + JOB_STATUS_REQUEST_TIMEOUT; return function () { return t; }; })(Date.now);
-    opts.error({status: 0, statusText: "timeout", responseText: ""}, "timeout");
+    opts.error(answer(0, "timeout", ""), "timeout");
 });
 
 // An outage that clears must not be charged against the next one: 504 on
 // polls 1-3, running on 4, 504 on 5-7, done on 8. Counted together the seven
 // unanswered polls would spend the budget; counted per outage they do not.
 results.twoOutages = drive(function (opts, n) {
-    if (n === 4) { opts.success({success: false, status: "JobStatus.STARTED", timeSpent: 10, estimatedFinishTime: 0}); }
-    else if (n === 8) { opts.success({success: true, jobID: "JOB1"}); }
-    else { opts.error({status: 504, statusText: "Gateway Time-out", responseText: %(nginx504)s}, "error"); }
+    if (n === 4) { running(opts); }
+    else if (n === 8) { finished(opts, "deliv-1"); }
+    else { opts.error(answer(504, "Gateway Time-out", %(nginx504)s), "error"); }
+});
+
+// A finished answer that carries no delivery token (an older server): the
+// result is used, and nothing is acknowledged, because an acknowledgement
+// without a token names nothing.
+results.doneWithoutToken = drive(function (opts) {
+    finished(opts, null);
 });
 
 console.log(JSON.stringify(results));
@@ -331,7 +360,7 @@ class StatusPollRetryTest(unittest.TestCase):
         self.assertEqual(outcome["requests"], 1)
         self.assertEqual(len(outcome["handled"]), 1)
         self.assertIn("Errors detected in input files", outcome["handled"][0]["body"]["message"])
-        self.assertEqual(outcome["acks"], ["/ack_job_result/JOB1"],
+        self.assertEqual(outcome["acks"], [{"url": "/ack_job_result/JOB1", "delivery": "deliv-failed"}],
                          "the server keeps a failed job's message until the "
                          "client says it has it; nothing said so")
 
@@ -339,9 +368,21 @@ class StatusPollRetryTest(unittest.TestCase):
     # The result is acknowledged, so the server can drop its copy.
     # ------------------------------------------------------------------
 
-    def test_a_received_result_is_acknowledged(self):
+    def test_a_received_result_is_acknowledged_by_its_delivery_token(self):
+        """The token from the answer's X-Paintomics-Delivery header travels
+        back. Keyed on the job id alone, a slow acknowledgement for step 1
+        could remove step 2's result under the same id (the review finding
+        on #155); the server removes only the delivery the token names."""
         outcome = self.results["one504ThenDone"]
-        self.assertEqual(outcome["acks"], ["/ack_job_result/JOB1"])
+        self.assertEqual(outcome["acks"], [{"url": "/ack_job_result/JOB1", "delivery": "deliv-1"}])
+
+    def test_an_answer_without_a_token_is_used_but_not_acknowledged(self):
+        outcome = self.results["doneWithoutToken"]
+        self.assertEqual(outcome["callbacks"], 1)
+        self.assertEqual(outcome["acks"], [])
+
+    def test_a_job_that_is_gone_is_not_acknowledged(self):
+        self.assertEqual(self.results["jobGone"]["acks"], [])
 
     def test_an_unanswered_poll_acknowledges_nothing(self):
         """Acknowledging before the result is in hand would recreate the bug."""

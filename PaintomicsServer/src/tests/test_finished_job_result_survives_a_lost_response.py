@@ -22,7 +22,9 @@ Pinned here:
   * deliver_result hands the result out and leaves the entry in place, so a
     second read gets the same result;
   * acknowledge removes it, which is what the client does once the result is
-    in hand;
+    in hand -- and only for the delivery its token names, so a slow
+    acknowledgement for step 1 cannot remove step 2's result under the same
+    job id (the review finding on #155);
   * reap_delivered removes a delivered result after DELIVERED_RESULT_TTL and
     not before, and never touches a result nobody has been given;
   * get_result keeps its consuming semantics for its remaining callers, and
@@ -146,24 +148,83 @@ class AcknowledgementTest(unittest.TestCase):
         self.queue = _queue()
         _add(self.queue, "J1", JobStatus.FINISHED, _Result())
 
-    def test_acknowledging_a_delivered_result_removes_it(self):
+    def test_a_delivery_has_a_token(self):
+        self.assertIsNone(self.queue.delivery_token("J1"))
         self.queue.deliver_result("J1")
-        self.assertTrue(self.queue.acknowledge("J1"))
+        token = self.queue.delivery_token("J1")
+        self.assertTrue(token)
+        self.queue.deliver_result("J1")
+        self.assertEqual(self.queue.delivery_token("J1"), token,
+                         "a re-delivery renamed the delivery, so the token the "
+                         "first answer carried no longer acknowledges anything")
+
+    def test_acknowledging_a_delivered_result_by_its_token_removes_it(self):
+        self.queue.deliver_result("J1")
+        token = self.queue.delivery_token("J1")
+        self.assertTrue(self.queue.acknowledge("J1", token))
         self.assertNotIn("J1", self.queue.jobs)
         self.assertEqual(self.queue.deliver_result("J1"), JobStatus.NOT_QUEUED)
+
+    def test_a_stale_acknowledgement_does_not_remove_the_next_runs_result(self):
+        """The review finding on #155, as a sequence.
+
+        Step 1 under J1 finishes and is delivered; the client fires its
+        acknowledgement and, without waiting for it, submits step 2, which
+        enqueue() files as a new Job under J1. Step 2 finishes before the
+        slow acknowledgement lands. Keyed on the id alone that acknowledgement
+        would pop step 2's result -- which the client has never been given --
+        and the next poll would be told the job is gone.
+        """
+        queue = Queue()
+        queue.enqueue(fn=lambda: None, args=(), job_id="J1")
+        queue.jobs["J1"].status = JobStatus.FINISHED
+        queue.jobs["J1"].result = _Result("step 1")
+        queue.deliver_result("J1")
+        stale = queue.delivery_token("J1")
+
+        queue.enqueue(fn=lambda: None, args=(), job_id="J1")     # step 2 filed
+        queue.jobs["J1"].status = JobStatus.FINISHED
+        queue.jobs["J1"].result = _Result("step 2")
+
+        self.assertFalse(queue.acknowledge("J1", stale),
+                         "step 1's acknowledgement removed step 2's result")
+        self.assertIn("J1", queue.jobs)
+        self.assertEqual(queue.deliver_result("J1").getResponse(), "step 2")
+
+        # Even after step 2 has itself been delivered, the stale token names
+        # nothing; only step 2's own does.
+        self.assertFalse(queue.acknowledge("J1", stale))
+        self.assertIn("J1", queue.jobs)
+        self.assertTrue(queue.acknowledge("J1", queue.delivery_token("J1")))
+        self.assertNotIn("J1", queue.jobs)
+
+    def test_acknowledging_without_a_token_does_nothing(self):
+        self.queue.deliver_result("J1")
+        self.assertFalse(self.queue.acknowledge("J1", None))
+        self.assertFalse(self.queue.acknowledge("J1", ""))
+        self.assertIn("J1", self.queue.jobs)
+
+    def test_acknowledging_an_undelivered_result_does_nothing(self):
+        """No delivery, no token, nothing to match: the entry stays for the
+        poll that has not arrived yet."""
+        self.assertFalse(self.queue.acknowledge("J1", "anything"))
+        self.assertIn("J1", self.queue.jobs)
 
     def test_acknowledging_a_running_job_does_nothing(self):
         """A stale or guessed id must not kill a job that is still running."""
         _add(self.queue, "J2", JobStatus.STARTED)
-        self.assertFalse(self.queue.acknowledge("J2"))
+        self.assertFalse(self.queue.acknowledge("J2", "anything"))
         self.assertIn("J2", self.queue.jobs)
 
     def test_acknowledging_twice_is_harmless(self):
-        self.queue.acknowledge("J1")
-        self.assertFalse(self.queue.acknowledge("J1"))
+        self.queue.deliver_result("J1")
+        token = self.queue.delivery_token("J1")
+        self.queue.acknowledge("J1", token)
+        self.assertFalse(self.queue.acknowledge("J1", token))
 
     def test_acknowledging_an_unknown_job_is_harmless(self):
-        self.assertFalse(self.queue.acknowledge("nope"))
+        self.assertFalse(self.queue.acknowledge("nope", "anything"))
+        self.assertIsNone(self.queue.delivery_token("nope"))
 
 
 class ReaperTest(unittest.TestCase):
@@ -259,11 +320,21 @@ class HandlerReadsWithoutConsumingTest(unittest.TestCase):
         self.assertIn("deliver_result(jobID)", failed)
         self.assertIn("error_message", failed)
 
-    def test_the_ack_route_exists(self):
+    def test_both_terminal_branches_carry_the_delivery_token(self):
+        """The header the client hands back with its acknowledgement."""
+        finished = self.body.split("is_finished()", 1)[1].split("is_failed()", 1)[0]
+        failed = self.body.split("is_failed()", 1)[1].split("else:", 1)[0]
+        self.assertIn("withDeliveryToken(", finished)
+        self.assertIn("withDeliveryToken(", failed)
+        source = inspect.getsource(self.module.Application.__init__)
+        self.assertIn('DELIVERY_HEADER = "X-Paintomics-Delivery"', source)
+
+    def test_the_ack_route_exists_and_demands_the_token(self):
         source = inspect.getsource(self.module.Application.__init__)
         self.assertIn("'/ack_job_result/<path:jobID>'", source)
         body = source.split("def acknowledgeJobResult", 1)[1].split("\n        def ", 1)[0]
-        self.assertIn("self.queue.acknowledge(jobID)", body)
+        self.assertIn("self.queue.acknowledge(jobID, delivery)", body)
+        self.assertIn('request.form.get("delivery")', body)
 
 
 def main():

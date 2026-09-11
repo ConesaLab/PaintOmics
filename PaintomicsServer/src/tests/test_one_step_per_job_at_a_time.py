@@ -214,7 +214,7 @@ class OneStepPerJobTest(_QueueCase):
         self.queue.enqueue(fn=_work, args=(), job_id="JOB1")
         self.queue.jobs["JOB1"].status = JobStatus.FAILED
         self.queue.deliver_result("JOB1")       # what the status poll does
-        self.queue.acknowledge("JOB1")          # what the client does with the answer
+        self.queue.acknowledge("JOB1", self.queue.delivery_token("JOB1"))  # what the client does with the answer
 
         self.assertNotIn("JOB1", self.queue.jobs)
         self.queue.enqueue(fn=_work, args=(), job_id="JOB1")

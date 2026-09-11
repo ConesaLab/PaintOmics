@@ -32,6 +32,7 @@
 
 import logging
 import time
+import uuid
 from threading import RLock as threading_lock, Thread
 from collections import deque
 from enum import Enum
@@ -232,21 +233,48 @@ class Queue:
                 return job.status
             if job.delivered_at is None:
                 job.delivered_at = time.monotonic()
-                logging.info("Delivering result of job " + job_id)
+                job.delivery_id = uuid.uuid4().hex
+                logging.info("Delivering result of job " + job_id
+                             + " (delivery " + job.delivery_id + ")")
             return job.result
         finally:
             self.lock.release() #UNLOCK CACHE
 
-    def acknowledge(self, job_id):
-        """The client has the result: drop the entry. True when one was dropped.
+    def delivery_token(self, job_id):
+        """The token that names the current delivery of `job_id`'s result, or
+        None when nothing has been delivered. The status route sends it with
+        the result and acknowledge() demands it back."""
+        try:
+            self.lock.acquire() #LOCK CACHE
+            job = self.jobs.get(job_id, None)
+            return job.delivery_id if job is not None else None
+        finally:
+            self.lock.release() #UNLOCK CACHE
 
-        Only a finished or failed job is dropped; acknowledging a running job
-        (a stale request, a wrong id) changes nothing.
+    def acknowledge(self, job_id, delivery):
+        """The client has the result named by `delivery`: drop the entry.
+        True when one was dropped.
+
+        The token, not just the id, decides. The client's acknowledgement is
+        fire-and-forget and the next step reuses the job id (enqueue clears
+        the finished run and files a new Job under it), so an acknowledgement
+        for step 1 that is slow on the wire can arrive after step 2 has been
+        filed -- and, if step 2 was quick, after step 2 has finished. Keyed on
+        the id alone it would pop step 2's result, which the client has not
+        been given, and the retry would be told the job is gone: the bug this
+        whole mechanism exists to remove, back through a side door. Each
+        delivery has its own token, so a stale acknowledgement matches
+        nothing and changes nothing.
         """
         try:
             self.lock.acquire() #LOCK CACHE
             job = self.jobs.get(job_id, None)
             if job is None or job.status not in (JobStatus.FINISHED, JobStatus.FAILED):
+                return False
+            if not delivery or job.delivery_id != delivery:
+                logging.info("Job " + job_id + ": acknowledgement for delivery "
+                             + str(delivery) + " does not name the current one ("
+                             + str(job.delivery_id) + "), ignored")
                 return False
             logging.info("Job " + job_id + " acknowledged, removing it")
             self.jobs.pop(job_id, None)
@@ -424,7 +452,11 @@ class Job:
         self.started_at = None
         # When the result was first handed to a client (deliver_result). None
         # until then; the reaper only looks at entries that carry a stamp.
+        # delivery_id names that delivery: the client hands it back to
+        # acknowledge(), and a token from an earlier run under the same job
+        # id matches nothing.
         self.delivered_at = None
+        self.delivery_id = None
 
     def set_id(self, _id):
         self.id = _id
