@@ -205,12 +205,16 @@ class OneStepPerJobTest(_QueueCase):
     def test_a_failed_job_that_was_polled_can_also_be_retried(self):
         """The path that already worked must keep working.
 
-        When the client does observe the failure, checkJobStatus removes the
-        entry itself, so the retry finds nothing there.
+        When the client does observe the failure it acknowledges it, which
+        removes the entry, so the retry finds nothing there. (The status poll
+        used to consume the entry itself, through get_result; it now delivers
+        without consuming and the client's acknowledgement does the removing.
+        Either way the entry is gone before the retry.)
         """
         self.queue.enqueue(fn=_work, args=(), job_id="JOB1")
         self.queue.jobs["JOB1"].status = JobStatus.FAILED
-        self.queue.get_result("JOB1")           # what the status poll does
+        self.queue.deliver_result("JOB1")       # what the status poll does
+        self.queue.acknowledge("JOB1")          # what the client does with the answer
 
         self.assertNotIn("JOB1", self.queue.jobs)
         self.queue.enqueue(fn=_work, args=(), job_id="JOB1")

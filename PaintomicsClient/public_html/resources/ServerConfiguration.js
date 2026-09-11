@@ -60,6 +60,11 @@ SERVER_URL_PA_TOUCH_JOB = SERVER_URL + "pa_touch_job";
 SERVER_URL_PA_SAVE_SHARING_OPTIONS = SERVER_URL + "pa_save_sharing_options";
 SERVER_URL_PA_APPLY_REPLICATE_MAPPING = SERVER_URL + "pa_apply_replicate_mapping";
 SERVER_URL_JOB_STATUS= SERVER_URL + "check_job_status";
+/* Posted once a finished or failed job's answer has been received, so the
+   server can drop its copy. The result is kept until then (or for ten
+   minutes) so a status poll whose response was lost in transit can be
+   retried: see Queue.deliver_result in PySiQ.py. */
+SERVER_URL_JOB_RESULT_ACK = SERVER_URL + "ack_job_result";
 SERVER_URL_GET_CLUSTER_IMAGE= SERVER_URL + "get_cluster_image";
 SERVER_URL_GET_MESSAGE = SERVER_URL + "um_get_message";
 SERVER_URL_ADJUST_PVALUES = SERVER_URL + "pa_adjust_pvalues";
@@ -180,4 +185,25 @@ messageDialog = null;
 UPLOAD_TIMEOUT=120; /*IN SECONDS*/
 MAX_LIVE_JOB=365; /*IN DAYS*/
 CHECK_STATUS_TIMEOUT=5000; /*MILISECONDS*/
+/* A status poll that gets no READABLE answer -- nginx's 502/504 page, the
+   empty body of a dropped connection, a request the browser timed out -- is
+   retried rather than reported. These are the retry's numbers; the rule is
+   statusPollRetryDelay in Util.js, and both polls (check_job_status in
+   JobController.js, ai_interpret_status in PA_Step3Views.js) use it.
+
+   The request timeout must be LONGER than the proxy's: 60 s on
+   paintomics.uv.es, nginx's default uwsgi_read_timeout. Shorter, and the
+   browser gives up while the uWSGI thread is still busy with that poll, then
+   retries on top of it -- two of four threads spent on one client at the
+   moment the server is weakest. At 65 s the proxy's 504 always lands first.
+
+   The budget is wall-clock time since the first unanswered request, not a
+   number of attempts: five 65 s timeouts and five instant 502s are very
+   different waits. Five minutes covers the longest stall measured (61 s, the
+   2026-09-11 poll) several times over, and is half the server's
+   DELIVERED_RESULT_TTL, so every retry lands while the result is still kept. */
+JOB_STATUS_REQUEST_TIMEOUT = 65000;   /*MILISECONDS*/
+JOB_STATUS_RETRY_FIRST_DELAY = 5000;  /*MILISECONDS; doubles each time*/
+JOB_STATUS_RETRY_MAX_DELAY = 60000;   /*MILISECONDS*/
+JOB_STATUS_RETRY_BUDGET = 300000;     /*MILISECONDS since the first unanswered request*/
 MAX_PATHWAYS_OPENED=5;

@@ -171,6 +171,11 @@ class Queue:
         JobStatus enum back, which the status handler then called getResponse()
         on. Locking makes "who gets the result" a decision rather than a race,
         and exactly one caller wins.
+
+        The status poll no longer takes results through here: see
+        deliver_result. This stays for the one-shot pickups (the input
+        converter, "Choose for me", the AI batch) and for enqueue(), which
+        clears a finished run so the next step can reuse the id.
         """
         try:
             self.lock.acquire() #LOCK CACHE
@@ -181,6 +186,97 @@ class Queue:
                     self.jobs.pop(job_id, None)
                 return job.result
             return JobStatus.NOT_QUEUED
+        finally:
+            self.lock.release() #UNLOCK CACHE
+
+    # How long a delivered result stays collectable after the first time it was
+    # handed out. The client acknowledges a result it has received, which
+    # removes the entry at once; this is the ceiling for a client that never
+    # does -- a closed tab, a browser that received the answer and crashed.
+    # Ten minutes is twice the client's retry budget (JOB_STATUS_RETRY_BUDGET
+    # in ServerConfiguration.js), so every retry the client will ever make
+    # lands while the result is still there.
+    DELIVERED_RESULT_TTL = 600
+
+    def deliver_result(self, job_id):
+        """Hand out a finished (or failed) job's result WITHOUT consuming it.
+
+        Why this exists. get_result pops the entry the first time it is read,
+        so the one HTTP response carrying the result was the only copy that
+        would ever exist. On 2026-09-11 a status poll for a finishing job on
+        paintomics.uv.es took 61 s (RAM pressure), nginx answered it with a
+        504 after its default 60 s, and the job then finished and was stored
+        at 13:09:42 with nobody polling; the user came back five hours later
+        and redid every step. A client that retries such a poll is only half
+        the fix -- had the lost response been the one carrying the result,
+        the retry would have been told "Your job is not on the queue anymore".
+
+        So the first delivery stamps `delivered_at` and leaves the entry in
+        place. It is removed by acknowledge() when the client confirms it has
+        the result, by reap_delivered() once DELIVERED_RESULT_TTL has passed,
+        or by enqueue() when the next step reuses the id. A second poller that
+        arrives before any of those gets the same result, which is the honest
+        answer: the job did finish, and both tabs are drawing the same job.
+
+        Returns the job's result for a FINISHED or FAILED job (for a failed
+        job that is whatever the worker stored, usually None; read the error
+        off the job itself), the JobStatus enum for one still running, and
+        JobStatus.NOT_QUEUED for one that is not here.
+        """
+        try:
+            self.lock.acquire() #LOCK CACHE
+            job = self.jobs.get(job_id, None)
+            if job is None:
+                return JobStatus.NOT_QUEUED
+            if job.status not in (JobStatus.FINISHED, JobStatus.FAILED):
+                return job.status
+            if job.delivered_at is None:
+                job.delivered_at = time.monotonic()
+                logging.info("Delivering result of job " + job_id)
+            return job.result
+        finally:
+            self.lock.release() #UNLOCK CACHE
+
+    def acknowledge(self, job_id):
+        """The client has the result: drop the entry. True when one was dropped.
+
+        Only a finished or failed job is dropped; acknowledging a running job
+        (a stale request, a wrong id) changes nothing.
+        """
+        try:
+            self.lock.acquire() #LOCK CACHE
+            job = self.jobs.get(job_id, None)
+            if job is None or job.status not in (JobStatus.FINISHED, JobStatus.FAILED):
+                return False
+            logging.info("Job " + job_id + " acknowledged, removing it")
+            self.jobs.pop(job_id, None)
+            return True
+        finally:
+            self.lock.release() #UNLOCK CACHE
+
+    def reap_delivered(self, ttl=None, now=None):
+        """Drop every delivered result older than `ttl` seconds.
+
+        Called from the status route rather than from a timer thread: the
+        jobs dict holds a handful of entries, so the scan costs nothing, and
+        a sweep that only happens while someone is polling cannot be the
+        thread that dies unnoticed. Returns the ids it removed.
+        """
+        if ttl is None:
+            ttl = self.DELIVERED_RESULT_TTL
+        if now is None:
+            now = time.monotonic()
+        try:
+            self.lock.acquire() #LOCK CACHE
+            expired = [job_id for job_id, job in self.jobs.items()
+                       if job.delivered_at is not None
+                       and job.status in (JobStatus.FINISHED, JobStatus.FAILED)
+                       and now - job.delivered_at >= ttl]
+            for job_id in expired:
+                logging.info("Result of job " + job_id + " was delivered "
+                             + str(ttl) + "s ago and never acknowledged, removing it")
+                self.jobs.pop(job_id, None)
+            return expired
         finally:
             self.lock.release() #UNLOCK CACHE
 
@@ -326,6 +422,9 @@ class Job:
         # were silently billed as job runtime.
         self.queued_at = time.monotonic()
         self.started_at = None
+        # When the result was first handed to a client (deliver_result). None
+        # until then; the reaper only looks at entries that carry a stamp.
+        self.delivered_at = None
 
     def set_id(self, _id):
         self.id = _id

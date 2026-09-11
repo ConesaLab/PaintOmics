@@ -759,6 +759,82 @@ function deleteCredentials() {
 }
 
 
+/*
+ * The answer a request got, when there is one the client can act on.
+ *
+ * Every handled server error is JSON with a message. nginx's 502 and 504
+ * pages are HTML, a dropped connection has no body, and a request the browser
+ * timed out has none either. Returns the parsed object, or null for anything
+ * that is not a JSON object -- which is the whole test the status polls
+ * apply: a readable answer is a verdict about the job, an unreadable one is a
+ * verdict about the wire, and only the second is worth asking again.
+ */
+function readableAnswer(jqXHR) {
+    var body = jqXHR && jqXHR.responseText;
+    if (typeof body !== "string" || body === "") { return null; }
+    try {
+        var parsed = JSON.parse(body);
+        return (parsed && typeof parsed === "object") ? parsed : null;
+    } catch (notJson) {
+        return null;
+    }
+}
+
+/*
+ * What happened to a request that got no readable answer, in words: the HTTP
+ * status when there was one ("HTTP 504 Gateway Time-out"), otherwise which
+ * of the two no-status cases it was. jQuery reports "timeout" as the
+ * textStatus of a request its own `timeout` cut off, and a status of 0 for a
+ * connection that was dropped or refused.
+ */
+function describeUnansweredRequest(jqXHR, textStatus) {
+    var status = Number(jqXHR && jqXHR.status) || 0;
+    if (status > 0) {
+        var text = (jqXHR && jqXHR.statusText && jqXHR.statusText !== "error")
+            ? " " + jqXHR.statusText : "";
+        return "HTTP " + status + text;
+    }
+    if (textStatus === "timeout" || (jqXHR && jqXHR.statusText === "timeout")) {
+        return "no answer within " + Math.round(JOB_STATUS_REQUEST_TIMEOUT / 1000) + " s";
+    }
+    return "the connection was dropped before any answer";
+}
+
+/* The line the dialogs show for an answer they cannot read. It used to be
+   "Unable to parse the error message.", which describes the client's
+   difficulty; the guest whose report reached us on 2026-09-11 had been shown
+   exactly that for an nginx 504, and neither they nor we could tell from the
+   report what had happened. Say what the server sent instead. */
+function unreadableAnswerMessage(jqXHR, textStatus) {
+    return "The server did not send a readable answer (" +
+        describeUnansweredRequest(jqXHR, textStatus) + ").";
+}
+
+/*
+ * When to try a status poll again, and when to stop.
+ *
+ * `outage` is the poll chain's bookkeeping for the current run of unanswered
+ * requests: {since, attempts}, reset to null by the caller as soon as the
+ * server answers, so a long job with the occasional blip never runs out.
+ * `now` is Date.now() in the browser (the tests pass a clock). Returns the
+ * delay in ms before the next attempt, or -1 once the budget is spent.
+ *
+ * Delays double from JOB_STATUS_RETRY_FIRST_DELAY and stop growing at
+ * JOB_STATUS_RETRY_MAX_DELAY: 5, 10, 20, 40, 60, 60 s ... The budget is
+ * wall-clock time since the first failure, so a retry is scheduled only when
+ * it would start inside JOB_STATUS_RETRY_BUDGET; after that the caller
+ * reports. Time, not a count, because each attempt can itself take
+ * JOB_STATUS_REQUEST_TIMEOUT to fail.
+ */
+function statusPollRetryDelay(outage, now) {
+    outage.attempts = (outage.attempts || 0) + 1;
+    if (!outage.since) { outage.since = now; }
+    var delay = Math.min(JOB_STATUS_RETRY_FIRST_DELAY * Math.pow(2, outage.attempts - 1),
+                         JOB_STATUS_RETRY_MAX_DELAY);
+    if ((now - outage.since) + delay > JOB_STATUS_RETRY_BUDGET) { return -1; }
+    return delay;
+}
+
 function ajaxErrorHandler(responseObj) {
     if (debugging === true)
         debugger
@@ -778,9 +854,9 @@ function ajaxErrorHandler(responseObj) {
         // keeps both paths consistent and drops the eval entirely.
         err = JSON.parse(responseObj.responseText);
     } catch (error) {
-        err = {message: "Unable to parse the error message."};
+        err = {message: unreadableAnswerMessage(responseObj)};
     } finally {
-        err = err || {message: "Unable to parse the error message."};
+        err = err || {message: unreadableAnswerMessage(responseObj)};
     }
 
     if (err.message && err.message.indexOf("User not valid") !== -1) {
@@ -793,6 +869,23 @@ function ajaxErrorHandler(responseObj) {
         return;
     }
 
+    var adminLink = "If the error persists, please contact the " +
+        "<a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.";
+
+    // A status poll that ran out of retries reports through here with a body
+    // it wrote itself (unansweredStatusResponse in JobController.js). The
+    // failure is the wire, not the server's code, so neither the cache advice
+    // nor the "happened on the server" wording below applies, and the title
+    // says what it was rather than "Internal error".
+    if (err.unanswered) {
+        showErrorMessage("The server did not answer", {
+            message: err.message + "</br>" + adminLink,
+            hidden: err.detail || "",
+            showButton: true
+        });
+        return;
+    }
+
     // The server reports its own exceptions with an "extra" block naming the
     // Python file and exception type. Telling the user to clear their browser
     // cache for one of those sends them after something they cannot fix -- a
@@ -800,8 +893,6 @@ function ajaxErrorHandler(responseObj) {
     // client state. Keep that advice for errors with no server-side origin,
     // where a stale cached model genuinely can be the cause.
     var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
-    var adminLink = "If the error persists, please contact the " +
-        "<a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.";
     var halves = splitServerError(err.message);
 
     showErrorMessage("Oops..Internal error!", {
@@ -957,7 +1048,7 @@ function extJSErrorHandler(form, responseObj) {
     try {
         err = JSON.parse(responseObj.response.responseText);
     } catch (error) {
-        err = {message: "Unable to parse the error message."};
+        err = {message: unreadableAnswerMessage(responseObj.response)};
     }
 
     if (err.message && err.message.indexOf("User not valid") !== -1) {

@@ -595,6 +595,10 @@ class Application(object):
         #*******************************************************************************************
         @self.app.route(SERVER_SUBDOMAIN + '/check_job_status/<path:jobID>', methods=['OPTIONS', 'POST'])
         def checkJobStatus(jobID):
+            # Results that were handed out and never acknowledged are dropped
+            # here, on the way in, rather than by a timer thread: see
+            # Queue.reap_delivered.
+            self.queue.reap_delivered()
             jobInstance = self.queue.fetch_job(jobID)
 
             def jobGoneResponse():
@@ -603,23 +607,33 @@ class Application(object):
             if jobInstance is None:
                 return jobGoneResponse()
             elif jobInstance.is_finished():
-                # Reading the job and consuming it are two steps, and the
-                # client polls this route every six seconds -- two tabs on one
-                # job, or a refresh landing beside a poll, can both get past
-                # fetch_job before either takes the result. get_result then
-                # returns the JobStatus enum to the loser, and calling
-                # getResponse() on it raised
+                # The result is READ here, not consumed. It used to be taken
+                # with get_result, which pops the entry, so the one HTTP
+                # response carrying it was the only copy that would ever
+                # exist -- and on 2026-09-11 that response was a 504 (see
+                # Queue.deliver_result). The entry now stays until the client
+                # acknowledges it (/ack_job_result), the delivered-result TTL
+                # passes, or the next step reuses the id, so a poll retried
+                # after a lost response still gets the result.
+                #
+                # Reading the job and delivering it are still two steps, and
+                # two tabs on one job -- or a refresh landing beside a poll --
+                # can both get past fetch_job. That used to hand the loser the
+                # JobStatus enum, and calling getResponse() on it raised
                 #     AttributeError: 'JobStatus' object has no attribute 'getResponse'
-                # which reached the browser as a 500 for a job that had just
-                # *succeeded*. Whoever arrives second is in the same position as
-                # someone polling a job that is already gone, so they get the
-                # same answer.
-                result = self.queue.get_result(jobID)
+                # a 500 for a job that had just *succeeded*. Both now get the
+                # result; and if an acknowledgement or the reaper has removed
+                # it between the two steps, the loser gets the same answer as
+                # anyone polling a job that is gone.
+                result = self.queue.deliver_result(jobID)
                 if not hasattr(result, "getResponse"):
                     return jobGoneResponse()
                 return result.getResponse()
             elif jobInstance.is_failed():
-                self.queue.get_result(jobID) #remove job
+                # Same rule as a finished job: the failure is delivered, not
+                # consumed, so a retry after a lost 400 still learns WHY the
+                # job failed instead of "not on the queue anymore".
+                self.queue.deliver_result(jobID)
                 return Response().setStatus(400).setContent({"success": False, "status" : str(jobInstance.get_status()), "message": jobInstance.error_message}).getResponse()
             else:
                 # The job reports its own position now (src/common/JobProgress.py).
@@ -663,6 +677,26 @@ class Application(object):
                             (progress["remainingLow"] + progress["remainingHigh"]) / 2.0, 1)
 
                 return Response().setContent(content).getResponse()
+
+        #*******************************************************************************************
+        #  ACKNOWLEDGE A DELIVERED RESULT
+        #
+        #  The client posts here once it has received a finished or failed job's
+        #  answer from /check_job_status, and the queue drops the entry. Until
+        #  then (or until Queue.DELIVERED_RESULT_TTL passes) the result stays
+        #  collectable, so a status poll whose response was lost in transit can
+        #  be retried. Fire-and-forget on the client: a lost acknowledgement
+        #  costs nothing but ten minutes of one entry in the jobs dict.
+        #
+        #  No ownership check, on purpose. /check_job_status has none either --
+        #  a job id is a 10-character random string handed only to the browser
+        #  that submitted it -- and the worst this route can do with a guessed id
+        #  is what the old destructive read did on every poll.
+        #*******************************************************************************************
+        @self.app.route(SERVER_SUBDOMAIN + '/ack_job_result/<path:jobID>', methods=['OPTIONS', 'POST'])
+        def acknowledgeJobResult(jobID):
+            removed = self.queue.acknowledge(jobID)
+            return Response().setContent({"success": True, "removed": removed}).getResponse()
         #*******************************************************************************************
         ##* COMMON JOB HANDLERS - END
         #############################################################################################

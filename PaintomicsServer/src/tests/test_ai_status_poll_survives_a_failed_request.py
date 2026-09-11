@@ -33,8 +33,19 @@ CLIENT_ROOT = os.path.abspath(os.path.join(
     "PaintomicsClient", "public_html"))
 STEP3_VIEWS = os.path.join(CLIENT_ROOT, "app", "view",
                            "PathwayAcquisitionViews", "PA_Step3Views.js")
+UTIL = os.path.join(CLIENT_ROOT, "app", "view", "common", "Util.js")
+SERVER_CONF = os.path.join(CLIENT_ROOT, "resources", "ServerConfiguration.js")
 
 HEADER = "this.pollAIStatus = function()"
+# The poll shares its rule for unreadable answers with the job status poll:
+# these come from Util.js, and the numbers from ServerConfiguration.js.
+UTIL_FUNCTIONS = ("readableAnswer", "describeUnansweredRequest", "statusPollRetryDelay")
+CONSTANTS = ("JOB_STATUS_REQUEST_TIMEOUT", "JOB_STATUS_RETRY_FIRST_DELAY",
+             "JOB_STATUS_RETRY_MAX_DELAY", "JOB_STATUS_RETRY_BUDGET")
+
+NGINX_504 = ("<html>\r\n<head><title>504 Gateway Time-out</title></head>\r\n"
+             "<body>\r\n<center><h1>504 Gateway Time-out</h1></center>\r\n"
+             "<hr><center>nginx/1.18.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n")
 
 
 def read(path):
@@ -59,19 +70,43 @@ def extract_block(source, header):
     raise AssertionError("unbalanced braces after %s" % header)
 
 
+def extract_function(source, name):
+    return extract_block(source, "function %s(" % name)
+
+
+def constant_lines(source):
+    lines = []
+    for name in CONSTANTS:
+        for line in source.splitlines():
+            if line.startswith(name + " ="):
+                lines.append(line.split("/*")[0].strip())
+                break
+        else:
+            raise AssertionError("%s is not defined in ServerConfiguration.js" % name)
+    return "\n".join(lines)
+
+
 # The real function, lifted out and driven by a stubbed jQuery. `respond`
 # decides what the single ajax call does, which is the only variable here.
 HARNESS = """
+%(constants)s
+%(util)s
+const console = {info() {}, warn() {}, error() {}, log: globalThis.console.log};
 const results = {};
 
 // `chain` false runs a single tick, which is all most of these need. `chain`
 // true keeps firing whatever the poll scheduled, up to a hard ceiling, which is
 // how "it eventually stops" can be asserted at all -- a stubbed setTimeout that
 // only records can never distinguish "stopped" from "scheduled once more".
+// Firing a timer advances a virtual clock by its delay, so the five-minute
+// budget for unreadable answers is measured rather than approximated.
 function drive(respond, chain) {
     const scheduled = [];
     const calls = [];
     const shown = [];
+    const timeouts = [];
+    let clock = 0;
+    Date.now = function () { return clock; };
     const setTimeout_ = function (fn, delay) { scheduled.push({fn: fn, delay: delay}); return scheduled.length; };
     const AI_POLL_INTERVAL = 3000;
     const AI_POLL_MAX_FAILURES = 5;
@@ -80,6 +115,7 @@ function drive(respond, chain) {
     const $ = function () { return {}; };
     $.ajax = function (opts) {
         calls.push(opts.url);
+        timeouts.push(opts.timeout);
         respond(opts, calls.length);
     };
 
@@ -100,19 +136,23 @@ function drive(respond, chain) {
         // well above AI_POLL_MAX_FAILURES and reaching it counts as "never
         // stopped".
         let fired = 0;
+        const delays = [];
         while (scheduled.length && fired < 40) {
             const next = scheduled.shift();
             fired++;
+            delays.push(next.delay);
+            clock += next.delay;
             next.fn();
         }
         return {polls: calls.length, stopped: scheduled.length === 0 && fired < 40,
+                delays: delays, timeouts: timeouts, clock: clock,
                 shown: shown, lastDetail: shown.length ? shown[shown.length - 1].detail : null,
                 lastStatus: shown.length ? shown[shown.length - 1].status : null};
     }
 
     return {polls: calls.length, scheduled: scheduled.length,
             firstDelay: scheduled.length ? scheduled[0].delay : null,
-            shown: shown};
+            timeouts: timeouts, shown: shown};
 }
 
 // A request that never landed: jQuery calls `error`, or nothing at all when no
@@ -190,6 +230,27 @@ results.sessionExpired = drive(function (opts) {
         {success: false, message: "CredentialException: User not valid. please log-in again."})});
 }, true);
 
+// AN UNREADABLE ANSWER. nginx's 504 page is what the job status poll died on
+// (2026-09-11, paintomics.uv.es); this poll goes through the same proxy and
+// must follow the same rule: retry on a clock, then say so.
+const NGINX_504 = %(nginx504)s;
+results.one504ThenDone = drive(function (opts, n) {
+    if (n === 1) { opts.error({status: 504, statusText: "Gateway Time-out", responseText: NGINX_504}, "error"); }
+    else { opts.success({success: true, status: "done", percent: 100, detail: "Ready"}); }
+}, true);
+
+results.persistent504 = drive(function (opts) {
+    opts.error({status: 504, statusText: "Gateway Time-out", responseText: NGINX_504}, "error");
+}, true);
+
+// Five 504s, then a healthy answer, then five more: an outage that cleared
+// must not be charged against the next one.
+results.twoOutages = drive(function (opts, n) {
+    if (n === 6) { opts.success({success: true, status: "interpreting", percent: 45, detail: "..."}); }
+    else if (n === 12) { opts.success({success: true, status: "done", percent: 100, detail: "Ready"}); }
+    else { opts.error({status: 504, statusText: "Gateway Time-out", responseText: NGINX_504}, "error"); }
+}, true);
+
 console.log(JSON.stringify(results));
 """
 
@@ -215,7 +276,13 @@ class StatusPollChainTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         block = extract_block(read(STEP3_VIEWS), HEADER)
-        cls.results = run_node(HARNESS % {"poll": block})
+        util = read(UTIL)
+        cls.results = run_node(HARNESS % {
+            "poll": block,
+            "constants": constant_lines(read(SERVER_CONF)),
+            "util": "\n".join(extract_function(util, name) for name in UTIL_FUNCTIONS),
+            "nginx504": json.dumps(NGINX_504),
+        })
 
     def test_a_dropped_request_does_not_end_the_chain(self):
         """The measured bug: one ERR http=0 and the widget never updates again."""
@@ -311,6 +378,55 @@ class StatusPollChainTest(unittest.TestCase):
         self.assertTrue(outcome["stopped"])
         self.assertIn("session expired", outcome["lastDetail"])
         self.assertNotIn("no longer stored", outcome["lastDetail"])
+
+    # ------------------------------------------------------------------
+    # An answer the client cannot read: nginx's 502/504 page, an empty body,
+    # the request's own timeout. Same rule as the job status poll
+    # (test_status_poll_retries_unreadable_answers): retried on a clock, for
+    # five minutes since the first one, then reported with the HTTP status.
+    # ------------------------------------------------------------------
+
+    def test_a_504_page_does_not_end_the_chain(self):
+        outcome = self.results["one504ThenDone"]
+        self.assertTrue(outcome["stopped"])
+        self.assertEqual(outcome["lastStatus"], "done",
+                         "the report never arrived after one 504")
+        self.assertEqual(outcome["polls"], 2)
+
+    def test_unreadable_answers_back_off_5_10_20_40_60(self):
+        outcome = self.results["persistent504"]
+        self.assertEqual(outcome["delays"][:5], [5000, 10000, 20000, 40000, 60000],
+                         outcome["delays"])
+
+    def test_a_proxy_that_never_answers_is_given_up_on_by_the_clock(self):
+        outcome = self.results["persistent504"]
+        self.assertTrue(outcome["stopped"], "the poll never stopped")
+        self.assertGreaterEqual(outcome["clock"], 240000,
+                                "gave up before four minutes: the budget is a count")
+        self.assertLessEqual(outcome["clock"], 300000)
+        self.assertEqual(outcome["lastStatus"], "error")
+        self.assertIn("HTTP 504", outcome["lastDetail"])
+        self.assertIn("may still be running", outcome["lastDetail"])
+
+    def test_an_answer_resets_the_unreadable_budget(self):
+        outcome = self.results["twoOutages"]
+        self.assertEqual(outcome["lastStatus"], "done",
+                         "the second outage was charged for the first")
+        self.assertEqual(outcome["polls"], 12)
+        # delays[5] is the healthy answer's normal cadence; the second
+        # outage that follows starts its backoff over at 5 s.
+        self.assertEqual(outcome["delays"][5], 3000, outcome["delays"])
+        self.assertEqual(outcome["delays"][6], 5000, outcome["delays"])
+
+    def test_every_status_request_times_out_after_the_proxy_would(self):
+        """65 s against nginx's 60 s default, so the proxy's 504 -- which is
+        retried -- ends a stalled poll, never the browser abandoning a
+        request the server thread is still busy with."""
+        for name, outcome in self.results.items():
+            with self.subTest(case=name):
+                for timeout in outcome["timeouts"]:
+                    self.assertIsNotNone(timeout, "the status request has no timeout")
+                    self.assertGreater(timeout, 60000)
 
     def test_a_failure_that_clears_does_not_consume_the_budget(self):
         """Two blips then success must still deliver the report.

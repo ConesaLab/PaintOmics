@@ -122,7 +122,7 @@ PUBLISHED = {
     # servlet's "already installed" refusal as a warning, not the error
     # dialog with its report button. That is #130's shape.
     "app/view/common/Util.js": (
-        "2.9", "69c3bdaa628db402fd8e707c9a1d679b331df548301bf26316c8bebdfcddafaf"),
+        "3.0", "5624cc402006364afcfef6436da1b028347c4d9f1e1999c960adea283cb6d946"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
@@ -205,7 +205,7 @@ PUBLISHED = {
     # v=1.4 adds SERVER_URL_PA_HUB_FEATURE. Same failure mode as v=0.9 above:
     # a browser keeping the old copy POSTs every node click to `undefined`.
     "resources/ServerConfiguration.js": (
-        "1.5", "c8421cf25b6789f1e59f5182db72bbb9761d818cd9b34fd210b818ac8c2e2887"),
+        "1.6", "aa7a476767ad15794121951dde0ba0f6c2ad72c4ba2b0f90eb7066a663ef4726"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     # v=2.8 draws regulators the map does not print, colours them from the
