@@ -544,8 +544,11 @@ class Runner(object):
                 time.sleep(30)
 
     def pending(self, state):
+        """Whether any species THIS run loaded is in `state` (same scope as counts())."""
         with self.stateLock:
-            return any(e["state"] == state for e in self.states.values())
+            wanted = getattr(self, "orderedCodeSet", None)
+            return any(e["state"] == state for code, e in self.states.items()
+                       if wanted is None or code in wanted)
 
     # ------------------------------------------------------------ run
     def run(self):

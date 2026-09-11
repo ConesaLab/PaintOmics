@@ -29,19 +29,30 @@ import urllib.request
 ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 
 
+#: Words that mean a name is not a plain Genus species binomial: a rank
+#: qualifier (`sp.`, `subsp.`, `pv.`) or a placeholder (`uncultured`,
+#: `Endosymbiont of`). Such names are counted as KEGG spells them.
+NOT_A_BINOMIAL = {"sp.", "sp", "spp.", "cf.", "aff.", "subsp.", "pv.", "bv.", "str.", "var.", "f.",
+                  "endosymbiont", "symbiont", "uncultured", "unidentified", "unclassified", "bacterium",
+                  "archaeon", "of"}
+
+
 def binomialOf(name):
-    """`Homo sapiens` from `Homo sapiens (human)`; the full name for `Genus sp. XYZ`."""
+    """`Homo sapiens` from `Homo sapiens (human)`; the full name for `Genus sp. XYZ`.
+
+    `Candidatus Liberibacter asiaticus` keeps three words (the epithet is the
+    third). Any qualifier or placeholder among the words a binomial would take
+    means the name is not one, and the full name is counted instead.
+    """
     clean = re.sub(r"\s*\(.*?\)\s*$", "", name).strip()
     words = [word.strip("'\"") for word in clean.split()]
     words = [word for word in words if word]
     clean = " ".join(words)
-    if len(words) >= 2 and words[1].lower() in ("sp.", "sp", "cf.", "aff."):
+    take = 3 if words and words[0].lower() == "candidatus" else 2
+    head = words[:take]
+    if len(head) < take or any(word.lower() in NOT_A_BINOMIAL for word in head):
         return clean
-    if words and words[0].lower() in ("endosymbiont", "symbiont", "uncultured", "unidentified", "bacterium"):
-        return clean
-    if words and words[0].lower() in ("candidatus", "uncultured"):
-        return " ".join(words[:3]) if len(words) >= 3 else clean
-    return " ".join(words[:2]) if len(words) >= 2 else clean
+    return " ".join(head)
 
 
 def pubmedCount(term, apiKey=None, tries=4):

@@ -262,6 +262,12 @@ def main(argv=None):
     census = loadCensus(args.census)
     registry = loadRegistry(args.registry)
 
+    # Only a census that carries the identifier tables (species_report.py's
+    # TSV) can say a table is missing; the runner's pathway-count JSON cannot,
+    # and must not turn every registered species into a refresh. Decided
+    # once for the whole census, not per species.
+    censusHasTables = any(entry.get("tables") for entry in census.values())
+
     mapmanFor = {}   # KEGG code -> (gomapman code, verdict, reason)
     for gcode in gomapman:
         kcode, verdict, reason = MAPMAN[gcode]
@@ -303,10 +309,7 @@ def main(argv=None):
         # KEGG ids only; a mapping refresh (download --kegg=0 --mapping=1 and a
         # rebuild) gives it the Ensembl tables without touching its pathways.
         tables = have.get("tables", {})
-        # Only a census that carries the identifier tables (species_report.py's
-        # TSV) can say a table is missing; the runner's pathway-count JSON
-        # cannot, and must not turn every registered species into a refresh.
-        missingEnsembl = bool(tables) and code in registry and installedKegg and tables.get("ensembl_gene", 0) <= 0
+        missingEnsembl = censusHasTables and code in registry and installedKegg and tables.get("ensembl_gene", 0) <= 0
         if not installedKegg:
             action = "install"
         elif (wantReactome and not installedReactome) or (wantMapman and not installedMapman) \
