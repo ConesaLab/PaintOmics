@@ -207,7 +207,21 @@ def _defer(row, reason):
     row["note"] = "; ".join(filter(None, [row["note"], "deferred: " + reason]))
 
 
-def rankByPopularity(rows, popularity, census, top):
+def previousRanks(path):
+    """{code: rank} from the manifest already on disk, so a rebuild keeps the same
+    top-N: without it, every species installed since the first ranking left the
+    candidate set and the next deferred ones slid across the cut."""
+    if not path or not os.path.isfile(path):
+        return {}
+    ranks = {}
+    with open(path, encoding="utf-8") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row.get("rank"):
+                ranks[row["code"]] = int(row["rank"])
+    return ranks
+
+
+def rankByPopularity(rows, popularity, census, top, previous=None):
     """Order the organisms still to install by how much is written about them.
 
     Every `install` row gets a `pubmed_count` and a `rank`; the rank becomes
@@ -216,8 +230,15 @@ def rankByPopularity(rows, popularity, census, top):
     the server already holds a code of that species -- the other strains are
     `defer`red with the reason. With `top`, everything ranked below it is
     deferred too. Rows the manifest does not install (keep, refresh, rebuild)
-    are untouched.
+    are untouched, but an installed row keeps the rank it had so the set
+    stays the same across rebuilds: `previous` (code -> rank from the last
+    manifest) is honoured first, and only organisms never ranked are ranked
+    now, after it.
     """
+    previous = previous or {}
+    for row in rows:
+        if row["code"] in previous and not row.get("rank"):
+            row["rank"] = previous[row["code"]]
     installedBinomials = set()
     for code, entry in census.items():
         if entry.get("sources", {}).get("KEGG", 0) > 0 and code in popularity:
@@ -243,9 +264,19 @@ def rankByPopularity(rows, popularity, census, top):
         seen.add(binomial)
         candidates.append(row)
     # Most cited first; ties by KEGG's own order (reference genomes first).
-    candidates.sort(key=lambda r: (-int(r["pubmed_count"]), keggOrder[r["code"]]))
-    for rank, row in enumerate(candidates, start=1):
-        row["rank"] = rank
+    # A candidate ranked by an earlier manifest keeps that rank; the rest are
+    # ranked after the highest rank ever given.
+    ranked = [r for r in candidates if r["code"] in previous]
+    fresh = [r for r in candidates if r["code"] not in previous]
+    ranked.sort(key=lambda r: previous[r["code"]])
+    fresh.sort(key=lambda r: (-int(r["pubmed_count"]), keggOrder[r["code"]]))
+    nextRank = max(previous.values()) + 1 if previous else 1
+    for row in ranked:
+        row["rank"] = previous[row["code"]]
+    for offset, row in enumerate(fresh):
+        row["rank"] = nextRank + offset
+    for row in ranked + fresh:
+        rank = row["rank"]
         if top and rank > top:
             _defer(row, "rank %d by PubMed count, beyond the top %d" % (rank, top))
         else:
@@ -261,6 +292,8 @@ def main(argv=None):
     parser.add_argument("-o", "--output", default=os.path.join(HERE, "manifest.tsv"))
     parser.add_argument("--popularity", default=None,
                         help="popularity.tsv from pubmed_popularity.py; ranks the organisms still to install")
+    parser.add_argument("--previous-manifest", default=None,
+                        help="manifest whose ranks are kept (default: the output file, if it exists)")
     parser.add_argument("--top", type=int, default=0,
                         help="with --popularity: install only the N most cited species (one KEGG code per binomial), defer the rest")
     args = parser.parse_args(argv)
@@ -352,7 +385,8 @@ def main(argv=None):
         })
 
     if args.popularity:
-        rankByPopularity(rows, loadPopularity(args.popularity), census, args.top)
+        rankByPopularity(rows, loadPopularity(args.popularity), census, args.top,
+                         previous=previousRanks(args.previous_manifest or args.output))
 
     # Priority order is the install order: refreshes first, then (with
     # --popularity) the most cited organisms by rank, else eukaryotes, archaea,
