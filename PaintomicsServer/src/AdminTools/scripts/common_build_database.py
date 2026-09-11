@@ -596,9 +596,15 @@ def processEnsemblUniProtData():
     processEnsemblData has nothing to link them with. They all publish UniProt
     ones, and processKEGGMappingData files KEGG's own uniprot -> kegg_id list
     under the same `uniprot_acc` table. Where the accession already exists, the
-    Ensembl gene, transcript and peptide join ITS transcript groups, which is
-    where kegg_id sits -- one hop, no bridge needed. An accession KEGG does not
-    know is inserted and linked to the Ensembl transcript so it stays reachable.
+    kegg_id rows of the groups KEGG put it in join the ENSEMBL transcript's own
+    group, together with the accession -- one hop from the Ensembl gene, no
+    bridge needed. The direction matters: pushing the Ensembl ids into KEGG's
+    group instead would make every gene that shares an accession (paralogues,
+    homoeologs in wheat or soybean, splice variants) a mate of every other, and
+    each would inherit the others' kegg_id. Only the groups the accession had
+    BEFORE this pass are consulted, so nothing this pass adds feeds back into
+    later rows. An accession KEGG does not know is inserted and linked to the
+    Ensembl transcript so it stays reachable.
 
     Must run AFTER processKEGGMappingData: it only ever joins groups that exist.
     A no-op for species whose configuration declares no "ensembl_uniprot"
@@ -628,6 +634,23 @@ def processEnsemblUniProtData():
     ensembl_gene_db_id = insertDatabase(DBNAME_Entry("ensembl_gene", "Ensembl gene", "Identifier"))
     ensembl_peptide_db_id = insertDatabase(DBNAME_Entry("ensembl_peptide", "Ensembl protein", "Identifier"))
     uniprot_acc_db_id = insertDatabase(DBNAME_Entry("uniprot_acc", "UniProt Accession", "Identifier"))
+    kegg_id_db_id = insertDatabase(DBNAME_Entry("kegg_id", "KEGG Feature ID", "Identifier"))
+
+    # The kegg_id members of each accession's groups as they stand now, i.e.
+    # what KEGG said. Filled on first sight of an accession, never updated by
+    # this pass, so a later row for the same accession sees the same answer.
+    keggIdsByAccession = {}
+
+    def keggIdsLinkedTo(accessionItemId):
+        if accessionItemId not in keggIdsByAccession:
+            found = []
+            for group in xref2transcript['global'].get(accessionItemId, ()):
+                for memberId in transcript2xref['global'].get(group, ()):
+                    member = xref['global'].get(memberId)
+                    if member is not None and member.dbname_id == kegg_id_db_id:
+                        found.append(memberId)
+            keggIdsByAccession[accessionItemId] = found
+        return keggIdsByAccession[accessionItemId]
 
     stderr.write("PROCESSING ENSEMBL-UNIPROT MAPPING FILE...\n")
     linked = 0
@@ -645,15 +668,14 @@ def processEnsemblUniProtData():
                 if ensembl_ti == "":
                     raise Exception("Empty ENSEMBL transcript value.")
 
+                # The transcript keys its own group; gene, peptide and the bare
+                # forms of prefixed ids join it (see _insertEnsemblIdentifier).
                 ensembl_ti = _insertEnsemblIdentifier(ensembl_ti, ensembl_transcript_db_id,
                                                       resource.get("description"), None)
-                members = [ensembl_ti]
                 if ensembl_gi != "":
-                    members.append(_insertEnsemblIdentifier(ensembl_gi, ensembl_gene_db_id,
-                                                            resource.get("description"), ensembl_ti))
+                    _insertEnsemblIdentifier(ensembl_gi, ensembl_gene_db_id, resource.get("description"), ensembl_ti)
                 if ensembl_pi != "":
-                    members.append(_insertEnsemblIdentifier(ensembl_pi, ensembl_peptide_db_id,
-                                                            resource.get("description"), ensembl_ti))
+                    _insertEnsemblIdentifier(ensembl_pi, ensembl_peptide_db_id, resource.get("description"), ensembl_ti)
                 if uniprot_acc == "":
                     continue
 
@@ -666,22 +688,12 @@ def processEnsemblUniProtData():
                     unknown += 1
                     continue
 
-                # Join the groups the accession already belongs to (KEGG's), and
-                # bring the accession into the Ensembl group as well. Bare forms
-                # of prefixed ids were linked to ensembl_ti above, so they follow
-                # through the transcript's own membership: link it here too.
-                for group in list(xref2transcript['global'].get(known.getID(), ())):
-                    for member in members:
-                        insertTR_XREF(member, group)
-                    for bare in (bareEnsemblIdentifier(row[0]), bareEnsemblIdentifier(row[2]),
-                                 bareEnsemblIdentifier(row[3])):
-                        if bare is not None:
-                            bareItem = findXREF(bare, ensembl_gene_db_id) or \
-                                       findXREF(bare, ensembl_peptide_db_id) or \
-                                       findXREF(bare, ensembl_transcript_db_id)
-                            if bareItem is not None:
-                                insertTR_XREF(bareItem.getID(), group)
+                # The accession and the kegg_id rows KEGG linked it to join THIS
+                # row's group. Nothing is written into KEGG's groups, so two genes
+                # sharing an accession never become each other's mates.
                 insertTR_XREF(known.getID(), ensembl_ti)
+                for keggItemId in keggIdsLinkedTo(known.getID()):
+                    insertTR_XREF(keggItemId, ensembl_ti)
                 linked += 1
             except Exception as ex:
                 errorMessage = "FAILED WHILE PROCESSING ENSEMBL-UNIPROT MAPPING FILE [line " + str(i) + "]: " + str(ex)

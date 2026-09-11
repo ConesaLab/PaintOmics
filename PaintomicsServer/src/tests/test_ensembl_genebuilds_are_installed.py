@@ -314,17 +314,43 @@ class ParserTests(unittest.TestCase):
             ("SPAC977.02", "A0A000UNKNOWN", "SPAC977.02.1:pep", "SPAC977.02.1"),
         ])
         self.builder.processKEGGMappingData()
+        keggGroupsBefore = self.groupsOf("SPAC212.11", "kegg_id")
         self.builder.processEnsemblUniProtData()
 
-        keggGroups = self.groupsOf("SPAC212.11", "kegg_id")
-        self.assertTrue(keggGroups)
-        self.assertTrue(keggGroups <= self.groupsOf("SPAC212.11", "ensembl_gene"),
-                        "the Ensembl gene did not join the KEGG accession's group")
-        self.assertTrue(keggGroups <= self.groupsOf("SPAC212.11.1", "ensembl_transcript"))
+        geneGroups = self.groupsOf("SPAC212.11", "ensembl_gene")
+        self.assertTrue(geneGroups)
+        self.assertTrue(geneGroups <= self.groupsOf("SPAC212.11", "kegg_id"),
+                        "kegg_id did not join the Ensembl transcript's group")
+        self.assertTrue(geneGroups <= self.groupsOf("P0CT33", "uniprot_acc"))
+        self.assertFalse(geneGroups & keggGroupsBefore, "the Ensembl ids must not be written into KEGG's group")
         # An accession KEGG does not map stays reachable from its own transcript only.
         unknownGroups = self.groupsOf("A0A000UNKNOWN", "uniprot_acc")
         self.assertEqual(unknownGroups, self.groupsOf("SPAC977.02", "ensembl_gene"))
-        self.assertFalse(unknownGroups & keggGroups)
+        self.assertFalse(unknownGroups & keggGroupsBefore)
+
+    def test_genes_sharing_an_accession_do_not_become_mates(self):
+        """Paralogues and homoeologs routinely share one UniProt accession; each may
+        reach the kegg_id KEGG ties to that accession, neither may reach the other."""
+        self.builder.SPECIE = "spo"
+        self.builder.EXTERNAL_RESOURCES = {
+            "ensembl_uniprot": [{"output": "ensembl_uniprot.list", "description": "t"}]}
+        self.writeMapping("uniprot2kegg.list", [("up:P0CT33", "spo:SPAC212.11")])
+        self.writeMapping("ensembl_uniprot.list", [
+            ("GENE_A", "P0CT33", "GENE_A.1:pep", "GENE_A.1"),
+            ("GENE_B", "P0CT33", "GENE_B.1:pep", "GENE_B.1"),
+            ("GENE_C", "P0CT33", "GENE_C.1:pep", "GENE_C.1"),
+        ])
+        self.builder.processKEGGMappingData()
+        self.builder.processEnsemblUniProtData()
+
+        groups = {gene: self.groupsOf(gene, "ensembl_gene") for gene in ("GENE_A", "GENE_B", "GENE_C")}
+        keggGroups = self.groupsOf("SPAC212.11", "kegg_id")
+        for gene, own in groups.items():
+            self.assertEqual(1, len(own), gene + " must sit in exactly its own transcript group")
+            self.assertTrue(own <= keggGroups, gene + " does not reach kegg_id")
+        self.assertFalse(groups["GENE_A"] & groups["GENE_B"])
+        self.assertFalse(groups["GENE_B"] & groups["GENE_C"])
+        self.assertFalse(groups["GENE_A"] & groups["GENE_C"])
 
     def test_ensembl_uniprot_pass_is_a_no_op_without_the_resource(self):
         self.builder.EXTERNAL_RESOURCES = {}
