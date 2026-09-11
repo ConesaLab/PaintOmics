@@ -1048,6 +1048,16 @@ function PA_Step3JobView() {
 			this.aiWidget.destroy();
 			this.aiWidget = null;
 		}
+		// The poll chain's bookkeeping goes with the chain. This view is
+		// reused across jobs (showJobInstance -> refreshAIWidget -> here ->
+		// pollAIStatus, never a fresh view), and the chain only resets these
+		// from its own callbacks -- which the clearTimeout above has just
+		// prevented from ever running. Left in place, an outage that began
+		// under job A would be charged to job B: its first unreadable answer
+		// would measure the five-minute budget from A's timestamp and give
+		// up at once, and a run of refusals under A would count against B.
+		this.aiPollOutage = null;
+		this.aiPollFailures = 0;
 		this.aiClusters = null;
 		this.aiJobID = null;
 		$("#aiInterpretButton").hide();

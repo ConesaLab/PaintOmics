@@ -37,6 +37,7 @@ UTIL = os.path.join(CLIENT_ROOT, "app", "view", "common", "Util.js")
 SERVER_CONF = os.path.join(CLIENT_ROOT, "resources", "ServerConfiguration.js")
 
 HEADER = "this.pollAIStatus = function()"
+CLEANUP_HEADER = "this.cleanupAIWidget = function()"
 # The poll shares its rule for unreadable answers with the job status poll:
 # these come from Util.js, and the numbers from ServerConfiguration.js.
 UTIL_FUNCTIONS = ("readableAnswer", "describeUnansweredRequest", "statusPollRetryDelay")
@@ -93,6 +94,10 @@ HARNESS = """
 %(util)s
 const console = {info() {}, warn() {}, error() {}, log: globalThis.console.log};
 const results = {};
+// Installed per drive(); module-scoped so the cleanup case below can build a
+// View outside any drive.
+let $ = function () { return {hide: function () {}}; };
+let View = null;
 
 // `chain` false runs a single tick, which is all most of these need. `chain`
 // true keeps firing whatever the poll scheduled, up to a hard ceiling, which is
@@ -112,20 +117,22 @@ function drive(respond, chain) {
     const AI_POLL_MAX_FAILURES = 5;
     const SERVER_URL_AI_INTERPRET_STATUS = "/ai_interpret_status";
 
-    const $ = function () { return {}; };
+    $ = function () { return {hide: function () {}}; };
     $.ajax = function (opts) {
         calls.push(opts.url);
         timeouts.push(opts.timeout);
         respond(opts, calls.length);
     };
 
-    function View() {
+    View = function () {
         this.aiWidget = {updateProgress: function (status, percent, detail) {
             shown.push({status: status, detail: String(detail || "")});
-        }};
+        }, destroy: function () {}};
         this.getModel = function () { return {getJobID: function () { return "JOB"; }}; };
         const setTimeout = setTimeout_;
+        const clearTimeout = function () {};
         %(poll)s
+        %(cleanup)s
     }
 
     const view = new View();
@@ -251,6 +258,19 @@ results.twoOutages = drive(function (opts, n) {
     else { opts.error({status: 504, statusText: "Gateway Time-out", responseText: NGINX_504}, "error"); }
 }, true);
 
+// The view is reused across jobs: cleanupAIWidget() tears the chain down
+// between them and must take the chain's bookkeeping with it, or job B is
+// charged for job A's outage (the second review finding on #155).
+(function () {
+    const view = new View();
+    view.pollTimerID = 7;
+    view.aiPollOutage = {since: 1, attempts: 4};
+    view.aiPollFailures = 4;
+    view.cleanupAIWidget();
+    results.cleanup = {outage: view.aiPollOutage, failures: view.aiPollFailures,
+                       timer: view.pollTimerID, widget: view.aiWidget};
+})();
+
 console.log(JSON.stringify(results));
 """
 
@@ -279,6 +299,7 @@ class StatusPollChainTest(unittest.TestCase):
         util = read(UTIL)
         cls.results = run_node(HARNESS % {
             "poll": block,
+            "cleanup": extract_block(read(STEP3_VIEWS), CLEANUP_HEADER),
             "constants": constant_lines(read(SERVER_CONF)),
             "util": "\n".join(extract_function(util, name) for name in UTIL_FUNCTIONS),
             "nginx504": json.dumps(NGINX_504),
@@ -423,10 +444,24 @@ class StatusPollChainTest(unittest.TestCase):
         retried -- ends a stalled poll, never the browser abandoning a
         request the server thread is still busy with."""
         for name, outcome in self.results.items():
+            if "timeouts" not in outcome:      # the cleanup case makes no request
+                continue
             with self.subTest(case=name):
                 for timeout in outcome["timeouts"]:
                     self.assertIsNotNone(timeout, "the status request has no timeout")
                     self.assertGreater(timeout, 60000)
+
+    def test_tearing_the_widget_down_takes_the_chains_bookkeeping_with_it(self):
+        """The view is reused across jobs. cleanupAIWidget() cancels the
+        retry timer -- the one thing that would have let the chain reset its
+        own state -- so it must reset that state itself, or job B's first
+        unreadable answer is measured against job A's outage and gives up at
+        once."""
+        outcome = self.results["cleanup"]
+        self.assertIsNone(outcome["outage"], "the outage survived the teardown")
+        self.assertEqual(outcome["failures"], 0, "the refusal count survived the teardown")
+        self.assertIsNone(outcome["timer"])
+        self.assertIsNone(outcome["widget"])
 
     def test_a_failure_that_clears_does_not_consume_the_budget(self):
         """Two blips then success must still deliver the report.
