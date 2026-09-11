@@ -31,11 +31,8 @@ SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverco
 # STEP 2. DOWNLOAD FILES
 #**************************************************************************
 try:
-    #**************************************************************************
-    #STEP 2.3 GET UNIPROT TRANSCRIPTS, PEPTIDES -> ENTREZ GENES
-    stderr.write( "STEP3 DOWNLOAD UNIPROT" + "\n")
-    resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("uniprot")[0]
-    COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
+    COMMON_BUILD_DB_TOOLS.downloadEnsemblResources(COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES, DESTINATION,
+                                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
     #*************************************************************************
 

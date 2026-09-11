@@ -1,10 +1,13 @@
 EXTERNAL_RESOURCES = {
-                 "uniprot"   :   [
+                "ensembl_uniprot"   :   [
                     {
-                    "url"           :   "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/by_organism/",
-                    "file"          :   "DICDI_44689_idmapping_selected.tab.gz",
-                    "output"        :   "uniprot_mapping.list",
-                    "description"   :    "Source: UniProt idmapping_selected.tab. Downloaded from UniProt FTP. Tab-delimited table which includes the multiple mappings between UniProt Accession and external databases."
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "dictyostelium_discoideum",
+                    "division"      :   "protists",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"],
+                    "output"        :   "ensembl_uniprot.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (dicty_2.7), UniProt rows. Links the Ensembl identifiers to KEGG through the accessions KEGG maps itself (processEnsemblUniProtData)."
                     }
                 ]
         }

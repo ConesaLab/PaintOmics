@@ -26,6 +26,8 @@ SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverco
 # STEP 2. DOWNLOAD FILES
 #**************************************************************************
 try:
+    COMMON_BUILD_DB_TOOLS.downloadEnsemblResources(COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES, DESTINATION,
+                                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
     stderr.write( "STEP DOWNLOAD MAPMAN" + "\n")
     #**************************************************************************
     #GET THE MapMan INPUTS

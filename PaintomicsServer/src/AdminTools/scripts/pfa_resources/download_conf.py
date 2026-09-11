@@ -1,4 +1,24 @@
 EXTERNAL_RESOURCES = {
+                "ensembl"   :   [
+                    {
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "plasmodium_falciparum",
+                    "division"      :   "protists",
+                    "output"        :   "ensembl_mapping.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (GCA000002765v3), EntrezGene rows. Release and filename are resolved at run time."
+                    }
+                ],
+                "ensembl_uniprot"   :   [
+                    {
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "plasmodium_falciparum",
+                    "division"      :   "protists",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"],
+                    "output"        :   "ensembl_uniprot.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (GCA000002765v3), UniProt rows. Links the Ensembl identifiers to KEGG through the accessions KEGG maps itself (processEnsemblUniProtData)."
+                    }
+                ],
                 "refseq"   :  [
                     {
                     "url"           :   "ftp://ftp.ncbi.nih.gov/gene/DATA/",

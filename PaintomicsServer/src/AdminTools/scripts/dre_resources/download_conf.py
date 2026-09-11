@@ -8,6 +8,17 @@ EXTERNAL_RESOURCES = {
                     "description"   :   "Source: Ensembl cross-reference TSV dumps. BioMart was retired (martservice answers HTTP 405), so the release/assembly and filename are resolved at run time rather than pinned here."
                     }
                 ],
+                "ensembl_uniprot"   :   [
+                    {
+                    "url"           :   "https://ftp.ensembl.org/pub/",
+                    "species-dir"   :   "danio_rerio",
+                    "division"      :   "vertebrates",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"],
+                    "output"        :   "ensembl_uniprot.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (GRCz11), UniProt rows. Links the Ensembl identifiers to KEGG through the accessions KEGG maps itself (processEnsemblUniProtData)."
+                    }
+                ],
                 "refseq"   :  [
                     {
                     "url"           :   "ftp://ftp.ncbi.nih.gov/gene/DATA/",

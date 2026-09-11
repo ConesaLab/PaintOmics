@@ -118,6 +118,142 @@ def insertDatabase(item):
 
     return elemAux.getID()
 
+
+#**************************************************************************
+# ENSEMBL GENEBUILD REGISTRY
+#
+# Every species whose organism has an Ensembl / Ensembl Genomes genebuild
+# must carry its Ensembl gene, transcript and peptide identifiers, linked to
+# the KEGG identifier table. Species with their own <code>_resources/ declare
+# the dumps in download_conf.py; every other species is served by
+# scripts/default/, which consults this registry. Measured on paintomics.org
+# on 2026-09-10: 157 of 171 installed species had no ensembl_gene table, 72 of
+# them eukaryotes with a genebuild, so an Ensembl gene id from a GTF or an
+# expression matrix resolved 0 features on soybean, maize, grape, rice, goat
+# and 60-odd others while the job reported success.
+#**************************************************************************
+ENSEMBL_GENEBUILDS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                       "common_resources", "ensembl_genebuilds.json")
+
+#: The two identifier spaces one Ensembl dump can be asked for, and the
+#: db_name values that carry them. UniProt is split across reviewed and
+#: unreviewed entries, and both are real accessions KEGG maps to genes.
+#: Genebuilds filed under an Ensembl Genomes collection label every UniProt
+#: row `UniProtKB_all` and nothing else (coprinopsis_cinerea: 13,384 rows,
+#: all that label; measured 2026-09-11 when cci and cgi refused the dump), so
+#: that label is accepted too. The other genebuilds carry it alongside the
+#: split labels for the same accessions, which insertXREF de-duplicates.
+#: `Uniprot_gn_trans_name` and `Uniprot/Varsplic` stay out: their xref is a
+#: transcript name or an isoform, not an accession.
+ENSEMBL_UNIPROT_DBS = ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"]
+ENSEMBL_XREF_DBS = {"entrez": "EntrezGene", "uniprot": ENSEMBL_UNIPROT_DBS}
+
+
+#: Top-level keys of a download_conf.py, read as text: `"ensembl"   :   [`.
+_RESOURCE_KEY = re.compile(r'^\s*"([a-z_]+)"\s*:\s*\[', re.M)
+
+
+def declaredResourceKeys(confPath):
+    """The EXTERNAL_RESOURCES keys a species' download_conf.py declares, or an empty set.
+
+    Read as text rather than imported: the census tool and the tests ask this of
+    every species directory, and importing 20-odd config modules for it is
+    neither needed nor safe (some carry module-level downloads).
+    """
+    if not os.path.isfile(confPath):
+        return set()
+    with open(confPath, "r", encoding="utf-8") as handle:
+        return set(_RESOURCE_KEY.findall(handle.read()))
+
+
+def loadEnsemblGenebuilds(path=ENSEMBL_GENEBUILDS_FILE):
+    """The registry document: bases plus a `genebuilds` map keyed by species code."""
+    with open(path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def ensemblResourcesFor(specie, path=ENSEMBL_GENEBUILDS_FILE):
+    """EXTERNAL_RESOURCES entries for a registered species, or {} if it has none.
+
+    Shaped exactly like a hand-written download_conf.py so the same downloader
+    (downloadEnsemblMapping) and the same processors serve both kinds of species:
+      "ensembl"         -> the EntrezGene dump, read by processEnsemblData
+      "ensembl_uniprot" -> the UniProt dump, read by processEnsemblUniProtData
+    A genebuild that publishes only one of the two gets only that key.
+    """
+    registry = loadEnsemblGenebuilds(path)
+    entry = registry.get("genebuilds", {}).get(specie)
+    if not entry:
+        return {}
+
+    base = registry["vertebrates-base"] if entry["division"] == "vertebrates" else registry["genomes-base"]
+    common = {"url": base, "species-dir": entry["species-path"], "division": entry["division"]}
+    resources = {}
+    if "entrez" in entry.get("xrefs", []):
+        resources["ensembl"] = [dict(common, output="ensembl_mapping.list",
+                                     description="Source: Ensembl cross-reference TSV dump (" +
+                                                 str(entry.get("assembly")) + "), EntrezGene rows.")]
+    if "uniprot" in entry.get("xrefs", []):
+        resources["ensembl_uniprot"] = [dict(common, output="ensembl_uniprot.list",
+                                             description="Source: Ensembl cross-reference TSV dump (" +
+                                                         str(entry.get("assembly")) + "), UniProt rows.",
+                                             **{"xref-type": "uniprot", "xref-db": ENSEMBL_XREF_DBS["uniprot"]})]
+    return resources
+
+
+#: Prefixes some Ensembl Genomes genebuilds carry on every identifier because
+#: the annotation was imported from GenBank/RefSeq: tomato (SL4.0) names its
+#: genes `gene-Solyc01g080690.3`, transcripts `mRNA-Solyc01g080690.3.1` and
+#: peptides `CDS-Solyc01g080690.3.1`; lettuce uses `gene-`/`rna-`. Ensembl's
+#: own GTF uses the prefixed form, so it is kept; but nobody uploads it -- an
+#: ITAG gene id in a user's matrix is `Solyc01g080690.3` -- so the bare form is
+#: stored alongside, in the same table and the same mate group. Measured on
+#: paintomics.org 2026-09-10: `Solyc03g007960.3` matched no table at all.
+ENSEMBL_ID_PREFIXES = ("gene-", "mRNA-", "rna-", "CDS-", "cds-")
+
+
+#: Genebuilds Ensembl Genomes imports from RefSeq (bombyx_mori_gca030269925v1rs,
+#: parasteatoda_tepidariorum_gca043381705v1rs, varroa_destructor, ...) name
+#: their genes after NCBI's own convention: `LOC107444053` is NCBI GeneID
+#: 107444053, `GeneID_806169` is GeneID 806169. Their entrez dumps carry an
+#: EntrezGene row for only a fraction of those genes (ptep: 27 of 300 sampled
+#: genes reached kegg_id on paintomics.org, 2026-09-11), although the id every
+#: other gene needs is spelled out in its name. Read it from there.
+NCBI_NAMED_GENE = re.compile(r"^(?:LOC|GeneID_)(\d+)$")
+
+
+def entrezIdFromGeneName(geneId):
+    """The NCBI GeneID an NCBI-style gene name carries, or None."""
+    match = NCBI_NAMED_GENE.match(geneId)
+    return match.group(1) if match else None
+
+
+def bareEnsemblIdentifier(identifier):
+    """The identifier without a GenBank-style type prefix, or None if it has none."""
+    for prefix in ENSEMBL_ID_PREFIXES:
+        if identifier.startswith(prefix) and len(identifier) > len(prefix):
+            return identifier[len(prefix):]
+    return None
+
+
+def _insertEnsemblIdentifier(value, db_id, description, transcript_key):
+    """Insert an Ensembl identifier and, when it carries a type prefix, its bare form too.
+
+    Both land in the same table and the same transcript group, so either spelling
+    reaches everything the group reaches. With ``transcript_key`` None the value IS
+    the transcript and keys its own group. Returns the xref id of the value itself.
+    """
+    xref_id = insertXREF(XREF_Entry(value, db_id, description))
+    if transcript_key is None:
+        # The transcript itself: its own xref id keys the group, as
+        # processEnsemblData has always done (insertTR_XREF(ti, ti)).
+        transcript_key = xref_id
+    insertTR_XREF(xref_id, transcript_key)
+    bare = bareEnsemblIdentifier(value)
+    if bare is not None:
+        insertTR_XREF(insertXREF(XREF_Entry(bare, db_id, description)), transcript_key)
+    return xref_id
+
 # def translate(featureName, destinationDB):
 #     found=[]
 #
@@ -442,20 +578,24 @@ def processEnsemblData():
                 if ensembl_ti == "": #ALWAYS FALSE
                     raise Exception("Empty ENSEMBL transcript value.")
 
-                ensembl_ti = insertXREF(XREF_Entry(ensembl_ti, ensembl_transcript_db_id, resource.get("description")))
-                insertTR_XREF(ensembl_ti, ensembl_ti)
+                # The transcript is the group key: every identifier on this row
+                # joins its group. A prefixed id (gene-/mRNA-/CDS-) is stored in
+                # both spellings, see ENSEMBL_ID_PREFIXES.
+                ensembl_ti = _insertEnsemblIdentifier(ensembl_ti, ensembl_transcript_db_id,
+                                                      resource.get("description"), None)
 
                 if ensembl_gi != "": #ALWAYS TRUE
-                    ensembl_gi = insertXREF(XREF_Entry(ensembl_gi, ensembl_gene_db_id, resource.get("description")))
-                    insertTR_XREF(ensembl_gi, ensembl_ti)
+                    _insertEnsemblIdentifier(ensembl_gi, ensembl_gene_db_id, resource.get("description"), ensembl_ti)
+
+                if entrez_gi == "" and ensembl_gi != "":
+                    entrez_gi = entrezIdFromGeneName(ensembl_gi) or ""
 
                 if entrez_gi != "":
                     entrez_gi = insertXREF(XREF_Entry(entrez_gi, entrezgene_db_id, resource.get("description")))
                     insertTR_XREF(entrez_gi, ensembl_ti)
 
                 if ensembl_pi != "":
-                    ensembl_pi = insertXREF(XREF_Entry(ensembl_pi, ensembl_peptide_db_id, resource.get("description")))
-                    insertTR_XREF(ensembl_pi, ensembl_ti)
+                    _insertEnsemblIdentifier(ensembl_pi, ensembl_peptide_db_id, resource.get("description"), ensembl_ti)
 
             except Exception as ex:
                 errorMessage = "FAILED WHILE PROCESSING ENSEMBL MAPPING FILE [line " + str(i) + "]: "+ str(ex)
@@ -464,6 +604,134 @@ def processEnsemblData():
 
     TOTAL_FEATURES["ENSEMBL"]=total_lines
 
+    return total_lines
+
+
+def processEnsemblUniProtData():
+    """Link Ensembl identifiers to KEGG through the UniProt accessions KEGG maps itself.
+
+    Eighteen registered genebuilds (Ensembl Fungi collections, Dictyostelium,
+    Leishmania, mung bean) publish no EntrezGene cross-references, so
+    processEnsemblData has nothing to link them with. They all publish UniProt
+    ones, and processKEGGMappingData files KEGG's own uniprot -> kegg_id list
+    under the same `uniprot_acc` table. Where the accession already exists, the
+    kegg_id rows of the groups KEGG put it in join the ENSEMBL transcript's own
+    group, together with the accession -- one hop from the Ensembl gene, no
+    bridge needed. The direction matters: pushing the Ensembl ids into KEGG's
+    group instead would make every gene that shares an accession (paralogues,
+    homoeologs in wheat or soybean, splice variants) a mate of every other, and
+    each would inherit the others' kegg_id. Only the groups the accession had
+    BEFORE this pass are consulted, so nothing this pass adds feeds back into
+    later rows. An accession KEGG does not know is inserted and linked to the
+    Ensembl transcript so it stays reachable.
+
+    Must run AFTER processKEGGMappingData: it only ever joins groups that exist.
+    A no-op for species whose configuration declares no "ensembl_uniprot"
+    resource, and a warned skip when the declared file is absent.
+
+    Input: mapping/ensembl_uniprot.list as written by downloadEnsemblMapping with
+    xref-type "uniprot": gene, accession, peptide, transcript per row.
+    """
+    resources = (EXTERNAL_RESOURCES or {}).get("ensembl_uniprot")
+    if not resources:
+        return 0
+    resource = resources[0]
+
+    FAILED_LINES["ENSEMBL-UNIPROT"] = []
+    file_name = DATA_DIR + "mapping/" + resource.get("output")
+    if not haveInputFile("ENSEMBL-UNIPROT", file_name,
+                         "Ensembl identifiers will not be linked to KEGG through UniProt for this species"):
+        return 0
+
+    if not ALL_DBS.get("kegg_id"):
+        stderr.write("WARNING [ENSEMBL-UNIPROT] processKEGGMappingData() has not run yet; "
+                     "Ensembl identifiers can only join groups that already exist.\n")
+
+    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
+
+    ensembl_transcript_db_id = insertDatabase(DBNAME_Entry("ensembl_transcript", "Ensembl transcript", "Identifier"))
+    ensembl_gene_db_id = insertDatabase(DBNAME_Entry("ensembl_gene", "Ensembl gene", "Identifier"))
+    ensembl_peptide_db_id = insertDatabase(DBNAME_Entry("ensembl_peptide", "Ensembl protein", "Identifier"))
+    uniprot_acc_db_id = insertDatabase(DBNAME_Entry("uniprot_acc", "UniProt Accession", "Identifier"))
+    kegg_id_db_id = insertDatabase(DBNAME_Entry("kegg_id", "KEGG Feature ID", "Identifier"))
+    entrezgene_db_id = insertDatabase(DBNAME_Entry("entrezgene", "EntrezGene ID", "Identifier"))
+
+    # The kegg_id members of each accession's groups as they stand now, i.e.
+    # what KEGG said. Filled on first sight of an accession, never updated by
+    # this pass, so a later row for the same accession sees the same answer.
+    keggIdsByAccession = {}
+
+    def keggIdsLinkedTo(accessionItemId):
+        if accessionItemId not in keggIdsByAccession:
+            found = []
+            for group in xref2transcript['global'].get(accessionItemId, ()):
+                for memberId in transcript2xref['global'].get(group, ()):
+                    member = xref['global'].get(memberId)
+                    if member is not None and member.dbname_id == kegg_id_db_id:
+                        found.append(memberId)
+            keggIdsByAccession[accessionItemId] = found
+        return keggIdsByAccession[accessionItemId]
+
+    stderr.write("PROCESSING ENSEMBL-UNIPROT MAPPING FILE...\n")
+    linked = 0
+    unknown = 0
+    with open(file_name, "r") as csvfile:
+        rows = csv.reader(csvfile, delimiter='\t')
+        i = 0
+        prev = -1
+        errorMessage = ""
+        for row in rows:
+            i += 1
+            prev = showPercentage(i, total_lines, prev, errorMessage)
+            try:
+                ensembl_gi, uniprot_acc, ensembl_pi, ensembl_ti = row[0], row[1], row[2], row[3]
+                if ensembl_ti == "":
+                    raise Exception("Empty ENSEMBL transcript value.")
+
+                # The transcript keys its own group; gene, peptide and the bare
+                # forms of prefixed ids join it (see _insertEnsemblIdentifier).
+                ensembl_ti = _insertEnsemblIdentifier(ensembl_ti, ensembl_transcript_db_id,
+                                                      resource.get("description"), None)
+                if ensembl_gi != "":
+                    _insertEnsemblIdentifier(ensembl_gi, ensembl_gene_db_id, resource.get("description"), ensembl_ti)
+                    # A RefSeq-named gene spells its NCBI GeneID; most such genes
+                    # appear in this dump only (ptep: 7,098 here, 650 in the entrez
+                    # dump), so the id has to be read here as well.
+                    entrez_gi = entrezIdFromGeneName(ensembl_gi)
+                    if entrez_gi is not None:
+                        insertTR_XREF(insertXREF(XREF_Entry(entrez_gi, entrezgene_db_id,
+                                                            resource.get("description"))), ensembl_ti)
+                if ensembl_pi != "":
+                    _insertEnsemblIdentifier(ensembl_pi, ensembl_peptide_db_id, resource.get("description"), ensembl_ti)
+                if uniprot_acc == "":
+                    continue
+
+                known = findXREF(uniprot_acc, uniprot_acc_db_id)
+                if known is None:
+                    # KEGG does not map this accession: keep it reachable from the
+                    # Ensembl side, nothing more.
+                    insertTR_XREF(insertXREF(XREF_Entry(uniprot_acc, uniprot_acc_db_id,
+                                                        resource.get("description"))), ensembl_ti)
+                    unknown += 1
+                    continue
+
+                # The accession and the kegg_id rows KEGG linked it to join THIS
+                # row's group. Nothing is written into KEGG's groups, so two genes
+                # sharing an accession never become each other's mates.
+                insertTR_XREF(known.getID(), ensembl_ti)
+                for keggItemId in keggIdsLinkedTo(known.getID()):
+                    insertTR_XREF(keggItemId, ensembl_ti)
+                linked += 1
+            except Exception as ex:
+                errorMessage = "FAILED WHILE PROCESSING ENSEMBL-UNIPROT MAPPING FILE [line " + str(i) + "]: " + str(ex)
+                FAILED_LINES["ENSEMBL-UNIPROT"].append([errorMessage] + row)
+
+    TOTAL_FEATURES["ENSEMBL-UNIPROT"] = total_lines
+    stderr.write("  * %d rows joined a KEGG-mapped UniProt accession, %d carried an accession KEGG does not map\n"
+                 % (linked, unknown))
+    if linked == 0 and total_lines > 0:
+        skipSource("ENSEMBL-UNIPROT", "none of the %d UniProt accessions matched KEGG's uniprot list" % total_lines,
+                   "Ensembl identifiers are installed but reach no KEGG identifier")
     return total_lines
 
 #**************************************************************************
@@ -3719,6 +3987,35 @@ def resolveEnsemblTsvUrl(resource, delay, maxTries):
     return directoryUrl + sorted(candidates)[0]
 
 
+def translateEnsemblDump(source, target, wantedDbs):
+    """Rewrite an Ensembl TSV dump into the 4-column mapping the parsers read.
+
+    `source` yields the dump's lines (gene, transcript, protein, xref, db_name,
+    ...); `target` receives gene, xref, protein, transcript per kept row. A row is
+    kept when its db_name is one of `wantedDbs` and it names a transcript, since
+    the parsers key every identifier off the transcript. "-" means absent and is
+    written as "". Returns (rows written, rows skipped for their db_name).
+    """
+    written = 0
+    skippedDb = 0
+    for lineNumber, line in enumerate(source):
+        fields = line.rstrip("\n").split("\t")
+        if lineNumber == 0 and fields[0] == "gene_stable_id":
+            continue  # header
+        if len(fields) < 5:
+            continue
+        gene, transcript, protein, xref, dbName = fields[0], fields[1], fields[2], fields[3], fields[4]
+        if dbName not in wantedDbs:
+            skippedDb += 1
+            continue
+        if not transcript or transcript == "-":
+            continue
+        blank = lambda value: "" if value == "-" else value
+        target.write("\t".join([blank(gene), blank(xref), blank(protein), transcript]) + "\n")
+        written += 1
+    return written, skippedDb
+
+
 def downloadEnsemblMapping(resource, outputName, delay, maxTries):
     """Fetch Ensembl cross-references and write them in the 4-column shape the build expects.
 
@@ -3753,25 +4050,9 @@ def downloadEnsemblMapping(resource, outputName, delay, maxTries):
         wantedDb = resource.get("xref-db", "EntrezGene")
         wantedDbs = {wantedDb} if isinstance(wantedDb, str) else set(wantedDb)
 
-        written = 0
-        skippedDb = 0
         with gzip.open(tmpGz, "rt", encoding="utf-8", errors="replace") as source, \
              open(tmpOut, "w", encoding="utf-8") as target:
-            for lineNumber, line in enumerate(source):
-                fields = line.rstrip("\n").split("\t")
-                if lineNumber == 0 and fields[0] == "gene_stable_id":
-                    continue  # header
-                if len(fields) < 5:
-                    continue
-                gene, transcript, protein, xref, dbName = fields[0], fields[1], fields[2], fields[3], fields[4]
-                if dbName not in wantedDbs:
-                    skippedDb += 1
-                    continue
-                if not transcript or transcript == "-":
-                    continue  # the parser keys everything off the transcript
-                blank = lambda value: "" if value == "-" else value
-                target.write("\t".join([blank(gene), blank(xref), blank(protein), transcript]) + "\n")
-                written += 1
+            written, skippedDb = translateEnsemblDump(source, target, wantedDbs)
 
         if written == 0:
             raise Exception("Ensembl TSV " + url + " yielded no usable rows for db_name in " +
@@ -3785,6 +4066,39 @@ def downloadEnsemblMapping(resource, outputName, delay, maxTries):
         for leftover in (tmpGz, tmpOut):
             if os.path.exists(leftover):
                 os.remove(leftover)
+
+
+def downloadEnsemblResources(resources, destination, delay, maxTries):
+    """Fetch every Ensembl dump a species' EXTERNAL_RESOURCES declares.
+
+    "ensembl" carries the EntrezGene dump (read by processEnsemblData),
+    "ensembl_uniprot" the UniProt dump (read by processEnsemblUniProtData); a
+    species declares one, both or neither. One loop for every download_others.py
+    -- the registry-driven default and the hand-written species directories
+    alike -- so the two cannot drift.
+
+    A dump that cannot be fetched -- Ensembl moved a collection, a transient
+    network failure -- is reported and skipped rather than raised: the build
+    already degrades to KEGG-only when the file is absent (haveInputFile), the
+    KEGG conversion lists downloaded right after this are tolerant in the same
+    way, and `ensembl_census.py census` exits 1 for as long as the species lacks
+    its tables, so nothing is lost silently. Returns (fetched, failed) where
+    `failed` lists (output name, reason).
+    """
+    fetched = 0
+    failed = []
+    for key in ("ensembl", "ensembl_uniprot"):
+        for resource in (resources or {}).get(key, []):
+            stderr.write("STEP DOWNLOAD ENSEMBL " + resource.get("xref-type", "entrez").upper() + "\n")
+            try:
+                downloadEnsemblMapping(resource, destination + resource.get("output"), delay, maxTries)
+                fetched += 1
+            except Exception as exc:
+                failed.append((resource.get("output"), str(exc)))
+                stderr.write("WARNING [ENSEMBL] could not fetch " + str(resource.get("output")) + ": " +
+                             str(exc).strip() + "\n         -> the species installs without it; "
+                             "ensembl_census.py census will flag it until the download succeeds\n")
+    return fetched, failed
 
 
 def downloadMapManResource(resource, outputName, delay, maxTries, checkIfExists=False):

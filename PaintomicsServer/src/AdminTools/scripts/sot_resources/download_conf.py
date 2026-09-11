@@ -19,6 +19,26 @@ GOMAPMAN_PAINTOMICS = "https://gomapman.nib.si/api/GetFile/protein_2018-05-25%7C
 GOMAPMAN_METABOLITE = "https://gomapman.nib.si/api/GetFile/metabolite_2018-02-06%7Cmapman%7C"
 
 EXTERNAL_RESOURCES = {
+                "ensembl"   :   [
+                    {
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "solanum_tuberosum",
+                    "division"      :   "plants",
+                    "output"        :   "ensembl_mapping.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (SolTub_3.0), EntrezGene rows. Release and filename are resolved at run time."
+                    }
+                ],
+                "ensembl_uniprot"   :   [
+                    {
+                    "url"           :   "https://ftp.ebi.ac.uk/ensemblgenomes/pub/current/",
+                    "species-dir"   :   "solanum_tuberosum",
+                    "division"      :   "plants",
+                    "xref-type"     :   "uniprot",
+                    "xref-db"       :   ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"],
+                    "output"        :   "ensembl_uniprot.list",
+                    "description"   :   "Source: Ensembl cross-reference TSV dump (SolTub_3.0), UniProt rows. Links the Ensembl identifiers to KEGG through the accessions KEGG maps itself (processEnsemblUniProtData)."
+                    }
+                ],
                 "mapman_kegg"   :   [
                     {
                     "url"           :   GOMAPMAN_PAINTOMICS,
