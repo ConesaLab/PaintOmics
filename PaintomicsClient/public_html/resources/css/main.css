@@ -9230,6 +9230,34 @@ div.repDetectionCard h3 {
   color: inherit;
   font-weight: 700;
 }
+/* The group labels of a browse ("Model organisms", "All organisms, A to Z")
+   and the footer that says how many rows the cap cut. Not rows: neither has
+   the x-boundlist-item class, so the list never selects, highlights or
+   keyboard-navigates them. Text starts at 7px, where a row's text starts
+   (Neptune gives a row 6px of padding inside a 1px border). Tokens only, so
+   dark.css follows with nothing to restate. */
+.po-organism-group {
+  padding: 7px 7px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pa-ink-muted);
+  cursor: default;
+}
+.po-organism-group:not(:first-child) {
+  margin-top: 3px;
+  border-top: 1px solid var(--pa-border);
+}
+.po-organism-more {
+  margin-top: 3px;
+  padding: 6px 7px 7px;
+  border-top: 1px solid var(--pa-border);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--pa-ink-muted);
+  cursor: default;
+}
 
 /* ==========================================================================
    Step 2 - "Choose for me" (AI compound disambiguation)

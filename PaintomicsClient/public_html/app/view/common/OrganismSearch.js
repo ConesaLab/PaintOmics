@@ -24,8 +24,8 @@
  *
  *   a whole common name              "rat", "human"
  *   the head word of a common name   "mouse" in "house mouse"
- *   the KEGG code exactly            "mmu", "hsa"
- *   a whole word                     "sapiens", "mus"
+ *   the KEGG code exactly, or the genus   "mmu", "hsa"; "mus", "homo"
+ *   a whole word                     "sapiens", "musculus"
  *   the start of a word              "arab", "homo"
  *   the start of the KEGG code       "hs"
  *   a fragment of a word             "rice" in "licorice"
@@ -36,9 +36,21 @@
  * word of it, and the genus edges out the species epithet. A single letter
  * is a genus initial ("e coli", "c elegans"), not a word. Misspellings are
  * accepted only for words of four letters or more (one edit; two from eight
- * letters), so "cat" never becomes "rat". Ties go to the classic model
- * organisms, then to the name: with all 11,550 KEGG organisms in the list,
- * "mouse" has six whole-word hits and Mus musculus is the one meant.
+ * letters), so "cat" never becomes "rat". Ties go to the model organisms, in
+ * the curated order below, then to the name: with all 11,550 KEGG organisms
+ * in the list, "mouse" has six whole-word hits and Mus musculus is the one
+ * meant.
+ *
+ * The empty query is a browse, and a browse of 12,000 organisms in the order
+ * species.json happens to hold them is a wall. It lists the curated model
+ * organisms first, in their curated order (human, mouse, rat, ...), and every
+ * other organism after them alphabetically by name. Not by how much each is
+ * studied: deploy/species/popularity.tsv holds a PubMed count per KEGG
+ * organism, but the count is per binomial -- all 286 E. coli strains share
+ * 336,361, "Homo sapiens" scores 5,830 because nobody writes the Latin name,
+ * and 2,346 organisms score 0 -- so it would put a block of E. coli strains
+ * where the reader expects the alphabet. The alphabet is what a reader can
+ * predict; the ranking above is for everything else.
  */
 (function (root, factory) {
     var api = factory();
@@ -53,14 +65,18 @@
        weaker kind of match over a stronger one.
 
        The code sits BELOW a whole common name (96) and the head word of one
-       (88 + 2 + 4 = 94), and above everything else. 253 of KEGG's 11,550 codes
-       spell a word of some other organism's name -- "fly" is a Flavobacterium,
-       "dog" a Desulfobulbus, "cow", "cat", "bat", "fox", "rat" and "pig" are
-       all bacteria -- and the animal is what was meant. A code nothing else
-       spells, "hsa", still lands first. */
+       (88 + 2 + 4 = 94), LEVEL with a genus (88 + 4 = 92), and above
+       everything else. 253 of KEGG's 11,550 codes spell a word of some other
+       organism's name -- "fly" is a Flavobacterium, "dog" a Desulfobulbus,
+       "cow", "cat", "bat", "fox", "rat" and "pig" are all bacteria -- and the
+       animal is what was meant. Six codes spell a genus: "mus" is a banana,
+       "sus" a Solibacter, "bos" a Bosea, "pan" a Podospora; level scores let
+       the model-organism tie-break put the mouse, the pig, the cow and the
+       chimpanzee first, and the code-holder next. A code nothing else spells,
+       "hsa", still lands first. */
     var SCORE = {
         phrase: 96,
-        code: 93,
+        code: 92,
         word: 88, prefix: 78, codePrefix: 70, fragment: 58, fuzzy: 48,
         fuzzyPrefix: 42,
         common: 2,      // the match is in a common name rather than the scientific one
@@ -70,16 +86,49 @@
         wholePhrase: 10 // the whole query is a whole common name
     };
 
-    /* KEGG codes of the classic model organisms. Only a tie-breaker: with the
-       full KEGG list loaded, "mouse" is a whole-word hit on six organisms and
-       "yeast" on a dozen, and alphabetical order would put Acomys and
-       Candida first. A better match always beats a model organism. */
-    var MODEL_ORGANISMS = {
-        hsa: 1, mmu: 1, rno: 1, dre: 1, dme: 1, cel: 1, sce: 1, spo: 1, ath: 1,
-        eco: 1, bsu: 1, osa: 1, zma: 1, gga: 1, xtr: 1, xla: 1, bta: 1, ssc: 1,
-        cfa: 1, ptr: 1, mcc: 1, ddi: 1, pfa: 1, cre: 1, gmx: 1, sly: 1, sot: 1,
-        vvi: 1, tae: 1
-    };
+    /* KEGG codes of the model organisms, in the order the browse lists them:
+       the textbook eleven first, then the rest by kingdom. Two jobs. With the
+       empty query it is the top of the list; with a query it breaks ties
+       between equal matches -- with the full KEGG list loaded, "mouse" is a
+       whole-word hit on six organisms and "yeast" on a dozen, and the
+       alphabet would put Acomys and Candida first. A better match always
+       beats a model organism.
+
+       Every code here is checked against deploy/species/manifest.tsv and the
+       genus it must name by test_organism_search: an earlier list carried
+       "tae" for wheat, which is Tepidanaerobacter acetatoxydans (wheat is
+       taes). Codes, not names, because names carry strains and change. */
+    var MODEL_ORGANISMS = [
+        // the classics
+        "hsa", "mmu", "rno", "dre", "dme", "cel", "sce", "spo", "ath", "eco", "bsu",
+        // other vertebrates: frogs, chicken, livestock, primates, CHO, medaka, anole
+        "xtr", "xla", "gga", "bta", "ssc", "cfa", "ptr", "mcc", "cge", "ola", "acs",
+        // other invertebrates: mosquito, bee, silkworm, beetle, water flea, sea squirt, urchin, anemone
+        "aga", "ame", "bmor", "tca", "dpx", "cin", "spu", "nve",
+        // other fungi
+        "cal", "ncr", "ani",
+        // plants: the two rice builds, maize, wheat, sorghum, brome, soybean, medicago,
+        // tomato, potato, tobacco, grape, poplar, moss, and the green alga
+        "osa", "dosa", "zma", "taes", "sbi", "bdi", "gmx", "mtr", "sly", "sot", "nta",
+        "vvi", "pop", "ppp", "cre",
+        // protists: slime mould, malaria, Toxoplasma, the trypanosomatids, Tetrahymena
+        "ddi", "pfa", "tgo", "tbr", "lma", "tet",
+        // other bacteria: TB, Pseudomonas, Salmonella, H. pylori, Synechocystis,
+        // Caulobacter, Agrobacterium, Streptomyces
+        "mtu", "pae", "stm", "hpy", "syn", "ccr", "atu", "sco"
+    ];
+
+    /* code -> position in MODEL_ORGANISMS; an organism not listed sorts after
+       every one that is. */
+    var MODEL_RANK = {};
+    (function () {
+        var i;
+        for (i = 0; i < MODEL_ORGANISMS.length; i++) MODEL_RANK[MODEL_ORGANISMS[i]] = i;
+    })();
+
+    function modelRank(code) {
+        return MODEL_RANK.hasOwnProperty(code) ? MODEL_RANK[code] : MODEL_ORGANISMS.length;
+    }
 
     var COMBINING_MARKS = /[\u0300-\u036f]/g;
 
@@ -175,7 +224,7 @@
             }
         }
         return {name: name, code: code, words: list, phrases: phrases,
-                model: MODEL_ORGANISMS.hasOwnProperty(code)};
+                model: modelRank(code)};
     }
 
     var cache = typeof WeakMap === "function" ? new WeakMap() : null;
@@ -311,7 +360,8 @@
     /*
      * The organisms that match `query`, best first. Each result carries the
      * organism's name and value and its score. An empty query lists every
-     * organism by name.
+     * organism: the model organisms first, in MODEL_ORGANISMS order, then the
+     * rest by name.
      *
      * organisms: [{name, value}], as the species endpoint serves them.
      */
@@ -337,9 +387,9 @@
         }
         out.sort(function (a, b) {
             if (a.score !== b.score) return b.score - a.score;
-            /* The model-organism prior breaks ties between MATCHES. A blank
-               query is a browse, and a browse is alphabetical. */
-            if (tokens.length && a.model !== b.model) return a.model ? -1 : 1;
+            /* Between equal matches, and across the whole of a browse (every
+               score is 0), the curated order; then the name. */
+            if (a.model !== b.model) return a.model - b.model;
             return byName(a, b);
         });
         for (i = 0; i < out.length; i++) {
@@ -406,39 +456,99 @@
         return escapeHtml(code);
     }
 
+    /* Thousands separators, the same in every locale: "11,951". */
+    function formatCount(n) {
+        return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    function groupLabel(text) {
+        return '<li class="po-organism-group">' + text + "</li>";
+    }
+
     /*
      * xtype 'organismcombo': an Ext.form.field.ComboBox whose local query is
-     * the ranking above instead of the display-name prefix filter. Everything
-     * else about the combo -- the store, valueField, forceSelection, the
-     * change event -- is untouched, so the two pickers keep their contracts.
+     * the ranking above instead of the display-name prefix filter, and whose
+     * list shows at most `maxRows` rows. Everything else about the combo --
+     * the store, valueField, forceSelection, the change event -- is
+     * untouched, so the two pickers keep their contracts.
+     *
+     * Why a cap: the list is an ExtJS BoundList, which renders one <li> per
+     * row of the store, so with every KEGG organism installed a trigger click
+     * built 12,000 <li>s (206 ms measured at 11,550, before any scrolling)
+     * and so did every keystroke that matched widely. Nobody scrolls to row
+     * 4,000 of an alphabet; they type. So the store is filtered to the first
+     * `maxRows` of rank()'s order -- the model organisms and the start of the
+     * alphabet for a browse, the best matches for a query -- and the list ends
+     * with a row saying how many more there are. The rows are still selected
+     * by value: findRecord() searches the whole snapshot, so setValue("mmu")
+     * and forceSelection work whatever the list is showing.
      */
     function defineCombo(Ext) {
+        var itemCls = (Ext.baseCSSPrefix || "x-") + "boundlist-item";
+
+        /* Called from the list template with the row's data. The query is
+           read from the combo rather than closed over because the template is
+           built once and the query changes per keystroke. */
+        function renderItem(values, comboId) {
+            var combo = Ext.getCmp(comboId), query = (combo && combo.lastQuery) || "",
+                code = values.value != null && values.value !== values.name ? String(values.value) : "";
+            return '<span class="po-organism-row"><span class="po-organism-name">' +
+                highlight(values, query) + "</span>" +
+                (code ? '<span class="po-organism-code">' + highlightCode(code, query) + "</span>" : "") +
+                "</span>";
+        }
+
+        /* One <li> of the list, preceded by a group label where a browse
+           passes from the curated order to the alphabet. The labels and the
+           footer carry no x-boundlist-item class, so the list never selects,
+           highlights, counts or keyboard-navigates them. */
+        function renderRow(values, xindex, comboId) {
+            var combo = Ext.getCmp(comboId), shown = combo && combo.organismShown, head = "";
+            if (shown && shown.groups) {
+                if (xindex === 1) head = groupLabel("Model organisms");
+                else if (xindex === shown.model + 1) head = groupLabel("All organisms, A to Z");
+            }
+            return head + '<li role="option" unselectable="on" class="' + itemCls + '">' +
+                renderItem(values, comboId) + "</li>";
+        }
+
+        /* The row after the last, when the cap cut the list. */
+        function renderFooter(comboId) {
+            var combo = Ext.getCmp(comboId), shown = combo && combo.organismShown, text;
+            if (!shown || shown.shown >= shown.matched) return "";
+            text = shown.query
+                ? "Showing the best " + formatCount(shown.shown) + " of " + formatCount(shown.matched) +
+                    " matches. Keep typing to narrow the list."
+                : "Showing " + formatCount(shown.shown) + " of " + formatCount(shown.matched) +
+                    " organisms. Type to search the rest.";
+            return '<li class="po-organism-more">' + text + "</li>";
+        }
+
         if (Ext.ClassManager.get("Paintomics.form.OrganismCombo")) return;
         Ext.define("Paintomics.form.OrganismCombo", {
             extend: "Ext.form.field.ComboBox",
             alias: "widget.organismcombo",
             queryMode: "local",
 
+            /* Rows the list shows at most, browse or query. 0 shows every row. */
+            maxRows: 200,
+
             statics: {
-                /* Called from the list template with the row's data. The query
-                   is read from the combo rather than closed over because the
-                   template is built once and the query changes per keystroke. */
-                renderItem: function (values, comboId) {
-                    var combo = Ext.getCmp(comboId), query = (combo && combo.lastQuery) || "",
-                        code = values.value != null && values.value !== values.name ? String(values.value) : "";
-                    return '<span class="po-organism-row"><span class="po-organism-name">' +
-                        highlight(values, query) + "</span>" +
-                        (code ? '<span class="po-organism-code">' + highlightCode(code, query) + "</span>" : "") +
-                        "</span>";
-                }
+                renderItem: renderItem,
+                renderRow: renderRow,
+                renderFooter: renderFooter
             },
 
             initComponent: function () {
                 var me = this;
                 me.listConfig = Ext.apply({
-                    getInnerTpl: function () {
-                        return '{[Paintomics.form.OrganismCombo.renderItem(values, "' + me.id + '")]}';
-                    }
+                    /* A string; BoundList compiles it. The rows are what the
+                       stock template renders (BoundList.initComponent, ExtJS
+                       4.2.1) plus the group labels and the footer. */
+                    tpl: '<ul class="' + (Ext.plainListCls || "") + '">' +
+                        '<tpl for=".">{[Paintomics.form.OrganismCombo.renderRow(values, xindex, "' + me.id + '")]}</tpl>' +
+                        '{[Paintomics.form.OrganismCombo.renderFooter("' + me.id + '")]}' +
+                        "</ul>"
                 }, me.listConfig);
                 /* Not the usual ExtJS parent call: ExtJS 4 implements that with
                    Function.caller, which this strict-mode file does not have,
@@ -448,16 +558,18 @@
             },
 
             /* Replaces ComboBox.doLocalQuery. Same shape: install the query
-               filter once, enable it for a query and disable it for the
-               trigger's show-all, then filter, expand or collapse, afterQuery.
-               The differences are that the filter keeps the rows rank() kept,
-               and the store is sorted by rank for as long as there is a query
-               -- its own sorters come back when the query is cleared. */
+               filter once, then filter, expand or collapse, afterQuery. The
+               differences: the filter keeps the first `maxRows` rows of
+               rank()'s order and the store is sorted by that order -- for the
+               empty query too, which is how a browse comes out model
+               organisms first. The store's own sorters go the first time
+               through; Store.filter() re-sorts with whatever sorters it holds
+               (sortOnFilter), so one sorter reading the current order is all
+               it takes. */
             doLocalQuery: function (queryPlan) {
                 var me = this, store = me.store, query = (queryPlan.query || "").replace(/^\s+|\s+$/g, ""),
-                    records, ranked, order, i;
+                    limit = me.maxRows > 0 ? me.maxRows : Infinity, records, ranked, kept, order, model, i;
 
-                if (!me.organismSorters) me.organismSorters = store.sorters.getRange();
                 if (!me.queryFilter) {
                     me.organismOrder = {};
                     me.queryFilter = new Ext.util.Filter({
@@ -467,28 +579,40 @@
                         }
                     });
                     store.addFilter(me.queryFilter, false);
-                }
-
-                if (query) {
-                    records = (store.snapshot || store.data).items;
-                    ranked = rank(query, Ext.Array.map(records, function (record) { return record.data; }));
-                    order = {};
-                    for (i = 0; i < ranked.length; i++) order[me.organismKey(ranked[i])] = i;
-                    me.organismOrder = order;
-                    me.queryFilter.disabled = false;
                     store.sorters.clear();
                     store.sorters.add(new Ext.util.Sorter({
                         sorterFn: function (a, b) {
-                            return order[me.organismKey(a.data)] - order[me.organismKey(b.data)];
+                            return me.organismOrder[me.organismKey(a.data)] - me.organismOrder[me.organismKey(b.data)];
                         }
                     }));
-                } else {
-                    me.queryFilter.disabled = true;
-                    store.sorters.clear();
-                    store.sorters.addAll(me.organismSorters);
                 }
 
+                records = (store.snapshot || store.data).items;
+                ranked = rank(query, Ext.Array.map(records, function (record) { return record.data; }));
+                kept = ranked.length > limit ? ranked.slice(0, limit) : ranked;
+                order = {};
+                for (i = 0; i < kept.length; i++) order[me.organismKey(kept[i])] = i;
+                me.organismOrder = order;
+
+                /* A browse leads with the curated organisms; the group labels
+                   sit either side of them, and only when there are rows on
+                   both sides. */
+                model = 0;
+                if (!query) {
+                    while (model < kept.length && MODEL_RANK.hasOwnProperty(normalize(kept[model].value))) model++;
+                }
+                me.organismShown = {
+                    query: query, shown: kept.length, matched: ranked.length, total: records.length,
+                    model: model, groups: !query && model > 0 && model < kept.length
+                };
+
                 store.filter();
+
+                /* The list has not arrived (autoLoad still in flight): what
+                   this computed is not the browse, and doQuery caches by
+                   lastQuery, so forget it -- or the first click after the
+                   load re-shows the empty list. */
+                if (!records.length) me.lastQuery = undefined;
 
                 if (store.getCount()) {
                     me.expand();
@@ -505,8 +629,9 @@
             /* The stock lookup searches the store's filtered rows only, so
                setValue("mmu") fails while the user's last query is still
                narrowing the list -- which is exactly when example mode sets
-               the organism programmatically. Every row is still in the
-               snapshot, so look there. */
+               the organism programmatically -- and, now that a browse shows
+               200 rows of 12,000, for most organisms at any time. Every row
+               is still in the snapshot, so look there. */
             findRecord: function (field, value) {
                 var items = (this.store.snapshot || this.store.data).items, i;
                 for (i = 0; i < items.length; i++) {
@@ -525,6 +650,8 @@
         highlight: highlight,
         highlightCode: highlightCode,
         defineCombo: defineCombo,
+        formatCount: formatCount,
+        MODEL_ORGANISMS: MODEL_ORGANISMS,
         SCORE: SCORE
     };
 });
