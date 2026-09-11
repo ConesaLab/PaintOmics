@@ -29,11 +29,7 @@ DBManager and the census tool load it, and it must work in a bare interpreter.
 """
 import re
 import time
-
-try:
-    from urllib.request import urlopen
-except ImportError:  # pragma: no cover - Python 2 is not supported, but be explicit
-    from urllib2 import urlopen  # type: ignore
+from urllib.request import urlopen
 
 KEGG_TAXONOMY_URL = "https://rest.kegg.jp/get/br:br08610"
 
