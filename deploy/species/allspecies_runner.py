@@ -583,17 +583,21 @@ class Runner(object):
         installer = threading.Thread(target=self.installWorker, args=(rowsByCode, len(rows)), name="install", daemon=True)
         installer.start()
         lastReport = 0
+        lastRequeue = time.time()
         while any(t.is_alive() for t in threads) or installer.is_alive():
-            # Requeue retries once the first pass drains.
-            if work.empty() and not self.controlFile("STOP"):
-                retries = [rowsByCode[c] for c in self.orderedCodes if self.getState(c)["state"] == "retry"]
-                if retries and not self.pending("downloading"):
-                    self.log("requeueing %d retries" % len(retries))
-                    for row in retries:
-                        self.setState(row["code"], "pending")
-                        work.put(row)
-                elif not retries and not self.pending("downloading"):
-                    self.downloadsDone = True
+            # Requeue retries every --requeue-every seconds, and again once the
+            # first pass drains. Waiting for the drain alone parked a species
+            # killed by a container swap behind the whole 11,000-deep queue.
+            retries = [rowsByCode[c] for c in self.orderedCodes if self.getState(c)["state"] == "retry"]
+            due = time.time() - lastRequeue >= self.args.requeue_every
+            if retries and not self.controlFile("STOP") and (due or (work.empty() and not self.pending("downloading"))):
+                self.log("requeueing %d retries" % len(retries))
+                for row in retries:
+                    self.setState(row["code"], "pending")
+                    work.put(row)
+                lastRequeue = time.time()
+            elif not retries and work.empty() and not self.pending("downloading"):
+                self.downloadsDone = True
             if time.time() - lastReport > 300:
                 progress = self.writeProgress(len(rows))
                 self.log("progress: %s installed/h=%s eta_h=%s" % (json.dumps(progress["counts"]), progress["installed_last_hour"], progress["eta_hours"]))
@@ -635,6 +639,7 @@ def main(argv=None):
     parser.add_argument("--breaker-pause", type=int, default=1800)
     parser.add_argument("--env-pause", type=int, default=300, help="pause after an environment failure")
     parser.add_argument("--forbidden-pause", type=int, default=3600, help="pause after KEGG answers 403/429")
+    parser.add_argument("--requeue-every", type=int, default=1800, help="seconds between retry requeues")
     parser.add_argument("--stagger", type=float, default=20.0, help="seconds between worker starts")
     parser.add_argument("--exec-user", default=None, help="user for docker compose exec (default: the container's)")
     args = parser.parse_args(argv)
