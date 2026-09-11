@@ -85,6 +85,13 @@ MAPMAN = {
     "cam": (None, "exclude", "not chickpea: ids are Pgl_GLEAN_*/UniVie_pm; KEGG cam is Cicer arietinum"),
 }
 
+#: Reactome species that publish too little to install, with the measurement.
+REACTOME_EXCLUDED = {
+    "mtu": ("Reactome publishes 13 pathways for M. tuberculosis in one tree (R-MTU-870392) and draws a "
+            "diagram for that root only; the 2026-09-11 refresh fetched 1 diagram. mtu_resources builds "
+            "no Reactome tables, so it stays KEGG-only"),
+}
+
 OMNIPATH = {"hsa": 9606, "mmu": 10090, "rno": 10116}
 
 #: Install order. Eukaryotes first (they carry Ensembl identifiers and are
@@ -210,7 +217,9 @@ def main(argv=None):
         installedReactome = int(sources.get("Reactome", 0) > 0)
         installedMapman = int(sources.get("MapMan", 0) > 0)
         installedOmnipath = int(sources.get("OmniPath", 0) > 0)
-        wantReactome = int(code in reactome)
+        wantReactome = int(code in reactome and code not in REACTOME_EXCLUDED)
+        if code in REACTOME_EXCLUDED:
+            notes.append("Reactome excluded: " + REACTOME_EXCLUDED[code])
         gcode, verdict, reason = mapmanFor.get(code, ("", "", ""))
         wantMapman = int(verdict == "install")
         wantOmnipath = int(code in OMNIPATH)
@@ -279,7 +288,8 @@ def main(argv=None):
     sys.stderr.write("wrote %d rows to %s\n" % (len(rows), args.output))
     for (kingdom, action), n in sorted(summary.items()):
         sys.stderr.write("  %-10s %-8s %6d\n" % (kingdom, action, n))
-    sys.stderr.write("  reactome: %d species (%s)\n" % (len(reactome), " ".join(sorted(reactome))))
+    sys.stderr.write("  reactome: %d species (%s); excluded: %s\n" % (
+        len(reactome), " ".join(sorted(reactome)), " ".join(sorted(REACTOME_EXCLUDED)) or "-"))
     sys.stderr.write("  mapman install: %s; excluded: %s\n" % (
         " ".join(k for k, (g, v, r) in sorted(mapmanFor.items()) if v == "install"),
         " ".join(g for g, (k, v, r) in sorted(MAPMAN.items()) if v == "exclude")))

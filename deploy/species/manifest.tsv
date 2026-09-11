@@ -4,7 +4,6 @@ aag	T01053	Eukaryota	Metazoa	Aedes aegypti (yellow fever mosquito)	0	refresh	1	0
 aalb	T06060	Eukaryota	Metazoa	Aedes albopictus (Asian tiger mosquito)	0	refresh	1	0	0	0	1	1	0	0	0			registered Ensembl genebuild but no ensembl_gene table: mapping refresh
 mdm	T03194	Eukaryota	Viridiplantae	Malus domestica (apple)	0	refresh	1	0	0	0	1	1	0	0	0			registered Ensembl genebuild but no ensembl_gene table: mapping refresh
 bvu	T00546	Bacteria	Pseudomonadati	Phocaeicola vulgatus	0	rebuild	1	0	0	0	0	1	0	1	0			carries MapMan data it must not (organism-code collision); rebuild drops it
-mtu	T00015	Bacteria	Bacillati	Mycobacterium tuberculosis H37Rv	0	refresh	1	1	0	0	0	1	0	0	0	13		Reactome publishes only 13 pathways
 aacu	T11380	Eukaryota	Metazoa	Anas acuta (northern pintail)	1	install	1	0	0	0	0	0	0	0	0			
 aage	T09904	Eukaryota	Metazoa	Aricia agestis (brown argus)	1	install	1	0	0	0	0	0	0	0	0			
 aali	T08930	Eukaryota	Metazoa	Anopheles albimanus	1	install	1	0	0	0	1	0	0	0	0			
@@ -7656,6 +7655,7 @@ mto	T01993	Bacteria	Bacillati	Mycobacterium tuberculosis CTRI-2	3	install	1	0	0	
 mtq	T03154	Bacteria	Bacillati	Mycobacterium tuberculosis HKBS1	3	install	1	0	0	0	0	0	0	0	0			
 mts	T01423	Bacteria	Bacillati	Microbacterium testaceum	3	install	1	0	0	0	0	0	0	0	0			
 mtt	T01365	Bacteria	Pseudomonadati	Marivirga tractuosa	3	install	1	0	0	0	0	0	0	0	0			
+mtu	T00015	Bacteria	Bacillati	Mycobacterium tuberculosis H37Rv	3	keep	1	0	0	0	0	1	0	0	0	13		Reactome publishes only 13 pathways
 mtua	T05651	Bacteria	Bacillati	Micromonospora tulbaghiae	3	install	1	0	0	0	0	0	0	0	0			
 mtub	T02617	Bacteria	Bacillati	Mycobacterium tuberculosis 7199-99	3	install	1	0	0	0	0	0	0	0	0			
 mtuc	T02652	Bacteria	Bacillati	Mycobacterium tuberculosis CAS/NITR204	3	install	1	0	0	0	0	0	0	0	0			
