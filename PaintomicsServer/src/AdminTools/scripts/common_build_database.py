@@ -148,6 +148,25 @@ ENSEMBL_GENEBUILDS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__
 ENSEMBL_UNIPROT_DBS = ["Uniprot/SWISSPROT", "Uniprot/SPTREMBL", "UniProtKB_all"]
 ENSEMBL_XREF_DBS = {"entrez": "EntrezGene", "uniprot": ENSEMBL_UNIPROT_DBS}
 
+#: An Ensembl gene cross-referenced to more EntrezGene ids than this -- or a
+#: GeneID cross-referenced to more genes -- is a gene FAMILY match, not a gene
+#: match, and is dropped from the entrez dump. Every EntrezGene xref Ensembl
+#: publishes is DEPENDENT (through a shared protein) with no identity score,
+#: so nothing ranks the members; zebrafish lists 13 genes of one family each
+#: against the same 4,014 GeneIDs, rainbow trout far more. Loaded as they
+#: come, each row's mate set held every paralogue: omy averaged 2,025 mates
+#: per EntrezGene row (max 13,399), a 3.1 GB xref table, a 24-minute import,
+#: and an Ensembl gene id that painted onto thousands of paralogues. Mouse has
+#: 3 genes above 5 ids: the cap costs a normal genome nothing. The UniProt
+#: dump is not capped -- many accessions per gene is ordinary there, and its
+#: join is per accession.
+ENTREZ_MAX_FAN_OUT = 10
+
+
+def fanOutCapFor(wantedDbs):
+    """The fan-out cap to apply to a dump: the EntrezGene dump only."""
+    return ENTREZ_MAX_FAN_OUT if set(wantedDbs) == {ENSEMBL_XREF_DBS["entrez"]} else 0
+
 
 #: Top-level keys of a download_conf.py, read as text: `"ensembl"   :   [`.
 _RESOURCE_KEY = re.compile(r'^\s*"([a-z_]+)"\s*:\s*\[', re.M)
@@ -3995,17 +4014,10 @@ def resolveEnsemblTsvUrl(resource, delay, maxTries):
     return directoryUrl + sorted(candidates)[0]
 
 
-def translateEnsemblDump(source, target, wantedDbs):
-    """Rewrite an Ensembl TSV dump into the 4-column mapping the parsers read.
-
-    `source` yields the dump's lines (gene, transcript, protein, xref, db_name,
-    ...); `target` receives gene, xref, protein, transcript per kept row. A row is
-    kept when its db_name is one of `wantedDbs` and it names a transcript, since
-    the parsers key every identifier off the transcript. "-" means absent and is
-    written as "". Returns (rows written, rows skipped for their db_name).
-    """
-    written = 0
-    skippedDb = 0
+def _ensemblDumpRows(source, wantedDbs):
+    """(gene, transcript, protein, xref, kept) per dump line; kept is False for other db_names."""
+    if hasattr(source, "seek"):
+        source.seek(0)
     for lineNumber, line in enumerate(source):
         fields = line.rstrip("\n").split("\t")
         if lineNumber == 0 and fields[0] == "gene_stable_id":
@@ -4013,14 +4025,52 @@ def translateEnsemblDump(source, target, wantedDbs):
         if len(fields) < 5:
             continue
         gene, transcript, protein, xref, dbName = fields[0], fields[1], fields[2], fields[3], fields[4]
-        if dbName not in wantedDbs:
+        yield gene, transcript, protein, xref, dbName in wantedDbs
+
+
+def translateEnsemblDump(source, target, wantedDbs, maxFanOut=0):
+    """Rewrite an Ensembl TSV dump into the 4-column mapping the parsers read.
+    `source` yields the dump's lines (gene, transcript, protein, xref, db_name,
+    ...); `target` receives gene, xref, protein, transcript per kept row. A row is
+    kept when its db_name is one of `wantedDbs` and it names a transcript, since
+    the parsers key every identifier off the transcript. "-" means absent and is
+    written as "". Returns (rows written, rows skipped for their db_name).
+
+    With `maxFanOut` > 0 the dump is read twice: the first pass counts distinct
+    xrefs per gene and genes per xref, the second drops every row whose gene or
+    xref exceeds the cap (see ENTREZ_MAX_FAN_OUT). `source` must then be
+    seekable or re-iterable.
+    """
+    ambiguousGenes = set()
+    ambiguousXrefs = set()
+    if maxFanOut > 0:
+        xrefsPerGene = defaultdict(set)
+        genesPerXref = defaultdict(set)
+        for gene, transcript, protein, xref, kept in _ensemblDumpRows(source, wantedDbs):
+            if kept and xref and xref != "-" and gene and gene != "-":
+                xrefsPerGene[gene].add(xref)
+                genesPerXref[xref].add(gene)
+        ambiguousGenes = {gene for gene, xrefs in xrefsPerGene.items() if len(xrefs) > maxFanOut}
+        ambiguousXrefs = {xref for xref, genes in genesPerXref.items() if len(genes) > maxFanOut}
+    written = 0
+    skippedDb = 0
+    droppedAmbiguous = 0
+    blank = lambda value: "" if value == "-" else value
+    for gene, transcript, protein, xref, kept in _ensemblDumpRows(source, wantedDbs):
+        if not kept:
             skippedDb += 1
             continue
         if not transcript or transcript == "-":
             continue
-        blank = lambda value: "" if value == "-" else value
+        if gene in ambiguousGenes or xref in ambiguousXrefs:
+            droppedAmbiguous += 1
+            continue
         target.write("\t".join([blank(gene), blank(xref), blank(protein), transcript]) + "\n")
         written += 1
+    if maxFanOut > 0 and (ambiguousGenes or ambiguousXrefs):
+        stderr.write("  * DROPPED %d rows of family-level cross-references: %d genes with more than %d xrefs, "
+                     "%d xrefs with more than %d genes\n"
+                     % (droppedAmbiguous, len(ambiguousGenes), maxFanOut, len(ambiguousXrefs), maxFanOut))
     return written, skippedDb
 
 
@@ -4060,7 +4110,8 @@ def downloadEnsemblMapping(resource, outputName, delay, maxTries):
 
         with gzip.open(tmpGz, "rt", encoding="utf-8", errors="replace") as source, \
              open(tmpOut, "w", encoding="utf-8") as target:
-            written, skippedDb = translateEnsemblDump(source, target, wantedDbs)
+            written, skippedDb = translateEnsemblDump(source, target, wantedDbs,
+                                                      maxFanOut=fanOutCapFor(wantedDbs))
 
         if written == 0:
             raise Exception("Ensembl TSV " + url + " yielded no usable rows for db_name in " +

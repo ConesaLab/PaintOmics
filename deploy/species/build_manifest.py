@@ -85,6 +85,13 @@ MAPMAN = {
     "cam": (None, "exclude", "not chickpea: ids are Pgl_GLEAN_*/UniVie_pm; KEGG cam is Cicer arietinum"),
 }
 
+#: A species whose xref documents average more than this many bytes carries
+#: inflated mate sets (ambiguous EntrezGene cross-references loaded before the
+#: fan-out cap: omy 6,621, amex 7,895, dre 2,899 against 400-900 for a normal
+#: genome) and is refreshed: the mapping is fetched again under the cap and
+#: the species rebuilt.
+XREF_INFLATED_BYTES = 1500
+
 #: Reactome species that publish too little to install, with the measurement.
 REACTOME_EXCLUDED = {
     "mtu": ("Reactome publishes 13 pathways for M. tuberculosis in one tree (R-MTU-870392) and draws a "
@@ -173,6 +180,8 @@ def loadCensus(path):
                 entry["sources"][row["name"]] = int(row["n"] or 0)
             elif row["kind"] == "table":
                 entry["tables"][row["name"]] = int(row["n"] or 0)
+            elif row["kind"] == "stat":
+                entry.setdefault("stats", {})[row["name"]] = int(row["n"] or 0)
     return census
 
 
@@ -310,13 +319,18 @@ def main(argv=None):
         # rebuild) gives it the Ensembl tables without touching its pathways.
         tables = have.get("tables", {})
         missingEnsembl = censusHasTables and code in registry and installedKegg and tables.get("ensembl_gene", 0) <= 0
+        xrefBytes = have.get("stats", {}).get("xref_avg_bytes", 0)
+        inflated = installedKegg and xrefBytes > XREF_INFLATED_BYTES
         if not installedKegg:
             action = "install"
         elif (wantReactome and not installedReactome) or (wantMapman and not installedMapman) \
-                or (wantOmnipath and not installedOmnipath) or missingEnsembl:
+                or (wantOmnipath and not installedOmnipath) or missingEnsembl or inflated:
             action = "refresh"
             if missingEnsembl:
                 notes.append("registered Ensembl genebuild but no ensembl_gene table: mapping refresh")
+            if inflated:
+                notes.append("mate sets inflated (xref documents average %d bytes): ambiguous EntrezGene "
+                             "cross-references; refresh under the fan-out cap" % xrefBytes)
         elif installedMapman and not wantMapman:
             action = "rebuild"
             notes.append("carries MapMan data it must not (organism-code collision); rebuild drops it")

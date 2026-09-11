@@ -401,6 +401,37 @@ class ParserTests(unittest.TestCase):
                          "the same accession under two labels is written twice and de-duplicated at insert")
         self.assertNotIn("Q00000", out.getvalue(), "a row without a transcript has nothing to key on")
 
+    def test_entrez_dump_drops_family_level_cross_references_but_keeps_gene_level_ones(self):
+        """A gene against thousands of GeneIDs (zebrafish: 13 genes x 4,014) is a family
+        match. Loaded as it comes it put every paralogue in every mate set (omy: 2,025
+        mates per EntrezGene row, 3.1 GB). Above the cap the pair is dropped, both ways."""
+        import io
+        header = "gene_stable_id\ttranscript_stable_id\tprotein_stable_id\txref\tdb_name\tinfo_type\n"
+        rows = ["G1\tT1\tP1\t1001\tEntrezGene\tDEPENDENT",            # a real 1:1 link
+                "G2\tT2\tP2\t1002\tEntrezGene\tDEPENDENT",
+                "G2\tT2b\tP2b\t1003\tEntrezGene\tDEPENDENT"]         # two ids: fine
+        rows += ["HUB\tTH\tPH\t%d\tEntrezGene\tDEPENDENT" % (5000 + i) for i in range(12)]   # one gene, 12 ids
+        rows += ["F%d\tTF%d\tPF%d\t9999\tEntrezGene\tDEPENDENT" % (i, i, i) for i in range(12)]  # one id, 12 genes
+        rows += ["G1\tT1\tP1\tQ1\tUniprot/SWISSPROT\tDEPENDENT"]     # other db: skipped, not counted
+        dump = io.StringIO(header + "\n".join(rows) + "\n")
+        out = io.StringIO()
+        written, skipped = self.builder.translateEnsemblDump(dump, out, {"EntrezGene"}, maxFanOut=10)
+        kept = [line.split("\t") for line in out.getvalue().splitlines()]
+        self.assertEqual(3, written, kept)
+        self.assertEqual(1, skipped)
+        self.assertEqual({"G1", "G2"}, {row[0] for row in kept})
+        self.assertNotIn("9999", out.getvalue())
+        # Uncapped, everything is written -- the UniProt dump route relies on that.
+        out = io.StringIO()
+        written, _ = self.builder.translateEnsemblDump(io.StringIO(header + "\n".join(rows) + "\n"), out, {"EntrezGene"})
+        self.assertEqual(3 + 12 + 12, written)
+
+    def test_only_the_entrez_dump_is_capped(self):
+        self.assertEqual(self.builder.ENTREZ_MAX_FAN_OUT, self.builder.fanOutCapFor({"EntrezGene"}))
+        self.assertEqual(0, self.builder.fanOutCapFor(set(self.builder.ENSEMBL_UNIPROT_DBS)))
+        self.assertEqual(0, self.builder.fanOutCapFor({"EntrezGene", "UniProtKB_all"}))
+        self.assertGreaterEqual(self.builder.ENTREZ_MAX_FAN_OUT, 5, "a normal genome has genes with a few GeneIDs")
+
     def test_a_dump_that_cannot_be_fetched_is_reported_not_raised(self):
         """One moved collection or a network blip must not fail the whole species."""
         calls = []

@@ -163,6 +163,28 @@ def test_manifest_census_accepts_the_runner_json_and_the_report_tsv():
         shutil.rmtree(tmp)
 
 
+def test_inflated_species_are_refreshed_from_the_census_statistic():
+    """omy/amex/dre carry mate sets inflated by ambiguous EntrezGene xrefs; the report's
+    xref_avg_bytes statistic is what the manifest turns into a refresh."""
+    import tempfile
+    m = _load("build_manifest")
+    tmp = tempfile.mkdtemp()
+    try:
+        tsvPath = os.path.join(tmp, "census.tsv")
+        with open(tsvPath, "w") as handle:
+            handle.write("kind\tcode\tname\tn\tsampled\treached\tfraction\ttarget\n"
+                         "source\tomy\tKEGG\t196\t\t\t\t\n"
+                         "stat\tomy\txref_avg_bytes\t6621\t\t\t\t\n"
+                         "source\tmmu\tKEGG\t364\t\t\t\t\n"
+                         "stat\tmmu\txref_avg_bytes\t692\t\t\t\t\n")
+        census = m.loadCensus(tsvPath)
+        assert census["omy"]["stats"] == {"xref_avg_bytes": 6621}, census
+        assert census["omy"]["stats"]["xref_avg_bytes"] > m.XREF_INFLATED_BYTES > census["mmu"]["stats"]["xref_avg_bytes"]
+    finally:
+        import shutil
+        shutil.rmtree(tmp)
+
+
 def test_report_sampler_spans_the_whole_table():
     sys.path.insert(0, SCRIPTS)
     import species_report
