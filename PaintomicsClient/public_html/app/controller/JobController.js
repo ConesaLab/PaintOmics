@@ -163,6 +163,56 @@ function showInvalidStep1FormMessage(jobView) {
 	showInvalidFieldMessage((jobView && jobView.firstFormError) ? jobView.firstFormError() : null);
 }
 
+/* Tells the server the answer for `jobID` arrived, so it can drop its copy of
+   the result. Fire-and-forget: nothing waits on it, and a lost
+   acknowledgement only means the server keeps the entry until its ten-minute
+   TTL (Queue.DELIVERED_RESULT_TTL).
+
+   `jqXHR` is the answer that arrived. The server names each delivery in an
+   X-Paintomics-Delivery header and removes the entry only for an
+   acknowledgement that hands the same token back: this request is not
+   sequenced before the next step, and the next step reuses the job id, so
+   an acknowledgement for step 1 that is slow on the wire could otherwise
+   land on step 2's finished result and remove it before the client had it.
+   An answer without the header (a job that is already gone) is not
+   acknowledged at all. */
+function acknowledgeJobResult(jobID, jqXHR) {
+	var delivery = (jqXHR && typeof jqXHR.getResponseHeader === "function")
+		? jqXHR.getResponseHeader("X-Paintomics-Delivery") : null;
+	if (!delivery) { return; }
+	$.ajax({type: "POST", url: SERVER_URL_JOB_RESULT_ACK + "/" + jobID,
+	        data: {delivery: delivery}, error: function () {}});
+}
+
+/* The response a status poll hands its error handler once it has given up
+   retrying: the shape of a server error (a JSON body with a message, an HTTP
+   status) so the callers' handlers -- step1FailureReason, ajaxErrorHandler --
+   read it as they read any other, and `unanswered` set so ajaxErrorHandler
+   can say it was the wire rather than the code. `what` is
+   describeUnansweredRequest's wording for the last attempt. The link is only
+   given to polls that showed one (showURL), whose handler renders HTML;
+   step1FailureReason escapes its message, so a conversion job gets text. */
+function unansweredStatusResponse(jqXHR, what, jobID, jobURL) {
+	var minutes = Math.round(JOB_STATUS_RETRY_BUDGET / 60000);
+	var message = "The server did not answer the status check for job " + jobID +
+		" (" + what + ") for " + minutes + " minutes. The job may still be running on the server" +
+		(jobURL
+			? ": you can reopen it later at <a href=\"" + jobURL + "\" target=\"_blank\">" + jobURL +
+			  "</a>, or from My jobs, before resending the data."
+			: "; check My jobs in a few minutes before resending the data.");
+	var body = String((jqXHR && jqXHR.responseText) || "")
+		.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+	return {
+		status: Number(jqXHR && jqXHR.status) || 0,
+		statusText: String((jqXHR && jqXHR.statusText) || ""),
+		unanswered: true,
+		responseText: JSON.stringify({
+			success: false, status: "unanswered", unanswered: true, message: message,
+			detail: "last status answer: " + what + (body ? "; body: " + body : "")
+		})
+	};
+}
+
 function JobController() {
 	/**
 	*
@@ -177,37 +227,49 @@ function JobController() {
 		var errorHandler = (other.errorHandler || ajaxErrorHandler);
 		var me = this;
 
+		// The dialog for a job the user is waiting on: its title, the link
+		// back to the job, and the body. Drawn by the still-running answer
+		// below, and again by a retry, which adds why the last poll got
+		// nothing.
+		//
+		// Title and body, not one string in the title slot. The whole thing -
+		// the job id, the sentence about the URL, and the URL itself - used to
+		// be passed as the dialog's title, so all three lines were painted by
+		// `#messageDialog.infoDialog h4`: 16px, 600 weight, centred, in the
+		// info blue. A dialog whose every word is a heading has no heading,
+		// and the one line that matters ("Running job X") was
+		// indistinguishable from the two lines of housekeeping under it. The
+		// body slot has existed on this dialog all along.
+		//
+		// A conversion job (regions/miRNA/MORE to genes) is named for what it
+		// prepares, so the analysis job that follows -- with its own id --
+		// does not read as the same job renumbered.
+		var jobURL = 'https://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
+		var dialogTitle = other.jobLabel
+			? other.jobLabel + " (conversion job " + jobID + ")..."
+			: "Running job " + jobID;
+		var dialogBody = showURL
+			? "You can come back to this job at any time:<br/>" +
+			  "<a href=\"" + jobURL + "\" target=\"_blank\">" + jobURL + "</a>"
+			: "";
+
 		console.info("Checking status for Job " + jobID);
 		$.ajax({
 			type: "POST",
 			headers: {"Content-Encoding": "gzip"},
 			url: SERVER_URL_JOB_STATUS + "/" + jobID,
-			success: function (response) {
+			// Longer than the proxy's 60 s, so a stalled poll is ended by the
+			// proxy's 504 -- which the error branch retries -- and never by the
+			// browser abandoning a request the server thread is still working
+			// on. See ServerConfiguration.js for the numbers.
+			timeout: JOB_STATUS_REQUEST_TIMEOUT,
+			success: function (response, textStatus, jqXHR) {
+				other.statusOutage = null;   // the server answered: any outage is over
 				if (response.success === false) {
 					if (response.status === "JobStatus.STARTED" || response.status === "started") {
-						// Title and body, not one string in the title slot.
-						//
-						// The whole thing - the job id, the sentence about the URL, and the
-						// URL itself - used to be passed as the dialog's title, so all three
-						// lines were painted by `#messageDialog.infoDialog h4`: 16px, 600
-						// weight, centred, in the info blue. A dialog whose every word is a
-						// heading has no heading, and the one line that matters ("Running job
-						// X") was indistinguishable from the two lines of housekeeping under
-						// it. The body slot has existed on this dialog all along.
-						// A conversion job (regions/miRNA/MORE to genes) is named for
-						// what it prepares, so the analysis job that follows -- with
-						// its own id -- does not read as the same job renumbered.
-						var title = other.jobLabel
-							? other.jobLabel + " (conversion job " + jobID + ")..."
-							: "Running job " + jobID;
-						var body = "";
 						var progress = null;
 
 						if (showURL) {
-							var jobURL = 'https://' + window.location.host + window.location.pathname + "?jobID=" + jobID;
-							body = "You can come back to this job at any time:<br/>" +
-								"<a href=\"" + jobURL  + "\" target=\"_blank\">" + jobURL + "</a>";
-
 							// These were two sentences of raw seconds that the reader had to
 							// divide to learn how far along the job was. Handed to the dialog
 							// as numbers instead, so it can draw a bar and say how long is left.
@@ -220,18 +282,79 @@ function JobController() {
 							};
 						}
 
-						showInfoMessage(title, {message: body, logMessage: "Job " + jobID + " still running.", showSpin: true, progress: progress, append: other.multipleJobs, itemId: jobID, icon: "play"});
+						showInfoMessage(dialogTitle, {message: dialogBody, logMessage: "Job " + jobID + " still running.", showSpin: true, progress: progress, append: other.multipleJobs, itemId: jobID, icon: "play"});
 					}
 					//Check again in N seconds
 					setTimeout(function () {
 						me.checkJobStatus(jobID, jobView, callback, other, showURL);
 					}, CHECK_STATUS_TIMEOUT);
 				} else {
+					// The result is in hand: tell the server it may drop its
+					// copy. Until this lands (or the server's ten-minute TTL
+					// passes) a retried poll could still have collected it --
+					// see Queue.deliver_result in PySiQ.py.
+					acknowledgeJobResult(jobID, jqXHR);
 					callback(response, jobID, jobView, other);
 				}
 			},
-			error: function (response) {
-				errorHandler(response, jobID, jobView, other);
+			error: function (response, textStatus) {
+				// A READABLE answer is a verdict about the job -- "not on the
+				// queue anymore", a failed run's own message, an expired
+				// session -- and is final. What is not readable is nginx's
+				// 502/504 page, the empty body of a dropped connection, or
+				// this request's own timeout: verdicts about the wire, none
+				// about the job, and every one worth asking again.
+				//
+				// 2026-09-11 13:07:47 UTC, paintomics.uv.es: one poll for job
+				// ia5b7334Y0 took 61 s (the server was swapping), nginx
+				// answered 504 at its default 60 s, this branch handed the HTML
+				// page to ajaxErrorHandler -- "Oops..Internal error! Unable to
+				// parse the error message" -- and the chain ended there. The
+				// job finished and was stored at 13:09:42 with nobody polling.
+				// The user came back five hours later and redid every step.
+				if (readableAnswer(response)) {
+					other.statusOutage = null;
+					acknowledgeJobResult(jobID, response);   // a failed job's message was received too
+					errorHandler(response, jobID, jobView, other);
+					return;
+				}
+
+				var outage = other.statusOutage || (other.statusOutage = {since: 0, attempts: 0});
+				var what = describeUnansweredRequest(response, textStatus);
+				var delay = statusPollRetryDelay(outage, Date.now());
+				if (delay < 0) {
+					// Budget spent. Report through the same handler a failed
+					// job uses, with a body that says what happened, so the
+					// callers' own handlers -- the one that unlocks the Step 1
+					// form, the one that counts a failed conversion -- run as
+					// they would for any other failure. The custom handler is
+					// reached here and above only: never for a poll that is
+					// still being retried.
+					other.statusOutage = null;
+					console.error("Job " + jobID + ": no readable status answer for " +
+						Math.round((Date.now() - outage.since) / 1000) + " s (last: " + what + "); giving up.");
+					errorHandler(unansweredStatusResponse(response, what, jobID, showURL ? jobURL : null),
+					             jobID, jobView, other);
+					return;
+				}
+
+				console.warn("Job " + jobID + ": status check got no readable answer (" + what +
+					"); trying again in " + Math.round(delay / 1000) + " s (attempt " + outage.attempts + ").");
+				if (showURL || other.multipleJobs) {
+					// The dialog this poll owns keeps its spinner, and says why
+					// it is still there rather than freezing on the last
+					// progress it saw.
+					showInfoMessage(dialogTitle, {
+						message: dialogBody + (dialogBody ? "<br/>" : "") +
+							"<i>The server did not answer the last status check (" + what +
+							"). Trying again in " + Math.round(delay / 1000) + " s\u2026</i>",
+						logMessage: "Job " + jobID + " status unanswered (" + what + "), retrying.",
+						showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "play"
+					});
+				}
+				setTimeout(function () {
+					me.checkJobStatus(jobID, jobView, callback, other, showURL);
+				}, delay);
 			}
 		});
 	};

@@ -868,6 +868,17 @@ function PA_Step3JobView() {
 	// Only done/error/cancelled end the chain now. A transport failure backs
 	// off so a server that is down is not hammered, and the normal cadence
 	// returns as soon as it answers again.
+	//
+	// Two kinds of failure, two rules. A request that got NO READABLE ANSWER
+	// -- nginx's 502/504 page, an empty body, this request's own timeout --
+	// says nothing about the run and is retried on the same clock-bounded
+	// schedule as the job status poll (statusPollRetryDelay in Util.js: 5, 10,
+	// 20, 40, 60 s, for five minutes since the first one). A request the
+	// server DID answer, with a refusal it can read, is classified below:
+	// permanent ones stop at once, the rest are counted up to
+	// AI_POLL_MAX_FAILURES. Time for the first, a count for the second,
+	// because five 65 s timeouts and five instant 502s are very different
+	// waits and only a clock tells them apart.
 	this.pollAIStatus = function() {
 		var me = this;
 		var BACKOFF_CEILING = 30000;
@@ -878,8 +889,11 @@ function PA_Step3JobView() {
 		$.ajax({
 			type: "POST", url: SERVER_URL_AI_INTERPRET_STATUS,
 			data: { jobID: me.getModel().getJobID() },
+			// Longer than the proxy's 60 s: see JOB_STATUS_REQUEST_TIMEOUT.
+			timeout: JOB_STATUS_REQUEST_TIMEOUT,
 			success: function(r) {
 				if (!me.aiWidget) { return; }
+				me.aiPollOutage = null;      // the server answered: any outage is over
 				// success:false is what the servlet returns for any handled
 				// exception. Most are worth another look -- a Mongo hiccup, a
 				// momentary blip -- but two are not, and treating those as
@@ -925,7 +939,30 @@ function PA_Step3JobView() {
 					schedule(AI_POLL_INTERVAL);
 				}
 			},
-			error: function(jqXHR) {
+			error: function(jqXHR, textStatus) {
+				if (!readableAnswer(jqXHR)) {
+					var outage = me.aiPollOutage || (me.aiPollOutage = {since: 0, attempts: 0});
+					var what = describeUnansweredRequest(jqXHR, textStatus);
+					var wait = statusPollRetryDelay(outage, Date.now());
+					if (wait < 0) {
+						me.aiPollOutage = null;
+						if (me.aiWidget) {
+							me.aiWidget.updateProgress(
+								"error", 100,
+								"The server did not answer the progress check (" + what +
+								") for " + Math.round(JOB_STATUS_RETRY_BUDGET / 60000) +
+								" minutes. The interpretation may still be running on " +
+								"the server: reload the page to pick it up.");
+						}
+						return;
+					}
+					console.warn("AI status: no readable answer (" + what +
+					             "); trying again in " + Math.round(wait / 1000) + " s.");
+					schedule(wait);
+					return;
+				}
+				me.aiPollOutage = null;
+
 				// Retrying is right for a TRANSPORT failure and wrong for a
 				// permanent one. Both used to back off and retry forever.
 				//
@@ -1011,6 +1048,16 @@ function PA_Step3JobView() {
 			this.aiWidget.destroy();
 			this.aiWidget = null;
 		}
+		// The poll chain's bookkeeping goes with the chain. This view is
+		// reused across jobs (showJobInstance -> refreshAIWidget -> here ->
+		// pollAIStatus, never a fresh view), and the chain only resets these
+		// from its own callbacks -- which the clearTimeout above has just
+		// prevented from ever running. Left in place, an outage that began
+		// under job A would be charged to job B: its first unreadable answer
+		// would measure the five-minute budget from A's timestamp and give
+		// up at once, and a run of refusals under A would count against B.
+		this.aiPollOutage = null;
+		this.aiPollFailures = 0;
 		this.aiClusters = null;
 		this.aiJobID = null;
 		$("#aiInterpretButton").hide();
