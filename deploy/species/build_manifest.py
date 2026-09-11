@@ -113,8 +113,10 @@ def fetch(url, cacheDir, name):
 
 
 def keggOrganisms(cacheDir):
-    organisms = {code: {"T": tNumber, "name": name}
-                 for code, (tNumber, name) in parseGenomeList(fetch(KEGG_GENOME_URL, cacheDir, "kegg_genome.tsv")).items()}
+    # KEGG's own order is kept: within a species the reference genome comes
+    # first, and that is the strain the popularity ranking keeps.
+    organisms = {code: {"T": tNumber, "name": name, "kegg_order": index}
+                 for index, (code, (tNumber, name)) in enumerate(parseGenomeList(fetch(KEGG_GENOME_URL, cacheDir, "kegg_genome.tsv")).items())}
     taxonomy = parseOrganismTaxonomy(fetch(KEGG_TAXONOMY_URL, cacheDir, "br08610.txt"))
     for code, entry in organisms.items():
         tax = taxonomy.get(code, {})
@@ -181,6 +183,66 @@ def loadRegistry(path):
         return json.load(handle).get("genebuilds", {})
 
 
+def loadPopularity(path):
+    """{code: (binomial, pubmed_count)} from pubmed_popularity.py's output."""
+    out = {}
+    with open(path, encoding="utf-8") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            if row["pubmed_count"] != "":
+                out[row["code"]] = (row["binomial"], int(row["pubmed_count"]))
+    return out
+
+
+def _defer(row, reason):
+    row["action"] = "defer"
+    row["note"] = "; ".join(filter(None, [row["note"], "deferred: " + reason]))
+
+
+def rankByPopularity(rows, popularity, census, top):
+    """Order the organisms still to install by how much is written about them.
+
+    Every `install` row gets a `pubmed_count` and a `rank`; the rank becomes
+    its priority, so the runner takes the most cited first. One KEGG code per
+    binomial is kept: the first KEGG lists (its reference genome), or none if
+    the server already holds a code of that species -- the other strains are
+    `defer`red with the reason. With `top`, everything ranked below it is
+    deferred too. Rows the manifest does not install (keep, refresh, rebuild)
+    are untouched.
+    """
+    installedBinomials = set()
+    for code, entry in census.items():
+        if entry.get("sources", {}).get("KEGG", 0) > 0 and code in popularity:
+            installedBinomials.add(popularity[code][0])
+    seen = set()
+    candidates = []
+    keggOrder = {r["code"]: r.get("kegg_order", i) for i, r in enumerate(rows)}
+    for row in sorted(rows, key=lambda r: keggOrder[r["code"]]):
+        if row["action"] != "install":
+            continue
+        code = row["code"]
+        binomial, count = popularity.get(code, (None, -1))
+        row["pubmed_count"] = count if count >= 0 else ""
+        if binomial is None:
+            _defer(row, "no popularity count")
+            continue
+        if binomial in installedBinomials:
+            _defer(row, "another strain of %s is installed" % binomial)
+            continue
+        if binomial in seen:
+            _defer(row, "another strain of %s ranks for it" % binomial)
+            continue
+        seen.add(binomial)
+        candidates.append(row)
+    # Most cited first; ties by KEGG's own order (reference genomes first).
+    candidates.sort(key=lambda r: (-int(r["pubmed_count"]), keggOrder[r["code"]]))
+    for rank, row in enumerate(candidates, start=1):
+        row["rank"] = rank
+        if top and rank > top:
+            _defer(row, "rank %d by PubMed count, beyond the top %d" % (rank, top))
+        else:
+            row["priority"] = rank
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cache-dir", default=os.path.join(HERE, "cache"))
@@ -188,6 +250,10 @@ def main(argv=None):
     parser.add_argument("--registry", default=os.path.join(HERE, "..", "..", "PaintomicsServer", "src", "AdminTools",
                                                            "scripts", "common_resources", "ensembl_genebuilds.json"))
     parser.add_argument("-o", "--output", default=os.path.join(HERE, "manifest.tsv"))
+    parser.add_argument("--popularity", default=None,
+                        help="popularity.tsv from pubmed_popularity.py; ranks the organisms still to install")
+    parser.add_argument("--top", type=int, default=0,
+                        help="with --popularity: install only the N most cited species (one KEGG code per binomial), defer the rest")
     args = parser.parse_args(argv)
 
     organisms = keggOrganisms(args.cache_dir)
@@ -195,6 +261,12 @@ def main(argv=None):
     gomapman = gomapmanCodes(args.cache_dir)
     census = loadCensus(args.census)
     registry = loadRegistry(args.registry)
+
+    # Only a census that carries the identifier tables (species_report.py's
+    # TSV) can say a table is missing; the runner's pathway-count JSON cannot,
+    # and must not turn every registered species into a refresh. Decided
+    # once for the whole census, not per species.
+    censusHasTables = any(entry.get("tables") for entry in census.values())
 
     mapmanFor = {}   # KEGG code -> (gomapman code, verdict, reason)
     for gcode in gomapman:
@@ -205,7 +277,7 @@ def main(argv=None):
     columns = ["code", "T", "kingdom", "group", "name", "priority", "action",
                "kegg", "reactome", "mapman", "omnipath", "ensembl_genebuild",
                "installed_kegg", "installed_reactome", "installed_mapman", "installed_omnipath",
-               "reactome_pathways_published", "mapman_source_code", "note"]
+               "reactome_pathways_published", "mapman_source_code", "pubmed_count", "rank", "note"]
     rows = []
     for code in sorted(organisms, key=lambda c: (PRIORITY.get(organisms[c]["kingdom"], 9), c)):
         entry = organisms[code]
@@ -237,7 +309,7 @@ def main(argv=None):
         # KEGG ids only; a mapping refresh (download --kegg=0 --mapping=1 and a
         # rebuild) gives it the Ensembl tables without touching its pathways.
         tables = have.get("tables", {})
-        missingEnsembl = code in registry and installedKegg and tables.get("ensembl_gene", -1) <= 0
+        missingEnsembl = censusHasTables and code in registry and installedKegg and tables.get("ensembl_gene", 0) <= 0
         if not installedKegg:
             action = "install"
         elif (wantReactome and not installedReactome) or (wantMapman and not installedMapman) \
@@ -261,12 +333,18 @@ def main(argv=None):
             "installed_kegg": installedKegg, "installed_reactome": installedReactome,
             "installed_mapman": installedMapman, "installed_omnipath": installedOmnipath,
             "reactome_pathways_published": reactome[code][1] if code in reactome else "",
-            "mapman_source_code": gcode, "note": "; ".join(notes),
+            "mapman_source_code": gcode, "pubmed_count": "", "rank": "", "note": "; ".join(notes),
+            "kegg_order": entry["kegg_order"],
         })
 
-    # Priority order is the install order: refreshes first, then eukaryotes,
-    # archaea, bacteria; alphabetical within a class.
-    rows.sort(key=lambda r: (r["priority"], PRIORITY.get(r["kingdom"], 9), r["code"]))
+    if args.popularity:
+        rankByPopularity(rows, loadPopularity(args.popularity), census, args.top)
+
+    # Priority order is the install order: refreshes first, then (with
+    # --popularity) the most cited organisms by rank, else eukaryotes, archaea,
+    # bacteria; alphabetical within a class.
+    rows.sort(key=lambda r: (int(r["priority"]) if str(r["priority"]).lstrip("-").isdigit() else 9,
+                             PRIORITY.get(r["kingdom"], 9), r["code"]))
 
     # Species the server holds that KEGG no longer lists stay visible here.
     for code in sorted(set(census) - set(organisms)):
@@ -274,6 +352,8 @@ def main(argv=None):
         rows[-1].update({"code": code, "action": "keep", "priority": 9, "note": "installed but absent from KEGG's current organism list"})
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    for row in rows:
+        row.pop("kegg_order", None)
     with open(args.output, "w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", lineterminator="\n")
         writer.writeheader()
