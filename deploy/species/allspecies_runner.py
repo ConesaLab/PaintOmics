@@ -513,8 +513,13 @@ class Runner(object):
             code = row["code"]
             entry = self.getState(code)
             state = entry["state"]
-            if state == "installed":
+            if state == "installed" and entry.get("action", row["action"]) == row["action"]:
                 continue
+            if state == "installed":
+                # Installed under a different action (a plain install before the
+                # manifest asked for a refresh): the refresh still has to happen.
+                self.log("%s: installed as %s, manifest now says %s; queuing" % (code, entry.get("action"), row["action"]))
+                state = "pending"
             if row["action"] == "install" and census.get(code, 0) > 0 and state in ("pending", "downloading", "retry", "installing", "downloaded"):
                 # Already there (a previous run, or someone else's install).
                 self.setState(code, "installed", kegg_pathways=census[code], reason="found installed before this run")
