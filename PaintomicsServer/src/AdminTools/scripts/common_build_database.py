@@ -654,6 +654,7 @@ def processEnsemblUniProtData():
     ensembl_peptide_db_id = insertDatabase(DBNAME_Entry("ensembl_peptide", "Ensembl protein", "Identifier"))
     uniprot_acc_db_id = insertDatabase(DBNAME_Entry("uniprot_acc", "UniProt Accession", "Identifier"))
     kegg_id_db_id = insertDatabase(DBNAME_Entry("kegg_id", "KEGG Feature ID", "Identifier"))
+    entrezgene_db_id = insertDatabase(DBNAME_Entry("entrezgene", "EntrezGene ID", "Identifier"))
 
     # The kegg_id members of each accession's groups as they stand now, i.e.
     # what KEGG said. Filled on first sight of an accession, never updated by
@@ -693,6 +694,13 @@ def processEnsemblUniProtData():
                                                       resource.get("description"), None)
                 if ensembl_gi != "":
                     _insertEnsemblIdentifier(ensembl_gi, ensembl_gene_db_id, resource.get("description"), ensembl_ti)
+                    # A RefSeq-named gene spells its NCBI GeneID; most such genes
+                    # appear in this dump only (ptep: 7,098 here, 650 in the entrez
+                    # dump), so the id has to be read here as well.
+                    entrez_gi = entrezIdFromGeneName(ensembl_gi)
+                    if entrez_gi is not None:
+                        insertTR_XREF(insertXREF(XREF_Entry(entrez_gi, entrezgene_db_id,
+                                                            resource.get("description"))), ensembl_ti)
                 if ensembl_pi != "":
                     _insertEnsemblIdentifier(ensembl_pi, ensembl_peptide_db_id, resource.get("description"), ensembl_ti)
                 if uniprot_acc == "":

@@ -331,10 +331,13 @@ class ParserTests(unittest.TestCase):
         self.writeMapping("ensembl_uniprot.list", [
             ("SPAC212.11", "P0CT33", "SPAC212.11.1:pep", "SPAC212.11.1"),
             ("SPAC977.02", "A0A000UNKNOWN", "SPAC977.02.1:pep", "SPAC977.02.1"),
+            ("LOC107444053", "A0A000ALSOUNKNOWN", "XP_015906880.1", "XM_016051394.2"),
         ])
         self.builder.processKEGGMappingData()
         keggGroupsBefore = self.groupsOf("SPAC212.11", "kegg_id")
         self.builder.processEnsemblUniProtData()
+        # A RefSeq-named gene seen only in this dump still yields its Entrez id.
+        self.assertEqual(self.groupsOf("LOC107444053", "ensembl_gene"), self.groupsOf("107444053", "entrezgene"))
 
         geneGroups = self.groupsOf("SPAC212.11", "ensembl_gene")
         self.assertTrue(geneGroups)
