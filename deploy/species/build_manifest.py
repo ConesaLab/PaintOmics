@@ -193,6 +193,11 @@ def loadPopularity(path):
     return out
 
 
+def _defer(row, reason):
+    row["action"] = "defer"
+    row["note"] = "; ".join(filter(None, [row["note"], "deferred: " + reason]))
+
+
 def rankByPopularity(rows, popularity, census, top):
     """Order the organisms still to install by how much is written about them.
 
@@ -218,16 +223,13 @@ def rankByPopularity(rows, popularity, census, top):
         binomial, count = popularity.get(code, (None, -1))
         row["pubmed_count"] = count if count >= 0 else ""
         if binomial is None:
-            row["action"] = "defer"
-            row["note"] = "; ".join(filter(None, [row["note"], "deferred: no popularity count"]))
+            _defer(row, "no popularity count")
             continue
         if binomial in installedBinomials:
-            row["action"] = "defer"
-            row["note"] = "; ".join(filter(None, [row["note"], "deferred: another strain of %s is installed" % binomial]))
+            _defer(row, "another strain of %s is installed" % binomial)
             continue
         if binomial in seen:
-            row["action"] = "defer"
-            row["note"] = "; ".join(filter(None, [row["note"], "deferred: another strain of %s ranks for it" % binomial]))
+            _defer(row, "another strain of %s ranks for it" % binomial)
             continue
         seen.add(binomial)
         candidates.append(row)
@@ -236,8 +238,7 @@ def rankByPopularity(rows, popularity, census, top):
     for rank, row in enumerate(candidates, start=1):
         row["rank"] = rank
         if top and rank > top:
-            row["action"] = "defer"
-            row["note"] = "; ".join(filter(None, [row["note"], "deferred: rank %d by PubMed count, beyond the top %d" % (rank, top)]))
+            _defer(row, "rank %d by PubMed count, beyond the top %d" % (rank, top))
         else:
             row["priority"] = rank
 

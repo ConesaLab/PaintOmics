@@ -92,11 +92,11 @@ def test_manifest_covers_every_kegg_organism_once_with_a_valid_action():
             assert r["priority"].isdigit(), r
             if r["priority"] == "0":
                 assert r["action"] in ("refresh", "rebuild"), r
+            assert r["kegg"] == "1", r
         if r["action"] == "defer":
             assert "deferred" in r["note"], r
         if r["action"] == "install" and r["rank"]:
             assert r["priority"] == r["rank"], "an installed organism's priority is its popularity rank: %r" % r
-            assert r["kegg"] == "1", r
         if r["mapman"] == "1":
             assert r["code"] in ("ath", "osa", "sly", "sot"), r["code"] + " must not install MapMan"
         if r["omnipath"] == "1":

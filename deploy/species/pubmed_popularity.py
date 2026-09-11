@@ -89,14 +89,25 @@ def main(argv=None):
     sys.stderr.write("%d organisms, %d distinct binomials, %d to count (%s key)\n"
                      % (len(binomials), len(set(binomials.values())), len(todo), "with" if apiKey else "no"))
     started = time.time()
+    failed = []
     for index, term in enumerate(todo):
-        counts[term] = pubmedCount(term, apiKey)
+        try:
+            counts[term] = pubmedCount(term, apiKey)
+        except RuntimeError as exc:
+            # One organism NCBI will not answer for must not cost the run the
+            # rest of the list; it is left uncounted (empty) for --resume.
+            failed.append(term)
+            sys.stderr.write("  giving up on %r: %s\n" % (term, exc))
         time.sleep(delay)
         if (index + 1) % 50 == 0:
             sys.stderr.write("  %d/%d in %d s\n" % (index + 1, len(todo), int(time.time() - started)))
             writeOut(args.output, rows, binomials, counts)
     writeOut(args.output, rows, binomials, counts)
     sys.stderr.write("wrote %s\n" % args.output)
+    if failed:
+        sys.stderr.write("%d binomials left uncounted (run again with --resume): %s\n"
+                         % (len(failed), " | ".join(failed[:10])))
+        return 1
     return 0
 
 
