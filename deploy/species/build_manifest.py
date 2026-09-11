@@ -217,13 +217,13 @@ def main(argv=None):
         installedReactome = int(sources.get("Reactome", 0) > 0)
         installedMapman = int(sources.get("MapMan", 0) > 0)
         installedOmnipath = int(sources.get("OmniPath", 0) > 0)
+        notes = []
         wantReactome = int(code in reactome and code not in REACTOME_EXCLUDED)
         if code in REACTOME_EXCLUDED:
             notes.append("Reactome excluded: " + REACTOME_EXCLUDED[code])
         gcode, verdict, reason = mapmanFor.get(code, ("", "", ""))
         wantMapman = int(verdict == "install")
         wantOmnipath = int(code in OMNIPATH)
-        notes = []
         if verdict == "exclude":
             notes.append("MapMan excluded: " + reason)
         elif verdict == "install":

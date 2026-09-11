@@ -7655,7 +7655,7 @@ mto	T01993	Bacteria	Bacillati	Mycobacterium tuberculosis CTRI-2	3	install	1	0	0	
 mtq	T03154	Bacteria	Bacillati	Mycobacterium tuberculosis HKBS1	3	install	1	0	0	0	0	0	0	0	0			
 mts	T01423	Bacteria	Bacillati	Microbacterium testaceum	3	install	1	0	0	0	0	0	0	0	0			
 mtt	T01365	Bacteria	Pseudomonadati	Marivirga tractuosa	3	install	1	0	0	0	0	0	0	0	0			
-mtu	T00015	Bacteria	Bacillati	Mycobacterium tuberculosis H37Rv	3	keep	1	0	0	0	0	1	0	0	0	13		Reactome publishes only 13 pathways
+mtu	T00015	Bacteria	Bacillati	Mycobacterium tuberculosis H37Rv	3	keep	1	0	0	0	0	1	0	0	0	13		Reactome excluded: Reactome publishes 13 pathways for M. tuberculosis in one tree (R-MTU-870392) and draws a diagram for that root only; the 2026-09-11 refresh fetched 1 diagram. mtu_resources builds no Reactome tables, so it stays KEGG-only; Reactome publishes only 13 pathways
 mtua	T05651	Bacteria	Bacillati	Micromonospora tulbaghiae	3	install	1	0	0	0	0	0	0	0	0			
 mtub	T02617	Bacteria	Bacillati	Mycobacterium tuberculosis 7199-99	3	install	1	0	0	0	0	0	0	0	0			
 mtuc	T02652	Bacteria	Bacillati	Mycobacterium tuberculosis CAS/NITR204	3	install	1	0	0	0	0	0	0	0	0			

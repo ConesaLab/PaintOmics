@@ -180,9 +180,6 @@ def test_registry_selects_eukaryotes_from_kegg_not_from_the_list_file():
                 "T40001\tHuman papillomavirus type 16\n"
                 "T00001\tmmu; Mus musculus (house mouse)\n")
 
-    class FakeTaxonomy(dict):
-        pass
-
     fakeTaxonomy = {"hsa": {"kingdom": "Eukaryota"}, "eco": {"kingdom": "Bacteria"}}
     import kegg_taxonomy
     originalFetch, originalTax = ensembl_census.fetch, kegg_taxonomy.fetchOrganismTaxonomy
