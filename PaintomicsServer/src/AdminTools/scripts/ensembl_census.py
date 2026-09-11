@@ -203,17 +203,35 @@ def dumpsPublished(division, path, release):
     return [kind for kind in ("entrez", "uniprot") if kind in kinds]
 
 
+def keggEukaryotes():
+    """{code: (T number, name)} for every eukaryote KEGG lists, straight from KEGG.
+
+    Used to read current/common/organisms_all.list and its lineage column. KEGG
+    retired /list/organism, and the list rebuilt from /list/genome carried an
+    EMPTY lineage column (paintomics.org, 2026-08-13 common download), so this
+    command resolved zero species without saying why. The two live sources
+    answer directly: /list/genome for codes and names, br08610 for the kingdom.
+    """
+    from kegg_taxonomy import fetchOrganismTaxonomy, isEukaryote
+    taxonomy = fetchOrganismTaxonomy()
+    lineage = {}
+    for line in fetch("https://rest.kegg.jp/list/genome").splitlines():
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) < 2 or "; " not in parts[1]:
+            continue
+        code, name = parts[1].split("; ", 1)
+        code = code.strip()
+        if code and " " not in code and isEukaryote(taxonomy.get(code)):
+            lineage[code] = (parts[0], name.strip())
+    if not lineage:
+        raise Exception("no eukaryotes found in KEGG's organism list; refusing to empty the registry")
+    return lineage
+
+
 def registry(args):
     """Rebuild the registry for every eukaryote in KEGG's organism list, or for --species."""
-    from conf.serverconf import KEGG_DATA_DIR
-    organisms = os.path.join(KEGG_DATA_DIR, "current", "common", "organisms_all.list")
     wanted = set(args.species.split(",")) if args.species else None
-    lineage = {}
-    with open(organisms, encoding="utf-8") as handle:
-        for line in handle:
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) >= 4 and parts[3].startswith("Eukaryotes"):
-                lineage[parts[1]] = (parts[0], parts[2])
+    lineage = keggEukaryotes()
     if wanted is not None:
         lineage = {code: value for code, value in lineage.items() if code in wanted}
     if args.installed:

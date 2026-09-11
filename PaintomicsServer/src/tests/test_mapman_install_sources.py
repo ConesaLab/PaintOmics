@@ -6,7 +6,7 @@ Run from `PaintomicsServer/`:
 
 Each test prints PASS/FAIL and exits non-zero on any failure.
 
-The MapMan organisms (ath, bvu, sly, sot) used to be built by copying five
+The MapMan organisms (ath, sly, sot; later osa) used to be built by copying five
 files out of `/home/tian/mapman/`, a directory that exists on exactly one
 machine and nowhere in the repository. Any other host - a fresh checkout, CI,
 the Drago image - could not rebuild them at all, and the failure surfaced as a
@@ -53,11 +53,14 @@ def _check(name, fn):
 # Helpers
 # ---------------------------------------------------------------------------
 
-MAPMAN_SPECIES = ("ath", "bvu", "osa", "sly", "sot")
+MAPMAN_SPECIES = ("ath", "osa", "sly", "sot")
 
 # Everything processMapManMappingData / processMapManPathwaysData reads.
-# "mapman_kegg" is deliberately absent: sugar beet has no gene-to-Entrez
-# export, and the download step treats that key as optional.
+# "mapman_kegg" is optional to the download step, but every organism kept
+# here declares one: without a cross-link the MapMan genes form an island the
+# mapper cannot reach -- which is what `bvu` was (GoMapMan's bvu is sugar
+# beet, KEGG's bvu is the gut bacterium Phocaeicola vulgatus, so its 27,421
+# MapMan ids sat at 0% cross-linked inside a bacterium; removed 2026-09-11).
 REQUIRED_RESOURCES = ("mapman_gene", "mapman_pathways",
                       "mapman_classification", "metabolites")
 
@@ -66,7 +69,6 @@ REQUIRED_RESOURCES = ("mapman_gene", "mapman_pathways",
 EXPECTED_OUTPUTS = {
     "ath": {"mapman_kegg": "gene-to-entrez_ath.list",
             "mapman_gene": "gene-to-mapman_ath.list"},
-    "bvu": {"mapman_gene": "gene-to-mapman_bvu.list"},
     "osa": {"mapman_kegg": "gene-to-entrez_osa.list",
             "mapman_gene": "gene-to-mapman_osa.list"},
     "sly": {"mapman_kegg": "gene-to-entrez_sly.list",
