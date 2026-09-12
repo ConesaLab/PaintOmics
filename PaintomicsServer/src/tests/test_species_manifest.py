@@ -302,6 +302,24 @@ def test_runner_progress_file_survives_concurrent_writers():
         shutil.rmtree(tmp)
 
 
+def test_runner_reads_per_species_verdicts_when_the_summary_is_missing():
+    """A run that installed its species and then died writing species.json has
+    INSTALL ... SUCCESS lines and no summary block; those species are installed."""
+    r = _load("allspecies_runner")
+    import tempfile
+    path = tempfile.mktemp()
+    with open(path, "w") as handle:
+        handle.write("2026-09-12 10:15:25,994 - INFO - DBManager.py : log -              INSTALL  1 ppy...SUCCESS\n"
+                     "2026-09-12 10:15:25,994 - INFO - DBManager.py : log -              INSTALL  1 xyz...ERROR\n"
+                     "2026-09-12 10:15:26,027 - ERROR - DBManager.py : errorlog -          Error while writing species.json: no display name for nfo\n")
+    try:
+        parsed = r.Runner.parseSummary(r.Runner.__new__(r.Runner), path)
+    finally:
+        os.remove(path)
+    assert parsed["installed"] == {"ppy"} and parsed["failed"] == {"xyz"}, parsed
+    assert parsed["from_verdict_lines"] == {"ppy", "xyz"}, parsed
+
+
 def test_runner_parses_the_install_summary_block():
     r = _load("allspecies_runner")
     import tempfile

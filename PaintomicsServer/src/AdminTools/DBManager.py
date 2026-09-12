@@ -1722,12 +1722,19 @@ def generateAvailableSpeciesFile(VALID_SPECIES, species_file, installed_species_
         # (see the note above): the file the dropdown reads must list what
         # is installed, all of it, or the picker offers a half-installed
         # server. Named in the error, so the fix is a lookup, not a hunt.
+        # A code the lists cannot name is shown by its code, and said so. It
+        # used to abort species.json for EVERY installed organism: KEGG adds
+        # organisms between two common downloads (nfo, Naegleria fowleri, on
+        # 2026-09-12), the new species installed into MongoDB, and then every
+        # later install run died here after its species were installed --
+        # 148 species were recorded as failed for one missing display name.
         missing = sorted(code for code in set(codes) if not species.get(code))
         if missing:
-            raise Exception("no display name in organisms_all.list or organisms_custom.list for "
-                            + ", ".join(missing))
-        # By display name, deterministic: the previous loop walked a set, so
-        # the file came out in hash order, different on every run.
+            log("            WARNING: no display name in organisms_all.list or organisms_custom.list for " +
+                ", ".join(missing) + "; shown by code until the common data is refreshed")
+            INSTALL_WARNINGS.append(("species.json", "no display name for " + ", ".join(missing)))
+            for code in missing:
+                species[code] = code
         rows = species_json_rows(codes, species)
     except Exception as ex:
         errorlog("Error while writing species.json: " + str(ex))

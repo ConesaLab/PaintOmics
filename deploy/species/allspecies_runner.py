@@ -80,6 +80,11 @@ ENV_FAILURE = re.compile(r"PermissionError|ModuleNotFoundError|ImportError|No su
 #: The INSTALL SUMMARY block DBManager prints at the end of a run, as it
 #: appears through the logging prefix ("... - DBManager.py : log -   installed : 2  aaf aag").
 SUMMARY_LINE = re.compile(r"\b(installed|failed|skipped)\s+:\s+(\d+)\s+(.*)$")
+#: DBManager's per-species verdict line, printed as each species finishes:
+#: "INSTALL  1 hpy...SUCCESS" / "...ERROR" / "...REFUSED". The summary block
+#: comes after species.json is written, so a run that installs its species
+#: and then dies writing species.json has these lines and no summary.
+VERDICT_LINE = re.compile(r"\bINSTALL\s+\d+\s+(\S+?)\.\.\.(SUCCESS|ERROR|REFUSED)\b")
 
 
 def now():
@@ -460,6 +465,9 @@ class Runner(object):
             rc = rc or rc2
         elapsed = int(time.time() - start)
         summary = self.parseSummary(logPath)
+        if summary.get("from_verdict_lines"):
+            self.log("install run ended without a summary; verdicts read from the per-species lines for %s"
+                     % " ".join(sorted(summary["from_verdict_lines"])))
         if not summary and ENV_FAILURE.search(self.tail(logPath, 4000)):
             # The run died before it looked at any species (root-owned
             # summary.log, a recreated container): not their fault.
@@ -513,14 +521,26 @@ class Runner(object):
         """{installed|failed|skipped: set(codes)} over every summary block in the log.
 
         One log can hold two runs (promote, then --reinstall), so the sets are
-        unioned rather than the last block winning.
+        unioned rather than the last block winning. Without any summary block
+        the per-species verdict lines decide: a run that installed its species
+        and then died writing species.json (it could not name a newer KEGG
+        organism, 2026-09-12) has those and nothing else; the Mongo count in
+        installBatch still guards every SUCCESS.
         """
         out = {}
+        verdicts = {}
         for line in self.tail(logPath, 200000).splitlines():
             match = SUMMARY_LINE.search(line.rstrip())
             if match:
                 key, _, rest = match.groups()
                 out.setdefault(key, set()).update(set(rest.split()) - {"-"})
+            verdict = VERDICT_LINE.search(line)
+            if verdict:
+                verdicts[verdict.group(1)] = verdict.group(2)
+        if not out and verdicts:
+            for code, verdict in verdicts.items():
+                out.setdefault("installed" if verdict == "SUCCESS" else "failed", set()).add(code)
+            out["from_verdict_lines"] = set(verdicts)
         return out
 
     def pathwayCount(self, code, tries=3):
