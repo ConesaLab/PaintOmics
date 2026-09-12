@@ -337,11 +337,17 @@ def buildStategraMore(context):
             # between the two PLS1 engines. That is what makes offering the
             # port as the default legitimate; a 473x speed claim with no
             # equivalence behind it would just be a different answer, faster.
-            # All three fit inside the 1800 s job timeout, which is the
-            # property that makes this dataset usable as the example for a
-            # three-way engine choice rather than only for the default.
+            # All four fit inside the 1800 s job timeout, which is the
+            # property that makes this dataset usable as the example for the
+            # whole engine choice rather than only for the default.
+            #
+            # rust-mlr measured 2026-09-12: the median of three consecutive
+            # runs on an idle machine (24.6, 26.5, 26.7 s) against the binary
+            # scripts/ci/build-more-rs.sh pins, d261f9c. It is the only one of
+            # the four this table had no entry for, which left the scenario
+            # advertising an engine whose cost nothing here recorded.
             "measuredRuntimeSeconds": {"rust-pls1": 0.1, "r-pls1": 234.4,
-                                       "r-mlr": 739.8},
+                                       "r-mlr": 739.8, "rust-mlr": 26.5},
             "enginesAgree": ("rust-pls1 and r-pls1 byte-identical on all four "
                              "output files; r-mlr is a different model and is "
                              "not expected to agree with either"),

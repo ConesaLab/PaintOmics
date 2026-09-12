@@ -115,5 +115,29 @@ class ManifestMatchesItsGeneratorTest(unittest.TestCase):
                     "entries" % (scenarioId, entry, len(MORE_ENGINES)))
 
 
+    def test_a_scenario_that_times_engines_times_all_of_them(self):
+        """A runtime table must cover the catalogue, not a subset of it.
+
+        `stategra-more` exists to be the example you can run on any engine, and
+        says so: "All four fit inside the 1800 s job timeout, which is the
+        property that makes this dataset usable as the example for the whole
+        engine choice". A table missing an engine leaves the scenario
+        advertising one whose cost nothing recorded -- which is what happened
+        when `rust-mlr` was added to the catalogue and not to the table.
+        """
+        from src.servlets.MOREServlet import MORE_ENGINES
+        catalogue = {entry["id"] for entry in MORE_ENGINES}
+        for scenarioId, scenario in sorted(_manifestScenarios().items()):
+            timings = (scenario.get("expected") or {}).get("measuredRuntimeSeconds")
+            if not timings:
+                continue
+            self.assertEqual(
+                catalogue, set(timings),
+                "scenario %r times %s but MOREServlet.MORE_ENGINES offers %s; "
+                "an engine with no measured runtime here is one the example "
+                "cannot honestly claim to cover"
+                % (scenarioId, sorted(timings), sorted(catalogue)))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

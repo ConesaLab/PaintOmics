@@ -38,7 +38,7 @@ The STATegra Ikaros induction time course (GSE75417) against the literature-cura
 * **enginesAgree** — rust-pls1 and r-pls1 byte-identical on all four output files; r-mlr is a different model and is not expected to agree with either
 * **flaggedRegulators** — 56
 * **flaggedRule** — Welch t-test of the 18 induced samples against the 18 controls, Benjamini-Hochberg FDR < 0.01, and at least a two-fold difference of arm means
-* **measuredRuntimeSeconds** — {'rust-pls1': 0.1, 'r-pls1': 234.4, 'r-mlr': 739.8}
+* **measuredRuntimeSeconds** — {'rust-pls1': 0.1, 'r-pls1': 234.4, 'r-mlr': 739.8, 'rust-mlr': 26.5}
 * **note** — Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted.
 * **regulators** — 387
 * **source** — {'expression': 'GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)', 'network': 'TFLink v1.0, Mus musculus, restricted to interactions flagged Small-scale.evidence = Yes', 'subsample': 'none -- every gene with a measured profile and at least one small-scale association is included'}

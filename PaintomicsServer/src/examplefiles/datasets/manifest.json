@@ -734,7 +734,8 @@
         "measuredRuntimeSeconds": {
           "r-mlr": 739.8,
           "r-pls1": 234.4,
-          "rust-pls1": 0.1
+          "rust-pls1": 0.1,
+          "rust-mlr": 26.5
         },
         "note": "Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted.",
         "regulators": 387,
