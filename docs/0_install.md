@@ -20,7 +20,8 @@ PaintOmics is distributed under the **GNU General Public License, version 3**
 | The client | Static JavaScript and CSS in `PaintomicsClient/public_html/` | Served by the same process. There is no build step |
 | MongoDB | Users, jobs, pathway definitions and identifier cross-references | The stack ships MongoDB 7; the driver is pinned to pymongo 4, which is required rather than preferred — pymongo 3.11 speaks wire-protocol opcodes MongoDB removed in 5.1 |
 | A data directory | `KEGG_DATA` (the pathway databases you install) and `CLIENT_TMP` (uploads and job output) | Both live under `/data` in the container, on a single named volume |
-| R | `Rscript` is called by metagenes (`generateMetaGenes.R`) and by regulatory analysis (`runMORE.R`) | See [R packages](#r-packages) below — the shipped image does not cover all of it |
+| R | `Rscript` is called by metagenes (`generateMetaGenes.R`) | See [R packages](#r-packages) below |
+| `more-rs` | The engine behind regulatory analysis (MORE). A platform-specific binary, gitignored, dropped in per deployment | Without it no regulatory analysis can run; `deploy/build-image.sh` refuses to build an image that lacks it |
 
 The one architectural fact an operator has to know is that the job queue lives
 in the memory of the process that accepted the request
@@ -108,9 +109,10 @@ running.
 ### R packages
 
 `generateMetaGenes.R` loads **amap**, **cluster**, **factoextra** and
-**mclust**; `runMORE.R` loads **optparse** and the **MORE** package itself. The
-six the README installs (those five plus **purrr**) are enough to start the
-application. The container image checks 21 packages at build time, listed in
+**mclust**. Those four plus **purrr** are enough to start the application.
+Regulatory analysis no longer needs R at all: the MORE R package and its
+`runMORE.R` wrapper were removed in September 2026 and MORE runs on the
+`more-rs` binary. The container image checks 21 packages at build time, listed in
 `deploy/Dockerfile`: the union of every R dependency the repository has carried,
 adding **igraph**, **tidyverse** and the ggplot2/ggpubr plotting stack. Most of
 that list is historical — the metabolite hub analysis was moved off R entirely,
@@ -403,7 +405,7 @@ docker compose -f deploy/compose.yaml exec -T mongo \
 | Every database checkbox is tickable, whatever the organism | The client could not read the availability map from the server and is offering all of them, with a note saying so under the checkbox group. This is a degraded state, not a well-stocked server |
 | A Reactome install fails on one species | Expected for a species Reactome does not curate. Reinstall it with `--reactome=0` |
 | Metagenes fails | Missing R packages — `amap`, `cluster`, `factoextra`, `mclust`. The `Rscript` check in `deploy/README.md` names them |
-| Regulatory analysis fails | Neither the MORE R package nor a `more-rs` binary is present; see [R packages](#r-packages) |
+| Regulatory analysis is greyed out, or a job is refused | No `more-rs` binary is installed. It is gitignored; build it from [TianYuan-Liu/MORE](https://github.com/TianYuan-Liu/MORE) (`rust/`) at the commit `scripts/ci/build-more-rs.sh` pins, and drop it at `PaintomicsServer/src/common/bioscripts/more-rs` |
 | Uploads rejected around 100 MB | `client_max_body_size`, `SERVER_MAX_CONTENT_LENGTH` and `limit-post` must all agree |
 
 Four standalone test scripts are worth running before a release, from

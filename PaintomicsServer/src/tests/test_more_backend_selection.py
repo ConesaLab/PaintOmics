@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""Cover for the MORE backend choice in src/servlets/MOREServlet.py.
+"""Cover for `MOREServlet.moreBinary` -- which more-rs a job runs on, if any.
 
-MORE has two interchangeable engines behind one CLI: `Rscript runMORE.R`, and
-`more-rs`, the Rust port of the PLS1 kernel. They were measured to agree on the
-bundled `06-regulatory-more` example -- six of the seven output files
-byte-identical, the seventh identical as a multiset and differing only in row
-order -- so the choice between them is an operational one.
+There is one MORE engine. Until 2026-09 there were two, and the second was a
+*fallback*: with no binary discoverable, `_resolveMOREBackend` returned
+`["Rscript", runMORE.R]` and the job went to the MORE R package. That package
+has never been installed in the deployed image (deploy/Dockerfile records why),
+so the fallback did not produce a slower answer -- it produced an R error from
+inside a job the user had already waited for.
 
-Two facts make the choice non-obvious, and both are pinned here:
+So the question this file pins changed shape. It used to be "which of the two",
+and it is now "the binary, or a refusal the user can read". The refusal path is
+therefore the important half of what is tested here, not an edge case:
 
-* **The port implements PLS1 only.** `--method MLR` exits pointing back at
-  runMORE.R rather than silently doing something different. Routing an MLR job
-  to the binary would turn a working analysis into a failed one, so MLR must
-  reach R whatever the configuration says.
-* **The binary is optional.** It is absent from the deploy image today. A
-  configured-but-missing path must degrade to R rather than raise, or a stale
-  setting takes MORE down entirely.
+* `PAINTOMICS_MORE_RS=off` and its synonyms, the opt-out, which used to mean
+  "use R" and now means "refuse".
+* A configured path that is not on disk -- a stale setting.
+* A configured path without the executable bit, which an unpacked archive
+  loses easily and which would otherwise surface as EACCES from Popen.
+
+Discovery order is pinned too, because it is what makes the bundled binary
+work with no configuration at all.
 
 Usage:
     cd PaintomicsServer
@@ -33,10 +37,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from src.servlets import MOREServlet
 
 
-R_SCRIPT = "/opt/paintomics/src/common/bioscripts/runMORE.R"
-
-
-class ResolveMOREBackendTest(unittest.TestCase):
+class MoreBinaryTest(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="more_backend_")
@@ -49,138 +50,86 @@ class ResolveMOREBackendTest(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_pls1_uses_the_binary_when_one_is_configured(self):
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, self.binary),
-            [self.binary])
+    def test_a_configured_binary_is_used(self):
+        self.assertEqual(MOREServlet.moreBinary(self.binary), self.binary)
 
-    def test_pls1_discovers_a_binary_when_none_is_configured(self):
-        """Blank means "go and find one", which is what makes the port default.
-
-        This is the whole of the change: an operator who has configured nothing
-        gets the Rust backend for PLS1, because that is the case the port was
-        measured byte-equal for. Discovery is patched rather than relying on
-        whatever happens to be installed on the machine running the tests.
-        """
+    def test_a_binary_is_discovered_when_none_is_configured(self):
         with mock.patch.object(MOREServlet, "_discoverMoreRs",
                                return_value=self.binary):
-            self.assertEqual(
-                MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, ""),
-                [self.binary])
+            self.assertEqual(MOREServlet.moreBinary(""), self.binary)
 
-    def test_pls1_falls_back_to_r_when_nothing_can_be_discovered(self):
-        """A host with no binary anywhere behaves exactly as it did before.
+    def test_nothing_discoverable_means_no_engine(self):
+        """The fallback that used to live here is gone, and that is the change.
 
-        This is what keeps the new default safe to ship: turning the port on by
-        default must not be able to break a deployment that has never had one.
+        This returned ["Rscript", runMORE.R] before, on a host where the MORE R
+        package is not installed. Returning "" is what lets every caller refuse
+        at submission instead.
         """
         with mock.patch.object(MOREServlet, "_discoverMoreRs", return_value=""):
-            self.assertEqual(
-                MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, ""),
-                ["Rscript", R_SCRIPT])
+            self.assertEqual(MOREServlet.moreBinary(""), "")
 
-    def test_the_off_switch_forces_r_even_though_a_binary_exists(self):
-        """`off` is the documented opt-out, and it must beat discovery.
+    def test_the_off_switch_disables_the_only_engine(self):
+        """`off` used to mean "use R". With no R, it means "refuse"."""
+        for spelling in MOREServlet.MORE_RS_OFF:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(MOREServlet.moreBinary(spelling), "")
 
-        Without it there would be no way back to R once a binary is installed,
-        which matters for anyone reproducing an older result.
-        """
+    def test_the_off_switch_is_case_insensitive(self):
+        self.assertEqual(MOREServlet.moreBinary("OFF"), "")
+        self.assertEqual(MOREServlet.moreBinary("  Off  "), "")
+
+    def test_blank_is_not_an_off_switch(self):
+        """Blank means "go and find one" -- the no-configuration default."""
+        self.assertNotIn("", MOREServlet.MORE_RS_OFF)
         with mock.patch.object(MOREServlet, "_discoverMoreRs",
                                return_value=self.binary):
-            for value in ("off", "OFF", " off ", "none", "false", "0", "no",
-                          "disabled"):
-                self.assertEqual(
-                    MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, value),
-                    ["Rscript", R_SCRIPT], "%r must force R" % value)
+            self.assertEqual(MOREServlet.moreBinary("   "), self.binary)
+
+    def test_a_configured_binary_that_is_not_on_disk_is_no_engine(self):
+        self.assertEqual(
+            MOREServlet.moreBinary(os.path.join(self.tmp, "absent")), "")
+
+    def test_a_configured_binary_that_is_not_executable_is_no_engine(self):
+        plain = os.path.join(self.tmp, "not-executable")
+        with open(plain, "w") as fh:
+            fh.write("#!/bin/sh\nexit 0\n")
+        os.chmod(plain, 0o644)
+        self.assertEqual(MOREServlet.moreBinary(plain), "")
+
+    def test_a_configured_path_is_never_second_guessed_by_discovery(self):
+        """A stale setting must refuse, not silently run a different binary.
+
+        Falling through to discovery here would make a typo in
+        PAINTOMICS_MORE_RS run whatever happens to be on PATH, which is the
+        opposite of what naming a path means.
+        """
+        with mock.patch.object(MOREServlet, "_discoverMoreRs",
+                               return_value=self.binary) as discover:
+            self.assertEqual(
+                MOREServlet.moreBinary(os.path.join(self.tmp, "absent")), "")
+            discover.assert_not_called()
+
+
+class DiscoveryOrderTest(unittest.TestCase):
+    """The bundled binary outranks PATH, and both beat nothing."""
 
     def test_discovery_prefers_the_bundled_binary_over_path(self):
-        """Beside runMORE.R first, so a deployment controls its own version."""
-        with mock.patch.object(MOREServlet.os.path, "isfile",
-                               lambda p: p == MOREServlet.MORE_RS_BUNDLED), \
-             mock.patch.object(MOREServlet.os, "access", lambda p, m: True), \
-             mock.patch.object(MOREServlet.shutil, "which",
-                               return_value="/usr/bin/more-rs"):
+        with mock.patch("os.path.isfile", return_value=True), \
+             mock.patch("os.access", return_value=True), \
+             mock.patch("shutil.which", return_value="/usr/local/bin/more-rs"):
             self.assertEqual(MOREServlet._discoverMoreRs(),
                              MOREServlet.MORE_RS_BUNDLED)
 
     def test_discovery_falls_through_to_path(self):
-        with mock.patch.object(MOREServlet.os.path, "isfile", return_value=False), \
-             mock.patch.object(MOREServlet.shutil, "which",
-                               return_value="/usr/bin/more-rs"):
-            self.assertEqual(MOREServlet._discoverMoreRs(), "/usr/bin/more-rs")
+        with mock.patch("os.path.isfile", return_value=False), \
+             mock.patch("shutil.which", return_value="/usr/local/bin/more-rs"):
+            self.assertEqual(MOREServlet._discoverMoreRs(),
+                             "/usr/local/bin/more-rs")
 
     def test_discovery_returns_empty_when_there_is_nothing(self):
-        with mock.patch.object(MOREServlet.os.path, "isfile", return_value=False), \
-             mock.patch.object(MOREServlet.shutil, "which", return_value=None):
+        with mock.patch("os.path.isfile", return_value=False), \
+             mock.patch("shutil.which", return_value=None):
             self.assertEqual(MOREServlet._discoverMoreRs(), "")
-
-    def test_mlr_ignores_a_discoverable_binary_too(self):
-        """MLR must not be reachable by the discovery path either.
-
-        The port implements MLR, so this is not a capability guard: R's MLR
-        draws from the RNG in three places and the port sits inside R's seed
-        band rather than on it, which is a difference to opt into rather than
-        have chosen silently.
-        """
-        with mock.patch.object(MOREServlet, "_discoverMoreRs",
-                               return_value=self.binary):
-            self.assertEqual(
-                MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, ""),
-                ["Rscript", R_SCRIPT])
-
-    def test_a_configured_binary_that_is_not_on_disk_falls_back_to_r(self):
-        """A stale path must not take MORE down; R is always installed."""
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend(
-                "PLS1", R_SCRIPT, os.path.join(self.tmp, "absent")),
-            ["Rscript", R_SCRIPT])
-
-    def test_a_configured_binary_that_is_not_executable_falls_back_to_r(self):
-        """An unpacked-without-the-mode-bit binary would fail with EACCES."""
-        os.chmod(self.binary, stat.S_IRUSR | stat.S_IWUSR)
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend("PLS1", R_SCRIPT, self.binary),
-            ["Rscript", R_SCRIPT])
-
-    def test_mlr_always_uses_r_even_when_the_binary_is_present(self):
-        """MLR stays on R by policy, not because the port lacks it.
-
-        `more-rs` accepts `--method MLR` and implements it in full (elastic
-        net, collinearity grouping, group expansion). It is routed to R because
-        R's MLR path is stochastic -- `sample(correlacionados, 1)` picks the
-        surviving member of a collapsed clique -- so the port can only be
-        measured inside R's own seed band, never equal to it. PLS1 has no such
-        problem, which is why only PLS1 gets switched by default.
-        """
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend("MLR", R_SCRIPT, self.binary),
-            ["Rscript", R_SCRIPT])
-
-    def test_an_unrecognised_method_uses_r(self):
-        """R owns the full method surface, so it is the safe default."""
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend("PLS2", R_SCRIPT, self.binary),
-            ["Rscript", R_SCRIPT])
-
-    def test_a_non_canonical_method_string_goes_to_r(self):
-        """The match is exact on purpose.
-
-        jobInstance.method comes from a form field, not a validated enum, and
-        the port is stricter than R about it -- measured: `--method pls1` and
-        `--method " PLS1 "` both exit with "must be PLS1 or MLR". Normalising
-        here would route a string the port refuses away from the backend that
-        might accept it, converting a slow analysis into a failed one.
-        """
-        for method in ("pls1", " PLS1 ", "Pls1"):
-            self.assertEqual(
-                MOREServlet._resolveMOREBackend(method, R_SCRIPT, self.binary),
-                ["Rscript", R_SCRIPT], "method %r must go to R" % method)
-
-    def test_a_missing_method_goes_to_r(self):
-        """MOREJob defaults method to PLS1, but None must not crash routing."""
-        self.assertEqual(
-            MOREServlet._resolveMOREBackend(None, R_SCRIPT, self.binary),
-            ["Rscript", R_SCRIPT])
 
 
 class ConfigCompatibilityTest(unittest.TestCase):
@@ -189,9 +138,14 @@ class ConfigCompatibilityTest(unittest.TestCase):
     serverconf.py is gitignored and generated from example_serverconf.py by
     deploy/entrypoint.sh -- but only `if [ ! -f "${CONFIG_PATH}" ]`. An upgraded
     container therefore keeps the config it already has, which predates this
-    setting. A hard `from src.conf.serverconf import MORE_RS_BINARY` would then
-    raise at import time and take the whole servlet down, turning a new optional
-    feature into an outage on every existing deployment.
+    setting. A hard import of it would raise at import time and take the whole
+    servlet down, turning a new optional feature into an outage on every
+    existing deployment.
+
+    Exercised by reloading the module rather than by grepping its source. The
+    source-grep form of this test also reads as
+    `from src.conf.serverconf import <name>, source` to the import scanner in
+    test_release_hygiene, which then demands a setting called `source`.
     """
 
     def test_the_servlet_imports_when_serverconf_predates_the_setting(self):
@@ -225,6 +179,23 @@ class ConfigCompatibilityTest(unittest.TestCase):
             body = fh.read()
         self.assertIn("MORE_RS_BINARY", body)
         self.assertIn("PAINTOMICS_MORE_RS", body)
+
+    def test_no_runtime_budget_setting_survives_the_cost_model(self):
+        """The pre-flight cost model is gone; its setting must not linger.
+
+        A setting the server no longer reads is worse than none: an operator
+        who tunes PAINTOMICS_MORE_RUNTIME_BUDGET would be tuning nothing, and
+        would have no way to find that out.
+        """
+        template = os.path.abspath(os.path.join(
+            os.path.dirname(MOREServlet.__file__),
+            "..", "resources", "example_serverconf.py"))
+        for path in (MOREServlet.__file__, template):
+            with self.subTest(path=os.path.basename(path)):
+                hits = [n for n, line in
+                        enumerate(open(path, encoding="utf-8"), 1)
+                        if "MORE_RUNTIME_BUDGET_SECONDS" in line]
+                self.assertEqual(hits, [], "still referenced at lines %s" % hits)
 
 
 if __name__ == "__main__":

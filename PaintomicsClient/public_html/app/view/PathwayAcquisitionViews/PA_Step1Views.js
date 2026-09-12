@@ -5186,29 +5186,29 @@ var _moreBackendsRequest = null;
 
    The wording lives in exactly one place, MOREServlet.MORE_ENGINES, and
    reaches the browser through /more_backends. The copy that used to sit here
-   was a second source for the same four descriptions and had already drifted
-   from the first: it dropped the speed figure and the recommendation, and it
-   still described MLR's collinearity representative as an unseeded draw, which
-   more.R:162 seeds (`set.seed(seed)`, `seed = 123`) and runMORE.R:382 never
-   overrides -- so re-running an MLR job credits the same regulator, and the
-   sentence was false in both copies.
+   was a second source for the same descriptions and had already drifted from
+   the first: it dropped the speed figure and the recommendation, and it still
+   described MLR's collinearity representative as an unseeded draw, which
+   more.R:162 seeds -- so the sentence was false in both copies.
 
    `label` is the combo's displayField and a row without one renders blank, so
-   it is DERIVED from the method and engine rather than written out; a hardcoded
-   label would be the duplication this list exists to avoid. `detail` is left
-   empty, and the description box renders nothing rather than a stale sentence:
-   when the route cannot be reached this client genuinely does not know what
-   this host runs, and saying nothing is the honest form of that. */
+   it is DERIVED from the method rather than written out; a hardcoded label
+   would be the duplication this list exists to avoid. `detail` is left empty,
+   and the description box renders nothing rather than a stale sentence: when
+   the route cannot be reached this client genuinely does not know what this
+   host runs, and saying nothing is the honest form of that.
+
+   `engine` is carried, always "rust", because the store's model declares the
+   field and the server still sends it. There is one engine now; the R half of
+   this list went with the R half of the catalogue. */
 var MORE_ENGINES_FALLBACK = ([
-	{id: "rust-pls1", method: "PLS1", engine: "rust"},
-	{id: "r-pls1",    method: "PLS1", engine: "r"},
-	{id: "r-mlr",     method: "MLR",  engine: "r"},
-	{id: "rust-mlr",  method: "MLR",  engine: "rust"}
+	{id: "rust-pls1", method: "PLS1"},
+	{id: "rust-mlr",  method: "MLR"}
 ]).map(function (entry) {
+	entry.engine = "rust";
 	entry.available = true;
 	entry.unavailableReason = "";
-	entry.label = entry.method + " — " +
-		(entry.engine === "rust" ? "Rust" : "R") + " engine";
+	entry.label = entry.method;
 	entry.detail = "";
 	return entry;
 });
@@ -5236,9 +5236,9 @@ function loadMOREEngines(combo) {
 
 		if (report && report.anyAvailable === false) {
 			showWarningMessage("No regulatory model can be run here", {
-				text: "This server has neither the Rust engine nor the R MORE " +
-				      "package installed, so a regulatory analysis cannot be " +
-				      "started. Please contact the administrator.",
+				text: "This server has no more-rs binary installed, so a " +
+				      "regulatory analysis cannot be started. Please " +
+				      "contact the administrator.",
 				logMessage: "GET /more_backends reported no available engine."
 			});
 		}

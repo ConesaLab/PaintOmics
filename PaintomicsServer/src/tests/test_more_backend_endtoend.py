@@ -205,12 +205,11 @@ class MoreRsMlrEndToEndTest(MoreRsEndToEndTest):
     the star file staying significance-filtered) is method-independent, and it
     was method-independent code that broke last time.
 
-    `engine = "rust"` is not decoration. `_resolveMOREBackend` sends MLR to the
-    port **only** when a caller names it -- with `auto`, or with no engine at
-    all, MLR stays on R so that stored jobs and older clients keep the numbers
-    they have already seen. If that invariant ever inverts, this test starts
-    passing for the wrong reason, so `test_mlr_without_an_explicit_engine_uses_r`
-    guards the other side of it.
+    MLR used to reach the port only when a caller named it: with `auto`, or
+    with no engine at all, it stayed on R so that stored jobs and older clients
+    kept the numbers they had already seen. There is no R to stay on now, so
+    that asymmetry is gone and `engine` is set here only because the job object
+    carries the field.
     """
 
     def setUp(self):
@@ -219,17 +218,16 @@ class MoreRsMlrEndToEndTest(MoreRsEndToEndTest):
         self.job.engine = "rust"
 
     def test_the_backend_actually_chosen_is_the_port(self):
-        """Otherwise this whole class could be silently exercising R."""
-        backend = MOREServlet._resolveMOREBackend(
-            "MLR", "runMORE.R", binaryPath=BINARY, engine="rust")
-        self.assertEqual(backend, [BINARY])
+        """Otherwise this whole class could be silently exercising nothing."""
+        self.assertEqual(MOREServlet.moreBinary(BINARY), BINARY)
 
-    def test_mlr_without_an_explicit_engine_uses_r(self):
-        for engine in (None, "auto"):
-            backend = MOREServlet._resolveMOREBackend(
-                "MLR", "runMORE.R", binaryPath=BINARY, engine=engine)
-            self.assertEqual(backend[0], "Rscript",
-                             "MLR with engine=%r must stay on R" % (engine,))
+    def test_mlr_reaches_the_port_however_the_engine_is_named(self):
+        """Every spelling a stored job or an old client can send, including
+        the literal "r" that names an engine this server no longer has."""
+        for engine in (None, "", "auto", "rust", "r"):
+            self.assertEqual(MOREServlet.engineIdFor("MLR", engine), "rust-mlr",
+                             "MLR with engine=%r must resolve to the port"
+                             % (engine,))
 
 
 if __name__ == "__main__":

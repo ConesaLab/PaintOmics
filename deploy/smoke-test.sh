@@ -73,6 +73,32 @@ cat("MISSING:", paste(missing, collapse=", "), "\n")' 2>&1 | tail -3
 fi
 
 # ---------------------------------------------------------------------------
+section "MORE engine"
+# ---------------------------------------------------------------------------
+# Same reasoning as the R packages above -- this is on the user-facing request
+# path, and its absence produces a server that works until someone opens the
+# regulatory card. It is checked HERE as well as in build-image.sh because the
+# two answer different questions: build-image.sh asks whether the image being
+# built has one, and this asks whether the deployment actually running has one.
+# An image built elsewhere, or a bind mount shadowing the directory, passes the
+# first and fails the second.
+#
+# more-rs became load-bearing when the MORE R engine was removed: there is no
+# second backend, so a missing binary is a refused analysis rather than a slow
+# one.
+if "${COMPOSE[@]}" exec -T app sh -c '
+    for candidate in "${PAINTOMICS_MORE_RS:-}" \
+                     /app/PaintomicsServer/src/common/bioscripts/more-rs \
+                     "$(command -v more-rs 2>/dev/null)"; do
+        [ -n "$candidate" ] && [ -x "$candidate" ] && exec "$candidate" --help
+    done
+    exit 1' >/dev/null 2>&1; then
+    ok "more-rs runs (the only MORE engine)"
+else
+    bad "no usable more-rs: regulatory analysis will be refused on this host"
+fi
+
+# ---------------------------------------------------------------------------
 section "Database"
 # ---------------------------------------------------------------------------
 if "${COMPOSE[@]}" exec -T app python -c "

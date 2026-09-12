@@ -309,7 +309,7 @@ def buildStategraMore(context):
                     "measurements and no planted signal, which is what "
                     "separates it from the simulated MORE example."),
         "tests": ["MORE on real per-sample data",
-                  "All four regulatory engines (Rust PLS1, R PLS1, R MLR, Rust MLR)",
+                  "Both regulatory models (PLS1 and MLR) on more-rs",
                   "12-group experimental design",
                   "Automatic minVariation threshold",
                   "GENE:::REGULATOR hand-off to pathway analysis",
@@ -327,30 +327,31 @@ def buildStategraMore(context):
                        "filter_r2": 0.0, "enrichment": "genes"},
         "expected": {
             "note": _ENVIRONMENT_NOTE,
-            # Measured, not estimated: one run of each engine over exactly
-            # these files, on an M-series laptop under other load, so treat
-            # them as ratios rather than as absolutes.
+            # Measured, not estimated: one run of each on an M-series laptop
+            # over exactly these files, so treat them as ratios rather than as
+            # absolutes.
             #
-            # The equivalence is the load-bearing half. `cmp` on all four
-            # result files -- values, relevant associations, relevant pairs and
-            # the RegulationPerCondition table -- reports them byte-identical
-            # between the two PLS1 engines. That is what makes offering the
-            # port as the default legitimate; a 473x speed claim with no
-            # equivalence behind it would just be a different answer, faster.
-            # All four fit inside the 1800 s job timeout, which is the
-            # property that makes this dataset usable as the example for the
-            # whole engine choice rather than only for the default.
+            # The R figures are kept deliberately, after the R engine was
+            # removed in 2026-09, because they are what the removal was
+            # weighed against and a table that silently loses them reads as if
+            # the choice never existed. They are no longer runnable here:
+            # `r-pls1` 234.4 s and `r-mlr` 739.8 s against 0.1 s and 26.5 s for
+            # the two that remain.
+            #
+            # The equivalence is the load-bearing half of that. `cmp` on all
+            # four result files -- values, relevant associations, relevant
+            # pairs and the RegulationPerCondition table -- reported them
+            # byte-identical between the two PLS1 engines, which is what made
+            # retiring R a removal rather than a change of answer.
             #
             # rust-mlr measured 2026-09-12: the median of three consecutive
-            # runs on an idle machine (24.6, 26.5, 26.7 s) against the binary
-            # scripts/ci/build-more-rs.sh pins, d261f9c. It is the only one of
-            # the four this table had no entry for, which left the scenario
-            # advertising an engine whose cost nothing here recorded.
-            "measuredRuntimeSeconds": {"rust-pls1": 0.1, "r-pls1": 234.4,
-                                       "r-mlr": 739.8, "rust-mlr": 26.5},
-            "enginesAgree": ("rust-pls1 and r-pls1 byte-identical on all four "
-                             "output files; r-mlr is a different model and is "
-                             "not expected to agree with either"),
+            # runs on an idle machine (24.6, 26.5, 26.7 s).
+            "measuredRuntimeSeconds": {"rust-pls1": 0.1, "rust-mlr": 26.5},
+            "retiredEngineRuntimeSeconds": {"r-pls1": 234.4, "r-mlr": 739.8},
+            "enginesAgree": ("rust-pls1 was byte-identical to the retired "
+                             "r-pls1 on all four output files; MLR is a "
+                             "different model and was never expected to agree "
+                             "with either"),
             "targets": 957,
             "regulators": 387,
             "associations": 2910,

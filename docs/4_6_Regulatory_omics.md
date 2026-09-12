@@ -150,48 +150,57 @@ successful run the card says so — *N regulatory omics processed* — and from
 Step 2 onward each layer is a separate omic in the mapping summary, in the
 network's **Node coloring** list and as its own row in every feature window.
 
-## Choosing the model and the engine
+## Choosing the model
 
-One drop-down, **Regulatory model**, chooses both the statistical method and the
-implementation that runs it.
+One drop-down, **Regulatory model**, chooses the statistical method. Both run on
+the same engine, `more-rs`.
 
-| Option | Method | Engine | What it is for |
-| --- | --- | --- | --- |
-| **PLS1 — Rust engine (recommended)** | PLS1 | Rust | The default. Measured byte-identical to the R engine on the bundled real dataset, and several hundred times faster |
-| **PLS1 — R engine (reference)** | PLS1 | R | The original MORE R package. Same answers, far slower; choose it to reproduce a published run |
-| **MLR — R engine** | MLR | R | Elastic-net multiple linear regression, the reference implementation |
-| **MLR — Rust engine (opt-in)** | MLR | Rust | The same elastic-net model, roughly 8–30× faster |
+| Option | Method | What it is for |
+| --- | --- | --- |
+| **PLS1 (recommended)** | PLS1 | The default. Deterministic, and it reports a p-value per regulator, so the alpha and VIP thresholds both apply |
+| **MLR** | MLR | Elastic-net multiple linear regression. Selection is shrinkage alone, so it reports no p-values |
 
-The list is fetched from the server, so an option this installation cannot run
-stays visible but greyed out with the reason — *This server has no more-rs binary
-installed*, *R is installed but the MORE package is not*. Selecting it is
-refused with that explanation rather than letting you fill in the rest of the
-form first, and a job that reaches the server naming an unavailable engine is
-refused up front with the same sentence plus a list of what is available. If
-nothing at all can be run here, Step 1 says **No regulatory model can be run
-here** as soon as you open the card.
+The list is fetched from the server, so if this installation has no `more-rs`
+binary both options are greyed out with the reason — *This server has no more-rs
+binary installed*. A job that reaches the server anyway, from an old browser or
+a scripted request, is refused up front with the same sentence rather than
+failing somewhere inside the run, and Step 1 says **No regulatory model can be
+run here** as soon as you open the card.
 
-A submission that names no engine at all — an old browser, a re-run of a stored
-job, a scripted request — runs PLS1 on the Rust binary when one is installed and
-on R otherwise. **MLR is never moved to the Rust engine on your behalf.** PLS1
-earned a silent default by being byte-identical to R; MLR has not, because MORE
-runs its underlying solver at a tolerance where it has not converged and where R
-does not reproduce itself either. The two MLR engines agree on every random draw
-— all 8,157 of them on the bundled STATegra dataset, so collinear regulators are
-grouped and represented identically — and they very nearly agree on the pairs
-they report: of all the regulator–target pairs either engine reports, 99.1% are
-reported by both. On the simulated dataset that figure falls to 88.6–92.3%. Pick
-the Rust engine for speed, the R engine to match numbers you have already
-published.
+!!! note "The R engine was removed in September 2026"
+
+    PaintOmics used to offer each method on two implementations: `more-rs` and
+    the original MORE R package. The R half is gone.
+
+    It was never a working alternative in the deployed image, which has never
+    contained the MORE R package — its dependency tree needs a newer R than the
+    image provides. What the R half actually did was act as a silent fallback:
+    a server with no `more-rs` binary sent every job to an R installation that
+    was not there, so a missing binary surfaced as an R error from inside a job
+    you had already waited for, instead of a refusal before you submitted.
+
+    The two PLS1 implementations were measured byte-identical on the bundled
+    real dataset, so for PLS1 this is a removal rather than a change of answer.
+    For MLR the two agreed on every one of the 8,157 random draws on the bundled
+    STATegra dataset, and on 99.1% of the regulator–target pairs either reported
+    (88.6–92.3% on the simulated dataset); the residual difference is because
+    MORE runs its underlying solver at a tolerance where it has not converged
+    and where R does not reproduce itself either.
+
+    If you need to reproduce numbers published from the R engine, the MORE R
+    package is still available at
+    [BiostatOmics/MORE](https://github.com/BiostatOmics/MORE) and can be run
+    outside PaintOmics.
 
 Runtimes recorded with the bundled STATegra MORE example (957 target genes, 387
 transcription factors, 36 samples, 12 groups) give the order of magnitude:
 
-| Engine | Measured runtime |
+| Model | Measured runtime |
 | --- | --- |
-| PLS1 — Rust | 0.1 s |
-| PLS1 — R | 234.4 s |
-| MLR — R | 739.8 s |
+| PLS1 | 0.1 s |
+| MLR | 26.5 s |
+
+For scale, the same jobs on the retired R engine took 234.4 s and 739.8 s.
 
 ### PLS1 or MLR?
 
@@ -429,7 +438,7 @@ what it exercises. The MORE group ships:
 Loading a MORE example fills the card with read-only labels. The model
 parameters come from the manifest rather than the form, so alpha, VIP and the R²
 filter are shown read-only too — and so is the **Regulatory model** picker, so an
-example runs on whichever engine the picker defaults to on this server.
+example runs on whichever model the picker defaults to on this server.
 See [Example datasets](examples.md).
 
 ## Two supporting tools

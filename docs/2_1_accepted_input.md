@@ -290,9 +290,8 @@ belongs to that condition and `0` where it does not.
 **MORE's data files** are the one place the log-ratio convention does not apply.
 Both the target gene expression matrix and each regulator matrix carry **one
 column per sample**, with the replicates present, and the same sample names as
-the design file. Identifiers must be unique: whichever engine runs the job, a
-repeated row name is refused outright — `duplicate 'row.names' are not allowed`
-— rather than merged into one row.
+the design file. Identifiers must be unique: a repeated row name is refused
+outright rather than merged into one row.
 
 | RegulatorID | Control_R1 | Control_R2 | Control_R3 | Early_R1 | Early_R2 | Early_R3 |
 |---|---|---|---|---|---|---|

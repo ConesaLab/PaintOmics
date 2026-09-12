@@ -129,58 +129,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # AnnotationDbi from Bioconductor. All four existed for hubAnalysisInstall.R,
 # which is gone -- the KEGG graph is derived in Python from the KGML the
 # installer already downloads. Checked against every surviving .R file: they
-# load only MORE, amap, cluster, factoextra, mclust and optparse, none of which
-# needs these four.
+# load only amap, cluster, factoextra and mclust, none of which needs these
+# four. (MORE and optparse were on that list until runMORE.R was removed.)
 #
 # Dropping the Bioconductor step is the bigger win; BiocManager::install pulls a
 # long dependency chain and was among the slowest layers in this image.
 
-# MORE, the regulatory-analysis backend behind runMORE.R. Not on CRAN or
-# Bioconductor -- it is installed from GitHub.
+# MORE, the regulatory-analysis backend, used to be installed here from GitHub
+# and is not any more. The block was already commented out -- it could not be
+# built on this image's R 4.2, so the deployed image has NEVER contained the
+# MORE R package -- and the R engine that needed it was removed from the server
+# in 2026-09. Regulatory analysis now runs on `more-rs`, a static binary that
+# deploy/build-image.sh refuses to build without.
 #
-# The source matters. There are two repositories called MORE:
-#
-#   BiostatOmics/MORE  <- CORRECT. Maintained; more() takes targetData /
-#                         regulatoryData / condition / varSel / minVariation
-#                         and it exports FilterRegulationPerCondition.
-#   ConesaLab/MORE     <- WRONG. Superseded; more() takes GeneExpression /
-#                         data.omics / edesign / min.variation, and has no
-#                         FilterRegulationPerCondition at all.
-#
-# Installing the ConesaLab one builds and imports perfectly cleanly, then
-# every MORE job dies at the model call with "unused arguments". The two are
-# distinguishable only by more()'s signature, which is what
-# src/tests/test_runmore_r_contract.py checks.
-#
-# optparse parses runMORE.R's command line and is CRAN-only.
-#
-# patchwork is pinned, and the pin is what makes this step build at all.
-# ggplot2 here is Debian bookworm's r-cran-ggplot2, which is 3.4.1 and frozen
-# by the distro. MORE pulls ComplexUpset, which pulls patchwork, and patchwork
-# is unpinned from CRAN, so it resolves to whatever is current. Current
-# patchwork calls ggplot2::is_ggplot(), added in ggplot2 3.5.2, and on 3.4.1 it
-# fails to byte-compile:
-#
-#   Error: object 'is_ggplot' is not exported by 'namespace:ggplot2'
-#   ERROR: lazy loading failed for package 'patchwork'
-#   Failed to install 'MORE' from GitHub: Failed to install 'ComplexUpset' ...
-#
-# `upgrade = "never"` does not prevent this: it stops remotes upgrading what is
-# already installed, and patchwork is absent, so it is a fresh install at
-# latest. Installing a compatible patchwork first makes it present, and then
-# `upgrade = "never"` does keep it.
-#
-# 1.2.0 is the last line that predates the is_ggplot switch. Raise it only
-# together with ggplot2 - and ggplot2 moves only if it stops coming from the
-# distro.
-#
-# ---------------------------------------------------------------------------
-# MORE IS NOT INSTALLED, and the block below is commented out rather than
-# deleted so the next attempt starts from what is already known.
-#
-# Pinning patchwork gets past ComplexUpset, and then eleven more packages fail,
-# for three unrelated reasons that no further pinning fixes (measured
-# 2026-08-08, full log in the build output):
+# Kept as a record because the measurement cost a day and the question will be
+# asked again. Eleven packages failed, for three unrelated reasons that no
+# further pinning fixes (measured 2026-08-08):
 #
 #   Deriv     R_ClosureFormals / Rf_allocLang not declared. Those are R C-API
 #             additions from R 4.4/4.5. R here is Debian bookworm's, 4.2.
@@ -189,24 +153,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #   gdtools   cairo-ft.h: No such file. Missing dev headers.
 #
 # and behind them ggiraph, treeio, shadowtext, doBy, ggtree, DOSE, enrichplot
-# and clusterProfiler. MORE's transitive tree has moved to needing a newer R and
-# toolchain than this base provides; the tree is unpinned, so it keeps moving.
+# and clusterProfiler. MORE's transitive tree needs a newer R and toolchain than
+# this base provides, and the tree is unpinned, so it keeps moving. There were
+# also two repositories called MORE, distinguishable only by more()'s signature:
+# BiostatOmics/MORE was the maintained one, ConesaLab/MORE the superseded one
+# that installs cleanly and then fails at the model call with "unused
+# arguments".
 #
-# Restoring it is a real piece of work, not a pin. Either resolve the whole
-# tree from a dated snapshot contemporary with R 4.2 - packagemanager.posit.co
-# is already an allowed outbound host, so `options(repos = ".../cran/2023-06-01")`
-# is the cheap thing to try first - or move the image off the distro's R.
-#
-# Note this changes nothing that was shipping: the deployed image has never
-# contained MORE. This file previously carried the block uncommented, which is
-# why building from master failed outright, and the VM's own copy had it
-# deleted with no record of why. This is that record.
-# ---------------------------------------------------------------------------
-# RUN Rscript -e 'options(warn = 2, Ncpus = parallel::detectCores()); \
-#       install.packages(c("optparse", "remotes"), repos = "https://cloud.r-project.org"); \
-#       remotes::install_version("patchwork", version = "1.2.0", \
-#                                repos = "https://cloud.r-project.org", upgrade = "never"); \
-#       remotes::install_github("BiostatOmics/MORE", upgrade = "never")'
+# R itself stays. generateMetaGenes.R, PCA-GENES.R, PCA2GO.2.R and
+# processReactomeData.R still run on it and load amap, cluster, factoextra and
+# mclust -- none of which is part of the tree above.
 
 # Fail the build now, not at 3am in production, if anything is unimportable.
 #

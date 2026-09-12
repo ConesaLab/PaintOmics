@@ -273,43 +273,21 @@ COMPOUND_SUGGESTION_MAX_SETS = int(os.getenv("COMPOUND_SUGGESTION_MAX_SETS", "90
 AI_SEARCH_SUBAGENT_TEMPERATURE = float(os.getenv("AI_SEARCH_SUBAGENT_TEMPERATURE", "0.2"))
 
 # ========== MORE BACKEND ==========
-# Absolute path to `more-rs`, the Rust port of MORE. It takes the same
-# arguments as runMORE.R and was measured against it on the bundled
-# 06-regulatory-more example: six of the seven output files byte-identical, the
-# seventh (the rpc table) holding the same rows in a different order.
+# Absolute path to `more-rs`, the Rust port of MORE and the only engine the
+# server has. The MORE R package was removed in 2026-09; it had never been
+# installed in the deployed image (deploy/Dockerfile records the measurement),
+# so what it actually provided was a silent fallback that turned "no binary"
+# into an R error from inside a job the user had already waited for.
 #
-# **PLS1 runs on the port by default.** Blank -- the default -- does NOT mean
-# "use R": it means "go and find a binary", which MOREServlet._discoverMoreRs
-# does by looking beside runMORE.R at src/common/bioscripts/more-rs and then on
-# PATH. A host with no binary finds nothing and runs R, exactly as before, so
-# the default is safe on a machine that has never heard of the port.
+# Blank -- the default -- does NOT mean "disabled": it means "go and find a
+# binary", which MOREServlet._discoverMoreRs does by looking at
+# src/common/bioscripts/more-rs and then on PATH. That is what makes a bundled
+# binary work with no configuration at all.
 #
-# Set this to a path to name one explicitly, or to `off` to force R for every
-# job. MLR always runs on R whatever this says -- R's MLR path draws from the
-# RNG in three places, so the port can only sit inside R's own seed band rather
-# than reproduce it, and that is a difference to opt into rather than impose.
-# See MOREServlet._resolveMOREBackend for the full reasoning.
+# Set this to a path to name one explicitly. Setting it to `off` now disables
+# regulatory analysis outright rather than routing jobs to R: submissions are
+# refused with a message naming the server. See MOREServlet.moreBinary.
 MORE_RS_BINARY = os.getenv("PAINTOMICS_MORE_RS", "")
-
-# Seconds a single MORE analysis may be *predicted* to take before the server
-# refuses it at submit time, instead of accepting it and killing it when the
-# queue timeout expires.
-#
-# This is not a new limit -- MOREServlet already enqueues every MORE job with a
-# 1800 s timeout. What is new is finding out before the wait rather than after
-# it. Measured on the STATegra TF->gene set (9,835 genes, 36 samples, ~30
-# regulators/gene), one process at a time:
-#
-#     R MLR      ~3.4 h        R PLS1     ~1.7 h        more-rs PLS1  ~9 s
-#
-# so on an R-only host this is reached by ordinary genome-scale data, and the
-# guard covers PLS1 as well as MLR. A host running the port is effectively
-# never gated, because the estimate is keyed on the engine that will actually
-# run (see MORECostModel).
-#
-# Raise it only in step with the queue timeout -- a budget above that just
-# moves the failure back to where it was. Set it to 0 to disable the check.
-MORE_RUNTIME_BUDGET_SECONDS = int(os.getenv("PAINTOMICS_MORE_RUNTIME_BUDGET", "1800"))
 
 # Metabolite class activity: label shuffles behind the permutation test that
 # runs when a compound omic carries replicates and a design. The smallest

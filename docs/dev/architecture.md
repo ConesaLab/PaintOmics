@@ -177,15 +177,16 @@ serves pages perfectly can still fail the moment someone clicks a button:
   Metagenes and Hub Analysis. `deploy/smoke-test.sh` checks that `purrr`,
   `cluster`, `mclust`, `amap`, `factoextra`, `igraph`, `ggplot2`, `jsonlite`,
   `stringr` and `dplyr` all import.
-- **MORE** — the regulatory model. PLS1 runs on `more-rs`, a Rust port
-  discovered beside `runMORE.R` or on `PATH`, and falls back to R when absent.
-  The binary is **gitignored**, so `git archive` drops it while
-  `deploy/build-image.sh` packs it from the working tree; `build-image.sh`
-  reads its ELF header and refuses to build if it is for the wrong
-  architecture. `PAINTOMICS_MORE_RS=off` forces R; MLR always runs on R.
-  `MORECostModel` refuses a job predicted not to fit the queue budget, and
-  `PAINTOMICS_MORE_COST_SCALE` multiplies that estimate for a host slower than
-  the one the model was fitted on.
+- **MORE** — the regulatory model. Both methods, PLS1 and MLR, run on
+  `more-rs`; the MORE R package and its `runMORE.R` wrapper were removed in
+  September 2026, so there is no second backend and no fallback. The binary is
+  discovered at `src/common/bioscripts/more-rs` or on `PATH` and is
+  **gitignored**, so `git archive` drops it while `deploy/build-image.sh` packs
+  it from the working tree; `build-image.sh` reads its ELF header and refuses to
+  build if it is for the wrong architecture, or absent. A host without it
+  refuses regulatory submissions up front (`MOREServlet.engineRefusal`) rather
+  than failing inside the job. `PAINTOMICS_MORE_RS=off` disables regulatory
+  analysis outright.
 - **The identifier mapper** — `FeatureNamesToKeggIDsMapper` parallelises with
   forked processes from inside the threaded worker. Forking a threaded process
   is delicate; see the deadlock entry in
