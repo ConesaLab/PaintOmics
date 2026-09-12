@@ -19,8 +19,7 @@ merged them where one exists.
 - Interpretation of pathways inside their shared-feature clusters, with the Step 3 pathway network coloured by the same clusters and a legend that explains the cluster ids.
 - A Results-section view of the interpretation, written the way a paper would write it and keeping every citation, and an activity feed showing which tools the agent is calling while it works.
 - An AI input-format converter that checks every upload against the server's contract, offers one-click deterministic repairs for mechanical faults, and can rewrite a file the analysis cannot read (#67, #72).
-- The MORE regulatory model behind a method chooser in Regulatory Omics, with three engines: PLS1 on a Rust port, PLS1 on R, and MLR on R (#44).
-- A refusal at submit time for a MORE job not predicted to fit inside the queue's timeout, with a cost estimate the operator can calibrate to the host (#45).
+- The MORE regulatory model behind a model chooser in Regulatory Omics, offering PLS1 and MLR on `more-rs`, the Rust engine (#44, #166).
 - A Step 3 regulator-target network drawn with Cytoscape.js, with free layout, per-condition colouring, search, spotlight, side panel and exports.
 - Regulation-per-condition tables beside that network, a "Find in pathways" hand-off from them into the pathway view, and a user-selectable per-omic minimum variation filter for MORE.
 - Multi-condition designs: analyses run across any number of conditions rather than two, with per-condition significance stars in the Step 4 heatmaps, in Metabolite Hub and in Class Activity, and a Stouffer weights panel for the combined p-value.
@@ -109,6 +108,8 @@ merged them where one exists.
 
 - The left navigation rail, replaced by navigation in the header.
 - R from the metabolite hub analysis, which now runs on the derived KEGG graph (#89).
+- R from the regulatory analysis: the MORE R package, `runMORE.R` and the two R engines, which the deployed image never contained and which served only as a silent fallback that turned a missing `more-rs` binary into an R error deep inside a job. Regulatory analysis now refuses at submission when no engine is installed, and `deploy/build-image.sh` refuses to build an image without one (#166).
+- The MORE pre-flight cost model, which refused submissions predicted to exceed the queue timeout. It was sized for the R engine, which needed ~3.4 h for MLR where `more-rs` needs ~27 s, and it was defending a deadline that cannot fire: the queue never enforces its own timeout (#166).
 - Vendored build toolchains that nothing installed or served, and a second `requirements.txt` that was raising 33 phantom dependency alerts.
 - The six-phase AI workflow arm, superseded by the agent workflow.
 - Dead code across the server, including the 154 rows the audit marked for deletion and the eight star imports in the application entry point.
