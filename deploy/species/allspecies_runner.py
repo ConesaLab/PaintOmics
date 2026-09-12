@@ -94,6 +94,7 @@ class Runner(object):
         self.logLock = threading.Lock()
         self.stateLock = threading.Lock()
         self.copyLock = threading.Lock()
+        self.progressLock = threading.Lock()
         self.logFile = open(os.path.join(args.log_dir, "runner.log"), "a")
         self.states = {}
         self.breakerUntil = 0.0
@@ -260,6 +261,13 @@ class Runner(object):
                 out[entry["state"]] = out.get(entry["state"], 0) + 1
             return out
 
+    def safeProgress(self, total):
+        """writeProgress for worker threads: a bookkeeping failure is logged, never fatal."""
+        try:
+            self.writeProgress(total)
+        except Exception as exc:
+            self.log("progress file not written: %s" % exc)
+
     def writeProgress(self, total, extra=None):
         counts = self.counts()
         cutoff = time.time() - 3600
@@ -272,10 +280,16 @@ class Runner(object):
                     "breaker_until": self.breakerUntil, "consecutive_network_failures": self.consecutiveNetworkFailures}
         if extra:
             progress.update(extra)
-        tmp = os.path.join(self.args.state_dir, "progress.json.tmp")
-        with open(tmp, "w") as handle:
-            json.dump(progress, handle, indent=1)
-        os.replace(tmp, os.path.join(self.args.state_dir, "progress.json"))
+        # One writer at a time, and a temp name nobody else uses: every worker
+        # called this after each species through the same progress.json.tmp,
+        # and when two overlapped the second os.replace found its temp file
+        # already moved (FileNotFoundError) -- uncaught, it killed the worker
+        # thread. Two of five workers died that way on 2026-09-11.
+        with self.progressLock:
+            tmp = os.path.join(self.args.state_dir, "progress.json.%d.tmp" % threading.get_ident())
+            with open(tmp, "w") as handle:
+                json.dump(progress, handle, indent=1)
+            os.replace(tmp, os.path.join(self.args.state_dir, "progress.json"))
         return progress
 
     # ------------------------------------------------------------ manifest
@@ -424,7 +438,7 @@ class Runner(object):
                 self.setState(row["code"], "retry", reason="worker: " + str(exc)[:300])
             finally:
                 work.task_done()
-            self.writeProgress(total)
+            self.safeProgress(total)
 
     # ------------------------------------------------------------ install
     def installBatch(self, rows, total):
@@ -483,7 +497,7 @@ class Runner(object):
         self.installedTimes.append((time.time(), installedNow))
         self.installedTimes = [(t, n) for t, n in self.installedTimes if t >= time.time() - 7200]
         self.log("install batch of %d: %d installed, %d s (%s)" % (len(codes), installedNow, elapsed, os.path.basename(logPath)))
-        self.writeProgress(total)
+        self.safeProgress(total)
 
     def installFailure(self, code, reason):
         entry = self.getState(code)

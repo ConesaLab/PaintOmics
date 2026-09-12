@@ -273,6 +273,35 @@ def test_runner_priority_order_ignores_the_kingdom():
         shutil.rmtree(tmp)
 
 
+def test_runner_progress_file_survives_concurrent_writers():
+    """Five workers wrote progress.json through one temp name; the loser's os.replace
+    raised FileNotFoundError and killed its thread. Eight threads, 200 writes each, no error."""
+    r = _load("allspecies_runner")
+    import tempfile, threading, argparse, shutil
+    tmp = tempfile.mkdtemp()
+    try:
+        runner = r.Runner.__new__(r.Runner)
+        # The fields writeProgress reads, without running __init__ (which opens logs).
+        runner.__dict__.update(dict(args=argparse.Namespace(state_dir=tmp), stateLock=threading.Lock(),
+                                    progressLock=threading.Lock(), logLock=threading.Lock(), states={},
+                                    installedTimes=[], breakerUntil=0.0, consecutiveNetworkFailures=0))
+        errors = []
+        def hammer():
+            try:
+                for _ in range(200):
+                    runner.writeProgress(10)
+            except Exception as exc:
+                errors.append(exc)
+        threads = [threading.Thread(target=hammer) for _ in range(8)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        assert not errors, errors[:3]
+        assert os.path.isfile(os.path.join(tmp, "progress.json"))
+        assert not [n for n in os.listdir(tmp) if n.endswith(".tmp")], "temp files left behind"
+    finally:
+        shutil.rmtree(tmp)
+
+
 def test_runner_parses_the_install_summary_block():
     r = _load("allspecies_runner")
     import tempfile
