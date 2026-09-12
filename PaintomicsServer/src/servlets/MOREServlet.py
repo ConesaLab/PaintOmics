@@ -136,15 +136,26 @@ MORE_ENGINES = [
         # The last point is why this option is listed third rather than second.
         # The usual reason given for choosing MLR is that it returns real
         # p-values. In MORE it does not.
-        "detail": ("Elastic-net multiple linear regression. Slower than PLS1 "
-                   "and harder to reproduce: correlated regulators are "
-                   "collapsed into a group and one member is chosen at random "
-                   "to represent it, so re-running the same job can credit a "
-                   "different regulator. It also reports coefficients without "
-                   "p-values — selection is shrinkage alone — which is why the "
-                   "alpha and VIP thresholds do not apply. Prefer PLS1 unless "
-                   "you have many more samples than candidate regulators per "
-                   "gene."),
+        # The draw IS a draw, but it is a seeded one, and this sentence used to
+        # say the opposite -- "re-running the same job can credit a different
+        # regulator". `more()` takes `seed = 123` in its signature and calls
+        # `set.seed(seed)` (more.R:162); runMORE.R:382 calls more() without
+        # overriding it. Two runs of the bundled 06-regulatory-more example
+        # through the R engine returned an identical table with identical
+        # collinearity representatives. What is worth telling the user is the
+        # part that IS true and is more useful anyway: the named regulator
+        # stands for its correlated group rather than having beaten the rest of
+        # it on the evidence.
+        "detail": ("Elastic-net multiple linear regression. Slower than PLS1. "
+                   "Correlated regulators are collapsed into a group and one "
+                   "member is drawn to represent it, so the regulator you see "
+                   "stands for its whole correlated group rather than having "
+                   "beaten the others on the evidence — the draw is seeded, so "
+                   "re-running the same job credits the same one. It also "
+                   "reports coefficients without p-values — selection is "
+                   "shrinkage alone — which is why the alpha and VIP "
+                   "thresholds do not apply. Prefer PLS1 unless you have many "
+                   "more samples than candidate regulators per gene."),
     },
     {
         "id": "rust-mlr",
