@@ -114,13 +114,10 @@ class Step1TestCase(unittest.TestCase):
         self.queue = FakeQueue()
         self.response = FakeResponse()
 
-        # A host with everything installed, so no test here can be refused
-        # for what the machine running it happens to lack (see the module
-        # docstring). mock.patch.stopall undoes both on cleanup.
-        mock.patch.object(MOREServlet, "probeR", return_value={
-            "rscript": "/usr/bin/Rscript", "more": True, "optparse": True,
-            "error": ""}).start()
-        mock.patch.object(MOREServlet, "_rustBinary",
+        # A host with the engine installed, so no test here can be refused for
+        # what the machine running it happens to lack (see the module
+        # docstring). mock.patch.stopall undoes it on cleanup.
+        mock.patch.object(MOREServlet, "moreBinary",
                           return_value="/x/more-rs").start()
         self.addCleanup(mock.patch.stopall)
 

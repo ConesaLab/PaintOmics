@@ -95,12 +95,11 @@ if [ ! -s "$SERVER/src/examplefiles/GTF/sorted_mmu.gtf" ]; then
     exit 66
 fi
 
-# The MORE datasets are PLS1 jobs, which the server runs on the Rust port
-# (more-rs) whenever it can find one -- as the development and production
-# hosts do. The baseline holds the port's output; R's MORE writes the same
-# numbers but orders one table differently, so a host without the port would
-# fail the MORE datasets for a reason that has nothing to do with the code
-# under test. Refuse early instead of reporting that as a regression.
+# The MORE datasets are PLS1 jobs, and more-rs is the only engine that runs
+# them: the MORE R package and its runMORE.R wrapper were removed in September
+# 2026. A host without the binary would fail those datasets for a reason that
+# has nothing to do with the code under test, so refuse early instead of
+# reporting it as a regression.
 if [ -z "${PAINTOMICS_MORE_RS:-}" ] && [ ! -x "$SERVER/src/common/bioscripts/more-rs" ]; then
     echo "regression: no more-rs binary at src/common/bioscripts/more-rs and PAINTOMICS_MORE_RS is unset; the MORE datasets need the Rust port (build it from github.com/TianYuan-Liu/MORE, rust/)" >&2
     exit 66

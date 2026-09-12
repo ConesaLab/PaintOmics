@@ -728,17 +728,19 @@
       },
       "expected": {
         "associations": 2910,
-        "enginesAgree": "rust-pls1 and r-pls1 byte-identical on all four output files; r-mlr is a different model and is not expected to agree with either",
+        "enginesAgree": "rust-pls1 was byte-identical to the retired r-pls1 on all four output files; MLR is a different model and was never expected to agree with either",
         "flaggedRegulators": 56,
         "flaggedRule": "Welch t-test of the 18 induced samples against the 18 controls, Benjamini-Hochberg FDR < 0.01, and at least a two-fold difference of arm means",
         "measuredRuntimeSeconds": {
-          "r-mlr": 739.8,
-          "r-pls1": 234.4,
           "rust-mlr": 26.5,
           "rust-pls1": 0.1
         },
         "note": "Matched-pathway counts depend on the KEGG snapshot the host carries, so the same job yields different totals on the deploy VM and locally. None are asserted.",
         "regulators": 387,
+        "retiredEngineRuntimeSeconds": {
+          "r-mlr": 739.8,
+          "r-pls1": 234.4
+        },
         "source": {
           "expression": "GEO GSE75417 (STATegra RNA-seq, CQN + ComBat)",
           "network": "TFLink v1.0, Mus musculus, restricted to interactions flagged Small-scale.evidence = Yes",
@@ -778,7 +780,7 @@
       },
       "tests": [
         "MORE on real per-sample data",
-        "All four regulatory engines (Rust PLS1, R PLS1, R MLR, Rust MLR)",
+        "Both regulatory models (PLS1 and MLR) on more-rs",
         "12-group experimental design",
         "Automatic minVariation threshold",
         "GENE:::REGULATOR hand-off to pathway analysis",

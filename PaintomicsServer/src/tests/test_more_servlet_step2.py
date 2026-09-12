@@ -37,11 +37,17 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.classes.JobInstances.MOREJob import MOREJob
 from src.servlets import MOREServlet
+
+
+# Stands in for an installed more-rs. Never executed: subprocess.Popen is
+# replaced by FakePopen throughout this file.
+FAKE_BINARY = "/opt/paintomics/src/common/bioscripts/more-rs"
 
 
 class FakeResponse(object):
@@ -96,17 +102,20 @@ class Step2TestCase(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="more2_")
         self._realPopen = MOREServlet.subprocess.Popen
         self._realJIM = MOREServlet.JobInformationManager
-        # Pin the backend to R. What the backend choice depends on belongs to
+        # Pin the binary to a fixed path. Which binary a host picks belongs to
         # test_more_backend_selection; what this file pins is the argument
-        # vector, which is identical either way.
+        # vector after that choice is made.
         #
-        # "off", not "": blank now means "discover a binary", which is what
-        # makes the Rust port the default for PLS1. Blank here would let a
-        # bundled or on-PATH more-rs win and fail the argv[0] assertion on any
-        # machine that has one -- which is every machine this is meant to ship
-        # to.
+        # A literal path rather than "" or the real discovery: blank means "go
+        # and find one", so argv[0] would then be whatever more-rs the machine
+        # running the tests happens to have -- different on CI, on a developer
+        # laptop and in the container. "off" is not usable either; it now means
+        # "no engine", which STEP2 turns into a refusal.
         self._realBinary = MOREServlet.MORE_RS_BINARY
-        MOREServlet.MORE_RS_BINARY = "off"
+        MOREServlet.MORE_RS_BINARY = FAKE_BINARY
+        self._binaryPatch = mock.patch.object(
+            MOREServlet, "moreBinary", return_value=FAKE_BINARY)
+        self._binaryPatch.start()
         MOREServlet.subprocess.Popen = FakePopen
         MOREServlet.JobInformationManager = lambda: self
 
@@ -127,6 +136,7 @@ class Step2TestCase(unittest.TestCase):
         MOREServlet.subprocess.Popen = self._realPopen
         MOREServlet.JobInformationManager = self._realJIM
         MOREServlet.MORE_RS_BINARY = self._realBinary
+        self._binaryPatch.stop()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def makeJob(self, omics=None):
@@ -288,10 +298,9 @@ class OmicNameValidationTest(Step2TestCase):
 
 class CommandConstructionTest(Step2TestCase):
 
-    def test_invokes_rscript_with_runmore(self):
+    def test_invokes_the_more_rs_binary(self):
         self.run_step2()
-        self.assertEqual(FakePopen.lastCommand[0], "Rscript")
-        self.assertTrue(FakePopen.lastCommand[1].endswith("runMORE.R"))
+        self.assertEqual(FakePopen.lastCommand[0], FAKE_BINARY)
 
     def test_passes_the_model_parameters(self):
         self.run_step2()

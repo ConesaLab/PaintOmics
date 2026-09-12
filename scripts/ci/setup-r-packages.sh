@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Install the R packages the pipeline's scripts load (metagenes, hub analysis,
-# runMORE's option parsing) into a private library that the workflow caches.
+# Install the R packages the pipeline's scripts load (metagenes, hub analysis)
+# into a private library that the workflow caches. MORE is not among them: it
+# runs on the more-rs binary, which scripts/ci/build-more-rs.sh provides.
 #
 # Plain install.packages() from CRAN binaries, on purpose: r-lib's
 # setup-r-dependencies installed the same packages in 20 s and then hung for
@@ -17,7 +18,7 @@ set -euo pipefail
 
 CI_HOME="${PAINTOMICS_CI_HOME:-$HOME/paintomics-ci}"
 RLIB="$CI_HOME/Rlib"
-PACKAGES="mclust cluster amap factoextra purrr optparse"
+PACKAGES="mclust cluster amap factoextra purrr"
 
 mkdir -p "$RLIB"
 export R_LIBS_USER="$RLIB"

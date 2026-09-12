@@ -26,7 +26,7 @@ from a real lookup for this test to mean anything -- the whole point is that the
 metadata is ground truth and only the quotation comes from the model.
 
 Skips cleanly when MongoDB, a stored job, or the network is unavailable, in the
-manner of test_enrichment_e2e and test_runmore_r_endtoend.
+manner of test_enrichment_e2e and test_more_backend_endtoend.
 
 **This writes to the real database, unlike the rest of the suite.**
 `test_pymongo4_compat` and `test_user_identity_security` each build a scratch

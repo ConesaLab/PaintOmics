@@ -161,10 +161,11 @@ to set paths, MongoDB host, SMTP, quotas and the AI and MORE backends.
 `./start_server.sh` does the same through a conda environment and starts MongoDB
 if it is not already running.
 
-MORE's PLS1 runs on the Rust port whenever a `more-rs` binary is discoverable —
-beside `runMORE.R` or on `PATH` — and falls back to R when it is not, so a host
-that has never heard of the port behaves exactly as before. Set
-`PAINTOMICS_MORE_RS=off` to force R for every job; MLR always runs on R.
+MORE runs on `more-rs`, discovered at `PaintomicsServer/src/common/bioscripts/more-rs`
+or on `PATH`. The binary is gitignored and dropped in per deployment; without it
+regulatory analysis is refused up front rather than failing inside the job. Set
+`PAINTOMICS_MORE_RS=off` to disable regulatory analysis, or to a path to name a
+binary explicitly.
 
 ### Load pathway data
 

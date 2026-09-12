@@ -14,7 +14,7 @@ missing values and duplicate identifiers, PEP 8, DRY.
 |---|---|
 | `PaintomicsServer/src/servlets/` | Flask routes |
 | `PaintomicsServer/src/classes/` | Job classes and the analysis code, including `AIInterpret/` |
-| `PaintomicsServer/src/common/` | Shared helpers, `PySiQ.py` (the in-process job queue), `bioscripts/` (R and `more-rs`) |
+| `PaintomicsServer/src/common/` | Shared helpers, `PySiQ.py` (the in-process job queue), `bioscripts/` (the R scripts and the `more-rs` binary) |
 | `PaintomicsServer/src/AdminTools/` | `DBManager.py`, the species installer |
 | `PaintomicsServer/src/examplefiles/` | Example datasets and their `datasets/manifest.json` |
 | `PaintomicsServer/src/benchmarks/` | `bench_runner.py`, the pipeline kernel the regression harness drives |
@@ -39,13 +39,10 @@ python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 Rscript -e 'install.packages(c("purrr","cluster","mclust","amap","factoextra",
-                               "igraph","ggplot2","jsonlite","stringr","dplyr",
-                               "optparse"))'
-# The first ten are the set deploy/smoke-test.sh checks for; a machine without
-# them passes the unit tests and fails the smoke test. The MORE R engines
-# additionally need the MORE package, which is not on CRAN -- see
-# https://github.com/BiostatOmics/MORE. The default MORE engine is the Rust
-# port and needs none of this.
+                               "igraph","ggplot2","jsonlite","stringr","dplyr"))'
+# These are the set deploy/smoke-test.sh checks for; a machine without
+# them passes the unit tests and fails the smoke test. MORE needs none of this:
+# it runs on the more-rs binary, not on R.
 
 cd PaintomicsServer
 python src/launch_server.py                # http://localhost:8000
@@ -178,7 +175,7 @@ What the harness records about the environment is what
 `.github/actions/setup-paintomics/action.yml` states: it "runs on macos-26
 (arm64), the platform family the regression baseline was produced on", with
 Python 3.11 and the R version input documented as "the baseline ran on 4.6.0".
-The MORE baselines hold the `more-rs` port's output, not R's.
+The MORE baselines hold `more-rs` output; it is the only MORE engine.
 
 Nothing in the harness records or checks a Python version, and
 `scripts/regression.sh` defaults `PYTHON` to plain `python3`. So a run on a

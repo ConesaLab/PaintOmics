@@ -48,21 +48,26 @@ if tar -tf "${ARCHIVE}" | grep -qE 'conf/(local_)?serverconf\.py$'; then
     exit 1
 fi
 
-# The Rust MORE port ships as a platform-specific binary beside runMORE.R, and
-# it is gitignored so each deployment drops in the build it needs. Two ways that
-# goes wrong without a word:
+# more-rs is the ONLY MORE engine, it is a platform-specific binary, and it is
+# gitignored so each deployment drops in the build it needs. Two ways that goes
+# wrong without a word:
 #
 #   * a developer's macOS build (Mach-O arm64) gets packed into a Linux image,
-#     where it fails at exec. _resolveMOREBackend then falls back to R for every
-#     PLS1 job, which on a host with no MORE package means the analysis simply
-#     stops working -- and the only symptom is that it got slower, or dead.
+#     where it fails at exec.
 #   * `git archive` DROPS this file because it is gitignored, while the tar
 #     above packs it from the working tree. The two delivery paths therefore
 #     disagree about whether the binary is even present.
 #
-# Absent is a legitimate state -- it means every job goes to R, exactly as
-# before the port existed -- so absence is reported, not punished. Present but
-# built for the wrong machine is never legitimate.
+# Absent used to be a legitimate state: the server fell back to `Rscript
+# runMORE.R` and the image was reported as "every MORE job will run on R". That
+# was never true of this image -- the Dockerfile's MORE install is commented
+# out because the package cannot be built on its R -- so what the line actually
+# described was an image that ships regulatory analysis in a broken state and
+# says so approvingly.
+#
+# With the R engine removed there is nothing to fall back to, so absence is now
+# a refusal. Building an image whose regulatory analysis cannot run is not
+# something to discover from a user's failed job.
 MORE_RS="PaintomicsServer/src/common/bioscripts/more-rs"
 if [ -e "${MORE_RS}" ]; then
     # Read the ELF header directly rather than shelling out to `file`, which is
@@ -91,7 +96,17 @@ if [ -e "${MORE_RS}" ]; then
             exit 1 ;;
     esac
 else
-    echo "  more-rs: absent -- every MORE job will run on R"
+    echo "REFUSING TO BUILD: ${MORE_RS} is absent." >&2
+    echo "  It is the only MORE engine, so this image could not run a single" >&2
+    echo "  regulatory analysis. It is gitignored on purpose: build it for the" >&2
+    echo "  image's architecture and drop it in." >&2
+    echo "    git clone https://github.com/TianYuan-Liu/MORE" >&2
+    echo "    cd MORE/rust && cargo build --release \\" >&2
+    echo "        --target x86_64-unknown-linux-musl" >&2
+    echo "    cp target/x86_64-unknown-linux-musl/release/more-rs \\" >&2
+    echo "       <paintomics>/${MORE_RS}" >&2
+    echo "  The pinned commit is in scripts/ci/build-more-rs.sh." >&2
+    exit 1
 fi
 
 # The symlinks are load-bearing; verify tar kept them as links.
