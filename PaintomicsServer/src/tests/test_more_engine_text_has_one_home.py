@@ -59,23 +59,47 @@ def _clientSource():
 
 
 def _fallbackBlock(source):
-    """The MORE_ENGINES_FALLBACK initialiser, bracket-matched.
+    """The whole MORE_ENGINES_FALLBACK statement, up to its terminating `;`.
 
-    Counting brackets rather than regex-matching to `]` because the entries are
-    piped through `.map()` and a naive match stops at the first one.
+    The array literal alone is not enough, and stopping there was a real hole:
+    the entries are piped through `.map()`, and `label` and `detail` -- the two
+    fields this test exists to police -- are assigned inside that callback, not
+    inside the array. A walker that returned at the array's closing `]` stopped
+    just before `).map(function (entry) {`, so prose written into the callback
+    passed every check.
+
+    So: walk to the `;` that ends the statement, at depth zero of (), [] and {}
+    together, skipping string literals and comments so a bracket or a semicolon
+    inside either cannot end the scan early.
     """
     start = source.index("var MORE_ENGINES_FALLBACK")
-    depth, index = 0, source.index("[", start)
-    opened = index
+    index = source.index("=", start) + 1
+    depth = 0
     while index < len(source):
-        if source[index] == "[":
+        char = source[index]
+        pair = source[index:index + 2]
+        if pair == "//":
+            index = source.find("\n", index)
+            if index < 0:
+                break
+            continue
+        if pair == "/*":
+            index = source.index("*/", index) + 2
+            continue
+        if char in "\"'":
+            quote, index = char, index + 1
+            while index < len(source) and source[index] != quote:
+                index += 2 if source[index] == "\\" else 1
+            index += 1
+            continue
+        if char in "([{":
             depth += 1
-        elif source[index] == "]":
+        elif char in ")]}":
             depth -= 1
-            if depth == 0:
-                return source[opened:index + 1]
+        elif char == ";" and depth == 0:
+            return source[start:index + 1]
         index += 1
-    raise AssertionError("MORE_ENGINES_FALLBACK is not bracket-balanced")
+    raise AssertionError("MORE_ENGINES_FALLBACK statement is not terminated")
 
 
 class EngineTextHasOneHomeTest(unittest.TestCase):
@@ -133,7 +157,10 @@ class EngineTextHasOneHomeTest(unittest.TestCase):
         enabled on a model that has no use for either.
         """
         block = _fallbackBlock(_clientSource())
-        entries = re.findall(r"\{[^{}]*\}", block)
+        # Braces carrying an `id:` -- the `.map()` callback is inside the block
+        # too (deliberately, so the prose check reaches it) and its body is a
+        # brace pair as well.
+        entries = [b for b in re.findall(r"\{[^{}]*\}", block) if "id:" in b]
         self.assertEqual(
             len(MORE_ENGINES), len(entries),
             "expected one fallback entry per catalogue engine, found %d"
