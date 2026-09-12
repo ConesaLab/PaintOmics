@@ -317,7 +317,23 @@ def test_runner_reads_per_species_verdicts_when_the_summary_is_missing():
     finally:
         os.remove(path)
     assert parsed["installed"] == {"ppy"} and parsed["failed"] == {"xyz"}, parsed
-    assert parsed["from_verdict_lines"] == {"ppy", "xyz"}, parsed
+    assert parsed["from_verdict_lines"] == {"ppy", "xyz"} and parsed["has_block"] is False, parsed
+    # Two legs in one log: the promote leg wrote its summary, the --reinstall
+    # leg died after its species' verdict line. Per species, not per log.
+    path = tempfile.mktemp()
+    with open(path, "w") as handle:
+        handle.write("... - INFO - DBManager.py : log -              INSTALL  1 aaa...SUCCESS\n"
+                     "... - INFO - DBManager.py : log -   installed : 1  aaa\n"
+                     "... - INFO - DBManager.py : log -   failed    : 0  -\n"
+                     "... - INFO - DBManager.py : log -   skipped   : 0  -\n"
+                     "... - INFO - DBManager.py : log -              INSTALL  1 bvu...SUCCESS\n"
+                     "Exception: Error while writing species.json: no display name for nfo\n")
+    try:
+        parsed = r.Runner.parseSummary(r.Runner.__new__(r.Runner), path)
+    finally:
+        os.remove(path)
+    assert parsed["installed"] == {"aaa", "bvu"} and parsed["from_verdict_lines"] == {"bvu"}, parsed
+    assert parsed["has_block"] is True, parsed
 
 
 def test_runner_parses_the_install_summary_block():
@@ -336,6 +352,7 @@ def test_runner_parses_the_install_summary_block():
     assert parsed["installed"] == {"aaf", "aag"}, parsed
     assert parsed["failed"] == {"aalb"}, parsed
     assert parsed["skipped"] == set(), parsed
+    assert parsed["has_block"] is True and parsed["from_verdict_lines"] == set(), parsed
 
 
 def main():

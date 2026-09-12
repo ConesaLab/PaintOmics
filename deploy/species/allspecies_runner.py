@@ -468,17 +468,22 @@ class Runner(object):
         if summary.get("from_verdict_lines"):
             self.log("install run ended without a summary; verdicts read from the per-species lines for %s"
                      % " ".join(sorted(summary["from_verdict_lines"])))
-        if not summary and ENV_FAILURE.search(self.tail(logPath, 4000)):
-            # The run died before it looked at any species (root-owned
-            # summary.log, a recreated container): not their fault.
-            for code in codes:
+        if not summary.get("has_block") and ENV_FAILURE.search(self.tail(logPath, 4000)):
+            # The run died on the environment (root-owned summary.log, a
+            # recreated container), not on its species. A species that had
+            # already logged a verdict keeps it (checked against MongoDB
+            # below); the rest are kept as downloaded and the batch pauses.
+            verdictless = [code for code in codes if code not in summary.get("from_verdict_lines", set())]
+            for code in verdictless:
                 self.setState(code, "downloaded", reason="environment: " + self.reasonFrom(self.tail(logPath, 4000)))
             with self.breakerLock:
                 self.breakerUntil = max(self.breakerUntil, time.time() + self.args.env_pause)
-            self.log("ENVIRONMENT FAILURE in install batch (%s); species kept as downloaded, pausing %d s"
-                     % (self.reasonFrom(self.tail(logPath, 4000)), self.args.env_pause))
-            time.sleep(self.args.env_pause)
-            return
+            self.log("ENVIRONMENT FAILURE in install batch (%s); %d species kept as downloaded, pausing %d s"
+                     % (self.reasonFrom(self.tail(logPath, 4000)), len(verdictless), self.args.env_pause))
+            codes = [code for code in codes if code not in verdictless]
+            if not codes:
+                time.sleep(self.args.env_pause)
+                return
         installedNow = 0
         for code in codes:
             if code in summary.get("installed", set()):
@@ -537,10 +542,16 @@ class Runner(object):
             verdict = VERDICT_LINE.search(line)
             if verdict:
                 verdicts[verdict.group(1)] = verdict.group(2)
-        if not out and verdicts:
-            for code, verdict in verdicts.items():
-                out.setdefault("installed" if verdict == "SUCCESS" else "failed", set()).add(code)
-            out["from_verdict_lines"] = set(verdicts)
+        out["has_block"] = bool(out)
+        # A species with a verdict line but in no summary block: its run died
+        # after it finished (species.json could not name a newer KEGG organism,
+        # 2026-09-12). Per species, not per log -- one log can hold a promote
+        # leg WITH a summary and a --reinstall leg that died without one.
+        inBlocks = set().union(*(out.get(k, set()) for k in ("installed", "failed", "skipped")))
+        fromLines = {code for code in verdicts if code not in inBlocks}
+        for code in fromLines:
+            out.setdefault("installed" if verdicts[code] == "SUCCESS" else "failed", set()).add(code)
+        out["from_verdict_lines"] = fromLines
         return out
 
     def pathwayCount(self, code, tries=3):
