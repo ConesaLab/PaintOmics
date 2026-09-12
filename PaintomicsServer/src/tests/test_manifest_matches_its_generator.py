@@ -7,10 +7,11 @@ Why this exists
 (`ExampleDatasets.catalogueForClient`, reached by `/example_datasets`), and it
 is rendered as the **Exercises** list in the Step 1 example picker. It is
 generated from the scenario dictionaries in
-`AdminTools/scripts/exampledata/legacy.py` -- but nothing regenerates the bundle
-in CI, so the two can drift, and the drift is invisible: the generator is not
-imported by the running server, so a stale manifest keeps being served while the
-source of truth reads correctly.
+`AdminTools/scripts/exampledata/` -- `scenarios.py` and `legacy.py`, which
+`__main__.py` builds together -- but nothing regenerates the bundle in CI, so
+the two can drift, and the drift is invisible: the generators are not imported
+by the running server, so a stale manifest keeps being served while the source
+of truth reads correctly.
 
 That is not hypothetical. The STATegra MORE example advertised
 
@@ -21,8 +22,11 @@ which went stale when a fourth, `rust-mlr`, was added. It was fixed in
 picker went on showing "three" to every user while two files in the repo said
 four. Only the manifest is served.
 
-So: every `tests` entry a scenario declares in the generator must appear
-verbatim in the manifest the server ships.
+So: every `tests` line the manifest SERVES must still exist in a generator
+source. That direction is the checkable one -- `scenarios.py` writes
+`"id": scenarioId`, a variable, so manifest entries cannot be paired back to a
+literal id -- and it is the direction that catches the defect: a served string
+the generator no longer contains is a file nobody regenerated.
 
 Usage:
     cd PaintomicsServer
@@ -38,8 +42,26 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 MANIFEST = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "examplefiles", "datasets", "manifest.json"))
-GENERATOR = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "AdminTools", "scripts", "exampledata", "legacy.py"))
+# Both halves of the catalogue. `__main__.py` builds the manifest from
+# `scenarios.CATALOGUE` and `legacy.CATALOGUE` together (lines 174 and 182), so
+# reading only one of them silently skips two thirds of the scenarios -- which
+# is what the first version of this test did.
+GENERATORS = [
+    os.path.abspath(os.path.join(
+        os.path.dirname(__file__), "..", "AdminTools", "scripts", "exampledata", name))
+    for name in ("legacy.py", "scenarios.py", "stategrametabolomics.py")
+]
+
+# `stategra-metabolomics-replicates` is not built by the bundle generator at
+# all. `__main__.py` imports only `legacy` and `scenarios`, and their two
+# CATALOGUEs hold eleven builders for the manifest's twelve scenarios;
+# `stategrametabolomics.py` is a standalone script run by hand
+# (`PYTHONPATH=. python src/AdminTools/scripts/exampledata/stategrametabolomics.py`)
+# and its three `tests` lines exist nowhere but the manifest. So it is exempt
+# from the drift check below -- there is nothing to drift against -- and that
+# is recorded here rather than silently skipped, because the underlying oddity
+# is real: running the bundle generator would not reproduce this entry.
+_MAINTAINED_OUTSIDE_THE_BUNDLE = {"stategra-metabolomics-replicates"}
 
 
 def _manifestScenarios():
@@ -47,52 +69,54 @@ def _manifestScenarios():
         return {s["id"]: s for s in json.load(handle)["scenarios"] if "id" in s}
 
 
-def _generatorScenarios():
-    """`id` -> its `tests` list, read out of the generator's literals.
+def _generatorSource():
+    """Every generator source, concatenated.
 
-    Parsed rather than imported: `legacy.py` pulls in the whole AdminTools
-    scenario stack, which wants a KEGG database and a server config this test
-    has no use for. The two literals sit next to each other in one dict, so a
-    scan for `"id": "..."` followed by the next `"tests": [...]` recovers the
-    pairing without evaluating anything.
+    Checked as text, and in the manifest -> generator direction, because the
+    ids cannot be paired: `scenarios.py` writes `"id": scenarioId`, a variable,
+    so there is no literal to match a manifest entry against. The direction
+    that matters is covered anyway -- a manifest string that no longer appears
+    in any generator is a manifest nobody regenerated, which is exactly the
+    defect this exists to catch.
     """
-    with open(GENERATOR, encoding="utf-8") as handle:
-        source = handle.read()
-    out = {}
-    for match in re.finditer(r'"id":\s*"([^"]+)"', source):
-        rest = source[match.end():]
-        tests = re.search(r'"tests":\s*\[(.*?)\]', rest, re.S)
-        nextId = re.search(r'"id":\s*"[^"]+"', rest)
-        if not tests or (nextId and nextId.start() < tests.start()):
-            continue
-        out[match.group(1)] = re.findall(r'"((?:[^"\\]|\\.)*)"', tests.group(1))
-    return out
+    out = []
+    for path in GENERATORS:
+        with open(path, encoding="utf-8") as handle:
+            out.append(handle.read())
+    return "\n".join(out)
 
 
 class ManifestMatchesItsGeneratorTest(unittest.TestCase):
 
-    def test_the_generator_declares_some_scenarios(self):
-        """A parse that silently finds nothing would pass every test below."""
-        generated = _generatorScenarios()
-        self.assertGreaterEqual(
-            len(generated), 4,
-            "parsed %d scenarios out of legacy.py; the literal shape it is "
-            "read from has probably changed" % len(generated))
+    def test_the_generator_sources_are_readable_and_substantial(self):
+        """A source that failed to load would make every check below vacuous."""
+        source = _generatorSource()
+        self.assertGreater(len(source), 20000,
+                           "generator sources look truncated: %d chars" % len(source))
+        for path in GENERATORS:
+            self.assertTrue(os.path.exists(path), "missing generator %s" % path)
 
-    def test_every_generated_exercise_is_in_the_served_manifest(self):
-        served = _manifestScenarios()
-        for scenarioId, tests in sorted(_generatorScenarios().items()):
-            if scenarioId not in served:
+    def test_every_served_exercise_still_exists_in_a_generator(self):
+        """Every `tests` line the manifest serves must be in a generator.
+
+        A line the generator no longer contains is a line nobody regenerated:
+        the source of truth was edited and the served file was not. That is how
+        `All three regulatory engines (Rust PLS1, R PLS1, R MLR)` went on being
+        shown in the Step 1 picker after the fourth engine was added and the
+        generator corrected.
+        """
+        source = _generatorSource()
+        for scenarioId, scenario in sorted(_manifestScenarios().items()):
+            if scenarioId in _MAINTAINED_OUTSIDE_THE_BUNDLE:
                 continue
-            have = served[scenarioId].get("tests") or []
-            for entry in tests:
+            for entry in scenario.get("tests") or []:
                 self.assertIn(
-                    entry, have,
-                    "legacy.py declares %r for scenario %r but manifest.json "
-                    "does not carry it. The manifest is what /example_datasets "
-                    "serves and what the Step 1 picker renders, so editing only "
-                    "the generator changes nothing a user sees."
-                    % (entry, scenarioId))
+                    entry, source,
+                    "manifest.json serves %r for scenario %r, but no generator "
+                    "source contains it. manifest.json is what "
+                    "/example_datasets returns and what the Step 1 picker "
+                    "renders, so it has gone stale against the thing that "
+                    "writes it." % (entry, scenarioId))
 
     def test_no_scenario_miscounts_the_regulatory_engines(self):
         """The specific drift that got through: a hardcoded engine count.
