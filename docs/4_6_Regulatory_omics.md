@@ -211,10 +211,16 @@ overrides it — so re-running the same job credits the **same** regulator. Two
 runs of the bundled simulated example return an identical table with identical
 representatives.
 
-What the draw does mean is that the regulator named for a correlated group did
-not earn the place: it was drawn, not selected on the evidence, and any other
-member of its group was an equally good candidate. Read an MLR hit as *"one of
-these correlated regulators"*, not as *"this regulator rather than its
+What the draw does mean is that the regulator named for a correlated group is
+not necessarily the one the data singles out — and how much weight the draw
+carries depends on which of MORE's three draw sites decided it. Two of them
+pick uniformly from the correlated set, so on those paths any member was an
+equally good candidate. The third picks the regulator with the highest
+connectivity in the correlation graph and draws only to break a tie among
+equals, so there the choice is partly earned.
+
+Either way, read an MLR hit as *"this correlated group, standing behind the
+member MORE named"* rather than as *"this regulator rather than its
 neighbours"*. Prefer MLR only when you have many more samples than candidate
 regulators per gene, which is the regime it suits.
 
