@@ -189,7 +189,9 @@ class MOREUploadEncodingTest(unittest.TestCase):
         #                    _moreRScript(), ~400 lines above the normalisation,
         #                    and again once the backend-selection logging began
         #                    quoting the filename in log strings, which are
-        #                    literals and survive comment-stripping.
+        #                    literals and survive comment-stripping. Both that
+        #                    helper and runMORE.R itself are gone now, with the
+        #                    R engine; the point of the list is the pattern.
         #
         # So stop proxying. `subprocess.Popen(` IS the call that must not
         # receive un-normalised files, it occurs exactly once, and it cannot be
