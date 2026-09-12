@@ -255,6 +255,18 @@ class ReaperTest(unittest.TestCase):
     STAMP = 1000.0
 
     def _deliverAt(self, stamp):
+        """Deliver, then replace the clock stamp with an exact one.
+
+        The exactness check lives here rather than in a test of its own, so it
+        covers every boundary case by construction: a stamp that reached these
+        tests from a clock cannot get past this line.
+        """
+        self.assertEqual(stamp, int(stamp),
+                         "the boundary cases need an integral stamp; %r came "
+                         "from a clock, and the TTL comparison on it is a coin "
+                         "flip" % (stamp,))
+        self.assertLess(abs(stamp) + 600, 2.0 ** 53,
+                        "integral stamps stop being exact above 2**53")
         self.queue.deliver_result("J1")
         self.queue.jobs["J1"].delivered_at = stamp
 
@@ -283,25 +295,36 @@ class ReaperTest(unittest.TestCase):
         removed = self.queue.reap_delivered(ttl=600, now=stamp + 601)
         self.assertEqual(removed, ["J1"])
 
-    def test_the_boundary_cases_use_arithmetic_floats_can_actually_do(self):
-        """Guards the fix itself: STAMP and its offsets must be exact.
+    def test_the_boundary_cases_use_a_stamp_floats_can_be_exact_about(self):
+        """Guards the fix itself, and does so deterministically.
 
-        Sweeping a few round magnitudes would prove nothing -- 12.0, 1000.0 and
-        1.7e9 are all exactly representable, so `(stamp + 600) - stamp` is
-        exactly 600 for every one of them and such a test passes just as well
-        against the form that was flaking. What broke was a stamp with a messy
-        fractional part, which is the only kind `time.monotonic()` returns.
+        The first version of this recomputed `(STAMP + offset) - STAMP` and
+        checked it equalled the offset. That is the *same* rounding-sensitive
+        expression the bug was about, so against a clock reading it would not
+        fail -- it would fail about nine times in ten, which is a second flaky
+        test standing next to the one it is meant to guard. Caught in review on
+        pull request #164.
 
-        So this asserts the property the two boundary cases above rely on,
-        directly: change STAMP to a clock reading and this fails rather than
-        the boundary silently inverting one run in ten.
+        What is asserted instead is a property of the stamp itself. An integral
+        value below 2**53 is exactly representable, and so is that value plus
+        any integer offset that stays below 2**53: no rounding is possible, for
+        any offset, on any machine. A `time.monotonic()` reading is integral
+        with probability nil, so reverting STAMP to one fails this every time.
+
+        What it does NOT catch, stated because the limit is real: someone
+        deleting `_deliverAt` and going back to reading `delivered_at` straight
+        out of `deliver_result()`. STAMP would still be 1000.0 and this would
+        still pass. That regression is guarded one level down -- the exactness
+        check is inside `_deliverAt`, so the boundary cases cannot be fed a
+        clock stamp through it -- and not at all if the helper is bypassed
+        entirely, which no assertion here can see.
         """
-        for offset in (599, 600):
-            with self.subTest(offset=offset):
-                self.assertEqual((self.STAMP + offset) - self.STAMP,
-                                 float(offset),
-                                 "the boundary cases need exact arithmetic; "
-                                 "STAMP=%r is not a usable choice" % self.STAMP)
+        self.assertEqual(self.STAMP, int(self.STAMP),
+                         "STAMP=%r is not integral, so the boundary cases are "
+                         "back to asking floats for an exact answer"
+                         % (self.STAMP,))
+        self.assertLess(abs(self.STAMP) + 600, 2.0 ** 53,
+                        "integral stamps stop being exact above 2**53")
 
     def test_a_messy_stamp_is_what_used_to_break_this(self):
         """The flake reproduced, so the diagnosis stays checkable.
