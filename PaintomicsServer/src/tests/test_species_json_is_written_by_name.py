@@ -186,15 +186,22 @@ class DBManagerWriter(KeggDataDir):
             self.assertEqual(first, handle.read())
         self.assertEqual(["eco", "hsa", "mmu"], [s["value"] for s in read_species(self.target)["species"]])
 
-    def test_a_species_without_a_display_name_aborts_and_is_named(self):
+    def test_a_species_without_a_display_name_is_shown_by_its_code(self):
         # A code installed in Mongo but absent from both lists used to abort
-        # with "Error while writting specie <code>" for whichever code the
-        # loop reached first; now every missing code is in the message, and
-        # no file is written.
-        with self.assertRaises(Exception) as caught:
-            self.generate(["mmu", "zzz", "yyy"], self.all_list, self.target)
-        self.assertIn("yyy, zzz", str(caught.exception))
-        self.assertFalse(os.path.exists(self.target))
+        # species.json for EVERY organism ("Error while writting specie" for
+        # the first such code, later a message naming them all). KEGG adds
+        # organisms between two common downloads -- nfo, Naegleria fowleri,
+        # installed on 2026-09-12 while the list predated it -- and that abort
+        # ended every later install run after its species were installed. The
+        # file is written, the code stands in for the name, and the run's
+        # warnings say so.
+        self.generate(["mmu", "zzz", "yyy"], self.all_list, self.target)
+        species = read_species(self.target)["species"]
+        self.assertEqual({"mmu", "yyy", "zzz"}, {s["value"] for s in species})
+        byCode = {s["value"]: s["name"] for s in species}
+        self.assertEqual("yyy", byCode["yyy"])
+        self.assertEqual("zzz", byCode["zzz"])
+        self.assertNotEqual("mmu", byCode["mmu"], "a named organism keeps its name")
 
 
 class CustomInstallerWriter(KeggDataDir):
