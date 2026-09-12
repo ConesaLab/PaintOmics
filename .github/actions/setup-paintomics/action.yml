@@ -80,11 +80,19 @@ runs:
       shell: bash
       run: scripts/ci/restore-data.sh ~/paintomics-ci/data
 
+    # Keyed on the build script's own hash, not on a copy of the commit it
+    # pins. The commit used to be written out here as well, and the two went
+    # out of step the first time the pin moved: the cache restored the old
+    # binary under a key naming it, build-more-rs.sh looked for the new one,
+    # missed, rebuilt it, and then saved it back under the stale key -- so
+    # every run rebuilt from scratch while the key claimed otherwise. Hashing
+    # the script cannot drift from it. The cost is that editing a comment in
+    # that file also busts the cache, which is one rebuild.
     - name: more-rs binary (cache)
       uses: actions/cache@v6
       with:
         path: ~/paintomics-ci/more-rs
-        key: more-rs-d261f9c8ea39aefd371bfb46afc596957a9dd7c5-${{ runner.os }}-${{ runner.arch }}
+        key: more-rs-${{ hashFiles('scripts/ci/build-more-rs.sh') }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: more-rs
       shell: bash
