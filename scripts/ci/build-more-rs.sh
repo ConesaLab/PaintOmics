@@ -15,7 +15,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CI_HOME="${PAINTOMICS_CI_HOME:-$HOME/paintomics-ci}"
-MORE_RS_COMMIT="${MORE_RS_COMMIT:-d261f9c8ea39aefd371bfb46afc596957a9dd7c5}"
+MORE_RS_COMMIT="${MORE_RS_COMMIT:-8d9ffebb0dc387c81cd1df3dc9ea5958c0d5c1b0}"
 CACHED="$CI_HOME/more-rs/$MORE_RS_COMMIT/more-rs"
 TARGET="$ROOT/PaintomicsServer/src/common/bioscripts/more-rs"
 
