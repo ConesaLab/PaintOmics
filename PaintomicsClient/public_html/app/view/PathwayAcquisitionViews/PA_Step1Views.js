@@ -4773,9 +4773,18 @@ function MORESubmittingPanel(nElem, options) {
 							if (methodField) { methodField.setValue(method); }
 
 							var detail = container.queryById('moreEngineDetail');
-							if (detail && record) {
-								detail.update('<p class="more-engine-detail">' +
-									Ext.String.htmlEncode(record.get('detail')) + '</p>');
+							if (detail) {
+								// Empty whenever the offline fallback supplied the row,
+								// because it carries no prose. Render nothing at all
+								// rather than an empty <p>, which would reserve a line's
+								// height for a sentence that is never coming -- and
+								// rather than String(undefined), which is what
+								// htmlEncode would have printed into the card.
+								var description = record ? (record.get('detail') || "") : "";
+								detail.update(description
+									? '<p class="more-engine-detail">' +
+									  Ext.String.htmlEncode(description) + '</p>'
+									: '');
 							}
 
 							var alphaField = container.queryById('moreAlphaField');
@@ -5148,54 +5157,61 @@ var _aiProviderRequest = null;
 /**********************************************************************
  * WHICH REGULATORY ENGINES THIS SERVER CAN RUN
  *
- * The picker offers three: PLS1 on the Rust engine, PLS1 on R, and MLR on R.
+ * The picker offers four: PLS1 and MLR, each on the Rust engine or on R.
  * Which of them a given host can actually run is not a fact the client can
  * know -- the deployed image carries /usr/bin/Rscript and none of MORE,
  * optparse, ropls or glmnet, so a list hardcoded here would offer two options
  * that pass every check in the browser and then fail deep inside the job.
  *
  * /more_backends answers it, from a probe of the R *packages* rather than the
- * interpreter. One request, cached for the page.
+ * interpreter. One request, cached for the page. It also carries the LABEL and
+ * the DESCRIPTION of every engine, and those are not restated here: see the
+ * fallback below.
  *
  * The fallback matters as much as the success path: if the request fails, the
- * picker is filled with the same three entries marked available, because a
- * server that cannot answer is more likely to be an old one that has no such
- * route than one with nothing installed -- and refusing every engine on a
- * transport error would take a working feature down. The server refuses an
- * engine it cannot run anyway (MOREServlet.engineRefusal), so the cost of
- * being optimistic here is a clear message at submission rather than a
- * mislabelled dropdown.
+ * picker is still filled with every engine marked available, because a server
+ * that cannot answer is more likely to be an old one that has no such route
+ * than one with nothing installed -- and refusing every engine on a transport
+ * error would take a working feature down. The server refuses an engine it
+ * cannot run anyway (MOREServlet.engineRefusal), so the cost of being
+ * optimistic here is a clear message at submission rather than a mislabelled
+ * dropdown.
  **********************************************************************/
 var MORE_BACKENDS = null;
 var _moreBackendsRequest = null;
 
-/* Every engine marked runnable, used when the server cannot be asked. Mirrors
-   MOREServlet.MORE_ENGINES; the labels are deliberately terser than the
-   server's, so a reader can tell an offline fallback from a real answer. */
-var MORE_ENGINES_FALLBACK = [
-	{id: "rust-pls1", method: "PLS1", engine: "rust", available: true,
-	 unavailableReason: "", label: "PLS1 — Rust engine (recommended)",
-	 detail: "The same model as the R engine, reimplemented and much faster."},
-	{id: "r-pls1", method: "PLS1", engine: "r", available: true,
-	 unavailableReason: "", label: "PLS1 — R engine (reference)",
-	 detail: "The original MORE R package. Same answers, far slower."},
-	{id: "r-mlr", method: "MLR", engine: "r", available: true,
-	 unavailableReason: "", label: "MLR — R engine",
-	 detail: "Elastic-net multiple linear regression. Slower than PLS1 and " +
-	         "harder to reproduce, and it reports no p-values, so the alpha " +
-	         "and VIP thresholds do not apply."},
-	/* Listed last and labelled opt-in, mirroring the server. The port
-	   reproduces R's random draws exactly, so collinear regulators are grouped
-	   and represented identically; it does not reproduce R's rounding, because
-	   MORE runs the solver at a tolerance where it has not converged. A few
-	   borderline regulators can therefore differ. */
-	{id: "rust-mlr", method: "MLR", engine: "rust", available: true,
-	 unavailableReason: "", label: "MLR — Rust engine (opt-in)",
-	 detail: "The same elastic-net model, reimplemented and much faster. It " +
-	         "reproduces R's random draws exactly but not R's rounding, so a " +
-	         "small number of borderline regulators can differ from the R " +
-	         "engine."}
-];
+/* Used when the server cannot be asked. It carries STRUCTURE ONLY -- the ids,
+   the method each one runs and the fact that it is offered -- and deliberately
+   no prose.
+
+   The wording lives in exactly one place, MOREServlet.MORE_ENGINES, and
+   reaches the browser through /more_backends. The copy that used to sit here
+   was a second source for the same four descriptions and had already drifted
+   from the first: it dropped the speed figure and the recommendation, and it
+   still described MLR's collinearity representative as an unseeded draw, which
+   more.R:162 seeds (`set.seed(seed)`, `seed = 123`) and runMORE.R:382 never
+   overrides -- so re-running an MLR job credits the same regulator, and the
+   sentence was false in both copies.
+
+   `label` is the combo's displayField and a row without one renders blank, so
+   it is DERIVED from the method and engine rather than written out; a hardcoded
+   label would be the duplication this list exists to avoid. `detail` is left
+   empty, and the description box renders nothing rather than a stale sentence:
+   when the route cannot be reached this client genuinely does not know what
+   this host runs, and saying nothing is the honest form of that. */
+var MORE_ENGINES_FALLBACK = ([
+	{id: "rust-pls1", method: "PLS1", engine: "rust"},
+	{id: "r-pls1",    method: "PLS1", engine: "r"},
+	{id: "r-mlr",     method: "MLR",  engine: "r"},
+	{id: "rust-mlr",  method: "MLR",  engine: "rust"}
+]).map(function (entry) {
+	entry.available = true;
+	entry.unavailableReason = "";
+	entry.label = entry.method + " — " +
+		(entry.engine === "rust" ? "Rust" : "R") + " engine";
+	entry.detail = "";
+	return entry;
+});
 
 /* Fills `combo` from /more_backends, and selects the server's default. */
 function loadMOREEngines(combo) {
