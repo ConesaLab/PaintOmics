@@ -233,19 +233,93 @@ class ReaperTest(unittest.TestCase):
         self.queue = _queue()
         _add(self.queue, "J1", JobStatus.FINISHED, _Result())
 
-    def test_a_delivered_result_is_kept_inside_the_ttl(self):
+    # `delivered_at` is set here rather than taken from deliver_result(), and
+    # that is the fix for a real CI flake rather than tidiness.
+    #
+    # deliver_result() stamps `time.monotonic()`, which on a fresh CI runner is
+    # seconds since boot -- a few hundred. reap_delivered() then tests
+    # `now - delivered_at >= ttl`, and the test handed it `now = stamp + 600`.
+    # At that magnitude `stamp + 600` is not exactly representable, so
+    # `(stamp + 600) - stamp` comes back as 599.99999999999989 about one time
+    # in ten and the boundary case silently inverts. Measured over 200,000
+    # stamps drawn from [100, 3000): 9.5% fail.
+    #
+    # It never reproduced on a developer machine, and the reason is the same
+    # arithmetic: a laptop that has been up for weeks has a monotonic clock in
+    # the millions, where the subtraction is exact. Testing at that magnitude
+    # is what made this look like noise twice (pull requests #162 and #163).
+    #
+    # Whole numbers small enough to be exact keep the boundary meaningful --
+    # the point of these two cases is that the comparison is `>=` and not `>`
+    # -- without asking floating point for a guarantee it does not give.
+    STAMP = 1000.0
+
+    def _deliverAt(self, stamp):
         self.queue.deliver_result("J1")
-        stamp = self.queue.jobs["J1"].delivered_at
-        removed = self.queue.reap_delivered(ttl=600, now=stamp + 599)
+        self.queue.jobs["J1"].delivered_at = stamp
+
+    def test_a_delivered_result_is_kept_inside_the_ttl(self):
+        self._deliverAt(self.STAMP)
+        removed = self.queue.reap_delivered(ttl=600, now=self.STAMP + 599)
         self.assertEqual(removed, [])
         self.assertIn("J1", self.queue.jobs)
 
     def test_a_delivered_result_is_dropped_after_the_ttl(self):
-        self.queue.deliver_result("J1")
-        stamp = self.queue.jobs["J1"].delivered_at
-        removed = self.queue.reap_delivered(ttl=600, now=stamp + 600)
+        self._deliverAt(self.STAMP)
+        removed = self.queue.reap_delivered(ttl=600, now=self.STAMP + 600)
         self.assertEqual(removed, ["J1"])
         self.assertNotIn("J1", self.queue.jobs)
+
+    def test_the_real_stamp_is_reaped_once_the_ttl_is_comfortably_past(self):
+        """The stamp deliver_result() actually writes still works.
+
+        Pinning the boundary with chosen numbers must not stop anything
+        exercising `time.monotonic()`, or a stamp that was never set at all
+        would pass both cases above.
+        """
+        self.queue.deliver_result("J1")
+        stamp = self.queue.jobs["J1"].delivered_at
+        self.assertIsNotNone(stamp)
+        removed = self.queue.reap_delivered(ttl=600, now=stamp + 601)
+        self.assertEqual(removed, ["J1"])
+
+    def test_the_boundary_cases_use_arithmetic_floats_can_actually_do(self):
+        """Guards the fix itself: STAMP and its offsets must be exact.
+
+        Sweeping a few round magnitudes would prove nothing -- 12.0, 1000.0 and
+        1.7e9 are all exactly representable, so `(stamp + 600) - stamp` is
+        exactly 600 for every one of them and such a test passes just as well
+        against the form that was flaking. What broke was a stamp with a messy
+        fractional part, which is the only kind `time.monotonic()` returns.
+
+        So this asserts the property the two boundary cases above rely on,
+        directly: change STAMP to a clock reading and this fails rather than
+        the boundary silently inverting one run in ten.
+        """
+        for offset in (599, 600):
+            with self.subTest(offset=offset):
+                self.assertEqual((self.STAMP + offset) - self.STAMP,
+                                 float(offset),
+                                 "the boundary cases need exact arithmetic; "
+                                 "STAMP=%r is not a usable choice" % self.STAMP)
+
+    def test_a_messy_stamp_is_what_used_to_break_this(self):
+        """The flake reproduced, so the diagnosis stays checkable.
+
+        Not a claim about the reaper: at the exact TTL boundary a difference of
+        1e-13 either way is meaningless, and in production `now` is a fresh
+        clock reading rather than `stamp + ttl`, so a result missed by one poll
+        is reaped by the next. It is a claim about the TEST -- that asking for
+        `>=` at exactly the boundary is not something a float stamp can answer
+        reliably, which is why the cases above no longer ask.
+        """
+        # A real fresh-runner-magnitude reading, found by search rather than
+        # guessed -- a hand-picked "messy-looking" number does not reproduce it.
+        # Pinned as a literal so this cannot itself become intermittent.
+        stamp = 1773.5985509907462
+        self.assertLess((stamp + 600) - stamp, 600.0,
+                        "this stamp no longer reproduces the rounding; the "
+                        "comment above needs rechecking, not deleting")
 
     def test_a_result_nobody_was_given_is_never_reaped(self):
         """The job finished while the client was away: that is exactly the
