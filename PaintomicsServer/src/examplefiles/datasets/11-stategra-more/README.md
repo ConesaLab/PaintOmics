@@ -13,7 +13,7 @@ The STATegra Ikaros induction time course (GSE75417) against the literature-cura
 ## What it exercises
 
 * MORE on real per-sample data
-* All three regulatory engines (Rust PLS1, R PLS1, R MLR)
+* All four regulatory engines (Rust PLS1, R PLS1, R MLR, Rust MLR)
 * 12-group experimental design
 * Automatic minVariation threshold
 * GENE:::REGULATOR hand-off to pathway analysis

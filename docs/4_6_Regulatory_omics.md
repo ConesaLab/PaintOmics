@@ -204,10 +204,19 @@ coefficient non-zero. There is no stepwise selection anywhere in it. That is
 why the **Alpha (Significance)** and **VIP threshold** fields disappear when you
 select an MLR model — neither applies.
 
-MLR also collapses correlated regulators into a group and picks **one member at
-random** to represent it, so re-running the same job can credit a different
-regulator of the same group. Prefer MLR only when you have many more samples
-than candidate regulators per gene, which is the regime it suits.
+MLR also collapses correlated regulators into a group and draws **one member**
+to represent it. The draw is seeded — MORE's `more()` takes `seed = 123` and
+calls `set.seed(seed)` before anything else, and the PaintOmics wrapper never
+overrides it — so re-running the same job credits the **same** regulator. Two
+runs of the bundled simulated example return an identical table with identical
+representatives.
+
+What the draw does mean is that the regulator named for a correlated group did
+not earn the place: it was drawn, not selected on the evidence, and any other
+member of its group was an equally good candidate. Read an MLR hit as *"one of
+these correlated regulators"*, not as *"this regulator rather than its
+neighbours"*. Prefer MLR only when you have many more samples than candidate
+regulators per gene, which is the regime it suits.
 
 PLS1 produces both a VIP score and a jackknife p-value, and a regulator is
 reported only when it clears both thresholds.
