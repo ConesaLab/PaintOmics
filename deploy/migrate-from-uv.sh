@@ -41,9 +41,16 @@ UV_SSH="sshpass -e ssh -o PreferredAuthentications=password -o PubkeyAuthenticat
 uv()  { $UV_SSH "$UV" "$@"; }
 vm()  { ssh -o BatchMode=yes "$VM" "$@"; }
 log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
+drop_staged_db() {  # the rehearsal copy on the VM; never fatal, harmless when it is already gone
+    vm "$COMPOSE exec -T mongo mongosh --quiet PaintomicsDB_staged --eval 'db.dropDatabase()'" >/dev/null 2>&1 || true
+}
 
 stage() {
     nc -z -w6 "$JUMP_IP" 22 || { echo "VPN down: $JUMP_IP unreachable" >&2; exit 1; }
+    # Whatever happens below, the rehearsal copy goes. It is production's users,
+    # password hashes included, restored into the VM's live mongod, and under
+    # set -e a restore or count that failed skipped the drop and left it there.
+    trap drop_staged_db EXIT
     mkdir -p "$LOCAL/client_tmp"
     local ts dump
     ts=$(date -u +%Y%m%dT%H%M%SZ); dump="paintomicsdb-$ts.archive.gz"
@@ -76,8 +83,8 @@ stage() {
     vm "$COMPOSE exec -T mongo mongorestore --quiet --archive --gzip --drop \
             --nsFrom 'PaintomicsDB.*' --nsTo 'PaintomicsDB_staged.*' < ~/$STAGE/$dump \
         && $COMPOSE exec -T mongo mongosh --quiet PaintomicsDB_staged --eval \
-            'print(\"   staged: users\", db.userCollection.countDocuments({}), \"jobs\", db.jobInstanceCollection.countDocuments({}), \"ai\", db.aiInterpretationCollection.countDocuments({}), \"collections\", db.getCollectionNames().length, \"indexes\", db.getCollectionNames().reduce((n,c)=>n+db.getCollection(c).getIndexes().length,0))' \
-        && $COMPOSE exec -T mongo mongosh --quiet PaintomicsDB_staged --eval 'db.dropDatabase()' >/dev/null"
+            'print(\"   staged: users\", db.userCollection.countDocuments({}), \"jobs\", db.jobInstanceCollection.countDocuments({}), \"ai\", db.aiInterpretationCollection.countDocuments({}), \"collections\", db.getCollectionNames().length, \"indexes\", db.getCollectionNames().reduce((n,c)=>n+db.getCollection(c).getIndexes().length,0))'"
+    drop_staged_db
 
     files
     log "staged. Dump: $LOCAL/$dump and VM:~/$STAGE/$dump."
