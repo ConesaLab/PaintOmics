@@ -5236,9 +5236,13 @@ function loadMOREEngines(combo) {
 
 		if (report && report.anyAvailable === false) {
 			showWarningMessage("No regulatory model can be run here", {
-				text: "This server has no more-rs binary installed, so a " +
-				      "regulatory analysis cannot be started. Please " +
-				      "contact the administrator.",
+				/* `message`, not `text`: showMessage reads `data.message` and
+				   has no `text` branch, so the body silently rendered empty
+				   and the dialog opened with a heading and nothing under it --
+				   on the one server that cannot run MORE at all. */
+				message: "This server has no more-rs binary installed, so a " +
+				         "regulatory analysis cannot be started. Please " +
+				         "contact the administrator.",
 				logMessage: "GET /more_backends reported no available engine."
 			});
 		}
