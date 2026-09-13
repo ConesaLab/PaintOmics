@@ -14,7 +14,13 @@
 #   migrate-from-uv.sh restore   replace the VM's PaintomicsDB and job files with the staged
 #                                copy. This is the decision-gated step; run it once, after the
 #                                flip, if .org is to start with production's users and jobs.
+#                                It checks the archive, backs up the VM's own database first,
+#                                and asks you to type "restore" before it drops anything.
 set -euo pipefail
+# The dump carries userCollection, password hashes included; 077 keeps the
+# Mac's copy 0600 in a 0700 directory. Production and the VM get the same
+# treatment inline below, since a umask does not travel over ssh.
+umask 077
 
 UV=tian@paintomics.uv.es
 JUMP=garnatxa
@@ -43,15 +49,28 @@ stage() {
     ts=$(date -u +%Y%m%dT%H%M%SZ); dump="paintomicsdb-$ts.archive.gz"
 
     log "1/6 dumping PaintomicsDB on production -> ~/backups/$dump (read-only for production)"
-    uv "mongodump --quiet --db PaintomicsDB --archive --gzip > ~/backups/$dump && ls -la ~/backups/$dump"
+    uv "umask 077 && mkdir -p ~/backups && mongodump --quiet --db PaintomicsDB --archive --gzip > ~/backups/$dump && ls -la ~/backups/$dump"
+    local expected; expected=$(uv "stat -c %s ~/backups/$dump")
 
+    # Each hop lands on a .part name and is renamed only once it is whole --
+    # same size as the source and a gzip that reads to the end. A transfer cut
+    # short (the VPN, mostly) used to leave a truncated archive under the final
+    # name with the newest mtime, which is exactly the file restore picks.
     log "2/6 pulling the dump to $LOCAL"
     sshpass -e scp -q -o PreferredAuthentications=password -o PubkeyAuthentication=no -J "$JUMP" \
-        "$UV:~/backups/$dump" "$LOCAL/"
+        "$UV:~/backups/$dump" "$LOCAL/$dump.part"
+    [ "$(stat -f %z "$LOCAL/$dump.part")" = "$expected" ] || { echo "pulled $dump is not $expected bytes; run stage again" >&2; exit 1; }
+    gzip -t "$LOCAL/$dump.part"
+    mv "$LOCAL/$dump.part" "$LOCAL/$dump"
+    # Production's copy has done its job: the Mac and the VM hold it from here,
+    # and a dump per stage run was otherwise left behind in ~/backups there.
+    uv "rm -f ~/backups/$dump"
 
     log "3/6 pushing the dump to the VM ~/$STAGE"
-    vm "mkdir -p ~/$STAGE"
-    scp -q "$LOCAL/$dump" "$VM:$STAGE/"
+    vm "mkdir -p ~/$STAGE && chmod 700 ~/$STAGE"
+    scp -q "$LOCAL/$dump" "$VM:$STAGE/$dump.part"
+    vm "[ \$(stat -c %s ~/$STAGE/$dump.part) = $expected ] && gzip -t ~/$STAGE/$dump.part \
+        && chmod 600 ~/$STAGE/$dump.part && mv ~/$STAGE/$dump.part ~/$STAGE/$dump"
 
     log "4/6 rehearsing the restore into PaintomicsDB_staged on the VM (live database untouched)"
     vm "$COMPOSE exec -T mongo mongorestore --quiet --archive --gzip --drop \
@@ -79,6 +98,17 @@ restore() {
     local dump
     dump=$(vm "ls -t ~/$STAGE/paintomicsdb-*.archive.gz 2>/dev/null | head -1")
     [ -n "$dump" ] || { echo "nothing staged on the VM; run stage first" >&2; exit 1; }
+    # Checked whole before anything is dropped: --drop removes each collection
+    # just before loading it, so a truncated archive would have destroyed the
+    # users and jobs and then failed part way, with nothing to go back to.
+    vm "gzip -t $dump" || { echo "$dump is not a complete gzip archive; run stage again" >&2; exit 1; }
+    # And the VM's own users and jobs are dumped first, so this can be undone:
+    # backup-db.sh --verify leaves a restore-tested archive in ~/backups there.
+    log "backing up the VM's current PaintomicsDB before replacing it"
+    vm "~/paintomics4/deploy/backup-db.sh --verify"
+    printf "About to REPLACE the VM's PaintomicsDB with %s. Type restore to continue: " "$(basename "$dump")" >&2
+    local answer=""; read -r answer || true
+    [ "$answer" = "restore" ] || { echo "aborted; nothing changed" >&2; exit 1; }
     log "restoring $dump into PaintomicsDB on the VM -- this replaces its users and jobs"
     vm "$COMPOSE exec -T mongo mongorestore --quiet --archive --gzip --drop --nsInclude 'PaintomicsDB.*' < $dump"
     log "copying the staged job files into the app container's /data/CLIENT_TMP"
