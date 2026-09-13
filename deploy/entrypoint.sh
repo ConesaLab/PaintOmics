@@ -84,16 +84,45 @@ for directory in /data/KEGG_DATA \
     mkdir -p "${directory}"
 done
 
+# Give the app user every entry under a directory that it does not already own.
+#
+# This used to test only the directory itself: `stat %u` on /data/CLIENT_TMP,
+# chown -R if it was not 1001. That is the right test for a volume the daemon
+# has just created, and the wrong one for a volume that was populated from
+# outside after the first start. Production's 388 user directories arrived by
+# `docker cp` (deploy/migrate-from-uv.sh restore), which keeps the uid of the
+# source -- 1000 -- while /data/CLIENT_TMP itself was already 1001 from the
+# first boot. The check passed on every restart, and uid 1001 had no write
+# permission inside any of those directories, so every job by a migrated user
+# or an anonymous one died in PathwayAcquisitionServlet with
+#     PermissionError: [Errno 13] Permission denied: '/data/CLIENT_TMP/nologin/tmp/<jobID>'
+# while an account registered after the copy worked, because the server made
+# its directory itself. `docker compose exec` runs as root, so an admin command
+# that creates files under /data leaves the same kind of entry behind.
+#
+# `-prune` stops the scan at each entry that is wrong, so one wrong subtree is
+# listed once, by its root, and chowned once, recursively. The scan itself is a
+# stat per entry (about a second for the 134,000 files of production's job
+# tree) and changes nothing when everything is already right.
+#
+# Extra arguments are passed to find. KEGG_DATA is scanned to depth 2 only: it
+# holds millions of files and the server never writes inside a species
+# directory, so a deeper scan would cost minutes per restart for nothing.
+repair_ownership() {
+    local directory="$1" wrong
+    shift
+    local -a scan=(find "${directory}" "$@" \
+                   \( ! -user "${APP_USER}" -o ! -group "${APP_USER}" \) -prune)
+    wrong=$("${scan[@]}" -printf . | wc -c)
+    if [ "${wrong}" -gt 0 ]; then
+        log "taking ownership of ${wrong} subtree(s) under ${directory}"
+        "${scan[@]}" -exec chown -R "${APP_USER}:${APP_USER}" {} +
+    fi
+}
+
 if [ "$(id -u)" = "0" ]; then
-    # Only chown when it is actually wrong. Recursively chowning a populated
-    # KEGG_DATA volume (hundreds of GB, millions of files) on every restart
-    # would add many minutes to each deploy.
-    for directory in /data/KEGG_DATA /data/CLIENT_TMP; do
-        if [ "$(stat -c '%u' "${directory}")" != "${APP_UID}" ]; then
-            log "taking ownership of ${directory} (one time)"
-            chown -R "${APP_USER}:${APP_USER}" "${directory}"
-        fi
-    done
+    repair_ownership /data/KEGG_DATA -maxdepth 2
+    repair_ownership /data/CLIENT_TMP
     log "dropping privileges to ${APP_USER}"
     exec setpriv --reuid="${APP_UID}" --regid="${APP_UID}" --init-groups -- "$@"
 fi

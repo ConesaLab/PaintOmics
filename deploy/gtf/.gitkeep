@@ -1,0 +1,5 @@
+# Host side of the examplefiles/GTF bind mount (see deploy/compose.yaml).
+# Kept in the repo so a fresh `docker compose up` finds an existing directory
+# instead of having Docker create a root-owned one. The GTFs themselves are not
+# tracked -- they are gigabytes of Ensembl data; fetch them per deploy/README.md
+# and register each one in MongoDB, which is the half that makes it visible.

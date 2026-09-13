@@ -84,3 +84,43 @@ off-rail elements. Enable with ?guides=1 or Ctrl+Alt+G.
 After any layout/spacing/CSS change: open the page with guides on,
 screenshot it, fix every off-rail element in the HUD (except ones marked
 data-guides="ignore"), and repeat until the HUD shows 0 off-rail.
+
+## 7. Pull request lifecycle (Mandatory)
+
+Opening a PR is the start of the job, not the end. The agent that opens a PR owns it
+until the squash commit is on `origin/master` and the branch is gone. "PR opened" is
+never a finished report. **Never end the turn while a check or review is still running.**
+An agent that stops "waiting for CI" has abandoned the PR (that is exactly how the
+09-01 reviewer run reported success having done nothing).
+
+1. **Before pushing:** `git status` must be clean. A local green run can be on the
+   working tree while CI tests the commit.
+2. **Open it:** `gh pr create` (not a draft unless the user asked) and note the number.
+3. **Watch every check to completion**, in the foreground: `gh pr checks <n> --watch`
+   (or a `/loop` wakeup). Two things must finish:
+   * The `PR` workflow's **`Gate`** job. It is the only required check on the `master`
+     ruleset (no bypass actors) and it `needs:` lint, unit-tests, fixtures,
+     secret-scan and docs, so wait for Gate itself, not for the individual jobs.
+   * The **`Code Review`** workflow ("Claude review"). It posts inline review comments
+     as `claude[bot]`. Read them with
+     `gh api repos/{owner}/{repo}/pulls/<n>/comments` -- `gh pr view --comments`
+     lists issue comments only and will show an empty review as "no findings".
+     A green review run with zero comments is a reason to check the run log, not
+     a pass.
+4. **Resolve every review finding** before merging: fix it (edit, re-verify in
+   Chrome per §5, push) or reply on the thread with the concrete reason it is not a
+   bug. Every push re-runs Gate and a **full** review (about $7 of the owner's own
+   subscription budget; `cancel-in-progress` replaces a running one), so batch fixes
+   into one push instead of pushing piecemeal.
+5. **A red check:** `gh run view <id> --log-failed`, fix on the branch, push, go back
+   to step 3. Never merge over a red or pending check, never request a bypass, never
+   `--admin`.
+6. **Merge** only when Gate is green, the review run has finished and every finding is
+   resolved: `gh pr merge <n> --squash --auto` (the merge queue is on). Then confirm it
+   landed: `gh pr view <n> --json state,mergedAt` and
+   `git fetch origin && git log origin/master -1`. Master's own push workflow (`CD`)
+   only builds and smoke-tests; it runs no tests, so the PR checks were the last test run.
+7. **After the merge:** GitHub deletes the remote branch; locally check out master, pull,
+   delete the branch, and reset any worktree that was sitting on it.
+8. **Report:** PR number, final state of Gate and the review, each review finding and
+   what was done with it, and the merge commit SHA.

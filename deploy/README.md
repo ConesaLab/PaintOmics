@@ -240,8 +240,13 @@ deliberately commented out in `nginx/paintomics.conf` while that is true —
 committing browsers to HTTPS-only for a host whose certificate they distrust
 makes the site unreachable, and the policy is cached.
 
-Once a DNS name exists, replace `nginx/certs/paintomics.{crt,key}`, uncomment
-the HSTS header, and `docker compose restart nginx`.
+Once a DNS name resolves to this host, `deploy/issue-cert.sh` issues a Let's Encrypt
+certificate through the ACME webroot, installs it into `nginx/certs/`, restarts nginx
+and verifies HTTPS with a real chain check (restoring the previous pair on failure).
+A cron on the VM runs it with `--if-dns` every five minutes, so the certificate is
+issued within minutes of the DNS change; renewals go through `certbot.timer` and the
+same script. Afterwards uncomment the HSTS header and `docker compose restart nginx`.
+The remaining cutover steps are in `deploy/CUTOVER.md`.
 
 ## Troubleshooting
 
@@ -299,6 +304,21 @@ which says nothing about the size of the upload — the same symptom the upstrea
 `keepalive` pool used to produce on POSTs, and the reason there is no keepalive
 pool in `deploy/nginx/paintomics.conf`. If `client_max_body_size` is not above
 `limit-post`, nginx cuts in first with its own 413.
+
+**Every job fails with `Permission denied: /data/CLIENT_TMP/<user>/tmp/<jobID>`.**
+Files were put into the data volume from outside (`docker cp`, a restore of job
+files) and kept the uid they had at the source, while the server runs as uid
+1001 (`paintomics`). Restarting the app repairs it: the entrypoint scans
+`/data/CLIENT_TMP` and hands over anything the app user does not own. To fix it
+without a restart:
+
+```bash
+docker compose -f deploy/compose.yaml exec -T -u 0 app chown -R paintomics:paintomics /data/CLIENT_TMP
+```
+
+`docker compose exec` runs as root, so an admin command that writes under
+`/data` leaves root-owned entries behind for the same reason; the same repair
+applies.
 
 ## Tests
 

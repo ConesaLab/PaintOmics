@@ -686,9 +686,20 @@
 [data-theme="dark"] .x-window,
 [data-theme="dark"] .x-window-body {
 	background-color: var(--pa-surface);
-	border-color: var(--pa-border);
 	color: var(--pa-ink-body);
 }
+[data-theme="dark"] .x-window { border-color: var(--pa-border); }
+/* The body's own 1px border is transparent in main.css
+ * (.x-window-body-default): the window's border is the edge, and a second one
+ * just inside it is a frame within a frame. Listing .x-window-body alongside
+ * .x-window in the border-colour rule undid that for the dark theme alone -
+ * at (0,2,0) it outranks main.css's (0,1,0) - so every dialog carried a
+ * lighter rounded line a pixel inside its edge. On the message dialog, whose
+ * body is rounded on all four corners inside a window whose top border was
+ * 4px, that line peeled away from the corner and left a dark wedge behind it:
+ * the corner "without any filling" reported on 2026-09-13. Measured before
+ * the fix: body border rgb(51,53,59) on a rgb(30,31,35) fill. */
+[data-theme="dark"] .x-window-body { border-color: transparent; }
 /* The sentence in a MessageBox does not inherit the body colour above, because
  * it is not text -- it is a form field. `Ext.window.MessageBox` builds its
  * `msg` out of `Ext.form.field.Display`, so the element that actually carries
