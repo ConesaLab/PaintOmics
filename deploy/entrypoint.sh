@@ -108,15 +108,26 @@ done
 # Extra arguments are passed to find. KEGG_DATA is scanned to depth 2 only: it
 # holds millions of files and the server never writes inside a species
 # directory, so a deeper scan would cost minutes per restart for nothing.
+#
+# Best effort, on purpose. This script runs under `set -e` with pipefail, and
+# find exits non-zero on any traversal error -- a job directory vanishing while
+# the scan runs, a subtree it cannot read -- which would otherwise turn a tidy-up
+# into a hard startup dependency and leave the container down over a stale
+# entry in a 134,000-file tree. So the scan's exit status is tolerated, its
+# count still used (find prints what it found before the error), and a chown
+# that could not finish is logged rather than fatal. The errors themselves
+# still reach the log on stderr.
 repair_ownership() {
     local directory="$1" wrong
     shift
     local -a scan=(find "${directory}" "$@" \
                    \( ! -user "${APP_USER}" -o ! -group "${APP_USER}" \) -prune)
-    wrong=$("${scan[@]}" -printf . | wc -c)
-    if [ "${wrong}" -gt 0 ]; then
+    wrong=$("${scan[@]}" -printf . | wc -c) \
+        || log "scan of ${directory} reported errors; repairing what it found"
+    if [ "${wrong:-0}" -gt 0 ]; then
         log "taking ownership of ${wrong} subtree(s) under ${directory}"
-        "${scan[@]}" -exec chown -R "${APP_USER}:${APP_USER}" {} +
+        "${scan[@]}" -exec chown -R "${APP_USER}:${APP_USER}" {} + \
+            || log "could not take ownership of everything under ${directory}; see errors above"
     fi
 }
 

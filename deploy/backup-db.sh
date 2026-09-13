@@ -13,6 +13,11 @@
 # not off-site. Job FILES (/data/CLIENT_TMP, ~19 GB) are deliberately not included: they are far
 # larger, change constantly, and are covered by the Cinder volume snapshot instead.
 set -euo pipefail
+# The dumps carry userCollection, password hashes included. Under cron's default
+# umask they would land 0644 in a 0755 directory, readable by every local user;
+# 077 makes each new dump 0600, and the chmod below covers a directory that
+# already existed with the old mode.
+umask 077
 
 DIR=/home/tliu/backups
 KEEP_DAILY=14
@@ -21,7 +26,7 @@ STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 OUT=$DIR/paintomicsdb-$STAMP.archive.gz
 LOG=$DIR/backup.log
 
-mkdir -p "$DIR"
+mkdir -p "$DIR"; chmod 700 "$DIR"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
 
 # Write to a .part and rename only on success, so an interrupted run never leaves a file that

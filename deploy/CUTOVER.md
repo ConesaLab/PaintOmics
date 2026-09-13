@@ -93,9 +93,11 @@ To do it by hand instead: `ssh dragocloud-vm ~/paintomics4/deploy/issue-cert.sh`
        echo | openssl s_client -connect paintomics.org:443 -servername paintomics.org 2>/dev/null | openssl x509 -noout -issuer -dates
    Then run a real analysis in a browser at https://paintomics.org and trigger the AI
    interpretation: it must appear in the **drago** block of the menu-bar app.
-2. **Enable HSTS** now that the certificate is trusted: uncomment the
-   `Strict-Transport-Security` line in `deploy/nginx/paintomics.conf`, then
-   `sudo docker compose -f deploy/compose.yaml restart nginx`.
+2. **HSTS stays off for now** -- see "Decide on HSTS" under *Still to do*. The
+   line in `deploy/nginx/paintomics.conf` is commented out on purpose: browsers
+   cache the policy for its whole `max-age`, so a certificate failure would make
+   the site unreachable with no quick undo. When it is enabled, start at
+   `max-age=300`, watch it for a few days, and only then raise it.
 3. **Migrate users and jobs, if decided.** Do it right after the flip: production keeps
    receiving jobs until caches expire, and anything created on `.uv.es` after the copy simply
    stays on `.uv.es`, which keeps running. Production is Mongo 4.4, the VM Mongo 7; the

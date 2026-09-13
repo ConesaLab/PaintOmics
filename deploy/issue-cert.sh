@@ -30,6 +30,9 @@ LIVE=/etc/letsencrypt/live/$APEX
 LOGDIR=/home/tliu/cutover
 LOG=$LOGDIR/issue-cert.log
 SELF=$(readlink -f "$0")
+# Every install keeps the pair it replaces in $CERTS/backup-<stamp>/ so a failed
+# swap can be undone; those are private keys, so only this many are kept.
+KEEP_BACKUPS=5
 
 mkdir -p "$LOGDIR"
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG" >&2; }
@@ -79,7 +82,14 @@ install_from() {  # install_from <dir with fullchain.pem + privkey.pem>
     local src=$1 ts backup
     [ -r "$src/fullchain.pem" ] && [ -r "$src/privkey.pem" ] || sudo -n test -r "$src/privkey.pem" || die "no certificate in $src"
     ts=$(date -u +%Y%m%dT%H%M%SZ); backup=$CERTS/backup-$ts
-    mkdir -p "$backup"; cp -p "$CERTS/paintomics.crt" "$CERTS/paintomics.key" "$backup/"
+    mkdir -p "$backup"; chmod 700 "$backup"
+    cp -p "$CERTS/paintomics.crt" "$CERTS/paintomics.key" "$backup/"
+    # Prune by count, newest first: the rehearsal and every renewal add one,
+    # and nothing else ever removed them, so retired private keys piled up
+    # inside the nginx bind-mount indefinitely.
+    ls -1dt "$CERTS"/backup-*/ | tail -n +$((KEEP_BACKUPS + 1)) | while read -r old; do
+        log "pruning $(basename "$old")"; rm -rf "$old"
+    done
     sudo -n cp "$src/fullchain.pem" "$CERTS/paintomics.crt.new"
     sudo -n cp "$src/privkey.pem"   "$CERTS/paintomics.key.new"
     sudo -n chown tliu:tliu "$CERTS/paintomics.crt.new" "$CERTS/paintomics.key.new"

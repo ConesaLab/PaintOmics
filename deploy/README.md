@@ -317,8 +317,15 @@ docker compose -f deploy/compose.yaml exec -T -u 0 app chown -R paintomics:paint
 ```
 
 `docker compose exec` runs as root, so an admin command that writes under
-`/data` leaves root-owned entries behind for the same reason; the same repair
-applies.
+`/data/CLIENT_TMP` leaves root-owned entries behind for the same reason, and the
+same repair applies. `/data/KEGG_DATA` is different: the entrypoint scans it only
+two levels deep (it holds millions of files), so a root-owned file deeper in a
+species directory -- a `DBManager.py` run through `exec`, say -- stays root-owned
+until you chown that subtree by hand:
+
+```bash
+docker compose -f deploy/compose.yaml exec -T -u 0 app chown -R paintomics:paintomics /data/KEGG_DATA/<subtree>
+```
 
 ## Tests
 
