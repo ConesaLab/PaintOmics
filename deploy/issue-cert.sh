@@ -60,6 +60,18 @@ apex_here() {  # apex_here "<names_here output>" -> true only if the apex itself
     case " $1 " in *" $APEX "*) return 0 ;; esac
     return 1
 }
+cert_covers() {  # cert_covers "<names>" -> true if the installed certificate names every one of them
+    # The cron's "already done" test used to be file-exists plus one HTTPS check
+    # under the apex, which never asked which names were ON the certificate. Two
+    # A records propagate separately, so a tick that saw the apex before www
+    # issued an apex-only certificate and then stopped looking: www was locked
+    # off it until expiry. Read the SAN list instead.
+    local sans n
+    sans=$(openssl x509 -noout -ext subjectAltName -in "$CERTS/paintomics.crt" 2>/dev/null \
+           | tr ',' '\n' | sed -n 's/.*DNS://p' | tr -d ' ')
+    for n in $1; do echo "$sans" | grep -qx "$n" || return 1; done
+    return 0
+}
 
 # -- prerequisites ------------------------------------------------------------------
 check() {
@@ -128,6 +140,10 @@ install_from() {  # install_from <dir with fullchain.pem + privkey.pem>
     return 1
 }
 verify_https() {  # a real chain check against this VM under the apex name; -k = accept self-signed
+    # /healthz is answered by nginx itself (`return 200` in paintomics.conf, in
+    # the TLS server block too), so this proves the chain and nginx, and says
+    # nothing about the application: an app outage cannot fail it, roll a good
+    # certificate back, or make the cron restart nginx.
     local code
     code=$(curl -s "$@" --max-time 10 --resolve "$APEX:443:$MY_IP" -o /dev/null -w '%{http_code}' "https://$APEX/healthz" || true)
     [ "$code" = "200" ]
@@ -140,9 +156,11 @@ issue() {
     local dargs=""; for n in $here; do dargs="$dargs -d $n"; done
     log "issuing for:$here"
     # --keep-until-expiring makes a re-run a no-op while the certificate is fresh, so the
-    # cron can never hammer Let's Encrypt's rate limits.
+    # cron can never hammer Let's Encrypt's rate limits. --expand is what lets a later run
+    # ADD a name to the lineage (www arriving after the apex): without it certbot refuses,
+    # non-interactively, to touch a certificate that covers only some of the names asked.
     sudo -n certbot certonly --webroot -w "$WEBROOT" $dargs \
-        --non-interactive --agree-tos -m "$email" --keep-until-expiring \
+        --non-interactive --agree-tos -m "$email" --keep-until-expiring --expand \
         --deploy-hook "$SELF --install" >>"$LOG" 2>&1 || die "certbot failed; see $LOG"
     # certbot runs the deploy hook only when it actually issued; make the install
     # unconditional so a re-run after a failed install still ends with nginx fixed.
@@ -159,7 +177,8 @@ case "${1:-}" in
         if [ "$now" = "$MY_IP" ]; then
             # Through sudo: /etc/letsencrypt/live is root-only, and a plain [ -f ] here is what made
             # the cron re-install the same certificate and restart nginx every 5 minutes.
-            if sudo -n test -f "$LIVE/fullchain.pem" && verify_https; then exit 0; fi   # already done
+            # Done only when the certificate names every name that resolves here.
+            if sudo -n test -f "$LIVE/fullchain.pem" && cert_covers "$(names_here)" && verify_https; then exit 0; fi
             issue
         fi ;;
     --install)  install_from "$LIVE" ;;

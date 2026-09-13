@@ -44,13 +44,21 @@ fi
 mv "$OUT.part" "$OUT"
 log "wrote $(numfmt --to=iec "$size" 2>/dev/null || echo "$size bytes")"
 
+drop_verify_db() {
+    $COMPOSE exec -T mongo mongosh --quiet PaintomicsDB_verify --eval 'db.dropDatabase()' >/dev/null 2>&1 || true
+}
+
 if [ "${1:-}" = "--verify" ]; then
+    # Whatever happens next, the scratch copy goes. Under set -e a restore or
+    # count that failed skipped the drop below and left a full second copy of
+    # the live database -- password hashes included -- in the running mongo.
+    trap drop_verify_db EXIT
     log "verifying: restoring into PaintomicsDB_verify"
     $COMPOSE exec -T mongo mongorestore --quiet --archive --gzip --drop \
         --nsFrom 'PaintomicsDB.*' --nsTo 'PaintomicsDB_verify.*' < "$OUT" 2>>"$LOG"
     counts=$($COMPOSE exec -T mongo mongosh --quiet PaintomicsDB_verify --eval \
         'print(db.userCollection.countDocuments({}) + " users, " + db.jobInstanceCollection.countDocuments({}) + " jobs, " + db.aiInterpretationCollection.countDocuments({}) + " ai")')
-    $COMPOSE exec -T mongo mongosh --quiet PaintomicsDB_verify --eval 'db.dropDatabase()' >/dev/null
+    drop_verify_db
     log "verified: $counts"
 fi
 
