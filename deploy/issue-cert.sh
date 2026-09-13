@@ -53,6 +53,13 @@ names_here() {  # every configured name that already points at this VM, apex fir
     done
     echo "$out"
 }
+apex_here() {  # apex_here "<names_here output>" -> true only if the apex itself is listed
+    # Whole-token match, not `grep -w`: "." is not a word character to grep, so
+    # `grep -w paintomics.org` also matched inside www.paintomics.org, and a DNS
+    # change that moved only www would have issued a certificate without the apex.
+    case " $1 " in *" $APEX "*) return 0 ;; esac
+    return 1
+}
 
 # -- prerequisites ------------------------------------------------------------------
 check() {
@@ -73,7 +80,7 @@ check() {
     for n in $APEX $EXTRA_NAMES; do log "DNS $n -> $(resolve "$n" || echo '?') (this VM is $MY_IP)"; done
     # /etc/letsencrypt/live is root-only (0700), so a plain [ -f ] is false for tliu: test through sudo.
     if sudo -n test -f "$LIVE/fullchain.pem"; then log "certificate already issued: $LIVE"; fi
-    if echo "$here" | grep -qw "$APEX"; then log "DNS ready: would issue for:$here"; return $ok
+    if apex_here "$here"; then log "DNS ready: would issue for:$here"; return $ok
     else log "DNS not here yet: apex must resolve to $MY_IP first"; return 1; fi
 }
 
@@ -82,13 +89,21 @@ install_from() {  # install_from <dir with fullchain.pem + privkey.pem>
     local src=$1 ts backup
     [ -r "$src/fullchain.pem" ] && [ -r "$src/privkey.pem" ] || sudo -n test -r "$src/privkey.pem" || die "no certificate in $src"
     ts=$(date -u +%Y%m%dT%H%M%SZ); backup=$CERTS/backup-$ts
-    mkdir -p "$backup"; chmod 700 "$backup"
+    mkdir -p "$backup"
     cp -p "$CERTS/paintomics.crt" "$CERTS/paintomics.key" "$backup/"
+    # This runs as tliu from the cron and by hand, and as root from certbot's
+    # deploy hook (--deploy-hook "$SELF --install" under sudo). A directory the
+    # hook created stayed root's, and the next non-root install could neither
+    # prune it nor remove it. Hand it to tliu whichever way it was made -- the
+    # same way the .new files below are -- and keep it closed: it holds a key.
+    sudo -n chown -R tliu:tliu "$backup"; chmod 700 "$backup"
     # Prune by count, newest first: the rehearsal and every renewal add one,
     # and nothing else ever removed them, so retired private keys piled up
-    # inside the nginx bind-mount indefinitely.
+    # inside the nginx bind-mount indefinitely. Through sudo, for the root-owned
+    # directories earlier hooks left behind, and never fatal: a backup that
+    # would not go is not a reason to abandon an install half way.
     ls -1dt "$CERTS"/backup-*/ | tail -n +$((KEEP_BACKUPS + 1)) | while read -r old; do
-        log "pruning $(basename "$old")"; rm -rf "$old"
+        log "pruning $(basename "$old")"; sudo -n rm -rf "$old" || log "could not prune $old"
     done
     sudo -n cp "$src/fullchain.pem" "$CERTS/paintomics.crt.new"
     sudo -n cp "$src/privkey.pem"   "$CERTS/paintomics.key.new"
@@ -120,7 +135,7 @@ verify_https() {  # a real chain check against this VM under the apex name; -k =
 
 issue() {
     local here; here=$(names_here)
-    echo "$here" | grep -qw "$APEX" || die "DNS for $APEX does not point at $MY_IP yet (see --check)"
+    apex_here "$here" || die "DNS for $APEX does not point at $MY_IP yet (see --check)"
     local email; email=$(grep -E '^EMAIL_REPORT_RECIPIENTS=' "$DEPLOY/.env" | cut -d= -f2- | cut -d, -f1)
     local dargs=""; for n in $here; do dargs="$dargs -d $n"; done
     log "issuing for:$here"
