@@ -568,11 +568,12 @@ function showMessage(title, data) {
         // The panel is the whole of the content, so the window adds only its
         // own frame: everything between its outer edge and the content box its
         // body actually offers. Measuring that rather than hard-coding it keeps
-        // this honest if the border changes - main.css gives #messageDialog a
-        // 4px top accent and 1px elsewhere, and the window body adds 1px of its
-        // own top and bottom, so it is 7px today. The constant it replaces was
-        // 30, and the ~23px of that which was not frame is why the dialog still
-        // sat loose even once the wrapping above was right.
+        // this honest if the frame changes - main.css gives #messageDialog a
+        // 1px border and 4px of top padding that carries the accent bar, and
+        // the window body adds 1px of its own top and bottom, so it is 8px
+        // today. The constant it replaces was 30, and the ~22px of that which
+        // was not frame is why the dialog still sat loose even once the
+        // wrapping above was right.
         //
         // clientHeight rather than body.getHeight(): the latter is a border box
         // and counts 2px the content cannot use, which left the panel
@@ -584,7 +585,7 @@ function showMessage(title, data) {
         // the spinner) and a truncated height clips the last pixel of it.
         var bodyDom = messageDialog.body ? messageDialog.body.dom : null;
         var frame = (bodyDom && bodyDom.clientHeight > 0)
-                ? messageDialog.getHeight() - bodyDom.clientHeight : 7;
+                ? messageDialog.getHeight() - bodyDom.clientHeight : 8;
         messageDialog.setHeight(Math.ceil($("#messageDialogPanel").outerHeight()) + frame);
         messageDialog.center();
     };

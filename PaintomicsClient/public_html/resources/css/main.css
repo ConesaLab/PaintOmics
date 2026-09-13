@@ -2398,13 +2398,40 @@ body > .x-mask {
    a 4px bar along the top, so error / warning / info / success still announce
    themselves at a glance without a saturated rectangle around the message. The
    shadow is deeper than the card shadow because a dialog genuinely is above
-   everything else - it is the one place in this UI where that is true. */
+   everything else - it is the one place in this UI where that is true.
+
+   The bar is painted, not bordered. It used to be the top border - 4px where
+   the other three sides were 1px - and a rounded border with unequal widths
+   has an elliptical inner edge: 7px across by 4px down at each top corner,
+   while the body inside kept a circular 8px corner. The two curves never met,
+   and the wedge between them showed whatever the window painted there:
+   white on white on the light theme, and on the dark theme a dark notch under
+   a lighter curve, because dark.css was also drawing a border on the body
+   (see the .x-window-body rule there). Reported on the welcome dialog on
+   2026-09-13 as a corner "without any filling".
+
+   So the border is a uniform hairline, which keeps each corner one circle,
+   and the accent is a background layer: a gradient of the type colour, 4px
+   tall, lying in 4px of top padding and clipped to the padding box, so the
+   browser cuts it to the very curve the border's inner edge follows. The
+   surface colour is a second layer clipped to the border box, so it still
+   runs under the hairline and no scrim leaks in at the anti-aliased seam
+   between the two. The body starts below the bar: ExtJS's dock layout reads
+   the padding and sizes the body to fit, and showMessage measures the frame
+   rather than assuming it, so nothing else moves. The four type rules further
+   down set --pa-dialog-accent instead of a border colour. */
 #messageDialog.x-window-default {
-	border-width: 1px;
-	border-top-width: 4px;
-	border-style: solid;
-	border-color: var(--pa-border);
+	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius);
+	padding-top: 4px;
+	background-color: var(--pa-surface);
+	background-image:
+		linear-gradient(var(--pa-dialog-accent, transparent), var(--pa-dialog-accent, transparent)),
+		linear-gradient(var(--pa-surface), var(--pa-surface));
+	background-size: 100% 4px, auto;
+	background-repeat: no-repeat, repeat;
+	background-origin: padding-box, border-box;
+	background-clip: padding-box, border-box;
 	box-shadow: 0 12px 28px -8px rgba(24, 24, 27, 0.22), 0 6px 12px -6px rgba(24, 24, 27, 0.14);
 }
 
@@ -2661,29 +2688,29 @@ body > .x-mask {
 	border-color: transparent;
 }
 
-/* Each of the four below sets `border-top-color` only. They must stay after the
-   rule above: same specificity, so source order is what lets the type colour
-   win the top edge while the other three sides keep the neutral border. */
+/* Each of the four below sets only --pa-dialog-accent: the colour of the 4px
+   bar that #messageDialog.x-window-default paints along its top edge. The
+   hairline border stays neutral on all four sides. */
 #messageDialog.errorDialog {
-	border-top-color: rgb(211, 96, 68);
+	--pa-dialog-accent: rgb(211, 96, 68);
 }
 #messageDialog.errorDialog h4 {
 	color: var(--pa-status-error-ink, #C84D2F); /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
 }
 #messageDialog.warningDialog {
-	border-top-color: #CB7505;
+	--pa-dialog-accent: #CB7505;
 }
 #messageDialog.warningDialog h4 {
 	color: #AC6304; /* was #CB7505 - 3.45:1 */
 }
 #messageDialog.infoDialog {
-	border-top-color: rgb(0, 121, 220);
+	--pa-dialog-accent: rgb(0, 121, 220);
 }
 #messageDialog.infoDialog h4 {
 	color: #0076D6; /* was rgb(0,121,220) - 4.40:1 */
 }
 #messageDialog.successDialog {
-	border-top-color: #288824;
+	--pa-dialog-accent: #288824;
 }
 #messageDialog.successDialog h4 {
 	/* This was "the same green as the global h4", back when the global h4 was
@@ -2692,7 +2719,7 @@ body > .x-mask {
 	   rules are the one place in the application where a heading's colour is
 	   the message type, and success is the only one of the four that would
 	   otherwise have gone neutral. 4.53:1 on the dialog's white fill; the
-	   border above keeps #288824, which clears the 3:1 non-text bar. */
+	   bar above keeps #288824, which clears the 3:1 non-text bar. */
 	color: var(--pa-accent-green);
 }
 #messageDialogBody {

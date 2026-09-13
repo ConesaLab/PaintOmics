@@ -121,8 +121,11 @@ PUBLISHED = {
     # request sends specie/specieCode beside its HTML) and shows the
     # servlet's "already installed" refusal as a warning, not the error
     # dialog with its report button. That is #130's shape.
+    # v=3.1 changes only the frame constant showMessage falls back on (7 -> 8)
+    # and the comment beside it, for the dialog whose accent bar moved from the
+    # border into 4px of padding; the measured path is unchanged.
     "app/view/common/Util.js": (
-        "3.0", "5624cc402006364afcfef6436da1b028347c4d9f1e1999c960adea283cb6d946"),
+        "3.1", "ee86cc1484046f423eaf1b7bc4d592d7859d6daa498ed44a565ec23ee0f4dcfa"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
