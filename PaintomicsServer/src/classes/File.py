@@ -36,35 +36,20 @@ class File (Model):
     #******************************************************************************************************************
     # GETTERS AND SETTER
     #******************************************************************************************************************
-    def getFileName(self):
-        return self.fileName
-
     def setFileName(self, fileName):
         self.fileName = fileName
-
-    def getDataType(self):
-        return self.dataType
 
     def setDataType(self, dataType):
         self.dataType = dataType
 
-    def getOmicType(self):
-        return self.omicType
-
     def setOmicType(self, omicType):
         self.omicType = omicType
-
-    def getSize(self):
-        return self.size
 
     def setSize(self, size):
         self.size = size
 
     def setSubmissionDate(self, submissionDate):
         self.submissionDate = submissionDate
-
-    def getDescription(self):
-        return self.description
 
     def setDescription(self, description):
         self.description= description

@@ -6,17 +6,12 @@ Chat tools (for follow-up Q&A):
   - get_pathway_genes: matched genes in a pathway (fuzzy name matching)
   - compare_genes: side-by-side comparison of multiple genes
 
-Interpretation tools (Phase 3 sub-agent):
-  - extract_evidence: spawn sub-agent to read full paper and extract evidence
-
 Verification tools (Phase 5 sub-agent):
   - search_paper_text: keyword search within a paper's full text
   - fetch_paper_section: retrieve a specific section of a paper
 """
 import logging
 import re
-
-from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_EVIDENCE_EXTRACTOR
 
 logger = logging.getLogger(__name__)
 
@@ -288,87 +283,9 @@ def execute_tool(tool_name, job_instance, arguments):
 # ===========================================================================
 
 
-
-def build_interpretation_executor(paper_index, llm):
-    """Factory: returns a tool executor callable(name, args) -> str for interpretation tools.
-
-    Args:
-        paper_index: {ref_index: paper_dict} mapping.
-        llm: LLMClient instance for sub-agent calls.
-    """
-    def executor(tool_name, args):
-        if tool_name == "extract_evidence":
-            return _exec_extract_evidence(paper_index, llm, args)
-        return f"Error: unknown interpretation tool '{tool_name}'."
-    return executor
-
-
-def _exec_extract_evidence(paper_index, llm, args):
-    """Spawn a sub-agent to read full paper text and extract evidence.
-
-    The sub-agent runs in its own LLM context with the full paper text.
-    Only the compact result (~150 tokens) flows back to the main agent.
-    """
-    ref_idx = args.get("ref_index")
-    question = args.get("question", "")
-
-    if ref_idx is None:
-        return "Error: ref_index is required."
-
-    paper = paper_index.get(int(ref_idx))
-    if not paper:
-        return f"Error: No paper with reference index [{ref_idx}]."
-
-    # Build sub-agent context with full paper text (ephemeral)
-    paper_text_parts = []
-    for section in ["abstract", "introduction", "results", "discussion", "other"]:
-        text = paper.get("sections", {}).get(section)
-        if text:
-            paper_text_parts.append(f"## {section.title()}\n{text}")
-
-    paper_content = "\n\n".join(paper_text_parts) if paper_text_parts else paper.get("abstract", "")
-
-    if not paper_content.strip():
-        return (f"FINDING: No text available for paper [{ref_idx}].\n"
-                f"CITED_TEXT: \"\"\nRELEVANCE: NONE")
-
-    sub_prompt = (
-        f'Paper [{ref_idx}]: {paper.get("authors_short", paper.get("first_author", "Unknown"))} '
-        f'"{paper["title"]}" {paper["journal"]}, {paper["year"]}.\n\n'
-        f'{paper_content}\n\n'
-        f'---\nQuestion: {question}\n\n'
-        f'Extract a specific finding from this paper that answers the question.\n'
-        f'You MUST respond in EXACTLY this format:\n\n'
-        f'FINDING: <one or two sentence summary of the relevant finding>\n'
-        f'CITED_TEXT: "<exact verbatim quote from the paper text above that supports '
-        f'the finding - do NOT paraphrase>"\n'
-        f'RELEVANCE: <HIGH/MEDIUM/LOW>\n\n'
-        f'If the paper does not contain relevant information, respond with:\n'
-        f'FINDING: No relevant evidence found.\n'
-        f'CITED_TEXT: ""\n'
-        f'RELEVANCE: NONE'
-    )
-
-    try:
-        result = llm.complete(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT_EVIDENCE_EXTRACTOR},
-                {"role": "user", "content": sub_prompt},
-            ],
-            max_tokens=500,
-            temperature=0.1,
-        )
-        return result
-    except Exception as e:
-        logger.exception(f"Evidence extraction sub-agent failed for [{ref_idx}]")
-        return (f"FINDING: Evidence extraction failed ({e}).\n"
-                f"CITED_TEXT: \"\"\nRELEVANCE: NONE")
-
-
 # ===========================================================================
 # Verification tools — Phase 5 citation verification sub-agents
 # ===========================================================================
-
 
 
 def build_verification_executor(paper_index):

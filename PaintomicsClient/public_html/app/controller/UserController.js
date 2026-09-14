@@ -331,7 +331,6 @@ function UserController() {
         * @returns {undefined}
         */
         this.signOutButtonClickHandler = function (userView) {
-            //var noLogin = Ext.util.Cookies.get("nologin") !== null;
             var loggedIn = Ext.util.Cookies.get("userID") !== null;
             if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
                 var noLogin = true;
@@ -354,9 +353,7 @@ function UserController() {
                       if (userView){
   											userView.getComponent().updateLoginState();
   										}
-                      //                this.signInButtonClickHandler();
                       application.getController("JobController").resetButtonClickHandler(null, true, function() { location.reload(); });
-  										// location.reload();
                   },
                   error: ajaxErrorHandler
               });
@@ -385,7 +382,6 @@ function UserController() {
                     Ext.util.Cookies.clear("nologin", location.pathname);
 
                     /*2. Show Credentials dialog*/
-                    //TODO: REVISAR ESTO, SEGURO?
                     me.showGuestSessionDialog(response.userName + "@" + PAINTOMICS_EMAIL_DOMAIN, response.p);
                 },
                 error: ajaxErrorHandler
@@ -400,8 +396,6 @@ function UserController() {
         this.startNoLoginSessionButtonClickHandler = function (userView) {
             var me = this;
 
-            //var noLogin = Ext.util.Cookies.get("nologin") !== null;
-            //var noLogin = true;
             var loggedIn = Ext.util.Cookies.get("userID") !== null;
             if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
                 var noLogin = true;
@@ -428,7 +422,6 @@ function UserController() {
                       Ext.util.Cookies.set("nologin", true, null, location.pathname);
 
                       /*2. Show Credentials dialog*/
-                      //TODO: REVISAR ESTO, SEGURO?
                       me.showNoLoginSessionDialog(null, response.p);
                   },
                   error: ajaxErrorHandler

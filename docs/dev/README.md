@@ -55,8 +55,7 @@ Python 3.11, MongoDB, R, and the `libcairo2` shared library:
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 Rscript -e 'install.packages(c("purrr","cluster","mclust","amap","factoextra",
-                               "igraph","ggplot2","jsonlite","stringr","dplyr",
-                               "optparse"))'
+                               "igraph","ggplot2","jsonlite","stringr","dplyr"))'
 
 cd PaintomicsServer
 python src/launch_server.py            # http://localhost:8000

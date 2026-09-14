@@ -8,10 +8,6 @@ from subprocess import CalledProcessError
 #
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
-#SPECIE = "sot"
-#ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DATA_DIR = '/home/tian/database/KEGG_DATA/current/sot/'
-#LOG_FILE = "/home/tian/database/KEGG_DATA/current/install.log"
 
 
 SPECIE      = argv[1]
@@ -47,19 +43,11 @@ try:
     # (will not fail though)
     COMMON_BUILD_DB_TOOLS.processMapManPathwaysData()
 
-    #COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
-
     #**************************************************************************
     # DUMP AND INSTALL
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.dumpDatabase()
     COMMON_BUILD_DB_TOOLS.createDatabase()
-
-    # try:
-    #     command = ROOT_DIR + "scripts/generateTestData.sh " + SPECIE + " " + DATA_DIR + "../../../"
-    #     check_call(command, shell=True)
-    # except Exception:
-    #     pass
 
 except CalledProcessError as ex:
     stderr.write("FAILED WHILE PROCESSING DATA " + str(ex))

@@ -1,7 +1,7 @@
 # Vulture whitelist: names vulture flags at >=80% confidence that are kept on
 # purpose. Every entry is a PARAMETER -- part of a signature some caller,
 # protocol or mock contract fixes -- so "unused" is the point, not a defect.
-# Evidence per row lives in reports/deadcode.md (verdict: keep).
+# The evidence is the reason on each row.
 #
 # Used by the lint gate as:  vulture PaintomicsServer/src scripts/ci/vulture_whitelist.py
 # A name listed here counts as used; delete a row only when the parameter

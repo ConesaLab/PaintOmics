@@ -10,10 +10,6 @@ import imp
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
 
-#SPECIE = 'gga'
-#ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DESTINATION = "/home/tian/database/KEGG_DATA/old/gga"
-
 
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools

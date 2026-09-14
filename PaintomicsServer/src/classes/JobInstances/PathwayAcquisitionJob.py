@@ -349,7 +349,6 @@ class PathwayAcquisitionJob(Job):
 
         self.matchedClass = {}
 
-        #self.reactomeClass = defaultdict(set)
     # ******************************************************************************************************************
     # GETTERS AND SETTER
     # ******************************************************************************************************************
@@ -366,12 +365,6 @@ class PathwayAcquisitionJob(Job):
     def addMatchedClass(self, matchedClass):
         """Counterpart of addMatchedPathway, used when reloading from storage."""
         self.matchedClass[matchedClass.getID()] = matchedClass
-
-    #def setReactomeClass(self, reactomeClass):
-    #    self.reactomeClass = reactomeClass
-
-    #def getReactomeClass(self):
-    #    return  self.reactomeClass
 
     def setMatchedPathways(self, matchedPathways):
         self.matchedPathways = matchedPathways
@@ -1174,7 +1167,6 @@ class PathwayAcquisitionJob(Job):
                 inputOmic["omicHeader"] = omicHeader
                 inputOmic["replicateDetection"] = self._detectReplicatesForOmic(omicName, omicHeader)
             # REMOVE REPETITIONS AND ORDER ALPHABETICALLY
-            # checkBoxesData = unifyAndSort(checkBoxesData, lambda checkBoxData: checkBoxData["title"].lower())
             checkBoxesData = unifyAndSort(checkBoxesData, lambda checkBoxData: checkBoxData.getTitle().lower())
 
             logging.info("PROCESSING COMPOUND BASED FILES...DONE")
@@ -1297,25 +1289,6 @@ class PathwayAcquisitionJob(Job):
                         ", ") and omicValue.originalName.lower() == originalName.lower():  # Some compounds can have combined names, separated by commas
                     newCompound.addOmicValue(omicValue)
                     del initialCompound.omicsValues[i]
-            #
-            #
-            # for compoundID in selectedCompound:
-            #     compoundName = compoundID.split
-            #     self.addInputCompoundData(initialCompounds.get(compoundID))
-
-            # initialCompoundName = selectedCompound.split("#")[0]
-            # selectedCompoundID= selectedCompound.split("#")[1]
-
-            # 4. CLONE THE ORIGINAL COMPOUND, SET THE ID AND THE NAME (GET NAME COMPOUND USING KEGGINFOMANAGER)
-            # compoundAux = initialCompounds.get(initialCompoundName).clone()
-            # compoundAux.setID(selectedCompoundID)
-            # compoundAux.setName(keggInformationManager.getCompoundNameByID(selectedCompoundID))
-
-            # 5. UPDATE THE FIELD NAME OF THE OMIC VALUE OBJECT USING THE COMPOUND NAME + THE ORIGINAL NAME (SOMETIMES THE
-            #   COMPOUND MATCHES TO VARIOS ORIGINAL COMPOUNDS e.g. if input is beta-alanine and alanine and user checks both, the
-            #   COMPOUND C00099 (beta-alanine) WILL HAVE 2 OMICS VALUES COMING FROM DIFFERENT COMPOUNDS
-            # compoundAux.getOmicsValues()[0].setInputName(compoundAux.getName() + " [" + initialCompoundName + "]")
-            # 6. ADD THE COMPOUND TO THE JOB
 
         if malformedSelections:
             # Logged rather than raised: the analysis is still valid for every
@@ -1620,15 +1593,6 @@ class PathwayAcquisitionJob(Job):
 
         mappedRatiosByOmic = self.getMappedRatios()
 
-        # ****************************************************************
-        # Step 2. FOR EACH PATHWAY OF THE SPECIES, CHECK IF THERE IS ONE OR
-        #         MORE FEATURES FROM THE INPUT (USING MULTITHREADING)
-        # ****************************************************************
-        # try:
-        #     #CALCULATE NUMBER OF THREADS
-        #     nThreads = min(cpu_count(), MAX_THREADS)
-        # except NotImplementedError as ex:
-        #     nThreads = MAX_THREADS
         _markStage("totals_and_backgrounds")
 
         nThreads = MAX_THREADS
@@ -1636,12 +1600,10 @@ class PathwayAcquisitionJob(Job):
 
         manager = Manager()
         matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
-        #matchedPathways = {}
         nPathwaysPerThread = int(
             ceil(len(pathwaysList) / nThreads)) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
 
         pathwaysListParts = chunks(list(pathwaysList.keys()), nPathwaysPerThread)  # SPLIT THE ARRAY IN n PARTS
-        #pathwaysListParts = list(pathwaysList.keys())
         threadsList = []
 
         # Flattened dict
@@ -1652,10 +1614,6 @@ class PathwayAcquisitionJob(Job):
         allCompoundsInPathway = {pathwayID: pathway for dbSource, dbPathways in organismCompounds.items() for
                                  pathwayID, pathway in
                                  dbPathways.items()}
-
-        #matchPathways( self, pathwaysListParts, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
-        #                 totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
-        #                 enrichmentByOmic )
 
         # Once here, inherited by every forked worker, instead of once per worker.
         lookups = _inputFeatureLookups(inputGenes, inputCompounds)
@@ -1708,7 +1666,6 @@ class PathwayAcquisitionJob(Job):
         #PaintOmics 4
         if 'Reactome' in self.databases:
             self.setMatchedClass(dict(matchedClass))
-            #self.setReactomeClass(reactomeClass)
 
         # The manager server is a forked process holding a copy of every
         # matched pathway; release it now instead of when the GC gets round to it.
@@ -2688,11 +2645,8 @@ class PathwayAcquisitionJob(Job):
 
         # Creat a non-redundant compound set
         compoundIDSet = set()
-        # compoundNameSet = set()
 
         for key, inputCompound in self.inputCompoundsData.items():
-            #    if inputCompound.omicsValues[0].inputName not in compoundNameSet and inputCompound.omicsValues[0].inputName.lower() == inputCompound.omicsValues[0].originalName.lower():
-            #        compoundNameSet.add(inputCompound.omicsValues[0].inputName)
             compoundIDSet.add(key)
 
         # Only keep compounds in the classification file

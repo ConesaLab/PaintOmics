@@ -43,7 +43,6 @@ try:
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
     COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
-    #COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
 
 
     #**************************************************************************

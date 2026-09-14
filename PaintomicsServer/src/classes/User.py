@@ -83,9 +83,6 @@ class User (Model):
     def setAffiliation(self, affiliation):
         self.affiliation= affiliation
 
-    def isActivated(self):
-        return self.activated
-
     def setCreationDate(self, creation_date):
         self.creation_date= creation_date
 

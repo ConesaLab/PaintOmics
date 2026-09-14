@@ -31,7 +31,6 @@ try:
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
-    # COMMON_BUILD_DB_TOOLS.processVegaData()
     # Zebrafish never received mapping/ensembl_mapping.list, so the Ensembl,
     # RefSeq and UniProt steps above all produced nothing and dre shipped with
     # no gene identifier table at all -- resolveDatabaseIds then raised on the

@@ -64,18 +64,6 @@ function PA_Step4JobView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	// /**
-	// * This function download the corresponding information for selected pathway
-	// * @chainable
-	// * @param  {String} format the desired format for downloading (png, svg,...)
-	// * @return {PA_Step4JobView}
-	// */
-	// this.downloadPathway = function(format) {
-	// 	if (this.currentView !== null) {
-	// 		this.currentView.controller.downloadPathwayHandler(this.currentView, this.getModel().getJobID(), format);
-	// 	}
-	// 	return this;
-	// };
 	
 	/**
 	* This function retrieves species data from the server and saves the info in the controller to avoid
@@ -287,10 +275,6 @@ function PA_Step4JobView() {
 						me.currentView.showGlobalHeatmap();
 					});
 
-					// $("#downloadButton").click(function() {
-					// 	me.downloadPathway("png");
-					// });
-
 					$("#searchButton").click(function() {
 						me.currentView.showFindFeaturesPanel();
 					});
@@ -455,7 +439,6 @@ function PA_Step4PathwayView() {
 		return this;
 	};
 
-	//TODO: DOCUMENTAR
 	this.getDataDistributionSummaries = function(propertyName) {
 		if (this.dataDistributionSummaries === null) {
 			this.dataDistributionSummaries = this.getParent().getModel().getDataDistributionSummaries();
@@ -499,7 +482,6 @@ function PA_Step4PathwayView() {
 		this.dataDistributionSummaries[omicName] = dataDistributionSummaries;
 	}).bind(this);
 
-	//TODO: DOCUMENTAR
 	this.getVisualOptions = function(propertyName) {
 		if (this.visualOptions !== null && propertyName !== undefined) {
 			return this.visualOptions[propertyName];
@@ -526,7 +508,6 @@ function PA_Step4PathwayView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.showDiagramPanel = function() {
 		if (this.diagramPanel === null) {
 			this.diagramPanel = new PA_Step4KeggDiagramView();
@@ -538,7 +519,6 @@ function PA_Step4PathwayView() {
 		this.diagramPanel.toggle(true);
 	};
 
-	//TODO: DOCUMENTAR
 	this.hideDiagramPanel = function(destroy) {
 		if (this.diagramPanel !== null) {
 			this.diagramPanel.toggle(false);
@@ -550,7 +530,6 @@ function PA_Step4PathwayView() {
 		}
 	};
 
-	//TODO: DOCUMENTAR
 	this.showFindFeaturesPanel = function() {
 		this.hideVisualOptionsPanel();
 
@@ -565,7 +544,6 @@ function PA_Step4PathwayView() {
 		this.adjustChildrenWidth();
 	};
 
-	//TODO: DOCUMENTAR
 	this.hideFindFeaturesPanel = function(destroy) {
 		if (this.findFeaturesPanel !== null) {
 			this.findFeaturesPanel.toggle(false);
@@ -577,7 +555,6 @@ function PA_Step4PathwayView() {
 		}
 	};
 
-	//TODO: DOCUMENTAR
 	this.showVisualOptionsPanel = function() {
 		this.hideFindFeaturesPanel();
 
@@ -591,7 +568,6 @@ function PA_Step4PathwayView() {
 		this.adjustChildrenWidth();
 	};
 
-	//TODO: DOCUMENTAR
 	this.hideVisualOptionsPanel = function(destroy) {
 		if (this.visualOptionsPanel !== null) {
 			this.visualOptionsPanel.toggle(false);
@@ -603,7 +579,6 @@ function PA_Step4PathwayView() {
 		}
 	};
 
-	//TODO: DOCUMENTAR
 	this.showGlobalHeatmap = function() {
 		this.hideFeatureSetDetails();
 
@@ -616,7 +591,6 @@ function PA_Step4PathwayView() {
 		this.globalHeatmapView.toggle(true);
 	};
 
-	//TODO: DOCUMENTAR
 	this.hideGlobalHeatmapPanel = function(destroy) {
 		if (this.globalHeatmapView !== null) {
 			this.globalHeatmapView.toggle(false);
@@ -628,7 +602,6 @@ function PA_Step4PathwayView() {
 		}
 	};
 
-	//TODO: DOCUMENTAR
 	this.showFeatureSetDetails = function(targetID, targetModel) {
 		this.hideGlobalHeatmapPanel();
 
@@ -652,7 +625,6 @@ function PA_Step4PathwayView() {
 		this.featureSetDetailsPanel.updateObserver();
 	};
 
-	//TODO: DOCUMENTAR
 	this.hideFeatureSetDetails = function(destroy) {
 		if (this.featureSetDetailsPanel !== null) {
 			this.featureSetDetailsPanel.toggle(false);
@@ -664,13 +636,9 @@ function PA_Step4PathwayView() {
 		}
 	};
 
-	//TODO: DOCUMENTAR
 	this.setHeight = function(height) {
-		// this.getComponent().setHeight(height);
-		//TODO: ajustar el contenido de los lateralOptionsPanel
 	};
 
-	//TODO: DOCUMENTAR
 	this.adjustChildrenWidth = function() {
 		var savedSpace = 450; //min width for pathway view
 		var parentSize = $("#pathwaysPanelsWrapper").width();
@@ -694,7 +662,6 @@ function PA_Step4PathwayView() {
 		this.diagramPanel.hideTooltips();
 	};
 
-	//TODO: DOCUMENTAR
 	this.updateObserver = function() {
 		debugger;
 		/********************************************************/
@@ -707,7 +674,6 @@ function PA_Step4PathwayView() {
 		this.globalHeatmapView.updateObserver();
 	};
 
-	//TODO: DOCUMENTAR
 	this.applyVisualSettings = function() {
 		var me = this;
 
@@ -756,7 +722,6 @@ function PA_Step4PathwayView() {
 		this.component = Ext.widget({
 			xtype: "container", flex:1, defaults: {border: false},
 			layout: {type: 'hbox', pack: 'start', align: 'stretch'},
-			// maxHeight: (graphicalOptions.getImageHeight() * adjustFactor) + 200,
 			items: [],
 			listeners: {
 				beforedestroy: function() {
@@ -866,7 +831,6 @@ function PA_Step4KeggDiagramView() {
 		}
 	};
 
-	//TODO: DOCUMENTAR
 	this.expand = function() {
 		this.isExpanded = true;
 
@@ -876,7 +840,6 @@ function PA_Step4KeggDiagramView() {
 		this.getParent().getComponent().doLayout();
 	};
 
-	//TODO: DOCUMENTAR
 	this.shrink = function() {
 		this.isExpanded = false;
 		$("#expandDiagramPanelButton").show();
@@ -1105,7 +1068,6 @@ function PA_Step4KeggDiagramView() {
 					var viewportWidth = $(this.el.dom).width();
 					var headerHeight = $(this.el.dom).find(".lateralOptionsPanel-header").outerHeight();
 					var viewportHeight = $("#mainViewCenterPanel").height() - headerHeight - 90;
-					// var viewportHeight = $(this.el.dom).height();
 					var imageWidth = graphicalOptions.getImageWidth();
 					var imageHeight = graphicalOptions.getImageHeight();
 					var imageProportion = imageHeight / imageWidth;
@@ -1337,7 +1299,6 @@ function PA_Step4KeggDiagramFeatureSetView() {
 	/***********************************************************************
 	* GETTERS AND SETTERS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.loadModel = function(featureSet, pathwayID) {
 		this.model = featureSet;
 		var pos = 0;
@@ -1415,7 +1376,6 @@ function PA_Step4KeggDiagramFeatureSetView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.showTooltip = function(dataDistributionSummaries, visualOptions, pinned) {
 		/* Create only when there is no instance */
 		if (this.tooltipComponent == null) {
@@ -1438,7 +1398,6 @@ function PA_Step4KeggDiagramFeatureSetView() {
 		this.tooltipComponent = null;
 	};
 
-	//TODO: DOCUMENTAR
 	this.drawComponent = function(canvas, dataDistributionSummaries, visualOptions) {
 		var me = this;
 		this.adjustFactor = visualOptions.adjustFactor;
@@ -1477,7 +1436,6 @@ function PA_Step4KeggDiagramFeatureSetView() {
 		return featureShape;
 	};
 
-	//TODO: DOCUMENTAR
 	this.updateObserver = function() {
 		//Update ONLY the visible item (mainItem)
 		this.featureView.loadModel(this.getModel().getMainFeature()).updateObserver();
@@ -1533,7 +1491,6 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.show = function(targetID, dataDistributionSummaries=null, visualOptions=null, pinned=false) {
 		if ( ! this.isPinned) {
 			this.getComponent().showBy(targetID);
@@ -1576,7 +1533,6 @@ function PA_Step4KeggDiagramFeatureSetTooltip() {
 		this.featureView.hideExpandedInfo();
 	};
 	
-	//TODO: DOCUMENTAR
 	this.showFeatureSetDetails = function(targetID, feature) {
 		this.getParent().getParent().showFeatureSetDetails(targetID, this.getModel(), feature);
 	};
@@ -2023,7 +1979,6 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		this.parent.getComponent().doLayout();
 	};
 
-	//TODO: DOCUMENTAR
 	this.generateExtraInfoPanelContent = function(target, specie, componentNames, featureID, featureType, callback=null) {
 		var me = this;
 		var renderFunction = function(data){
@@ -2051,7 +2006,6 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 
 			var alternativeName = specieName.split("(")[1];
 			alternativeName = alternativeName.substring(0,1).toUpperCase() +  alternativeName.substring(1,alternativeName.length-1);
-			// specieName = encodeURIComponent(featureName + " " + specieName);
 
 			if(featureType.toLowerCase() === "gene"){
 				htmlCode +=
@@ -2506,16 +2460,13 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 	/***********************************************************************
 	* GETTERS AND SETTERS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.getID = function() {
 		console.warn("Calling to deprecated getID method");
 		return this.getComponentID();
 	};
-	//TODO: DOCUMENTAR
 	this.getComponentID = function() {
 		return this.componentID;
 	};
-	//TODO: DOCUMENTAR
 	this.setComponentID = function(componentID) {
 		this.componentID = (componentID + "_" + this.model.getFeature().getID()).replace(/\s+/g, '_');
 		return this;
@@ -2528,18 +2479,13 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.updateObserver = function() {
 		var dataDistributionSummaries = this.getParent("PA_Step4PathwayView").getDataDistributionSummaries();
 		var visualOptions = this.getParent("PA_Step4PathwayView").getVisualOptions();
 		$("#" + this.getComponentID()).attr("href", this.generateBox(dataDistributionSummaries, visualOptions));
-		// var newID = this.componentID.split("_");
-		// newID[newID.length-1] = this.model.getFeature().getID();
-		// $("#" + this.getComponentID()).attr("id", newID.join("_"));
 		return this;
 	};
 
-	//TODO: DOCUMENTAR
 	this.drawComponent = function(dataDistributionSummaries, visualOptions) {
 		return this.initComponent(dataDistributionSummaries, visualOptions);
 	};
@@ -2580,7 +2526,6 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 		return this.imageCode;
 	};
 
-	//TODO: DOCUMENTAR
 	this.generateBox = function(dataDistributionSummaries, visualOptions) {
 		var scaleFactor = 10;
 		var boxPadding = 1;
@@ -2618,9 +2563,7 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 		var setForMetagenes = (isMetageneFeature && this.getModel().getParent)
 			? this.getModel().getParent() : null;
 
-		//   if (isRelevant === true) {
 		boxPadding = 18;
-		//   }
 
 		//GET THE WIDTH AND THE HEIGHT
 		var width = (featureGraphicalData.getBoxWidth()  || 10 ) * scaleFactor;
@@ -2806,7 +2749,6 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 		return this.imageCode;
 	};
 
-	//TODO: DOCUMENTAR
 	this.getPopUpInformation = function(visualOptions) {
 		var omicsValues = {};
 		var feature = this.getModel().getFeature();
@@ -2849,17 +2791,8 @@ function PA_Step4KeggDiagramFeatureSetSVGBox() {
 	this.initComponent = function(dataDistributionSummaries, visualOptions) {
 		var me = this;
 
-		//TODO: DELETE OBSERVER
-		//me.getModel().deleteObserver(me);
-		//TODO: SOME FEATURES HAS NaN FOR WIDTH AND POS
 		var width = (this.getModel().getFeatureGraphicalData().getBoxWidth() * visualOptions.adjustFactor || 20);
 		var height = (this.getModel().getFeatureGraphicalData().getBoxHeight() * visualOptions.adjustFactor || 20);
-		// DEPRECATED: MapMan pathways do not have width or height set. For that, and those rare KEGG cases in which it isn't set,
-		// draw a circle instead
-		// var width = (this.getModel().getFeatureGraphicalData().getBoxWidth() * visualOptions.adjustFactor);
-		// var height = (this.getModel().getFeatureGraphicalData().getBoxHeight() * visualOptions.adjustFactor);
-		//this.getModel().getFeatureGraphicalData().setBoxWidth(width);
-		//this.getModel().getFeatureGraphicalData().setBoxHeight(height);
 
 		/* LEGACY CODE IN CASE WE WANT TO RESTORE POINT "BOXES" FOR OTHER DBS */
 		if (width == 0 || height == 0) {
@@ -3124,7 +3057,6 @@ function PA_Step4VisualOptionsView() {
 							 var customSlider = Ext.create('Ext.slider.MultiCustom', {
 						        renderTo: "colorByCheckbox5_" + omic,
 										name: "customslider_" + omic,
-						        //hideLabel: false,
 						        width: 240,
 						        minValue: omicValues.min,
 						        maxValue: omicValues.max,
@@ -3450,7 +3382,6 @@ function PA_Step4GlobalHeatmapView() {
 		return this;
 	};
 
-	//TODO: DOCUMENTAR
 	this.expand = function() {
 		this.isExpanded = true;
 
@@ -3460,7 +3391,6 @@ function PA_Step4GlobalHeatmapView() {
 		this.getParent().getComponent().doLayout();
 	};
 
-	//TODO: DOCUMENTAR
 	this.shrink = function() {
 		this.isExpanded = false;
 		$("#expandHeatmapButton").show();
@@ -3470,12 +3400,10 @@ function PA_Step4GlobalHeatmapView() {
 		this.getParent().getComponent().doLayout();
 	};
 
-	//TODO: DOCUMENTAR
 	this.download = function() {
 		throw "Not implemented"
 	};
 
-	//TODO: DOCUMENTAR
 	this.updateObserver = function() {
 		var start = new Date();
 
@@ -3691,7 +3619,6 @@ function PA_Step4GlobalHeatmapView() {
 		console.log('Rendered in ' + start + ' ms');
 	};
 
-	//TODO: DOCUMENTAR
 	this.generateContent = function(referenceOmics, dataMatrix, otherDataMatrix, clusterize, level) {
 		var referenceOmic = referenceOmics.shift();
 
@@ -3767,7 +3694,6 @@ function PA_Step4GlobalHeatmapView() {
 		this.generateContent(referenceOmics, dataMatrix, otherDataMatrix, clusterize, level + 1);
 	};
 
-	//TODO: DOCUMENTAR
 	this.generateHeatmap = function(targetID, omicName, omicsValues, dataDistributionSummaries, visualOptions, showLabels, clusterize, maxX) {
 		var featureValues,
 		x = 0,
@@ -4224,12 +4150,7 @@ function PA_Step4DetailsView() {
 	* GETTERS AND SETTERS
 	***********************************************************************/
 	this.loadModel = function (model) {
-		//UNLINK THE PREVIOUS MODEL (IF ANY)
-		// if (this.model !== null) {
-		// 	this.model.deleteObserver(this);
-		// }
 		this.model = model;
-		//model.addObserver(this);
 
 		var features = this.getModel().getFeatures();
 

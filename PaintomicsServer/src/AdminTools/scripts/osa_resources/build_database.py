@@ -8,10 +8,6 @@ from subprocess import CalledProcessError
 #
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
-#SPECIE = "osa"
-#ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DATA_DIR = '/home/tian/database/KEGG_DATA/current/osa/'
-#LOG_FILE = "/home/tian/database/KEGG_DATA/current/install.log"
 
 
 SPECIE      = argv[1]

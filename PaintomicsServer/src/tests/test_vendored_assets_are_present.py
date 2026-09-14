@@ -55,8 +55,7 @@ SEARCHED_SUFFIXES = (".html", ".js", ".css")
 
 
 def _referencesIn(path):
-    # os.walk reports dangling symlinks as files, and the client tree has at
-    # least one (js/libs/jquery/jquery-1.min.js). Reading it raises
+    # os.walk reports dangling symlinks as files, and reading one raises
     # FileNotFoundError, which would abort the scan rather than skip a file --
     # and an aborted scan is indistinguishable from a clean one here.
     try:

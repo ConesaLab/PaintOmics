@@ -52,7 +52,6 @@ class Pathway(Model):
         self.globalOmicPvalues = {}
         self.totalGlobalPvalues = {}
         self.adjustedSignificanceValues = {}
-        #self.combinedSignificancePvalue=1
         self.combinedSignificancePvalues = {}
         self.adjustedCombinedSignificanceValues = {}
         self.masterRegulators = defaultdict(list)
@@ -74,29 +73,18 @@ class Pathway(Model):
 
     def setClassification(self, classification):
         self.classification = classification
-    def getClassification(self):
-        return self.classification
-
     def setSource(self, source):
         self.source = source
     def getSource(self):
         return self.source
 
-    def setMatchedCompounds(self, matchedCompounds):
-        self.matchedCompounds = matchedCompounds
     def getMatchedCompounds(self):
         return self.matchedCompounds
-    def addMatchedCompound(self, matchedCompound):
-        self.matchedCompounds.append(matchedCompound.getID())
     def addMatchedCompoundID(self, matchedCompoundID):
         self.matchedCompounds.append(matchedCompoundID)
 
-    def setMatchedGenes(self, matchedGenes):
-        self.matchedGenes = matchedGenes
     def getMatchedGenes(self):
         return self.matchedGenes
-    def addMatchedGene(self, matchedGen):
-        self.matchedGenes.append(matchedGen.getID())
     def addMatchedGeneID(self, matchedGenID):
         self.matchedGenes.append(matchedGenID)
 
@@ -113,10 +101,6 @@ class Pathway(Model):
         """The pathway's compound count, or None if not recorded."""
         return getattr(self, "totalCompounds", None)
 
-    def setMetagenes(self, metagenes):
-        self.metagenes= metagenes
-    def getMetagenes(self):
-        return self.metagenes
     def addMetagenes(self, omicName, metagene):
         if not omicName in self.metagenes:
             self.metagenes[omicName] = []
@@ -125,8 +109,6 @@ class Pathway(Model):
         self.metagenes[omicName] = []
 
     #OmicName -> [[totalFeatures, totalRelevantFeatures, pValue], ...] (one per condition)
-    def setSignificanceValues(self, significanceValues):
-        self.significanceValues = significanceValues
     def getSignificanceValues(self):
         return self.significanceValues
     def addSignificanceValues(self, omicName, isRelevantFeatureList):
@@ -173,8 +155,6 @@ class Pathway(Model):
     def getTotalGlobalPvalues(self):
         return self.totalGlobalPvalues
 
-    def getAdjustedSignificanceValues(self):
-        return self.adjustedSignificanceValues
     def setOmicAdjustedSignificanceValues(self, omic, adjustedSignificanceValues):
         self.adjustedSignificanceValues[omic] = adjustedSignificanceValues
 
@@ -187,10 +167,6 @@ class Pathway(Model):
             if i < len(self.significanceValues[omicName]):
                 self.significanceValues[omicName][i][2] = pVal
 
-    # def setCombinedSignificancePvalue(self, pValue):
-    #     self.combinedSignificancePvalue = pValue
-    # def getCombinedSignificancePvalue(self):
-    #     return self.combinedSignificancePvalue
     def setCombinedSignificancePvalues(self, pValues):
         self.combinedSignificancePvalues = pValues
     def getCombinedSignificancePvalues(self):

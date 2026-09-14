@@ -136,11 +136,11 @@ PUBLISHED = {
     # shadow, and the framework's 5px-radius one only showed as a grey box
     # under each 8px corner. That is #132's shape.
     "app/view/common/ExtJS_extensions.js": (
-        "0.8", "c463dffb7cf4a73991e61fdc6d5f2a367ae1c9a5710a017cf1d89b90ef355ca3"),
+        "0.9", "632709a5cc3b28db2bfe227cf1fc1762d9d2969c2958499cce0699f2aed9d2ee"),
     "app/view/common/CookieConsent.js": (
         "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (
-        "0.3", "d674eb13f512d72d71c662ec03305eb2c1a0b721cade230c6808c110b173e583"),
+        "0.4", "83f9902cf8bbe35be51b2c361f9b3c19768b1c23895b6ac57026a373014fb6a1"),
     # A development overlay, inert until ctrl+alt+G, and still recorded here:
     # it ships to every visitor as a script tag like any other, so a change to
     # it with an unbumped marker leaves returning browsers running the old
@@ -237,7 +237,7 @@ PUBLISHED = {
     # skips the bump. Recorded as None, an edit to the boot copy or to
     # `this.controllers` passed every check here.
     "app.js": (
-        "0.6", "4969e8969606e5c3974f05371bc32a76a607add43a7e28f24ec54a1401639d23"),
+        "0.7", "1e6e3c5400df77af6c6f8ed03721c3d6891e6150d02b4695c61b2b1c9d19a174"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

@@ -67,55 +67,7 @@ function PathwayController() {
 			var current_height = Number.parseFloat(svgElem.find(".keggImageBack").attr("height"));
 			var current_width = Number.parseFloat(svgElem.find(".keggImageBack").attr("width")) ;
 
-			//TODO: GENERATE TOOLTIPS FOR THE SVG IMAGE
 			/*IF WE WANT TO SAVE IN SVG ADD THE SCRIPTS TO SHOW THE POPUPS*/
-			// if (format === "svg") {
-			//	 /*GENERATE THE OBJECT WITH THE INFO INDEXED BY pathwayID#featureID*/
-			//	 var featureSetViews = pathwayView.diagramPanel.items;
-			//	 var imageInfo = {}, elemAux;
-			//
-			//
-			//	 //GET THE VIEW PORT AND IF THE IMAGE IS BIGGER, CALCULATE THE ADJUST FACTOR
-			//	 var viewportWidth = $("#pathwaysPanelsWrapper").width();
-			//	 var graphicalOptions = pathwayView.getModel().getGraphicalOptions();
-			//	 var imageWidth = graphicalOptions.getImageWidth(), imageHeight = graphicalOptions.getImageHeight();
-			//	 var imageProportion = imageHeight / imageWidth;
-			//	 var adjustFactor = 1;
-			//
-			//	 //if the image is bigger than the available space, the it's neccessary to adjust the image as well as all the coordinateS
-			//	 if (viewportWidth < imageWidth) {
-			//		 imageWidth = viewportWidth * 0.98;/*UN 95% del espacio disponible*/
-			//		 imageHeight = imageWidth * imageProportion;
-			//		 adjustFactor = imageWidth / graphicalOptions.getImageWidth();
-			//	 }
-			//
-			//	 for (var i in featureSetViews) {
-			//			 elemAux = featureSetViews[i].featureView;
-			//			 imageInfo[elemAux.getID()] = elemAux.getPopUpInformation(graphicalOptions.getVisibleOmics(), adjustFactor);
-			//	 }
-			//
-			//	 /*OVERRIDE THIS FUNCTION*/
-			//	 var showToolTip = function (featureId) {
-			//		 var elemData = imageInfo[featureId];
-			//		 generateToolTip(elemData.name, elemData.values, elemData.x, elemData.y, minMaxValues, featureId + "_popup", canvasID)
-			//	 };
-			//	 /*OVERRIDE THIS FUNCTION*/
-			//	 var showCompleteDataDialog = function (toolTipId) {
-			//		 $("#" + toolTipId).css("display", "none");
-			//	 };
-			//
-			//	 svgString.attr("xmlns:xlink", "http://www.w3.org/1999/xlink");
-			//	 //ADD THE SCRIPTS
-			//	 svgString.prepend('<script xmlns="http://www.w3.org/2000/svg"><![CDATA[' +
-			//	 'canvasID = "' + $("#" + pathwayView.getComponent().id + " svg").attr("id") + '";\n' +
-			//	 'minMaxValues = ' + JSON.stringify(pathwayView.minMaxValues) + ';\n' +
-			//	 'imageInfo = ' + JSON.stringify(imageInfo) + ';\n' +
-			//	 ("" + showToolTip).replace("function", "function showToolTip") + ';\n' +
-			//	 ("" + generateToolTip).replace("function", "function generateToolTip") + ';\n' +
-			//	 ("" + getColor).replace("function", "function getColor") + ';\n' +
-			//	 ("" + hideToolTip).replace("function", "function hideToolTip") + ';\n' +
-			//	 '//]]></script>');
-			// }
 
 			canvas	= SVG(svgElem[0]);
 			canvas.viewbox(0,0, current_width, current_height);
@@ -139,7 +91,6 @@ function PathwayController() {
 					var a = document.createElement('a');
 					a.download = "paintomics_" + fileName.replace(" ", "_") + "_" + jobID +  "." + format;
 					a.type = 'image/' + format;
-					// a.href = window.location.href.replace(/\/$/,"") + response.filepath;
 					a.href = window.location.href.replace(window.location.search, "").replace(/\/$/,"") + response.filepath;
 					a.target = "_blank";
 					a.style = "display:none";

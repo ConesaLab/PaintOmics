@@ -758,7 +758,6 @@ function JobController() {
 							jobModel.aiConsent = true;
 						}
 
-						//TODO: IF IS THE SECOND TIME THAT THE PREVIOUS STEP WAS EXECUTED AND NOTHING CHANGES, AVOID RESENDING?
 						jobModel.setFoundCompounds([]);
 						var matchedMetabolites = response.matchedMetabolites;
 						var matchedCompound = null;
@@ -944,15 +943,6 @@ function JobController() {
 			var me = this;
 			showInfoMessage("Obtaining Pathways list...", {logMessage: "Sending new request (get pathway list).", showSpin: true});
 
-			// TODO: disabled code, allow setting customValues from step2
-			// Get omicNames and customValues from view
-			// jobView.getModel().getCompoundBasedInputOmics().concat(jobView.getModel().getGeneBasedInputOmics());
-			// var omicNames = ...
-			// var omicValues = {};
-			//
-			// $(omicNames).each(function(omic) {
-			// 		omicValues[omic] = Ext.ComponentQuery.query('[name="customslider_' + omic + '"]')[0].getValues();
-			// });
 			/* EVERY form on the step, not the first one. Step 2 carries two:
 			   the cluster-number form and the metabolite class activity form.
 			   `down("form")` posted only whichever came first, so on any job
@@ -1191,7 +1181,6 @@ function JobController() {
 					jobView.generateNetwork(pathwaysNetworkData);
 				});
 			} else if (jobView.database == "KEGG") {
-				//TODO: CHANGE URL
 				$.getJSON(SERVER_URL_GET_PATHWAY_NETWORK + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
 					// Set the id key as organism
 					pathwaysNetworkData.id = jobView.getModel().getOrganism();
@@ -1328,7 +1317,6 @@ function JobController() {
 						var jobModel = new JobInstance(jobID);
 						//UPDATE THE STEP NUMBER
 						jobModel.setStepNumber(response.stepNumber);
-						//TODO: NO ES NECESARIO DEVOLVER ESTO!!! MUY GRANDE! MEJOR CALCULARLO EN EL SERVER
 						jobModel.setUserID(response.userID);
 						jobModel.setCompoundBasedInputOmics(response.compoundBasedInputOmics);
 						jobModel.setGeneBasedInputOmics(response.geneBasedInputOmics);
@@ -1668,7 +1656,6 @@ function JobController() {
 					jobModel.setStepNumber(jobModel.getStepNumber() - 1);
 					me.updateStoredApplicationData("jobModel", jobModel);
 					me.showJobInstance(jobModel, {doUpdate: update});
-					//                    showSuccessMessage("Done", {logMessage: "Getting Job information..."});
 				}, closeTimeout: 1, showSpin: true
 			});
 		}
@@ -1688,7 +1675,6 @@ function JobController() {
 			if (callback !== undefined) {
 				callback();
 			}
-			//location.reload();
 			return;
 		}
 		Ext.MessageBox.confirm('Confirm', 'Are you sure you want to exit the current job?', function (opcion) {
@@ -1699,7 +1685,6 @@ function JobController() {
 				if (callback !== undefined) {
 					callback();
 				}
-				// location.reload();
 				window.history.replaceState(null, null, window.location.pathname);
 			}
 		});

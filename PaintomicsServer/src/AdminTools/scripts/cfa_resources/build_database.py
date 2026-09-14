@@ -10,7 +10,6 @@ from subprocess import CalledProcessError
 #**************************************************************************
 
 
-
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
 DATA_DIR    = argv[3].rstrip("/") + "/"
@@ -36,8 +35,6 @@ try:
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
-    #COMMON_BUILD_DB_TOOLS.processUniProtData()
-    #processRefSeqGeneSymbolData()
 
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG  & OTHER DATABASES

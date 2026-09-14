@@ -623,9 +623,11 @@ also why `build_synthesis_prompt` reads as live: it is the only caller of
 `SYSTEM_PROMPT_SYNTHESIZE`, so a reference search on the prompt alone finds a
 user and stops there. Dead code hides behind dead code.
 
-They are pinned in a test allowlist rather than deleted -- removing shipped code
-belongs in a change against master, not in a branch about the agent arm -- and
-the guard fails on any NEW orphan, verified by adding one.
+They were pinned in a test allowlist rather than deleted -- removing shipped code
+belonged in a change against master, not in a branch about the agent arm -- and
+the guard fails on any NEW orphan, verified by adding one. All five, together with
+`verify_report` and the `Verdict` model that the AST-based check later surfaced,
+were removed in the 2026-09 cleanup; the allowlist is empty.
 
 ## References that nothing cites (2026-08-18)
 

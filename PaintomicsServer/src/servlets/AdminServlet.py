@@ -291,48 +291,6 @@ def adminServletInstallOrganism(request, response, organism_code, ROOT_DIRECTORY
     finally:
         return response
 
-def adminServletRestoreData(request, response, ROOT_DIRECTORY):
-    # ROOT_DIRECTORY is an argument, as in adminServletInstallOrganism: the
-    # body built the DBManager path from a name that was never defined here,
-    # so any call would have died with NameError before running anything.
-    """
-    This function...
-
-    @param {Request} request, the request object
-    @param {Response} response, the response object
-    """
-    try :
-        #****************************************************************
-        # Step 0.CHECK IF VALID USER SESSION
-        #****************************************************************
-        logging.info("STEP0 - CHECK IF VALID USER....")
-        userID = request.cookies.get('userID')
-        sessionToken = request.cookies.get('sessionToken')
-        userName = request.cookies.get('userName')
-        UserSessionManager().isValidAdminUser(userID, userName, sessionToken)
-
-        #****************************************************************
-        # Step 1.GET THE SPECIE CODE AND THE UPDATE OPTION
-        #****************************************************************
-
-        from subprocess import check_output, CalledProcessError, STDOUT
-
-        logging.info("STARTING DBManager Restore PROCESS.")
-        scriptArgs = [ROOT_DIRECTORY + "AdminTools/DBManager.py", "restore", "--remove=1", "--force=1"]
-        try:
-            check_output(scriptArgs, stderr=STDOUT)
-        except CalledProcessError as exc:
-            raise Exception("Error while calling DBManager Restore: Exit status " + str(exc.returncode) + ". Error message: " + exc.output.decode('utf-8'))
-        logging.info("FINISHED DBManager Restore PROCESS.")
-
-        response.setContent({"success": True})
-
-    except Exception as ex:
-        handleException(response, ex, __file__ , "adminServletRestoreData")
-
-    finally:
-        return response
-
 def clearFailedData():
     import shutil, os
     dirname = KEGG_DATA_DIR + 'download/'
@@ -936,7 +894,6 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         userID  = request.cookies.get('userID')
         #sessionToken  = request.cookies.get('sessionToken')
         #UserSessionManager().isValidUser(userID, sessionToken)
-
 
 
         #****************************************************************

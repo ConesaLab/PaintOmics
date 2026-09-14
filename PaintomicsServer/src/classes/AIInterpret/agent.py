@@ -52,7 +52,7 @@ _TRANSPORT_ERRORS = ((httpx.HTTPError,) if _transport is httpx
                      else (httpx.HTTPError, _transport.HTTPError))
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.classes.AIInterpret import model_fallback
 from src.conf.serverconf import (
@@ -223,8 +223,6 @@ four three two one several multiple various different profile profiles
 """.split())
 
 
-
-
 # Servlet-facing state: the servlet flips
 # _cancel_flags[job_id] to cancel, and the semaphore bounds concurrent runs.
 import threading
@@ -274,7 +272,6 @@ class _AsyncPacer:
 
 class _EmptyStream(Exception):
     """The gateway closed a completion stream without a single choice."""
-
 
 
 # Lengths of answers the model cut off at its token limit, this process.
@@ -599,12 +596,6 @@ _CAVEAT_CUES = (
 )
 
 
-
-
-
-
-
-
 async def run_hedged(agent, prompt, ctx, max_turns=6, timeout=None, label=""):
     """Runner.run, with a straggler retried instead of waited on.
 
@@ -648,34 +639,12 @@ class AgentContext:
     organism_name: str
     experiment_design: str
     paper_index: dict = field(default_factory=dict)   # ref_index -> paper
-    llm: Any = None                                    # for extract_evidence
     tool_calls: int = 0                                # instrumentation
-
-
-
-
-
-
-
-
 
 
 class RelevantPMIDs(BaseModel):
     """Replaces _parse_pmid_list."""
     pmids: list[str]
-
-
-class Verdict(BaseModel):
-    """Replaces _parse_json_verdict."""
-    supported: bool
-    confidence: float = Field(ge=0.0, le=1.0)
-    reason: str
-
-
-
-
-
-
 
 
 @function_tool
@@ -694,10 +663,6 @@ def fetch_paper_section(ctx: RunContextWrapper[AgentContext], ref_index: int, se
     return executor("fetch_paper_section", {"ref_index": ref_index, "section": section})
 
 
-
-
-
-
 VERIFY_TOOLS = [search_paper_text, fetch_paper_section]
 
 
@@ -708,10 +673,6 @@ VERIFY_TOOLS = [search_paper_text, fetch_paper_section]
 def _build_agents():
     ms = ModelSettings(temperature=AI_TEMPERATURE)
     strict = ModelSettings(temperature=0.1)
-
-
-
-
 
 
     synthesizer = Agent[AgentContext](
@@ -794,8 +755,6 @@ VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
 # AI_VERIFY_PREFETCH=0 restores the tool-loop verifier for comparison.
 VERIFY_PREFETCH = (os.getenv("AI_VERIFY_PREFETCH") or "1").strip().lower() \
     not in ("0", "false", "no")
-
-
 
 
 SENTENCE_REPAIR_WORKERS = int(os.getenv("AI_SENTENCE_REPAIR_WORKERS", "6"))
@@ -890,18 +849,6 @@ async def _repair_sentences(agent, ctx, report, failed, job_id, stats, timeout):
     return report, repaired
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class _Heartbeat:
     """Background thread that touches the job's updatedAt every interval.
 
@@ -944,9 +891,6 @@ class _Heartbeat:
             finally:
                 if dao is not None:
                     dao.closeConnection()
-
-
-
 
 
 def run_ai_agent(job_id, experiment_design, RESPONSE):

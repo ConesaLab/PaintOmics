@@ -284,8 +284,6 @@ class Job(Model):
     #******************************************************************************************************************
     # GETTERS AND SETTER
     #******************************************************************************************************************
-    def setJobID(self, jobID):
-        self.jobID = jobID
     def getJobID(self):
         return self.jobID
 
@@ -334,15 +332,11 @@ class Job(Model):
     def addReferenceInput(self, referenceInput):
         self.referenceInputs.append(referenceInput)
 
-    def setCompoundBasedInputOmics(self, compoundBasedInputOmics):
-        self.compoundBasedInputOmics = compoundBasedInputOmics
     def getCompoundBasedInputOmics(self):
         return self.compoundBasedInputOmics
     def addCompoundBasedInputOmic(self, compoundBasedInputOmic):
         self.compoundBasedInputOmics.append(compoundBasedInputOmic)
 
-    def setGeneBasedInputOmics(self, geneBasedInputOmics):
-        self.geneBasedInputOmics = geneBasedInputOmics
     def getGeneBasedInputOmics(self):
         return self.geneBasedInputOmics
     def addGeneBasedInputOmic(self, geneBasedInputOmic):
@@ -702,7 +696,6 @@ class Job(Model):
             # Avoid numpy calculations on empty files (fails on some versions)
             # Initialize summary as a zero filled list
             summary = [0] * 9
-            # outliers = []
 
             if len(allValues):
                 numpyArray = asarray(allValues, dtype=float)
@@ -764,8 +757,6 @@ class Job(Model):
         @param keggInformationManager, contains all the tools and info for ids and names matching
         @returns the changed instances of checkBoxesData
         """
-        #GET KEGG DATA FOR THE GIVEN SPECIE
-        # keggInformationManager = KeggInformationManager()
 
         #E.G. Metabolomics, Metabolomics 2, My Metab
         omicName = inputOmic.get("omicName")
@@ -901,8 +892,6 @@ class Job(Model):
 
             logging.info("PARSING COMPOUND BASED FILE (" + omicName + ")... DONE" )
 
-            # TODO: changed to assign the foundFeatures/notMatchedFeatures but they are not the same as the raw data (duplicated compounds?)
-            # return [omicName, checkBoxesData  + list(parsedFeatures), [-1,-1] + summary ]
             return [omicName, checkBoxesData + list(parsedFeatures), [foundFeatures, len(notMatchedFeatures)] + summary, fileHeader]
         else:
             logging.error("PARSING USER COMPOUND BASED FILE (" + omicName + ")... FAILED. File " + valuesFileName + " NOT FOUND")
@@ -1154,12 +1143,6 @@ class Job(Model):
 
         return associationFeatures
 
-    ##*************************************************************************************************************
-    # This function...
-    #
-    # @param {type}
-    # @returns
-    ##*************************************************************************************************************
     def parseBSON(self, bsonData):
        bsonData.pop("_id")
        for (attr, value) in bsonData.items():

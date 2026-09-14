@@ -1405,10 +1405,6 @@ function PA_Step1JobView() {
 		return firstVisibleInvalidField(this.getComponent().query("field"));
 	};
 
-	//    this.showMyDataPanel = function () {
-	//        this.controller.showMyDataPanelClickHandler(this);
-	//    };
-
 	this.initComponent = function() {
 		var me = this;
 		this.component = Ext.widget({
@@ -2843,7 +2839,6 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 	*/
 	this.setExampleMode = function(scenario){
 		var component = this.getComponent();
-		//component.queryById("toogleMapRegions").setVisible(false);
 
 		component = component.queryById("itemsContainer");
 
@@ -3659,7 +3654,6 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 	*/
 	this.setExampleMode = function(scenario){
 		var component = this.getComponent();
-		//component.queryById("toogleMapRegions").setVisible(false);
 		component = component.queryById("itemsContainer");
 
 		var omicNames = (scenario && scenario.omicNames) || ["miRNA"];
@@ -3799,12 +3793,6 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				hidden: !this.allowToogle,
 				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My features are already mapped to Gene IDs, skip this step.</label></div>'
 			},
-			// {
-			// 	xtype: "box",
-			// 	itemId: "toogleUseAssociations",
-			// 	hidden: !this.allowToogle,
-			// 	html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_useAssociations"><label for="' + this.namePrefix + '_useAssociations">Provide own associations lists.</label></div>'
-			// },
 			{
 				xtype: "container",
 				itemId: "itemsContainerAlt",
@@ -4218,7 +4206,6 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 									["by negative correlation with gene expression", "negative_correlation"]
 								]
 							}),
-							//TODO: THIS HELP TOOL IS NOT DISPLAYED, WHY??
 							helpTip:
 							"Determines how we select the potential features that are regulating a certain gene. " +
 							"For instance, usually miRNA act as inhibitors of gene expression so we should expect an opposite behavior " +
@@ -4310,20 +4297,11 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				initializeTooltips(".helpTip");
 
 				$("#" + me.namePrefix + "_mapRegions").change(function() {
-					//$("#" + me.namePrefix + "_useAssociations").prop('disabled', $(this).is(':checked'));
-					// me.getComponent().queryById("toogleUseAssociations").setVisible(! $(this).is(':checked'));
 					me.toogleContent();
 				});
 
-				// $("#" + me.namePrefix + "_useAssociations").change(function() {
-				// 	// $("#" + me.namePrefix + "_mapRegions").prop('disabled', $(this).is(':checked'));
-				// 	me.getComponent().queryById("toogleMapRegions").setVisible(! $(this).is(':checked'));
-				// 	me.toogleContent("itemsContainerAssociations");
-				// });
-
 				$("#" + me.namePrefix + "_corrOptions").change(function() {
 					var corrEnabled = $(this).is(':checked');
-					// $("#" + me.namePrefix + "_mapRegions").prop('disabled', corrEnabled);
 					me.getComponent().queryById("secondaryAssociationFileSelector").down('container').setDisabled(corrEnabled);
 					me.getComponent().queryById("itemsContainerCorrOptions").setDisabled(! corrEnabled);
 

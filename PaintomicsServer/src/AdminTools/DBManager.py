@@ -1,16 +1,6 @@
 #! /usr/bin/env python
 import sys
 import os
-# sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)) + "/../../")
-
-# Ensure this script always runs inside the expected virtualenv so required packages are available.
-# Disabled for local deployment - using conda env instead.
-# VENV_DIR = "/home/tian/paintomics/paintomics_env"
-# VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python3")
-# if os.path.exists(VENV_PYTHON) and sys.executable != VENV_PYTHON:
-#     os.environ["VIRTUAL_ENV"] = VENV_DIR
-#     os.environ["PATH"] = os.path.join(VENV_DIR, "bin") + os.pathsep + os.environ.get("PATH", "")
-#     os.execv(VENV_PYTHON, [VENV_PYTHON] + sys.argv)
 
 import datetime, traceback, shutil, inspect, tempfile
 import logging
@@ -201,8 +191,6 @@ def download_command(inputfile=None, specie=None, kegg=0, mapping=0, common=0, r
                                  pathway + ".png", DOWNLOAD_DELAY_2, MAX_TRIES_1)
                 generateThumbnail(datadir + "png/" + pathway + ".png")
                 i += 1
-                #if i == 5:
-                #    break
             # STEP 2.A.3 REMOVE THE DOWNLOADING FLAG AND ADD THE VERSION FILE
             os.remove(datadir + "DOWNLOADING")
             version = open(datadir + "VERSION", 'w')
@@ -488,9 +476,7 @@ def install_command(inputfile=None, specie=None, species=None, common=0, reinsta
 
     sleep(2)
     log("       - " + str(len(SPECIES_INSTALL.keys())) + " new organisms will be installed.")
-    # log("       - " + str(len(DOWNLOADED_PREVIOUS)) + " organisms were downloaded on previous executions." )
     log("       - " + str(len(INSTALLED_PREVIOUS)) + " organisms were installed on previous executions.")
-    # log("       - " + str(len(ERRONEOUS_PREVIOUS)) + " organisms failed during the installation on previous executions." )
     log("")
 
     if ((common == None and confirm(
@@ -1337,7 +1323,6 @@ def getSpecieKeggData(specie, downloadLog, dirName, step):
                      dirName, "gene2pathway.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
     downloadKEGGFile("              * PATHWAYS LIST", downloadLog, "https://rest.kegg.jp/list/pathway/" + specie,
                      dirName, "pathways.list", DOWNLOAD_DELAY_1, MAX_TRIES_1)
-    # downloadKEGGFile("              * PATHWAY to GENE TABLE", downloadLog,  "http://rest.kegg.jp/link/" + specie + "/pathway", dirName, "pathway2gene.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
 
     # CREATE THE pathway2gene.list File
     check_call(
@@ -1463,8 +1448,6 @@ def getSpecieMappingData(specie, downloadLog, dirName, step, scriptsDir):
                             "https://rest.kegg.jp/list/" + specie,
                             "kegg2genesymbol.list", "kegg2genesymbol",
                             "KEGG offers no gene list for " + specie + " (HTTP 400); continuing without gene symbols.")
-
-        # downloadKEGGFile("             * KEGG TO NCBI GI", downloadLog,  "http://rest.kegg.jp/conv/"+ specie +"/ncbi-gi", dirName, "ncbi-gi2kegg.list",  DOWNLOAD_DELAY_1, MAX_TRIES_1)
 
         log("            DOWNLOADED IN " + str(int((time() - start_time) / 60)) + " minutes ---")
     except Exception as ex:
@@ -1871,7 +1854,6 @@ def errorlog(msg):
 
 
 def wait(nSeconds):
-    # log(message)
     sleep(nSeconds)
 
 

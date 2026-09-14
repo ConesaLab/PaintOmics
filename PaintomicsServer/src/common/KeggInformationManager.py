@@ -29,9 +29,6 @@ class KeggInformationManager(metaclass=Singleton):
     #     | |   | | \ \  / ____ \ | |\  | ____) || |____  / ____ \ | |   | |____
     #     |_|   |_|  \_\/_/    \_\|_| \_||_____/ |______|/_/    \_\|_|   |______|
     #*************************************************************************************
-    def getCompoundNameByID(self, compoundID):
-        raise NotImplementedError("Not implemented")
-
     def createTranslationCache(self, jobID):
         """
         This function...
@@ -58,26 +55,6 @@ class KeggInformationManager(metaclass=Singleton):
                 raise ex
         finally:
                 self.lock.release() #UNLOCK CACHE
-
-    def findInTranslationCache(self, jobID, featureID, type="id", dbID = "global"):
-        """
-        This function...
-
-        @param {type}
-        @return {type}
-        """
-        try:
-            self.lock.acquire() #LOCK CACHE
-
-            if self.translationCache.get(jobID) == None:
-                return None
-
-            return self.translationCache.get(jobID)[dbID][type].get(featureID, None)
-        except Exception as ex:
-            raise ex
-        finally:
-                self.lock.release() #UNLOCK CACHE
-
 
     def findBatchInTranslationCache(self, jobID, featureIDs, type="id", dbID = "global"):
         """

@@ -627,7 +627,6 @@ function SimpleOmicValue() {
 	/***********************************************************************
 	* ATTRIBUTES
 	***********************************************************************/
-	//TODO: CAMBIAR ESTO
 	this.visibleAtFeatureFamilyDetails = true;
 	this.visibleAtFeatureDetails = true;
 	this.visibleAtPathwayDetails = false;

@@ -31,7 +31,6 @@ PROCESSOR_RESOURCE = {
     "processRefSeqData": "refseq",
     "processRefSeqGeneSymbolData": "refseq",
     "processMapManMappingData": "mapman_gene",
-    "processVegaData": "vega",
 }
 #: Processors that may run without their resource: they skip, warned.
 FAIL_SOFT = {"processEnsemblUniProtData", "processUniProtData"}

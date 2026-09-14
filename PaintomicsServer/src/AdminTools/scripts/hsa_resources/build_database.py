@@ -10,20 +10,10 @@ from subprocess import CalledProcessError
 #**************************************************************************
 
 
-
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
 DATA_DIR    = argv[3].rstrip("/") + "/"
 LOG_FILE    = argv[4]
-
-#ListToInstall = ["bta","mtu","cel", "cfa"]
-#LOG_FILE = "~/Downloads/database/KEGG_DATA/current/install.log"
-#DATA_DIR = '/home/tian/Downloads/database/KEGG_DATA/current/hsa/'
-#SPECIE = "hsa"
-#ROOT_DIR = '/home/tian/Desktop/git/paintomics3/PaintomicsServer/src/AdminTools/'
-#currentDataDir = "~/Downloads/database/KEGG_DATA/current"
-#ROOT_DIRECTORY = "/home/tian/Desktop/git/paintomics3/PaintomicsServer/src/"
-#installCommonData(currentDataDir + "common/", ROOT_DIRECTORY + "AdminTools/scripts/")
 
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")
 COMMON_BUILD_DB_TOOLS.SPECIE= SPECIE
@@ -53,7 +43,6 @@ try:
     #**************************************************************************
     COMMON_BUILD_DB_TOOLS.processKEGGPathwaysData()
     COMMON_BUILD_DB_TOOLS.processReactomePathwaysData()
-    #COMMON_BUILD_DB_TOOLS.mergeNetworkFiles()
 
 
     #**************************************************************************

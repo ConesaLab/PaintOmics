@@ -11,8 +11,6 @@ DATA_DIR    = argv[3].rstrip("/") + "/"
 LOG_FILE    = argv[4]
 
 
-
-
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")
 COMMON_BUILD_DB_TOOLS.SPECIE= SPECIE
 COMMON_BUILD_DB_TOOLS.DATA_DIR= DATA_DIR
@@ -21,7 +19,6 @@ COMMON_BUILD_DB_TOOLS.ROOT_DIR= ROOT_DIR
 COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/" + SPECIE + "_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.COMMON_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/common_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverconf.py")
-
 
 
 #**************************************************************************
@@ -37,7 +34,6 @@ try:
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
-    # COMMON_BUILD_DB_TOOLS.processVegaData()
     # KEGG keys C. elegans on its own identifier space (CELE_C17G1.7), which
     # no other source here produces: with this call commented out the species
     # had ensembl/refseq/uniprot tables and nothing that matched a single one of

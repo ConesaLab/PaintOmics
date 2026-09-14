@@ -47,15 +47,9 @@ Rules:
 6. End with "Limitations and Caveats" section"""
 
 # ---------------------------------------------------------------------------
-# V2 prompts — [N] citation format with sub-agent evidence extraction
+# V2 prompts — [N] citation format
 # ---------------------------------------------------------------------------
 
-
-SYSTEM_PROMPT_EVIDENCE_EXTRACTOR = (
-    "You are a precise evidence extraction agent. Extract exact verbatim quotes from the "
-    "provided paper. Never fabricate or paraphrase quotes. If the paper does not contain "
-    "relevant information, say so explicitly."
-)
 
 SYSTEM_PROMPT_VERIFICATION = (
     "You are a citation verification agent. Your job is to check whether a cited text actually "
@@ -86,52 +80,6 @@ If fewer than {max_keep} papers are relevant, return only the relevant ones.
 If none are relevant, return an empty array: []"""
 
 
-
-
-def build_subagent_filter_prompt(task, papers_with_abstracts, experiment_design,
-                                 organism_name, max_keep):
-    """Build the user prompt for a search sub-agent filtering papers.
-
-    Args:
-        task: dict with task_id, query_intent, target_pathways, keywords.
-        papers_with_abstracts: list of paper dicts with pmid, title, first_author,
-                               year, journal, abstract.
-        experiment_design: str
-        organism_name: str
-        max_keep: int
-    """
-    lines = []
-
-    lines.append("## Biological Question")
-    lines.append(f"Intent: {task.get('query_intent', 'N/A')}")
-    lines.append(f"Target pathways: {', '.join(task.get('target_pathways', []))}")
-    lines.append(f"Keywords: {', '.join(task.get('keywords', []))}")
-    lines.append("")
-
-    lines.append("## Experiment Context")
-    lines.append(f"Organism: {organism_name}")
-    if experiment_design:
-        lines.append(f"Design: {experiment_design}")
-    lines.append("")
-
-    lines.append("## Candidate Papers")
-    for p in papers_with_abstracts:
-        abstract_trunc = (p.get("abstract") or "")[:400]
-        lines.append(f"\nPMID: {p['pmid']}")
-        lines.append(f"Title: {p.get('title', 'N/A')}")
-        lines.append(f"Authors: {p.get('first_author', 'Unknown')} et al.")
-        lines.append(f"Journal: {p.get('journal', 'N/A')}, {p.get('year', 'N/A')}")
-        if abstract_trunc:
-            lines.append(f"Abstract: {abstract_trunc}")
-
-    lines.append("\n## Task")
-    lines.append(f"Select the top {max_keep} most relevant papers for the biological "
-                 f"question above.")
-    lines.append("Return ONLY a JSON array of PMID strings — no markdown fencing.")
-
-    return "\n".join(lines)
-
-
 SYSTEM_PROMPT_CHAT = """You are an expert molecular biologist assistant helping a researcher understand their multi-omics pathway analysis results.
 You have access to the analysis report and can answer follow-up questions about the findings.
 
@@ -147,78 +95,6 @@ Available tools:
 - get_gene_timecourse: Query all timepoint values for a specific gene across its omics layers. Use when the researcher asks about expression dynamics, temporal profiles, or exact values for a gene.
 - get_pathway_genes: List all matched genes in a pathway with their significance status. Use when the researcher asks which genes were found in a particular pathway.
 - compare_genes: Side-by-side comparison of temporal profiles for multiple genes. Use when the researcher asks to compare expression patterns between genes or wants to identify co-regulation."""
-
-
-def build_two_pass_interpretation_prompt(pathways, papers, experiment_design, organism_name):
-    """Build prompt for sub-agent interpretation: abstracts only, with extract_evidence instructions."""
-    lines = []
-    lines.append("## Experiment Context")
-    lines.append(f"Organism: {organism_name}")
-    if experiment_design:
-        lines.append(f"Design: {experiment_design}")
-    lines.append("")
-
-    lines.append("## Enriched Pathways")
-    for pw in pathways:
-        lines.append(f"\n### {pw['name']} ({pw['id']}, source: {pw['source']})")
-        # Name each figure for what it is. Calling the best-of-conditions value
-        # "combined p-value" made reports disagree with the results table, which
-        # headlines the global p-value, by orders of magnitude on the same
-        # pathway.
-        perCondition = pw.get("combined_pvalue_per_condition") or []
-        if perCondition:
-            lines.append("Combined p-value, best of %d conditions: %.4e"
-                         % (len(perCondition), pw["combined_pvalue"]))
-            lines.append("Combined p-value per condition: "
-                         + ", ".join("%.4e" % v for v in perCondition))
-        else:
-            lines.append(f"Combined p-value: {pw['combined_pvalue']:.4e}")
-        if pw.get("global_pvalue") is not None:
-            lines.append("Global p-value (the value shown in the results table): "
-                         "%.4e" % pw["global_pvalue"])
-        lines.append(f"Per-omic significance: {pw['per_omic']}")
-        lines.append(f"Matched genes: {pw['matched_gene_count']}")
-        if pw['top_genes']:
-            lines.append("Top genes:")
-            for g in pw['top_genes']:
-                rel = "DE" if g['relevant'] else "not-DE"
-                profiles = g.get('omic_profiles') or []
-                if profiles:
-                    first = profiles[0]
-                    line = (f"  {g['symbol']}({rel}, "
-                            f"values=[{first['values']}], "
-                            f"peak={first['peak_value']}@{first['peak_timepoint']}, "
-                            f"pattern={first['pattern']})")
-                    lines.append(line)
-                    for prof in profiles[1:]:
-                        lines.append(
-                            f"    {prof['omic_name']}: "
-                            f"values=[{prof['values']}], "
-                            f"peak={prof['peak_value']}@{prof['peak_timepoint']}, "
-                            f"pattern={prof['pattern']}")
-                else:
-                    lines.append(f"  {g['symbol']}({rel}, |FC|={g['effect_size']})")
-
-    lines.append("\n## Available Literature")
-    if papers:
-        for p in papers:
-            ft_flag = "[FULL TEXT]" if p.get("full_text_available") else "[ABSTRACT ONLY]"
-            lines.append(f"\n[{p['ref_index']}] {p.get('authors_short', p['first_author'])} "
-                         f'"{p["title"]}" {p["journal"]}, {p["year"]}. {ft_flag}')
-            if p.get("abstract"):
-                lines.append(f"    Abstract: {p['abstract'][:500]}")
-    else:
-        lines.append("No relevant papers found.")
-
-    lines.append("\n## Task")
-    lines.append("For each pathway above:")
-    lines.append("1. Review paper abstracts to assess relevance to the pathways")
-    lines.append("2. For relevant papers with [FULL TEXT], call extract_evidence(ref_index, question) to get detailed findings")
-    lines.append("3. Build your interpretation using the evidence returned by extract_evidence")
-    lines.append("4. The Cited Text in your References section must use the EXACT quotes returned by extract_evidence")
-    lines.append("5. Note any unexpected or contradictory patterns")
-
-    return "\n".join(lines)
 
 
 def build_batch_interpretation_prompt(pathways, papers, experiment_design, organism_name):
@@ -290,32 +166,6 @@ def build_batch_interpretation_prompt(pathways, papers, experiment_design, organ
     lines.append("2. Interpret key gene expression changes in mechanistic context")
     lines.append("3. Connect findings to published evidence using the provided PMIDs")
     lines.append("4. Note any unexpected or contradictory patterns")
-
-    return "\n".join(lines)
-
-
-def build_synthesis_prompt(batch_reports, experiment_design, organism_name):
-    """Build prompt for synthesizing batch reports into final report."""
-    lines = []
-    lines.append("## Experiment Context")
-    lines.append(f"Organism: {organism_name}")
-    if experiment_design:
-        lines.append(f"Design: {experiment_design}")
-    lines.append("")
-
-    lines.append("## Batch Interpretation Reports")
-    for i, report in enumerate(batch_reports, 1):
-        lines.append(f"\n### Batch {i}")
-        lines.append(report)
-
-    lines.append("\n## Task")
-    lines.append("Synthesize the above batch reports into a unified analysis:")
-    lines.append("1. **Key Findings** (3-5 bullet points of the most important discoveries)")
-    lines.append("2. **Cross-Pathway Themes** (shared mechanisms, pathway crosstalk)")
-    lines.append("3. **Detailed Pathway Analysis** (organized by biological theme, not pathway order)")
-    lines.append("4. **Suggested Follow-up Experiments** (2-3 specific, actionable experiments)")
-    lines.append("5. **Limitations and Caveats** (data quality issues, missing evidence)")
-    lines.append("\nUse markdown formatting. Cite all PMIDs from the batch reports.")
 
     return "\n".join(lines)
 

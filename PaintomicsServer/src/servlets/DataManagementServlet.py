@@ -345,8 +345,6 @@ def dataManagementDownloadFile(request, response):
         serve =(request.args.get("serve", "").lower() == "true")
         offset =int(request.args.get("offset", 0))
 
-        #send_from_directory(self.FILES_SETTINGS.ROOT_DIRECTORY + 'public_html', filename)
-
         #****************************************************************
         # Step 2.GENERATE THE PATH TO FILE
         #****************************************************************
@@ -386,7 +384,6 @@ def dataManagementDownloadFile(request, response):
 
                 from flask import Response
                 return Response(generate(), mimetype='text/plain')
-                #response.imetype='text/plain')
             else:
                 # download_name, not attachment_filename: Werkzeug 2.2 renamed
                 # it and removed the old spelling, so the previous call raised

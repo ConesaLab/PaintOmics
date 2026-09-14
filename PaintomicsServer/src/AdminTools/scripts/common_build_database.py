@@ -273,36 +273,6 @@ def _insertEnsemblIdentifier(value, db_id, description, transcript_key):
         insertTR_XREF(insertXREF(XREF_Entry(bare, db_id, description)), transcript_key)
     return xref_id
 
-# def translate(featureName, destinationDB):
-#     found=[]
-#
-#     #FIND THE ID FOR DATABASE
-#     for item in dbname.itervalues():
-#         if(item.dbname == destinationDB):
-#             destinationDB = item.getID()
-#             break
-#
-#     #FIND THE FEATURES WHOSE NAME MATCH TO PROVIDED
-#     for item in xref.itervalues():
-#         if(item.display_id == featureName):
-#             found.append(item.getID())
-#
-#     #FOR EACH MATCH, FIND THE ASSOCIATED TRANSCRIPTS
-#     found2 = set([])
-#     for item in found:
-#         for key, value in transcript2xref.iteritems():
-#             if(item in value): #IF THE TRANSCRIPT IS ASSOCIATED TO CURRENT ITEM
-#                 found2 = found2.union(value) #MERGE ALL POSSIBLE MATCHES (WE WILL FILTER LATER BY DB ID)
-#
-#     #FOR EACH MATCHED ITEM, FILTER BY DATABASE ID
-#     found=[]
-#     for item_id in found2:
-#         item = xref.get(item_id)
-#         if(item.dbname_id == destinationDB):
-#             found.append(item)
-#
-#     return found
-
 def showPercentage(n, total, prev, errorMessage):
     # `prev` was accepted and returned but never used to gate the write, so this emitted
     # one progress line PER INPUT ROW. Measured on a real 358,853-row mapping file: 12.8 MB
@@ -1168,83 +1138,6 @@ def processUniProtData():
 #     \/   |______\_____/_/    \_\
 #
 #**************************************************************************
-def processVegaData():
-    """
-    #
-    # ENSEMBL MAPPING FILE CONTAINS THE FOLLOWING COLUMNS
-    # 1. Vega Gene ID
-    # 2. EntrezGene ID
-    # 3. Vega Protein ID
-    # 4. Vega Transcript ID
-    # 5. Ensembl Transcript ID
-    """
-    FAILED_LINES["VEGA"]=[]
-    resource = EXTERNAL_RESOURCES.get("vega")[0]
-    file_name= DATA_DIR + "mapping/" + resource.get("output")
-    if not haveInputFile("VEGA", file_name,
-                         "VEGA identifiers will be absent for this species"):
-        return
-
-    #Get line count (for percentage)
-    total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
-
-    #Register databases and get the assigned IDs
-    ensembl_transcript_db_id = insertDatabase(DBNAME_Entry("ensembl_transcript", "Ensembl transcript", "Identifier"))
-    vega_transcript_db_id = insertDatabase(DBNAME_Entry("vega_transcript", "Vega transcript", "Identifier"))
-    vega_gene_db_id = insertDatabase(DBNAME_Entry("vega_gene", "Vega gene", "Identifier"))
-    vega_peptide_db_id = insertDatabase(DBNAME_Entry("vega_peptide", "Vega protein", "Identifier"))
-    entrezgene_db_id = insertDatabase(DBNAME_Entry("entrezgene", "EntrezGene ID", "Identifier"))
-
-    #Process files
-    stderr.write("\n\nPROCESSING ENSEMBL Vega MAPPING FILE...\n")
-    with open(file_name, "r") as csvfile:
-        rows = csv.reader(csvfile, delimiter=',')
-        i =0
-        prev=-1
-        errorMessage=""
-
-        for row in rows:
-            i+=1
-            prev = showPercentage(i, total_lines, prev, errorMessage)
-            try:
-                vega_gi = row[0]
-                entrez_gi = row[1]
-                vega_pi = row[2]
-                vega_ti = row[3]
-                ensembl_ti = row[4]
-
-                if ensembl_ti == "": #ALWAYS FALSE
-                    raise Exception("Empty ENSEMBL Vega transcript value.")
-
-                ensembl_ti = insertXREF(XREF_Entry(ensembl_ti, ensembl_transcript_db_id, resource.get("description")))
-                #TODO: IF TI NOT IN DB?
-
-                if vega_ti != "": #ALWAYS TRUE
-                    vega_ti = insertXREF(XREF_Entry(vega_ti, vega_transcript_db_id, resource.get("description")))
-                    insertTR_XREF(vega_ti, ensembl_ti)
-
-                if vega_gi != "": #ALWAYS TRUE
-                    vega_gi = insertXREF(XREF_Entry(vega_gi, vega_gene_db_id, resource.get("description")))
-                    insertTR_XREF(vega_gi, ensembl_ti)
-
-                if entrez_gi != "":
-                    entrez_gi = insertXREF(XREF_Entry(entrez_gi, entrezgene_db_id, resource.get("description")))
-                    insertTR_XREF(entrez_gi, ensembl_ti)
-
-                if vega_pi != "":
-                    vega_pi = insertXREF(XREF_Entry(vega_pi, vega_peptide_db_id, resource.get("description")))
-                    insertTR_XREF(vega_pi, ensembl_ti)
-
-            except Exception as ex:
-                errorMessage = "FAILED WHILE PROCESSING ENSEMBL VEGA MAPPING FILE [line " + str(i) + "]: "+ str(ex)
-                FAILED_LINES["VEGA"].append([errorMessage] + row)
-    csvfile.close()
-
-    TOTAL_FEATURES["VEGA"]=total_lines
-
-    return total_lines
-
-
 def processMapManMappingData():
     global external_mapping, kegg_id_2_refseq_tid
 
@@ -1253,11 +1146,9 @@ def processMapManMappingData():
     #STEP 1. Register databases and get the assigned IDs
     mapman_gene_db_id = insertDatabase(DBNAME_Entry("mapman_gene_id", "MapMan Gene identifier", "Identifier"))
     kegg_id_db_id = insertDatabase(DBNAME_Entry("kegg_id", "KEGG Feature ID", "Identifier"))
-    # mapman_id_db_id = insertDatabase(DBNAME_Entry("mapman_id", "Mapman Feature ID", "Identifier"))
 
     # XREF descriptions
     mapman_gene_desc = "Extracted from MapMan Database"
-    # mapman_feature_desc = "Extracted from Mapman Database (GENE 2 MAPMAN file)"
     ncbi_kegg_desc = "Extracted from KEGG Database (NCBI Gene ID 2 KEGG  file)"
 
     #STEP 2. READ THE UniProt 2 KEGG FILE but DO NOT process it as it will be done in "processKEGGMappingData
@@ -1432,7 +1323,6 @@ def processKEGGMappingData():
     random_transcript_db_id = insertDatabase(DBNAME_Entry("random_transcript_db_id", "Random transcripts (not real)", "Identifier"))
     uniprot_acc_db_id = insertDatabase(DBNAME_Entry("uniprot_acc", "UniProt Accession", "Identifier"))
     ncbi_geneid_db_id = insertDatabase(DBNAME_Entry("ncbi_geneid", "NCBI Gene ID", "Identifier"))
-    # ncbi_gi_db_id = insertDatabase(DBNAME_Entry("ncbi_gi", "NCBI GI ID", "Identifier"))
     kegg_id_db_id = insertDatabase(DBNAME_Entry("kegg_id", "KEGG Feature ID", "Identifier"))
     kegg_gene_symbol_db_id = insertDatabase(DBNAME_Entry("kegg_gene_symbol", "KEGG Gene Symbol", "Identifier"))
     kegg_gene_symbol_synonyms_db_id = insertDatabase(DBNAME_Entry("kegg_gene_symbol_synonyms", "KEGG Gene Symbol Synonyms", "Identifier"))
@@ -1452,13 +1342,6 @@ def processKEGGMappingData():
         stderr.write("\n\nUnable to find the NCBI Gene ID 2 KEGG MAPPING file: " + file_name + "\n")
     else:
         processKEGGMappingDataAUX("NCBI Gene ID 2 KEGG", file_name, ncbi_geneid_db_id, kegg_id_db_id, random_transcript_db_id, "ncbi-geneid:")
-
-    #STEP 4. READ THE NCBI GI 2 KEGG FILE
-    # file_name= DATA_DIR + "mapping/" + "ncbi-gi2kegg.list"
-    # if not os.path.isfile(file_name):
-    #     stderr.write("\n\nUnable to find the NCBI GI 2 KEGG MAPPING file: " + file_name + "\n")
-    # else:
-    #     processKEGGMappingDataAUX("NCBI GI 2 KEGG", file_name, ncbi_gi_db_id, kegg_id_db_id, random_transcript_db_id, "ncbi-gi:")
 
     #STEP 4. READ THE KEGG 2 GENE SYMBOL FILE
     file_name= DATA_DIR + "mapping/" + "kegg2genesymbol.list"
@@ -1617,7 +1500,6 @@ def processMapMan2CompoundSymbolMappingData(file_name):
 
         for row in rows:
             i+=1
-            #prev = showPercentage(i, total_lines, prev, errorMessage)
             try:
                 mapman_id      = row[0]
                 compound_symbols  = row[1].split(".")[-1].split("|")
@@ -1645,7 +1527,6 @@ def processMapMan2CompoundSymbolMappingData(file_name):
 def processKEGG2CompoundSymbolMappingData(file_name):
     #Get line count (for percentage)
     total_lines = int(check_output(['wc', '-l', file_name]).decode('utf-8').split()[0])
-    # KEGG_COMPOUNDS = []
 
     #STEP 1. Process files
     stderr.write("\n\nPROCESSING KEGG 2 Compound MAPPING FILE...\n")
@@ -1655,7 +1536,6 @@ def processKEGG2CompoundSymbolMappingData(file_name):
 
         for row in rows:
             i+=1
-            #prev = showPercentage(i, total_lines, prev, errorMessage)
             try:
                 kegg_id      = row[0].replace("cpd:", "")
                 compound_symbols  = row[1]
@@ -2105,11 +1985,6 @@ def processMapManPathwaysData():
 
     ALL_VERSIONS["MAPMAN"] = {"name" : "MAPMAN", "date" : strftime("%Y%m%d %H%M")}
     ALL_VERSIONS["MAPMAN_MAPPING"] = {"name": "MAPMAN_MAPPING", "date": strftime("%Y%m%d %H%M")}
-    #
-    # file_name= DATA_DIR + "mapping/MAP_VERSION"
-    # file = open(file_name, 'r')
-    #
-    # file.close()
 
 def buildReactomeHierarchyEdges(installedPathways, relationFile, speciesMarker,
                                 maxCombinedDepth=3, maxGroupSize=60):
@@ -2342,32 +2217,10 @@ def processReactomePathwaysData():
     entities_fallback_mapping = 0
     entities_fallback_displayName = 0
     entities_skipped_no_identifier = 0
-    #
-    #if not len(ALL_ENTRIES):
-    #    stderr.write("The mapping entries dictionary is not filled. Mapping of KEGG & auxiliary files must be processed first.")
-    #    exit(1)
 
     REACTOME_DIR = DATA_DIR + "/reactome"
 
     print("REACTOME_DATA_DIR:" + REACTOME_DIR)
-    #REACTOME_DIR = DATA_DIR + "reactome"
-
-    # If the path already exists rename it
-    #if (os.path.exists(REACTOME_DIR)):
-    #    shutil.rmtree(REACTOME_DIR + ".bak", ignore_errors=True)
-    #    shutil.move(REACTOME_DIR, REACTOME_DIR + ".bak")
-
-    #os.makedirs(REACTOME_DIR)
-    #os.makedirs(REACTOME_DIR + "/png/thumbnails/")
-
-    # When downloading Reactome data we only retrieve the top pathways from the species.
-    # The rest of them need to be downloaded in the installation process.
-    #reactome_top_pathways = EXTERNAL_RESOURCES.get("reactome")[0]
-    #reactome_top_pathways_file_name = DATA_DIR + "mapping/" + reactome_top_pathways.get("output")
-
-    #if not os.path.isfile(reactome_top_pathways_file_name):
-    #    stderr.write("\n\nUnable to find the Reactome top pathways file: " + reactome_top_pathways_file_name + "\n")
-    #    exit(1)
 
     # Because of the current particularities of the Reactome data, the mapping process must be done parallel
     # to the insertion of pathways.
@@ -2397,8 +2250,6 @@ def processReactomePathwaysData():
 
     # Cache variables
     reactome_id_2_refseq_tid = {}  # We use a different one
-
-
 
 
     # The ReactomePathway.txt check further down already fail-softs the KEGG
@@ -2533,7 +2384,6 @@ def processReactomePathwaysData():
             keggCompoundNamesById[compoundId].append(compoundName)
 
 
-
     REACTOME_PATHWAY = DATA_DIR + 'ReactomePathway.txt'
 
     # Absent whenever the species was downloaded without --reactome=1, and for every
@@ -2570,7 +2420,6 @@ def processReactomePathwaysData():
     with open(pathway_hierachy_file) as HierachyRelation:
         hierachyRelation = json.load(HierachyRelation)
 
-    #pathway_id = ""
     indexFinal = 0
 
     total_feature = defaultdict(set)
@@ -2583,17 +2432,11 @@ def processReactomePathwaysData():
         showPercentageSimple( indexFinal, len( PATHWAY_ID ) )
         stderr.write('\n')
 
-        #stderr.write("\nStart Analysis:" + pathway_id +"\n")
         nodes_tmp_file = REACTOME_DIR + "/" + pathway_id + ".json"
 
         with open(nodes_tmp_file) as pathway_info:
             pathway_data = json.load(pathway_info)
 
-        #try:
-            # Find Higher Level Pathway information and download them
-        #    IDList = findHighLevelPathway(pathway_id, ReactomeHierarchy, ReactomePathwayHighList, ReactomePathwayLowList)
-        #except Exception as ex:
-        #   IDList = [pathway_id,pathway_id]
         pathway_name = pathway_data.get("displayName")
 
         ## Some time this could happen: the downloader records a hierarchy entry
@@ -2658,8 +2501,6 @@ def processReactomePathwaysData():
 
         # Select the first and only component
 
-        #stderr.write("\nLoading pathway info ")
-
 
         with open (REACTOME_DIR + "/" + pathway_id + ".graph.json") as graphInf:
             graphData = json.load(graphInf)
@@ -2670,7 +2511,6 @@ def processReactomePathwaysData():
         nodesHighList = list()  # high level
         nodesLowList = list()  # low level
         for item in graphData.get('nodes'):
-            #if item['schemaClass'] == 'Complex' | item['schemaClass'] == 'DefinedSet' | item['schemaClass'] == 'CandidateSet' | item['schemaClass'] == 'Polymer':
             try:
                 for children in item['children']:
                     nodesHighList.append(item['dbId'])
@@ -2682,8 +2522,6 @@ def processReactomePathwaysData():
 
         nodesMiddleSet = nodesHighSet.intersection(nodesLowSet)
         nodesTopSet = nodesHighSet.difference(nodesLowSet)
-
-
 
 
         # Complex item contains several proteins, we need to find out which protein it represents.
@@ -2718,7 +2556,6 @@ def processReactomePathwaysData():
 
         highHierarchySet = defaultdict( set )
         middleHierarchySet = defaultdict( set )
-        #node = 10032727
         for node in nodesTopSet:
             inputList = next( item for item in nodesInf if item["dbId"] == node )['children']
             outputSet = findLastLevelNodes(inputList)
@@ -2731,9 +2568,6 @@ def processReactomePathwaysData():
                 middleHierarchySet[node].add(value)
 
 
-        # Parse each node of the pathway
-        #reactome_entity = pathway_data.get("nodes")[20]
-        #reactome_entity = next( item for item in pathway_data.get("nodes") if item["reactomeId"] == 188833 )
         for reactome_entity in pathway_data.get("nodes"):
 
             entity_id = reactome_entity.get("reactomeId")
@@ -2742,10 +2576,6 @@ def processReactomePathwaysData():
                  entity_reactome = next( item for item in nodesInf if item["dbId"] == entity_id )
             except Exception:
                 continue
-
-            #graphic_id = reactome_entity.get("id")
-
-            #stderr.write("\nChecking entity id " + str(entity_id))
 
             # Calculate the middle point
             propX = int(reactome_entity.get("prop").get("x"))
@@ -2784,18 +2614,14 @@ def processReactomePathwaysData():
                 # Find element in the database. if we can not find it return the Reactome id
             for nodeID in nodeIDSet:
 
-                #stderr.write('\n \nstart analysising:' + str(nodeID))
-
                 entity_reactome = next( item for item in nodesInf if item["dbId"] == nodeID )
                 entity_reactome_id = entity_reactome['stId']
-                #entry['schemaClass'] = next( item for item in nodesInf if item["dbId"] == entity_id )["schemaClass"]
                 entity_reactome_id_name = entity_reactome['displayName']
                 entity_reactome_id_name_simple = entity_reactome_id_name.rsplit('[', -1)[0]
                 if entity_reactome.get("schemaClass") == 'SimpleEntity':
                     chebiIds = chebiByStId.get(entity_reactome_id, [])
                     ## Can not find chebi ID
                     if not chebiIds:
-                        #print("Can not find:" + entity_reactome_id)
                         entryAux = entry.copy()
                         entryAux["id"] = entity_reactome_id_name_simple
                         REACTOME_COMPOUNDS[entity_reactome_id_name_simple] = entity_reactome_id
@@ -2908,7 +2734,6 @@ def processReactomePathwaysData():
                     total_feature[pathway_id].add(gene_id)
 
 
-
                     for ID in gene_ids:
                         other_ids.add(ID.upper())
 
@@ -2978,8 +2803,6 @@ def processReactomePathwaysData():
                     continue
 
 
-
-
     # Append the new Reactome compounds to the file previously generated
     # by KEGG process.
     file = open("/tmp/compounds.tmp", 'a')
@@ -2994,19 +2817,6 @@ def processReactomePathwaysData():
     # The handful of species compatible with MapMan will specify to download the same dataset.
     # Here we override the data always.
     # TODO: modify DBManager.py and move the code to "downloadData"?
-
-    # mapman_pathways = EXTERNAL_RESOURCES.get("mapman_pathways")[0]
-    # pathways_file_name = DATA_DIR + "mapping/" + mapman_pathways.get("output")
-
-    # i = 0;
-    # prev = -1;
-    # errorMessage = "";
-    # xml_files = os.listdir(MAPMAN_XML)
-    # total_lines = len(xml_files)
-    #
-    # for xml_file in xml_files:
-    #     i+=1
-    #     prev = showPercentage(i, total_lines, prev, errorMessage)
 
     # ***********************************************************************************
     # * GENERATE THE NETWORK FILE DATA FOR REACTOME
@@ -3109,8 +2919,6 @@ def processReactomePathwaysData():
     # Write a "gene2pathway_mapman.list" to be used for metagenes generation.
     with open(reactome_g2p_file, 'w') as reactome_gene2pathway:
         for path_id, gene_ids in pathway2gene.items():
-            # Write one row for each gene and pathway
-            # reactome_gene2pathway.writelines(geneID.encode('utf-8') + "\t".encode('utf-8') + path_id.encode('utf-8') + "\n".encode('utf-8') for geneID in gene_ids)
             reactome_gene2pathway.writelines("{}\t{}\n".format(geneID, path_id) for geneID in gene_ids)
 
 
@@ -3302,12 +3110,10 @@ def processKEGGPathwaysData():
                                 entryAux = entry.copy()
                                 entryAux["id"] = featureID.replace("cpd:","")
                                 ALL_PATHWAYS[pathway_id]["compounds"].append(entryAux)
-                                #already_added[featureID] = 1
                             elif(entryType == "gene") and not featureID in already_added:
                                 entryAux = entry.copy()
                                 entryAux["id"] = featureID.replace(SPECIE + ":","")
                                 ALL_PATHWAYS[pathway_id]["genes"].append(entryAux)
-                                #already_added[featureID] = 1
                     elif (entryType == "map"):
                         graphicInfo = child.find("graphics")
                         pathAuxID = normaliseKeggPathwayId(child.get("name"), SPECIE)
@@ -3606,7 +3412,6 @@ def dumpDatabase():
 
         for elem in xref[dbid].values():
             item = elem.__dict__
-            # item["mates"] = list(xref2xref.get(elem.getID(), []))
             item["mates"] = list(set(itertools.chain.from_iterable(xref2xref.get(elem.getID(), []))))
 
             if(len(item["mates"])> 0):
