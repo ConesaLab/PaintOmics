@@ -257,7 +257,7 @@ class Walker:
             steps, len(chosen), self.budget["notes"], self._show_node())
         return self._log("plan", args, answer)
 
-    def _move_guard(self, tool, args, reading):
+    def _move_guard(self, tool, args):
         if self.done:
             return self._refuse(tool, args, "The walk is over.")
         if self.plan is None:
@@ -280,7 +280,7 @@ class Walker:
         """Move one edge to a neighbour, with or against the arrow; close that
         edge in that direction; append a leg with the reading and the reason."""
         args = {"to": to, "reading": reading, "reason": reason}
-        guard = self._move_guard("step", args, reading)
+        guard = self._move_guard("step", args)
         if guard:
             return guard
         if self.budget["steps"] <= 0:
@@ -313,7 +313,7 @@ class Walker:
     def jump(self, to, reading, reason=""):
         """Teleport to an unvisited seed or a node on the chain; a leg without an edge."""
         args = {"to": to, "reading": reading, "reason": reason}
-        guard = self._move_guard("jump", args, reading)
+        guard = self._move_guard("jump", args)
         if guard:
             return guard
         if self.budget["jumps"] <= 0:

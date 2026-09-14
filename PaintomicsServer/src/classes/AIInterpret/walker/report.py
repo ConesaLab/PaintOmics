@@ -9,6 +9,7 @@ import html
 import json
 import math
 import os
+import re
 import struct
 import xml.etree.ElementTree as ET
 
@@ -281,7 +282,6 @@ table{border-collapse:collapse;width:100%;font-family:'Helvetica Neue',Arial,san
 
 def _chips(text):
     out = esc(text)
-    import re
     out = re.sub(r"\[e(\d+)\]", r'<span class="leg">\1</span>', out)
     out = re.sub(r"\[([^\]]+ · [^\]]+)\]", r'<span class="chip">\1</span>', out)
     return out
