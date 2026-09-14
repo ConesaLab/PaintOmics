@@ -13,6 +13,7 @@ merged them where one exists.
 
 ### Added
 
+- The agentic graph walk engine: one network per organism from KEGG, Reactome and OmniPath with the job laid over it, a walker with six tools (scan, plan, step, jump, note, stop) driven by a model or by a scripted policy, a Writer whose statements separate what the pathway draws from what is built on top of it, code and model checks on every statement, a Narrator that writes a checked Results section, a planted-module evaluation, and a command-line runner with an HTML report. Engine and evaluation only; the Step 4 column and the chat tool follow.
 - Ensembl gene, transcript and peptide identifiers for every installed species whose organism Ensembl or Ensembl Genomes annotates. A genebuild registry (`AdminTools/scripts/common_resources/ensembl_genebuilds.json`) tells the default installer where each organism's cross-reference dumps live, and `ensembl_census.py census|verify` reports, per species, which identifier tables exist and what fraction of sampled Ensembl gene ids reach the KEGG identifier table through the real mapper.
 - AI interpretation of the ranked pathways: an agent reads the cross-omic patterns, searches PubMed, and drafts the biology with numbered citations that link back to the source record.
 - A verification stage over that draft, which checks every claim and quotation against the retrieved papers and redacts what it cannot ground rather than publishing it.

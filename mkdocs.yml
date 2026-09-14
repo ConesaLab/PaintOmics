@@ -31,6 +31,7 @@ nav:
       - 'What the AI does': 'ai-overview.md'
       - 'Converting your input files': 'ai-input-converter.md'
       - 'The pathway interpretation': 'ai-interpretation.md'
+      - 'The agentic graph walk': 'ai-graph-walk.md'
    - 'Reference':
       - 'The KEGG pathways database': '1_1_kegg.md'
       - 'The Reactome pathways database': '1_2_reactome.md'
