@@ -218,7 +218,7 @@ class ResultsSectionKeepsItsFindings(unittest.TestCase):
         coverage with a word target, -50% of pathways without one. The fix is a
         smaller question per call, not a better prompt."""
         self.assertIn("_results_by_chunk", self.src)
-        self.assertIn("RESULTS_CHUNK", self.src)
+        self.assertIn("RESULTS_TARGET_SECTIONS", self.src)
 
     def test_a_chunk_checks_the_pathways_it_owns(self):
         """A single dropped name rejects the whole rewrite, and a chunk owns a

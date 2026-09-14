@@ -110,6 +110,7 @@ merged them where one exists.
 
 ### Removed
 
+- Dead AI configuration: seventeen `AI_CLUSTER_*`, `AI_SDK_*` and `AI_VERIFY_*` knobs and `AI_MAX_RUN_SECONDS` that were read from the environment and used nowhere, the three settings only they read (`AI_MAX_SEARCH_TASKS`, `AI_SEARCH_SUBAGENT_WORKERS`, `AI_PAPERS_PER_SEARCH_TASK`), `AI_AGENT_RESULTS_CHUNK`, and the client method `complete_with_tools_json` that nothing called.
 - The left navigation rail, replaced by navigation in the header.
 - R from the metabolite hub analysis, which now runs on the derived KEGG graph (#89).
 - R from the regulatory analysis: the MORE R package, `runMORE.R` and the two R engines, which the deployed image never contained and which served only as a silent fallback that turned a missing `more-rs` binary into an R error deep inside a job. Regulatory analysis now refuses at submission when no engine is installed, and `deploy/build-image.sh` refuses to build an image without one (#166).

@@ -131,7 +131,6 @@ def cmd_ready(_args):
 # -- run -------------------------------------------------------------------
 
 def cmd_run(args):
-    os.environ["AI_MAX_RUN_SECONDS"] = str(CEILING_SECONDS)
     os.environ["AI_AGENT_MAX_RUN_SECONDS"] = str(CEILING_SECONDS)
     if args.arm == "agent":
         os.environ["AI_FULL_AGENT"] = "1"

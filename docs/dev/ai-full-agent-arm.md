@@ -96,7 +96,6 @@ EOF
 
 # then run one arm in-process on that job
 AI_FULL_AGENT=1 AI_AGENT_MAX_RUN_SECONDS=600 python -c "..."   # agent arm
-AI_MAX_RUN_SECONDS=600 python -c "..."                          # workflow arm
 ```
 
 Pre-register the decision rule before running: one fold cannot measure a

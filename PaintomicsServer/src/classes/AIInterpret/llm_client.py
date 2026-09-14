@@ -440,66 +440,6 @@ class LLMClient:
             pass
         return fallback_parser(text)
 
-    def complete_with_tools_json(self, messages, tools, tool_executor,
-                                 schema_name, schema, fallback_parser,
-                                 max_tokens=4096, temperature=0.3,
-                                 max_iterations=5, timeout=None):
-        """Tool loop that ends in schema-enforced JSON.
-
-        Why this is two steps rather than one flag on the loop: passing
-        ``response_format`` alongside ``tools`` is accepted by the gateway but
-        silently defeats it. Grammar-constrained decoding forces the very first
-        token to open the JSON object, so the model can never emit a tool call
-        -- it answers immediately from priors and returns a confident,
-        unevidenced verdict. Verified against the CSIC gateway on 2026-08-07.
-
-        So: run the tool loop unconstrained, let the agent gather its evidence,
-        then spend one extra cheap call to coerce the finished answer into the
-        schema.
-        """
-        text = self.complete_with_tools(
-            messages, tools, tool_executor, max_tokens=max_tokens,
-            temperature=temperature, max_iterations=max_iterations, timeout=timeout)
-
-        # Spend nothing when the model already answered in clean JSON, which is
-        # the common case. The coercion call exists to rescue the malformed
-        # tail, not to be paid on every citation -- billing a second request per
-        # verification is how this phase started tripping the gateway's rate
-        # limit.
-        stripped = text.strip()
-        if stripped.startswith("```"):
-            stripped = "\n".join(l for l in stripped.split("\n")
-                                 if not l.strip().startswith("```")).strip()
-        try:
-            direct = json.loads(stripped)
-            if isinstance(direct, dict):
-                return direct
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-        if not self.supports_schema():
-            return fallback_parser(text)
-
-        try:
-            coerced = self.complete(
-                messages=[
-                    {"role": "system",
-                     "content": "Convert the analysis below into the required "
-                                "JSON object. Do not add, drop, or soften any "
-                                "finding -- report exactly what it concluded."},
-                    {"role": "user", "content": text},
-                ],
-                max_tokens=max_tokens, temperature=0.0,
-                response_format=json_schema_format(schema_name, schema), timeout=timeout)
-            parsed = json.loads(coerced)
-            if isinstance(parsed, dict):
-                return parsed
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
-            logger.warning("Schema coercion failed, using text parser: %s", e)
-        except requests.exceptions.RequestException as e:
-            logger.warning("Schema coercion request failed, using text parser: %s", e)
-        return fallback_parser(text)
-
     def complete_with_tools(self, messages, tools, tool_executor,
                             max_tokens=4096, temperature=0.3, max_iterations=5,
                             timeout=None):

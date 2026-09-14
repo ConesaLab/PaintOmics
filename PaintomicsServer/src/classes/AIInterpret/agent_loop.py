@@ -117,8 +117,8 @@ SEARCH_BUDGET = int(os.getenv("AI_AGENT_SEARCH_BUDGET", "40"))
 # a proxy token backstop on the input side (the model's context is the real
 # resource; characters are what this layer can measure without a tokenizer).
 TOOL_CHAR_BUDGET = int(os.getenv("AI_AGENT_TOOL_CHAR_BUDGET", "400000"))
-# Papers shown to one delegated interpretation. Same value and the same reason
-# as the workflow arm's SDK_PAPERS_PER_BATCH.
+# Papers shown to one delegated interpretation. More retrieved literature is
+# good; more literature per prompt is not.
 DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
 # Hits per search. Deliberately NOT widened: round 6 tried ten and the pool grew
 # from ~13 papers to ~49 while citations collapsed 11 -> 3 and redactions rose
@@ -127,7 +127,7 @@ DELEGATE_PAPERS = int(os.getenv("AI_AGENT_DELEGATE_PAPERS", "10"))
 # step, which hands the Report Writer the whole master reference list. More
 # literature in one prompt buys fewer citations, not more.
 # DEFAULT 10 as of the agent-v54-r3 ship, pinned here rather than inherited from
-# AI_PAPERS_PER_SEARCH_TASK. Round 51 halved it to 5 and citations fell 22.8 ->
+# the old papers-per-search setting. Round 51 halved it to 5 and citations fell 22.8 ->
 # 12.5, a RESOLVED -10.25 at se 2.57 against round 50 where nothing else
 # differed. The wide pool is where the citations come from; the earlier reading
 # that retrieval volume buys nothing was a median hiding a gradient.
@@ -2807,7 +2807,6 @@ def _split_on(head, body, hits, title_of):
 RESULTS_FURNITURE = ("key findings", "cross-pathway", "detailed pathway analysis",
                      "pathway clusters", "enriched pathway summary", "summary of")
 
-RESULTS_CHUNK = int(os.getenv("AI_AGENT_RESULTS_CHUNK", "4"))
 # How many subsections a Results section should aim for.
 RESULTS_TARGET_SECTIONS = int(os.getenv("AI_AGENT_RESULTS_SECTIONS", "5"))
 

@@ -150,100 +150,6 @@ def test_non_dict_json_falls_back():
     assert out == {"pmids": ["FELL_BACK"]}, out
 
 
-def test_tool_loop_runs_unconstrained_then_coerces():
-    """The whole point: tools must not be suppressed by the schema.
-
-    Constraining the tool loop itself makes the model answer from priors
-    without ever calling a tool, so the tool phase must go out WITHOUT
-    response_format and only the final coercion carries it.
-    """
-    _reset_support()
-    state = {"tool_done": False}
-
-    def handler(payload):
-        if "response_format" in payload:
-            return _Resp(json.dumps({
-                "text_match": True, "supports_claim": True,
-                "reasoning": "quoted", "actual_text": "the text",
-                "suggested_fix": ""}))
-        if not state["tool_done"]:
-            state["tool_done"] = True
-            return _Resp("the paper says X")  # loop's final text answer
-        return _Resp("the paper says X")
-
-    calls = _patch(handler)
-    client = lc.LLMClient(PROVIDER)
-    out = client.complete_with_tools_json(
-        [{"role": "user", "content": "verify"}],
-        tools=[{"type": "function", "function": {"name": "search_paper_text"}}],
-        tool_executor=lambda n, a: "tool result",
-        schema_name="verdict", schema={"type": "object"},
-        fallback_parser=lambda t: {"supports_claim": False})
-
-    assert out["supports_claim"] is True, out
-    # The tool-carrying request must not constrain the grammar.
-    tool_calls = [c for c in calls if "tools" in c]
-    assert tool_calls, "no tool-bearing request was made"
-    for c in tool_calls:
-        assert "response_format" not in c, "schema leaked into the tool loop"
-    # The coercion request must carry the schema and no tools.
-    schema_calls = [c for c in calls if "response_format" in c]
-    assert len(schema_calls) == 1, schema_calls
-    assert "tools" not in schema_calls[0]
-
-
-def test_coercion_failure_keeps_the_text_parser_verdict():
-    """If coercion returns junk, we must not invent a passing verdict."""
-    _reset_support()
-
-    def handler(payload):
-        if "response_format" in payload:
-            return _Resp("not json at all")
-        return _Resp("analysis text")
-
-    _patch(handler)
-    client = lc.LLMClient(PROVIDER)
-    sentinel = {"supports_claim": False, "reasoning": "from parser"}
-    out = client.complete_with_tools_json(
-        [{"role": "user", "content": "v"}], tools=[], tool_executor=lambda n, a: "",
-        schema_name="verdict", schema={"type": "object"},
-        fallback_parser=lambda t: sentinel)
-    assert out is sentinel, out
-
-
-def test_clean_json_from_tool_loop_costs_no_extra_call():
-    """The coercion call is a repair, not a toll.
-
-    Paying a second request per citation is what pushed the verification phase
-    into the gateway's rate limit, so a well-formed answer must short-circuit.
-    """
-    _reset_support()
-    verdict = {"text_match": True, "supports_claim": True, "reasoning": "ok",
-               "actual_text": "t", "suggested_fix": ""}
-    calls = _patch(lambda p: _Resp(json.dumps(verdict)))
-    client = lc.LLMClient(PROVIDER)
-    out = client.complete_with_tools_json(
-        [{"role": "user", "content": "v"}], tools=[], tool_executor=lambda n, a: "",
-        schema_name="verdict", schema={"type": "object"},
-        fallback_parser=lambda t: {"supports_claim": False})
-    assert out == verdict, out
-    assert not [c for c in calls if "response_format" in c], "paid for coercion needlessly"
-
-
-def test_fenced_json_from_tool_loop_also_short_circuits():
-    _reset_support()
-    verdict = {"text_match": True, "supports_claim": True, "reasoning": "ok",
-               "actual_text": "t", "suggested_fix": ""}
-    calls = _patch(lambda p: _Resp("```json\n" + json.dumps(verdict) + "\n```"))
-    client = lc.LLMClient(PROVIDER)
-    out = client.complete_with_tools_json(
-        [{"role": "user", "content": "v"}], tools=[], tool_executor=lambda n, a: "",
-        schema_name="verdict", schema={"type": "object"},
-        fallback_parser=lambda t: {"supports_claim": False})
-    assert out == verdict, out
-    assert not [c for c in calls if "response_format" in c]
-
-
 def test_429_is_retried_not_fatal():
     """A shared gateway's rate limit must not kill a multi-minute job.
 
@@ -330,10 +236,6 @@ def main():
                   test_gateway_rejecting_schema_falls_back_to_parser,
                   test_unsupported_endpoint_is_remembered,
                   test_non_dict_json_falls_back,
-                  test_tool_loop_runs_unconstrained_then_coerces,
-                  test_coercion_failure_keeps_the_text_parser_verdict,
-                  test_clean_json_from_tool_loop_costs_no_extra_call,
-                  test_fenced_json_from_tool_loop_also_short_circuits,
                   test_429_is_retried_not_fatal,
                   test_429_honours_retry_after_header,
                   test_401_still_fails_fast,

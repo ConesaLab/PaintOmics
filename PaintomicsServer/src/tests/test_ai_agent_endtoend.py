@@ -249,12 +249,8 @@ class AiPipelineEndToEndTest(unittest.TestCase):
         agent._MODEL_OBJ = None
 
         # Keep the run short: the point is the contract, not the breadth.
-        cls._savedBudgets = (agent.AI_MAX_PATHWAYS,
-                             agent.AI_MAX_SEARCH_TASKS,
-                             agent.AI_PAPERS_PER_SEARCH_TASK)
+        cls._savedBudgets = agent.AI_MAX_PATHWAYS
         agent.AI_MAX_PATHWAYS = 2
-        agent.AI_MAX_SEARCH_TASKS = 1
-        agent.AI_PAPERS_PER_SEARCH_TASK = 2
 
         # Running the pipeline overwrites this job's stored interpretation.
         # That record may be a real report someone wants, so keep the previous
@@ -347,9 +343,7 @@ class AiPipelineEndToEndTest(unittest.TestCase):
             serverconf.AI_PROVIDERS[serverconf.AI_LLM_PROVIDER].update(cls._saved)
         if hasattr(cls, "_savedBudgets"):
             import src.classes.AIInterpret.agent as agent
-            (agent.AI_MAX_PATHWAYS,
-             agent.AI_MAX_SEARCH_TASKS,
-             agent.AI_PAPERS_PER_SEARCH_TASK) = cls._savedBudgets
+            agent.AI_MAX_PATHWAYS = cls._savedBudgets
             # Un-cache the stub client so a later run rebuilds from live conf.
             agent._sdk_configured = False
             agent._MODEL_OBJ = None

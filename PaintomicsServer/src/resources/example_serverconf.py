@@ -253,14 +253,10 @@ AI_EUROPEPMC_DELAY = float(os.getenv("AI_EUROPEPMC_DELAY", "0.2"))
 AI_MAJOR_PATHWAY_MIN_OMICS = int(os.getenv("AI_MAJOR_PATHWAY_MIN_OMICS", "2"))
 AI_MAJOR_PATHWAY_MAX_PVAL = float(os.getenv("AI_MAJOR_PATHWAY_MAX_PVAL", "0.05"))
 
-# Phase 2: Search Planner
-AI_MAX_SEARCH_TASKS = int(os.getenv("AI_MAX_SEARCH_TASKS", "12"))
-AI_SEARCH_SUBAGENT_WORKERS = int(os.getenv("AI_SEARCH_SUBAGENT_WORKERS", "4"))
 # Citations are verified one sub-agent call each and are independent, so they
 # run concurrently. Same default as the search workers, so the pipeline never
 # issues more parallel LLM calls than it already did.
 AI_VERIFICATION_WORKERS = int(os.getenv("AI_VERIFICATION_WORKERS", "4"))
-AI_PAPERS_PER_SEARCH_TASK = int(os.getenv("AI_PAPERS_PER_SEARCH_TASK", "5"))
 AI_PAPERS_KEPT_PER_TASK = int(os.getenv("AI_PAPERS_KEPT_PER_TASK", "3"))
 AI_SEARCH_PLANNER_TEMPERATURE = float(os.getenv("AI_SEARCH_PLANNER_TEMPERATURE", "0.4"))
 # "Choose for me" on step 2: residual compound sets go to the gateway thirty

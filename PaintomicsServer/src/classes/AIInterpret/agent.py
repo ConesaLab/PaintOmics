@@ -59,78 +59,24 @@ from src.conf.serverconf import (
     AI_LLM_PROVIDER,
     AI_PROVIDERS,
     AI_TEMPERATURE,
-    AI_SEARCH_SUBAGENT_WORKERS,
     # Read through this module by the agent-loop end-to-end test
-    # (agent.AI_MAX_PATHWAYS etc.), not used here.
+    # (agent.AI_MAX_PATHWAYS), not used here.
     AI_MAX_PATHWAYS,  # noqa: F401 -- read and patched as agent.AI_MAX_PATHWAYS by the e2e tests
-    AI_MAX_SEARCH_TASKS,  # noqa: F401 -- read and patched as agent.AI_MAX_SEARCH_TASKS by the e2e tests
-    AI_PAPERS_PER_SEARCH_TASK,  # noqa: F401 -- read and patched as agent.AI_PAPERS_PER_SEARCH_TASK by the e2e tests
 )
 from src.classes.AIInterpret import tools as tools_mod
 from src.classes.AIInterpret import prompts as prompts_mod
 
 logger = logging.getLogger(__name__)
 
-# How many pathways one cluster-mode interpretation batch may hold (units are
-# never split; a bigger cluster travels alone) and how many batches run at
-# once. Cluster mode has ~5x the batches of the top-15 path, so it needs a
-# bound the three-batch path never did.
-CLUSTER_BATCH_MAX = int(os.getenv("AI_CLUSTER_BATCH_MAX", "8"))
-CLUSTER_CONCURRENCY = int(os.getenv("AI_CLUSTER_CONCURRENCY", "6"))
-# Two tiers of interpretation in cluster mode. A unit that carries a top-N
-# (by p-value) pathway gets the full tool-loop interpreter, capped at
-# CLUSTER_INTERPRET_TURNS; every other unit gets one single-shot
-# call from the same instructions without tools. Measured: a full-protocol
-# cluster run at 8 turns x 14 batches blew a 600 s cap on the gateway, where
-# parallel tool loops serialise; single-shot calls parallelise.
-CLUSTER_INTERPRET_TURNS = int(os.getenv("AI_CLUSTER_INTERPRET_TURNS", "5"))
-# AI_CLUSTER_TOOLS=0 makes every cluster batch single-shot (no data tools) --
-# the cheap mode for gateways whose tool loops crawl, and the mode a
-# qualitative smoke can run on a backend that never finishes a tool loop.
-CLUSTER_TOOLS = os.getenv("AI_CLUSTER_TOOLS", "1") == "1"
-
 # Tuning knobs for the SDK arm. Separate from the shared AI_* settings so
 # sweeping this workflow keeps its behaviour stable mid-comparison.
 SDK_VERIFY_CONCURRENCY = int(os.getenv("AI_SDK_VERIFY_CONCURRENCY", "8"))
-SDK_SEARCH_CONCURRENCY = int(os.getenv("AI_SDK_SEARCH_CONCURRENCY",
-                                        str(AI_SEARCH_SUBAGENT_WORKERS)))
-# Search every triaged pathway rather than only the planner's task list: PubMed
-# retrieval is 6-10s of a 300s budget, so breadth here is nearly free, and
-# citations are the metric we are short on.
-SDK_SEARCH_ALL_PATHWAYS = os.getenv("AI_SDK_SEARCH_ALL_PATHWAYS", "1") == "1"
-# Ceiling on the total search-task list once per-pathway backfill is added
-# (planner tasks + up to three angles per uncovered pathway). Unbounded, a
-# 40-pathway triage would issue 120+ PubMed queries and their screening calls.
-SDK_BACKFILL_MAX_TASKS = int(os.getenv("AI_SDK_BACKFILL_MAX_TASKS", "45"))
-# Papers shown to one interpretation batch. More retrieved literature is good;
-# more literature *per prompt* is not -- see the cap in _one_batch.
-SDK_PAPERS_PER_BATCH = int(os.getenv("AI_SDK_PAPERS_PER_BATCH", "10"))
-# Tool-loop depth for an interpretation batch. Batches run in parallel, so this
-# sets the slowest-batch floor on the interpretation phase -- 109s of a 318s
-# run. Worth bounding: measured batch reports carry no citations at all, so
-# extra turns buy analysis depth rather than references.
-SDK_INTERPRET_TURNS = int(os.getenv("AI_SDK_INTERPRET_TURNS", "8"))
 # Straggler cutoff. Median call is ~3.5s and a stalled one runs ~63s, so
 # anything past this is stuck rather than slow -- see run_hedged.
 SDK_CALL_TIMEOUT = float(os.getenv("AI_SDK_CALL_TIMEOUT", "45"))
 # Below this many cited papers, synthesis is asked once more to use what it was
 # given. Not a quota: the quote and verification guards still decide what stays.
 SDK_MIN_CITATIONS = int(os.getenv("AI_SDK_MIN_CITATIONS", "22"))
-# Parallel synthesis drafts, best kept. Defaults to 1 -- best-of-N was tried and
-# does not pay here, for two measured reasons:
-#
-#   * It is not free in wall-clock. Short calls parallelise on this gateway (32
-#     concurrent in 5.6s), but three full-length syntheses took 216s against ~80s
-#     for one, pushing a 280s run to 417s. Long generations queue.
-#   * The drafts barely differ on anything selectable from the data: scores came
-#     out 162 / 164 / 164, so the selector was choosing between near-identical
-#     candidates and the variance that motivated this lives elsewhere.
-#
-# Raise it only where wall-clock is not a constraint.
-SDK_SYNTH_DRAFTS = int(os.getenv("AI_SDK_SYNTH_DRAFTS", "1"))
-# Deterministic completeness pass. Off by default -- see the note at its call
-# site: it works, and it costs ~190s for a quality change that measured negative.
-SDK_GAP_FILL = os.getenv("AI_SDK_GAP_FILL", "0") == "1"
 # Every chat completion is issued as a stream and folded back into a
 # ChatCompletion for the SDK (see _stream_to_completion). Measured on the CSIC
 # gateway 2026-08-17: a non-streamed generation has ~120 s per attempt before
@@ -199,19 +145,6 @@ def _run_seconds_left():
     """Seconds until the run is due, or None when no deadline is armed."""
     when = _RUN_DEADLINE.get()
     return None if when is None else when - time.time()
-# The whole interpretation, end to end. A run that is still going after this
-# has stalled somewhere the phase caps did not reach; better an error the user
-# can retry than a job that reads as running for the rest of the day.
-AI_MAX_RUN_SECONDS = float(os.getenv("AI_MAX_RUN_SECONDS", "2700"))
-# What the pipeline must keep in hand after the verify loop: quote collection
-# (capped at AI_QUOTE_DEADLINE, 45 s), reference rendering, the programmatic
-# redaction net and the save. Measured at 0.0-0.1 s for the net itself, so this
-# is dominated by the quote pass.
-VERIFY_TAIL_RESERVE = float(os.getenv("AI_VERIFY_TAIL_RESERVE", "60"))
-# One verification fan-out, before any has been measured in this run.
-VERIFY_ITER_RESERVE = float(os.getenv("AI_VERIFY_ITER_RESERVE", "90"))
-# A correction rewrite is a full-report synthesis echo (~70 s of a 347 s run).
-VERIFY_REWRITE_RESERVE = float(os.getenv("AI_VERIFY_REWRITE_RESERVE", "90"))
 
 _SYSTEM_STOPWORDS = frozenset("""
 a an the and or of in on at to for from with without by as is are was were be
@@ -694,7 +627,7 @@ def _build_agents():
     #
     # A citation verifier that rubber-stamps is worse than none: it converts
     # "unchecked" into "checked and passed". So tools win and the verdict is
-    # parsed from text -- the same trade llm_client.complete_with_tools_json
+    # parsed from text -- the same trade the fixed-schema calls
     # makes by coercing only after the tool loop has finished.
     verifier = Agent[AgentContext](
         name="Claim Verifier",
@@ -727,7 +660,6 @@ def _build_agents():
 # ---------------------------------------------------------------------------
 
 SENTENCE_REPAIR = os.getenv("AI_SENTENCE_REPAIR", "0") == "1"
-VERIFY_MEMO = os.getenv("AI_VERIFY_MEMO", "0") == "1"
 # Hand the verifier its evidence instead of making it hunt for it -- ported from
 # the agent arm, where it has been the default for many rounds on this measured
 # result: 29 of 29 calls returned a verdict at a median 2 464 ms, redactions fell
