@@ -1,0 +1,283 @@
+/* Agentic Graph Walk: the Step 4 Walk column (PA_Step4WalkView.js) and the
+   interpretation in the AI panel (PA_AIInterpretView.js).
+
+   Every colour is a token with its light value as the fallback; dark.css
+   restates the tokens under [data-theme="dark"]. The walk's own hue is the
+   teal its legs are drawn in on the diagram, so a chip in the text and an
+   arc on the map read as the same thing. */
+:root {
+	--pa-walk-accent: #0F766E;
+	--pa-walk-accent-ink: #0B4F4A;
+	--pa-walk-chip-bg: #E3F1EE;
+	--pa-walk-seed: #B45309;
+	--pa-walk-error-ink: #A33B2B;
+	--pa-walk-error-bg: #FBEDEA;
+	--pa-walk-focus-bg: #EEF7F5;
+	--pa-walk-rule: rgba(24, 24, 27, 0.10);
+}
+
+.pa-walk-panel .lateralOptionsPanel-header h2 {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.pa-walk-panel .lateralOptionsPanel-header h2 svg {
+	flex: 0 0 auto;
+}
+
+.pa-walk-body {
+	width: 330px;
+	box-sizing: border-box;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--pa-ink-body, #27272A);
+	overflow-wrap: anywhere;
+}
+.pa-walk-body h4,
+.pa-walk-bubble h4 {
+	margin: 14px 0 6px;
+}
+
+.pa-walk-intro {
+	margin: 0 0 10px;
+}
+.pa-walk-note,
+.pa-walk-meta {
+	color: var(--pa-ink-muted, #595959);
+	font-size: 12px;
+	margin: 6px 0;
+}
+.pa-walk-label {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--pa-ink-label, #52525B);
+}
+.pa-walk-error {
+	margin: 0 0 10px;
+	padding: 8px 10px;
+	border-radius: var(--pa-radius-sm, 6px);
+	background: var(--pa-walk-error-bg);
+	color: var(--pa-walk-error-ink);
+	font-size: 12.5px;
+}
+
+.pa-walk-actions {
+	display: flex;
+	justify-content: flex-start;
+	margin: 12px 0 4px;
+}
+.pa-walk-actions .button {
+	float: none;
+	margin: 0;
+}
+
+/* The design card, editable before the walk starts. */
+.pa-walk-card,
+.pa-walk-statements,
+.pa-walk-chain {
+	margin: 10px 0;
+	border-top: 1px solid var(--pa-walk-rule);
+	padding-top: 8px;
+}
+.pa-walk-card > summary,
+.pa-walk-statements > summary,
+.pa-walk-chain > summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--pa-ink-title, #18181B);
+}
+.pa-walk-field {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 8px 0;
+}
+.pa-walk-field textarea {
+	width: 100%;
+	box-sizing: border-box;
+	resize: vertical;
+	font: inherit;
+	font-size: 12.5px;
+	padding: 4px 6px;
+	border: 1px solid var(--pa-border-control, #A1A1AA);
+	border-radius: var(--pa-radius-sm, 6px);
+	background: var(--pa-control-bg, #FFFFFF);
+	color: var(--pa-ink-body, #27272A);
+}
+.pa-walk-field textarea:focus-visible {
+	outline: 2px solid var(--pa-focus-ring, #0A84FF);
+	outline-offset: 1px;
+}
+
+/* Progress while the agent walks. */
+.pa-walk-progress {
+	margin: 0 0 10px;
+}
+.pa-walk-stage {
+	font-weight: 600;
+	color: var(--pa-ink-title, #18181B);
+}
+.pa-walk-track {
+	height: 6px;
+	margin: 6px 0;
+	border-radius: 3px;
+	background: var(--pa-walk-chip-bg);
+	overflow: hidden;
+}
+.pa-walk-fill {
+	height: 100%;
+	border-radius: 3px;
+	background: var(--pa-walk-accent);
+	transition: width 400ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+	.pa-walk-fill { transition: none; }
+}
+.pa-walk-plan {
+	margin: 8px 0;
+	font-size: 12.5px;
+}
+
+/* The Results section. */
+.pa-walk-results-title {
+	margin-top: 4px;
+}
+.pa-walk-summary {
+	font-style: italic;
+	margin: 0 0 8px;
+}
+.pa-walk-paragraph {
+	margin: 0 0 8px;
+}
+.pa-walk-provenance {
+	color: var(--pa-ink-muted, #595959);
+	font-size: 11.5px;
+	margin: 6px 0 0;
+}
+.pa-walk-chip {
+	display: inline-block;
+	padding: 0 4px;
+	margin: 0 1px;
+	border-radius: 3px;
+	font-size: 11px;
+	line-height: 1.5;
+	white-space: nowrap;
+	background: var(--pa-walk-chip-bg);
+	color: var(--pa-walk-accent-ink);
+}
+.pa-walk-chip-leg {
+	font-weight: 700;
+	cursor: pointer;
+}
+.pa-walk-chip-leg:hover,
+.pa-walk-chip-leg:focus-visible {
+	background: var(--pa-walk-accent);
+	color: #FFFFFF;
+	outline: none;
+}
+.pa-walk-chip-layer {
+	white-space: normal;
+}
+a.pa-walk-cite,
+a.pa-walk-pathway-link {
+	color: var(--pa-link, #0060BA);
+	text-decoration: none;
+}
+a.pa-walk-cite:hover,
+a.pa-walk-pathway-link:hover {
+	text-decoration: underline;
+}
+
+/* References. */
+.pa-walk-references {
+	margin: 10px 0;
+	border-top: 1px solid var(--pa-walk-rule);
+	padding-top: 8px;
+}
+.pa-walk-references > summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--pa-ink-title, #18181B);
+}
+.pa-walk-reference-list {
+	margin: 6px 0;
+	padding-left: 22px;
+	font-size: 12px;
+}
+.pa-walk-reference-list li {
+	margin: 4px 0;
+}
+
+/* Statements. */
+.pa-walk-statement {
+	margin: 8px 0;
+	padding-left: 8px;
+	border-left: 3px solid var(--pa-walk-accent);
+}
+.pa-walk-statement.is-dropped {
+	border-left-color: var(--pa-walk-rule);
+	opacity: 0.8;
+}
+.pa-walk-claim {
+	margin: 0 0 2px;
+}
+
+/* The legs. */
+.pa-walk-legs {
+	list-style: none;
+	margin: 6px 0;
+	padding: 0;
+}
+.pa-walk-leg {
+	padding: 6px 6px 6px 4px;
+	border-bottom: 1px solid var(--pa-walk-rule);
+	border-radius: 4px;
+	cursor: pointer;
+}
+.pa-walk-leg:focus-visible {
+	outline: 2px solid var(--pa-focus-ring, #0A84FF);
+	outline-offset: -2px;
+}
+.pa-walk-leg.is-focused {
+	background: var(--pa-walk-focus-bg);
+}
+.pa-walk-leg-head {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	font-weight: 600;
+	color: var(--pa-ink-title, #18181B);
+}
+.pa-walk-leg-n {
+	flex: 0 0 auto;
+	min-width: 26px;
+	padding: 0 4px;
+	border-radius: 9px;
+	text-align: center;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	background: var(--pa-walk-accent);
+	color: #FFFFFF;
+}
+.pa-walk-leg.is-jump .pa-walk-leg-n {
+	background: var(--pa-walk-seed);
+}
+.pa-walk-leg-edge,
+.pa-walk-leg-reading {
+	margin-left: 32px;
+	font-size: 12px;
+}
+.pa-walk-leg-edge {
+	color: var(--pa-ink-muted, #595959);
+}
+
+/* The interpretation inside the AI panel. */
+.ai-walk-bubble .ai-walk-title {
+	margin: 0 0 6px;
+}
+.ai-walk-bubble .pa-walk-leg-edge,
+.ai-walk-bubble .pa-walk-leg-reading {
+	margin-left: 32px;
+}

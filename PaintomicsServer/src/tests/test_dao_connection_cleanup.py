@@ -63,13 +63,9 @@ MUST_CLOSE_IN_FINALLY = [
     ("servlets/DataManagementServlet.py", "registerFile"),
     ("common/JobInformationManager.py", "getVisualOptions"),
     ("common/JobInformationManager.py", "storeVisualOptions"),
-    # _Heartbeat._run is the worst of the set and the easiest to overlook: it
-    # already had a try/except, which reads like cleanup and is not. `except`
-    # decides whether the error propagates; only `finally` decides whether the
-    # connection comes back. This one beats every 30s for the whole life of a
-    # job, swallows the error with a bare `pass`, and runs once per concurrent
-    # job -- so a flaky database leaks a client every half minute, silently.
-    ("classes/AIInterpret/agent.py", "_run"),
+    # The graph walk's queued job: it writes progress every leg and a heartbeat
+    # every minute, and its client must come back whatever the walk raised.
+    ("classes/AIInterpret/walker/service.py", "run_job"),
 ]
 
 

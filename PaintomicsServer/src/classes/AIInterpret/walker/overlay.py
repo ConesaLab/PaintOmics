@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import OrderedDict
 
 from src.classes.AIInterpret.walker import heat as heat_mod
+from src.classes.AIInterpret.walker.card import labels_by_omic, shorten_labels
 
 REGULATOR_OMICS = ("miRNA-seq", "miRNA", "microRNA")
 
@@ -49,22 +50,7 @@ def _any_relevant(value):
     return bool(value)
 
 
-def _shorten_labels(header):
-    """The user's column labels, minus a prefix every label shares
-    (``Ikaros/Control_0h`` -> ``0h``). None when the file had no header."""
-    # The job store turns a missing header into the STRING "None" (adaptBSON);
-    # anything that is not a list of column names is no header.
-    if not isinstance(header, (list, tuple)) or len(header) < 2:
-        return None
-    labels = [str(h) for h in header[1:]]
-    prefix = labels[0]
-    for label in labels[1:]:
-        while prefix and not label.startswith(prefix):
-            prefix = prefix[:-1]
-    cut = max(prefix.rfind("_"), prefix.rfind("/"), prefix.rfind(" "))
-    if cut > 0 and all(len(label) > cut + 1 for label in labels):
-        labels = [label[cut + 1:] for label in labels]
-    return labels
+_shorten_labels = shorten_labels          # the tests reach it under this name
 
 
 def values_text(values, labels):
@@ -80,21 +66,6 @@ def values_text(values, labels):
         label = labels[i] if labels and i < len(labels) else "c%d" % (i + 1)
         out.append("%s %s%.2f" % (label, "+" if number >= 0 else "−", abs(number)))
     return " · ".join(out)
-
-
-def _column_labels(job_instance):
-    """omic name -> labels (None when the input file carried no header)."""
-    labels = {}
-    for getter in ("getGeneBasedInputOmics", "getCompoundBasedInputOmics"):
-        try:
-            omics = getattr(job_instance, getter)() or []
-        except Exception:                                      # noqa: BLE001
-            omics = []
-        for omic in omics:
-            name = omic.get("omicName") if isinstance(omic, dict) else None
-            if name:
-                labels[name] = _shorten_labels(omic.get("omicHeader"))
-    return labels
 
 
 def node_for_feature(network, feature_id, kind):
@@ -113,7 +84,7 @@ def overlay_job(network, job_instance):
     """Add the job's regulator nodes to ``network`` (in place) and return the
     Overlay: measured set, r, layer text, labels, heat, degree cap."""
     ov = Overlay()
-    ov.labels = _column_labels(job_instance)
+    ov.labels = labels_by_omic(job_instance)
     regulators = OrderedDict()                # mir:<name> -> {targets, relevant, values}
     seen_layers = set()
 
@@ -121,6 +92,16 @@ def overlay_job(network, job_instance):
         node_id = node_for_feature(network, feature.getID(), kind)
         if node_id is None or node_id not in network.nodes:
             return
+        # KEGG's symbol list skips some genes, which then read as their id
+        # ("g:11951"); the user's own name for the feature is the better label.
+        node = network.nodes[node_id]
+        if str(node.get("label")) in (node_id, node_id.split(":", 1)[-1]):
+            try:
+                name = feature.getName()
+            except AttributeError:
+                name = None
+            if name and str(name) != str(feature.getID()):
+                node["label"] = str(name)
         for omic in feature.getOmicsValues() or []:
             omic_name = str(omic.getOmicName() or "")
             member = str(omic.getOriginalName() or omic.getInputName() or feature.getID())

@@ -13,12 +13,9 @@ merged them where one exists.
 
 ### Added
 
-- The agentic graph walk engine: one network per organism from KEGG, Reactome and OmniPath with the job laid over it, a walker with six tools (scan, plan, step, jump, note, stop) driven by a model or by a scripted policy, a Writer whose statements separate what the pathway draws from what is built on top of it, code and model checks on every statement, a Narrator that writes a checked Results section, a planted-module evaluation, and a command-line runner with an HTML report. Engine and evaluation only; the Step 4 column and the chat tool follow.
+- AI interpretation as an agentic graph walk: one network per organism from KEGG, Reactome (complexes and sets read as their proteins) and OmniPath with the job laid over it, a walker with six tools (scan, plan, step, jump, note, stop), a Writer whose statements separate what the pathway draws from what is built on top of it and cite only papers it retrieved in PubMed's best-match order and read, code and model checks on every statement, and a Narrator that writes a checked Results section with its citations numbered in order of first use. The walk over the whole network is the job's interpretation, queued when Step 2 finishes and shown in the AI panel with its legs, statements and references; a Step 4 **Walk** column walks one pathway on its own map with the design card editable before the walk and the legs drawn on the diagram; the chat reads the walk and can walk a few steps from a gene. Walks share the analysis queue under a cap (one fewer than the workers, two per job), a read-only job's walk is its owner's to replace, and a walk stops when its job is deleted. A planted-module evaluation and a command-line runner with an HTML report come with it.
+- A design card read from the experiment design and the user's column headers, which every AI prompt carries: whether the columns are time points, ordered values or unordered conditions, which omics have no column labels, and the guidance that follows (trajectory words only on an ordered axis). The chat tool `get_gene_timecourse` is now `get_feature_values`, which prints each layer under its own labels and never borrows another omic's.
 - Ensembl gene, transcript and peptide identifiers for every installed species whose organism Ensembl or Ensembl Genomes annotates. A genebuild registry (`AdminTools/scripts/common_resources/ensembl_genebuilds.json`) tells the default installer where each organism's cross-reference dumps live, and `ensembl_census.py census|verify` reports, per species, which identifier tables exist and what fraction of sampled Ensembl gene ids reach the KEGG identifier table through the real mapper.
-- AI interpretation of the ranked pathways: an agent reads the cross-omic patterns, searches PubMed, and drafts the biology with numbered citations that link back to the source record.
-- A verification stage over that draft, which checks every claim and quotation against the retrieved papers and redacts what it cannot ground rather than publishing it.
-- Interpretation of pathways inside their shared-feature clusters, with the Step 3 pathway network coloured by the same clusters and a legend that explains the cluster ids.
-- A Results-section view of the interpretation, written the way a paper would write it and keeping every citation, and an activity feed showing which tools the agent is calling while it works.
 - An AI input-format converter that checks every upload against the server's contract, offers one-click deterministic repairs for mechanical faults, and can rewrite a file the analysis cannot read (#67, #72).
 - The MORE regulatory model behind a model chooser in Regulatory Omics, offering PLS1 and MLR on `more-rs`, the Rust engine (#44, #166).
 - A Step 3 regulator-target network drawn with Cytoscape.js, with free layout, per-condition colouring, search, spotlight, side panel and exports.
@@ -44,7 +41,6 @@ merged them where one exists.
 - The running-job spinner was replaced with a progress bar that only moves forward and reports what the job is doing.
 - The heatmap colour scale was rebuilt against the range the data actually occupies, and the same ramp now paints the pathway diagrams (#63, #92).
 - The platform moved to Python 3.11, Flask 3, and pymongo 4 against MongoDB 7, with the imaging and HTTP stacks upgraded onto versions carrying their security fixes, and dependencies declared in one pinned `requirements.txt` at the repository root.
-- The AI interpretation was reimplemented on the OpenAI Agents SDK, replacing the earlier threaded pipeline, and PMID markers are rendered as numbered references.
 - The analysis pipeline was profiled and made faster: batched cross-reference lookups, one shared fork-aware MongoDB client, a cached GTF annotation, and metagene R scripts run per omic in parallel (#33).
 - Step 2 was rebuilt as one module system — a databases matrix, a levelled class-activity pair, and compound disambiguation inside the grid (#111, #114) — and Browse now lives inside the file field (#110).
 - Every Step 1 file row now says whether the job requires that file (#108), and the database checkboxes are drawn from what the server has actually installed.
@@ -86,7 +82,7 @@ merged them where one exists.
 - The Other data type panel could never be submitted: the picked file type was stored as null and an optional field was required (#109).
 - A refused Step 1 form said nothing about which field was wrong, and deleted the panel it was blaming (#90, #93, #112).
 - A large pathway export exceeded Werkzeug's form-memory limit, image export was capped and lossy (#47), and pathway PNG download broke on the CairoSVG upgrade.
-- The AI status poll retried a session that could not come back, and the References section printed out of citation order (#36).
+- The AI status poll retried a session that could not come back (#36).
 - A user report was lost when the mail provider was down; reports are now stored before delivery is attempted (#50).
 - The hub graph hid 64 of its 72 edges (#102), and a hub node was asked for a single direction instead of showing one wedge per condition (#104).
 - The class map's hover readout resized the caption and oscillated under the cursor (#100), resetting to the landing page left detached job views alive (#82), the "Neighbouring features" button did not answer every click (#39), and a Step 4 tooltip failed on an unnamed event (#19).
@@ -99,17 +95,18 @@ merged them where one exists.
 - Path traversal was closed on both routes that took a name from the request: a job id could name a directory tree to delete, and a file name could name a file outside the user's directory.
 - Forgeable user identity was fixed, covering both the `userID=0` bypass and reuse of a retired id.
 - Session and password-reset tokens are drawn from `secrets` rather than `random`.
-- Per-request authorisation guards were added where they were missing: re-running step 2 on someone else's job, writing an image into a job's directory, reading someone else's AI report (#62), and the admin and read-only routes.
+- Per-request authorisation guards were added where they were missing: re-running step 2 on someone else's job, writing an image into a job's directory, reading someone else's AI interpretation (#62), and the admin and read-only routes.
 - The session check that every other handler in its family performed had been skipped by SaveImage, and is restored.
 - Password hashes are no longer sent to the admin users panel, and a password change could land on another user's account.
 - AI consent is enforced on the server before anything is sent to the LLM service, and the three other routes around the consent check were closed.
-- The AI report's HTML is sanitised before rendering, and a server error response is parsed rather than evaluated.
+- AI chat replies are sanitised before rendering, and a server error response is parsed rather than evaluated.
 - A MongoDB cleanup routine leaked data across users (#12).
 - Committed secrets were removed, the live server configuration untracked, and a release-hygiene test now fails the suite if a secret is committed again.
 - Dependency upgrades across Flask, Pillow, CairoSVG and the HTTP stack bring in their published security fixes.
 
 ### Removed
 
+- The previous AI interpreter, replaced by the graph walk: the lead agent and its tools (experiment overview, pathway details, pathway clusters, literature search and paper reading, notebook, citation checks, delegation, report submission), the shared-feature pathway clusters and the Step 3 **AI pathway clusters** network colouring, the claim-and-quote verification and redaction of the markdown report, the per-pathway drill-down (`/ai_interpret_pathway`), the context builder, the prompts and settings only that pipeline read, and their benchmarks and tests.
 - Dead AI configuration: seventeen `AI_CLUSTER_*`, `AI_SDK_*` and `AI_VERIFY_*` knobs and `AI_MAX_RUN_SECONDS` that were read from the environment and used nowhere, the three settings only they read (`AI_MAX_SEARCH_TASKS`, `AI_SEARCH_SUBAGENT_WORKERS`, `AI_PAPERS_PER_SEARCH_TASK`), `AI_AGENT_RESULTS_CHUNK`, and the client method `complete_with_tools_json` that nothing called.
 - The left navigation rail, replaced by navigation in the header.
 - R from the metabolite hub analysis, which now runs on the derived KEGG graph (#89).

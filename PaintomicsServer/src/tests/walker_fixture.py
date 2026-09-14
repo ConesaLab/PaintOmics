@@ -83,8 +83,11 @@ class FakeOmicValue(object):
 
 
 class FakeFeature(object):
-    def __init__(self, feature_id, omics):
-        self._id, self._omics = feature_id, omics
+    def __init__(self, feature_id, omics, name=None):
+        self._id, self._omics, self._name = feature_id, omics, name or feature_id
+
+    def getName(self):
+        return self._name
 
     def getID(self):
         return self._id

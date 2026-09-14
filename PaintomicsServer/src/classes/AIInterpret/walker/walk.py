@@ -18,10 +18,13 @@ from src.classes.AIInterpret.walker import heat as heat_mod
 
 logger = logging.getLogger(__name__)
 
+# steps_per_seed: the least a plan may give each seed. The universal walk is
+# the job's interpretation, and its first model run planned 12 steps for 12
+# seeds -- a tour of seeds with one step each, not a walk.
 PATHWAY_PARAMS = {"sep": 1, "max_seeds": 8, "candidates": 12, "ceiling": 40,
-                  "names_shown": 30, "degree_cap": None, "min_steps": 3}
+                  "names_shown": 30, "degree_cap": None, "min_steps": 3, "steps_per_seed": 1}
 NETWORK_PARAMS = {"sep": 2, "max_seeds": 16, "candidates": 40, "ceiling": 120,
-                  "names_shown": 30, "degree_cap": 99, "min_steps": 3}
+                  "names_shown": 30, "degree_cap": 99, "min_steps": 3, "steps_per_seed": 3}
 NOTE_MAX_CHARS = 400
 SCAN_RADII = (1, 2, 3)
 
@@ -70,10 +73,12 @@ class Walker:
     budget: dict = field(default_factory=lambda: {"steps": 0, "jumps": 0, "notes": 0})
     stop_reason: str | None = None
     stop_reading: str | None = None
+    loop_error: str | None = None                # the model loop ended on this exception
     done: bool = False
     scans: int = 0
     refusals: int = 0
     steps_here: int = 0                          # steps taken since the last plan or jump
+    on_turn: object = None                       # called with the walker after every logged turn
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -85,6 +90,11 @@ class Walker:
                            "answer": answer, "refused": refused})
         if refused:
             self.refusals += 1
+        if self.on_turn is not None:
+            try:
+                self.on_turn(self)
+            except Exception:                                         # noqa: BLE001
+                logger.warning("[walker] on_turn callback failed", exc_info=True)
         return answer
 
     def _refuse(self, tool, args, why):
@@ -247,9 +257,11 @@ class Walker:
             steps = int(steps)
         except (TypeError, ValueError):
             return self._refuse("plan", args, "steps must be a number.")
-        if steps < self.params["min_steps"] or steps > self.params["ceiling"]:
-            return self._refuse("plan", args, "steps must be between %d and the ceiling %d."
-                                % (self.params["min_steps"], self.params["ceiling"]))
+        floor = min(self.params["ceiling"],
+                    max(self.params["min_steps"], self.params.get("steps_per_seed", 1) * len(chosen)))
+        if steps < floor or steps > self.params["ceiling"]:
+            return self._refuse("plan", args, "steps must be between %d (%d per seed, %d seeds) and the ceiling %d."
+                                % (floor, self.params.get("steps_per_seed", 1), len(chosen), self.params["ceiling"]))
         self.plan = {"seeds": chosen, "steps": steps, "reason": reason}
         self.budget = {"steps": steps, "jumps": len(chosen), "notes": max(1, steps // 2)}
         self.current = chosen[0]
@@ -257,6 +269,23 @@ class Walker:
         answer = "plan set · %d steps · %d jumps · %d notes · standing on seed 1:\n%s" % (
             steps, len(chosen), self.budget["notes"], self._show_node())
         return self._log("plan", args, answer)
+
+    def start_at(self, node_id, steps, reason=""):
+        """Code-only opening for a walk from a node the user named (the chat's
+        walk tool): one seed that need not be a candidate, and ``steps`` within
+        the ceiling. Not a model tool; the model plans from the scan."""
+        args = {"seed": node_id, "steps": steps, "reason": reason}
+        if self.plan is not None or self.done:
+            return self._refuse("plan", args, "The plan is fixed; plan is called once.")
+        if node_id not in self.network.nodes:
+            return self._refuse("plan", args, "%r is not a node of this graph." % node_id)
+        steps = max(self.params["min_steps"], min(self.params["ceiling"], int(steps)))
+        self.plan = {"seeds": [node_id], "steps": steps, "reason": reason}
+        self.budget = {"steps": steps, "jumps": 1, "notes": max(1, steps // 2)}
+        self.current = node_id
+        self.visited.add(node_id)
+        return self._log("plan", args, "plan set · %d steps · standing on %s:\n%s" % (
+            steps, self.label(node_id), self._show_node()))
 
     def _move_guard(self, tool, args):
         if self.done:

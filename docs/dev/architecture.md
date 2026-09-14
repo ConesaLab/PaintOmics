@@ -148,7 +148,8 @@ see the `$lookup` entry in [troubleshooting.md](troubleshooting.md). *(The
 production version is from operator notes.)*
 
 - `PaintomicsDB`: users, jobs, pathways, features, files, visual options, AI
-  interpretations, reports.
+  graph walks (`aiWalkCollection`) and chat conversations
+  (`aiInterpretationCollection`), reports.
 - `<species>-paintomics`: `kegg` (pathway documents, with a `source` field of
   KEGG / Reactome / MapMan / OmniPath), `xref`, `dbname`, `versions`.
   **`xref` documents carry `dbname_id`, a foreign key into `dbname` — not a

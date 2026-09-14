@@ -1,4 +1,4 @@
-/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, SERVER_URL_AI_INTERPRET_PATHWAY, withAIProviderInfo */
+/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, paWalkEl, paWalkResultsNode, paWalkReferencesNode, paWalkStatementsNode, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway */
 
 if (typeof marked !== "undefined" && marked.use) {
     marked.use({
@@ -22,16 +22,9 @@ function PA_AIInterpretView() {
     this.reportLoaded = false;
     this.onRetry = null;
     this.isFullscreen = false;
-    // id/name/source of the pathways the report was written from, used to turn
-    // pathway mentions into links.
+    // id/name/source of the pathways the interpretation walk runs through,
+    // used to turn pathway mentions in chat replies into links.
     this.pathwayIndex = [];
-    // The shared-feature pathway partition the report was written from
-    // (cluster mode only): {clusters:[{id,label,members,satellites,core}],
-    // standalone:[ids], further:[ids]}. Handed to the Step 3 view through
-    // onClustersLoaded so the pathway network can colour nodes by cluster.
-    this.clusters = null;
-    this.onClustersLoaded = null;
-    this._pathwayRequestInFlight = null;
 
     this.init = function(jobID) {
         this.jobID = jobID;
@@ -95,21 +88,15 @@ function PA_AIInterpretView() {
             }
         });
 
-        // Delegated so it covers pathway links in the report, in chat replies,
-        // and in per-pathway reports added later. Deliberately not an inline
-        // onclick: the sanitiser strips on* attributes, and this keeps the
-        // rendered report free of executable attributes.
-        this.$root.find(".ai-widget-messages").on("click", ".ai-pathway-link", function(e) {
+        // Delegated so it covers the pathway links in the walk and in chat
+        // replies. Deliberately not an inline onclick: the sanitiser strips on*
+        // attributes. A link opens the pathway's diagram in Step 4, where its
+        // Walk column walks that one pathway.
+        this.$root.find(".ai-widget-messages").on("click", ".ai-pathway-link, .pa-walk-pathway-link", function(e) {
             e.preventDefault();
-            me.openPathway($(this).attr("data-pathway-id"),
-                           $(this).attr("data-pathway-name"));
-        });
-        // A cluster id in the prose jumps to that cluster's row in the
-        // Pathway Clusters table (the id's definition); the hover title
-        // already names the cluster and its members.
-        this.$root.find(".ai-widget-messages").on("click", ".ai-cluster-link", function(e) {
-            e.preventDefault();
-            me.revealCluster($(this).attr("data-cluster"));
+            if (typeof paWalkOpenPathway === "function") {
+                paWalkOpenPathway($(this).attr("data-pathway-id"));
+            }
         });
     };
 
@@ -191,24 +178,11 @@ function PA_AIInterpretView() {
 
     this._lastStatus = null;
 
-    /* What the agent is doing, not just how far along it is.
-
-       The full-agent arm records every tool call it makes, and that trace used
-       to reach MongoDB and stop there -- the status endpoint never returned it,
-       so a ten-minute run showed a percentage and a sentence. These are the
-       agent's own decisions: which pathways it looked at, what it searched for,
-       which paper it opened, when it delegated. */
+    /* What the walker is doing, not just how far along it is: the legs it has
+       walked so far, newest last, as /ai_interpret_status returns them. */
     var TOOL_LABELS = {
-        get_experiment_overview: "Read the experiment",
-        get_pathway_details: "Examined pathways",
-        compare_gene_profiles: "Compared gene profiles",
-        cluster_pathways: "Grouped pathways by shared genes",
-        search_literature: "Searched PubMed",
-        read_paper: "Read a paper",
-        notebook_write: "Noted a finding",
-        check_my_citations: "Checked its citations",
-        delegate_interpretation: "Delegated pathway analysis",
-        submit_report: "Submitted the report"
+        step: "Walked",
+        jump: "Jumped to a seed"
     };
 
     this._renderActivity = function(trace, total) {
@@ -217,13 +191,12 @@ function PA_AIInterpretView() {
         if (!trace || !trace.length) { $list.hide(); return; }
 
         /* Built as DOM nodes with .text(), not concatenated HTML: these strings
-           are tool arguments -- the agent's own search queries and pathway
-           names -- and they reach this feed without passing the report
-           sanitiser. */
+           are node labels from the walk, and they reach this feed without
+           passing the sanitiser. */
         $list.empty();
         if (total > trace.length) {
             $list.append($('<li class="ai-activity-row is-count">')
-                         .text(total + " tool calls so far"));
+                         .text(total + " legs so far"));
         }
         trace.slice(-6).forEach(function(e) {
             var result = String(e.result === null || e.result === undefined ? "" : e.result);
@@ -260,10 +233,8 @@ function PA_AIInterpretView() {
             $progress.hide();
             $fab.removeClass("is-processing");
             $badge.css("background", "#66bb6a").html("&#10003;").show();
-            // Load as soon as it is ready, expanded or not: the Step 3
-            // network's "AI pathway clusters" colouring reads the partition
-            // the report carries, so waiting for the panel to be opened would
-            // hide that option until then.
+            // Load as soon as it is ready, expanded or not, so the result is
+            // there the moment the panel opens.
             if (!this.reportLoaded) {
                 this.loadReport();
             }
@@ -300,6 +271,23 @@ function PA_AIInterpretView() {
                     me.onRetry();
                 }
             });
+        } else if (status === "not_started") {
+            // No walk for this job: one analysed before the walk existed, or
+            // whose start after Step 2 never reached the server. Offer to start
+            // it rather than showing a bar that will never move.
+            $progress.show().removeClass("is-done is-error");
+            this.$root.find(".ai-progress-fill").css("width", "0%");
+            var $detail = this.$root.find(".ai-progress-detail").empty()
+                .append(document.createTextNode("No interpretation has run for this job yet. "));
+            var me2 = this;
+            $('<button class="ai-retry-btn ai-start-btn">Start the graph walk</button>')
+                .on("click", function() {
+                    $(this).prop("disabled", true).text("Starting...");
+                    if (typeof me2.onRetry === "function") { me2.onRetry(); }
+                })
+                .appendTo($detail);
+            $fab.removeClass("is-processing");
+            $badge.hide();
         } else {
             // Processing
             $progress.show().removeClass("is-done is-error");
@@ -328,20 +316,21 @@ function PA_AIInterpretView() {
     this.loadReport = function(attempt) {
         var me = this;
         attempt = attempt || 0;
+        // One load at a time: the "done" poll and opening the panel can both
+        // ask while the first request is still carrying a large view, and two
+        // answers drew the walk twice. Retries continue the load in flight.
+        if (attempt === 0 && me.reportLoading) { return; }
+        me.reportLoading = true;
         $.ajax({
             type: "POST",
             url: SERVER_URL_AI_INTERPRET_REPORT,
             data: { jobID: me.jobID },
             success: function(response) {
-                if (response.success && response.report) {
+                me.reportLoading = false;
+                if (response.success && response.walk) {
                     me.pathwayIndex = response.pathways || [];
-                    me.clusters = response.clusters || null;
-                    me.displayReport(response.report, response.papers || [], me.pathwayIndex);
-                    me.displayCitations(response.papers || []);
+                    me.displayWalk(response.walk);
                     me.reportLoaded = true;
-                    if (me.onClustersLoaded) {
-                        try { me.onClustersLoaded(me.clusters); } catch (e) { console.warn(e); }
-                    }
                 } else if (response.status === "error") {
                     me.addMessage("assistant",
                         "The AI interpretation failed: **" + (response.message || "Unknown error") + "**");
@@ -355,7 +344,7 @@ function PA_AIInterpretView() {
                         "7 days for guests and 14 days for registered users.");
                 } else {
                     me.addMessage("assistant",
-                        "The AI interpretation is still in progress. Please wait for it to complete.");
+                        "The graph walk is still running. Its result appears here when it is sealed.");
                 }
             },
             error: function() {
@@ -366,6 +355,7 @@ function PA_AIInterpretView() {
                                1000 * Math.pow(2, attempt));
                     return;
                 }
+                me.reportLoading = false;
                 // Passed as trusted HTML on purpose: it is a fixed string with
                 // nothing interpolated into it, and the assistant path would
                 // otherwise run it through marked and the sanitiser, which is
@@ -670,7 +660,7 @@ function PA_AIInterpretView() {
                             a.setAttribute("data-pathway-id", pw.id);
                             a.setAttribute("data-pathway-name", pw.name);
                             a.setAttribute("title",
-                                "Open " + pw.name + " and interpret it with AI");
+                                "Open the " + pw.name + " diagram");
                             a.appendChild(document.createTextNode(match[1]));
                             frag.appendChild(a);
                             alreadyLinked[pw.id] = true;
@@ -716,279 +706,60 @@ function PA_AIInterpretView() {
     };
 
     /**
-     * Cluster ids ("C01") in the report prose become hover-explained links.
+     * The interpretation: the universal graph walk's checked Results section,
+     * its references, its statements and its legs.
      *
-     * The report groups pathways into clusters and refers to them by id, which
-     * a reader meets before the table that defines them. Each id in the body
-     * gets a title carrying the cluster's label and member pathways, and a
-     * click scrolls to its row in the Pathway Clusters table. Only ids of real
-     * clusters are touched; text inside links, code and the table itself is
-     * left alone (the table row is the destination, not a link).
+     * Rendered from text nodes by the renderers the Step 4 Walk column uses
+     * (PA_Step4WalkView.js), not through marked: every string is model output
+     * and none of it is markup. A leg's pathway is a link that opens its
+     * diagram. The attribution rides inside the bubble so a copy of the
+     * write-up copies it too.
      */
-    this._linkifyClusters = function(rootEl, clusters, pathways) {
-        var list = clusters && clusters.clusters;
-        if (!list || !list.length) return;
-        var nameOf = {};
-        (pathways || []).forEach(function(p) { if (p && p.id) nameOf[p.id] = p.name; });
-        var byId = {};
-        list.forEach(function(c) {
-            if (!c || !c.id) return;
-            var members = (c.members || []).concat(c.satellites || [])
-                .map(function(id) { return nameOf[id] || id; });
-            var shown = members.slice(0, 6).join("; ") + (members.length > 6 ? "; +" + (members.length - 6) + " more" : "");
-            byId[c.id] = c.id + " — " + (c.label || "") + "\n" + shown +
-                (c.hub_driven ? "\n(held together by hub genes shared across the network)" : "") +
-                "\nClick to see the cluster in the table.";
-        });
-        var SKIP = { A: 1, CODE: 1, PRE: 1, SCRIPT: 1, STYLE: 1, TABLE: 1, H1: 1 };
-        var pattern = /\bC\d{2}\b/g;
-        var walk = function(node) {
-            var child = node.firstChild;
-            while (child) {
-                var next = child.nextSibling;
-                if (child.nodeType === 1) {
-                    if (!SKIP[child.tagName.toUpperCase()]) walk(child);
-                } else if (child.nodeType === 3 && child.nodeValue && /C\d\d/.test(child.nodeValue)) {
-                    var text = child.nodeValue;
-                    var frag = document.createDocumentFragment();
-                    var cursor = 0, match;
-                    pattern.lastIndex = 0;
-                    while ((match = pattern.exec(text)) !== null) {
-                        var title = byId[match[0]];
-                        if (!title) continue;
-                        if (match.index > cursor) {
-                            frag.appendChild(document.createTextNode(text.slice(cursor, match.index)));
-                        }
-                        var a = document.createElement("a");
-                        a.className = "ai-cluster-link";
-                        a.setAttribute("href", "#");
-                        a.setAttribute("data-cluster", match[0]);
-                        a.setAttribute("title", title);
-                        a.appendChild(document.createTextNode(match[0]));
-                        frag.appendChild(a);
-                        cursor = match.index + match[0].length;
-                    }
-                    if (cursor > 0) {
-                        if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
-                        node.replaceChild(frag, child);
-                    }
-                }
-                child = next;
-            }
+    this.displayWalk = function(view) {
+        if (!this.$root || typeof paWalkResultsNode !== "function") { return; }
+        var $bubble = $('<div class="ai-message ai-msg-assistant ai-walk-message">' +
+            '<div class="ai-msg-label">AI Assistant</div><div class="ai-msg-bubble ai-walk-bubble"></div></div>');
+        var bubble = $bubble.find(".ai-walk-bubble")[0];
+        var focusLeg = function(n) {
+            var chain = $(bubble).find("details.pa-walk-chain").attr("open", "open");
+            chain.find(".pa-walk-leg").removeClass("is-focused");
+            var row = chain.find('.pa-walk-leg[data-leg="' + n + '"]').addClass("is-focused");
+            if (row.length && row[0].scrollIntoView) { row[0].scrollIntoView({block: "nearest"}); }
         };
-        walk(rootEl);
-    };
-
-    /** Scroll the Pathway Clusters table row for a cluster id into view and flash it. */
-    this.revealCluster = function(clusterID) {
-        if (!this.$root || !clusterID) return;
-        var cells = this.$root.find(".ai-widget-messages table td").filter(function() {
-            return $(this).text().trim().indexOf(clusterID + " ") === 0 ||
-                   $(this).text().trim() === clusterID;
-        });
-        var row = cells.first().closest("tr");
-        if (!row.length) return;
-        row[0].scrollIntoView({ behavior: "smooth", block: "center" });
-        row.addClass("ai-cluster-row-flash");
-        setTimeout(function() { row.removeClass("ai-cluster-row-flash"); }, 2200);
-    };
-
-    this.displayReport = function(reportText, papers, pathways) {
-        var html = "";
-        try {
-            reportText = this._preprocessMarkdown(reportText);
-            html = marked.parse(reportText);
-        } catch(e) {
-            // Escape rather than interpolate: this branch previously injected
-            // unparsed model output straight into the DOM.
-            html = "<pre>" + $("<div>").text(reportText).html() + "</pre>";
+        var counts = view.counts || {};
+        bubble.appendChild(paWalkEl("h3", "ai-walk-title", "Graph walk across KEGG, Reactome and OmniPath"));
+        bubble.appendChild(paWalkEl("p", "pa-walk-meta", "An agent walked the network of every KEGG, Reactome and " +
+            "OmniPath interaction for this organism (" + ((view.graph || {}).nodes || "?") + " nodes), with your " +
+            "values on its nodes, from the nodes whose neighbourhoods hold surprisingly many relevant features: " +
+            (counts.steps || 0) + " steps, " + (counts.jumps || 0) + " jumps."));
+        bubble.appendChild(paWalkResultsNode(view, {onLeg: focusLeg}));
+        var references = paWalkReferencesNode(view);
+        if (references) { bubble.appendChild(references); }
+        if ((view.statements || []).length || (view.dropped || []).length) {
+            bubble.appendChild(paWalkStatementsNode(view, {onLeg: focusLeg}));
         }
-        // Build ref_index -> pmid mapping and linkify [N] citations
-        if (papers && papers.length > 0) {
-            var refMap = {};
-            for (var i = 0; i < papers.length; i++) {
-                if (papers[i].ref_index && papers[i].pmid) {
-                    refMap[papers[i].ref_index] = papers[i].pmid;
-                }
-            }
-            html = html.replace(/\[(\d+)\]/g, function(match, num) {
-                var pmid = refMap[parseInt(num, 10)];
-                if (pmid) {
-                    return '<a href="https://pubmed.ncbi.nlm.nih.gov/' + pmid + '/" target="_blank" rel="noopener" class="ai-citation-link" title="Open in PubMed">[' + num + ']</a>';
-                }
-                return match;
-            });
-        }
-
-        html = this._sanitizeHtml(html);
-
-        // Pathway names become links only after sanitising, so the anchors we
-        // add are not themselves subject to the whitelist pass.
-        var holder = document.createElement("div");
-        holder.innerHTML = html;
-        this._linkifyPathways(holder, pathways);
-        this._linkifyClusters(holder, this.clusters, pathways);
-
-        /* Who wrote this. The report is model output that gets read, quoted and
-           pasted into drafts, so the attribution rides inside the bubble rather
-           than in the panel chrome -- a copy of the write-up copies the line.
-           Every report goes through here, so the per-pathway interpretations
-           opened from a pathway link carry it too.
-
-           The first sentence ships in the markup and is true on any install: it
-           is what stays on screen if /ai_provider never answers, and this line
-           must not degrade into a claim the server has not confirmed. The
-           model, its host and who operates it come from the same cached answer
-           the consent surfaces on step 1 use -- all three are chosen by
-           AI_LLM_PROVIDER server-side and the browser cannot know them. */
-        var provenance =
-            '<div class="ai-report-provenance">' +
-            'Drafted by a large language model, not by a person. Check every ' +
-            'claim and every citation against the sources before relying on it. ' +
-            '<span class="ai-report-provenance-model"></span>' +
-            '</div>';
-        this.addMessage("assistant", holder.innerHTML + provenance, true);
-
+        var chain = paWalkEl("details", "pa-walk-chain");
+        chain.appendChild(paWalkEl("summary", null, "The walk: " + (counts.steps || 0) + " steps, " +
+            (counts.jumps || 0) + " jumps"));
+        chain.appendChild(paWalkLegsNode(view.chain, {onLeg: focusLeg, pathwayLink: paWalkPathwayLink}));
+        bubble.appendChild(chain);
+        bubble.appendChild(paWalkEl("p", "pa-walk-meta", "A leg is an interaction a database draws, not a " +
+            "finding of this experiment; the values at its ends are yours. Open a pathway to walk it on its " +
+            "map, or ask about any leg below."));
+        var provenance = paWalkEl("div", "ai-report-provenance",
+            "Drafted by a large language model, not by a person. Check every claim and every citation " +
+            "against the sources before relying on it. ");
+        var model = paWalkEl("span", "ai-report-provenance-model");
+        provenance.appendChild(model);
+        bubble.appendChild(provenance);
+        this.$root.find(".ai-widget-messages").append($bubble);
         if (typeof withAIProviderInfo === "function") {
-            /* addMessage appends synchronously, so the span just added is the
-               last one in the panel. Filled with .text(), so a model name can
-               never be read as markup. withAIProviderInfo never calls back on
-               failure, which is why the sentence above has to stand alone. */
-            var $model = this.$root
-                .find(".ai-widget-messages .ai-report-provenance-model").last();
-            withAIProviderInfo(function (info) {
-                /* The model identifier is deliberately left out. The report is
-                   the surface people paste into a draft, and a build name
-                   pasted with it is stale as soon as the gateway is repointed,
-                   whereas who ran it and where does not go stale. */
+            withAIProviderInfo(function(info) {
                 var text = "Generated at " + info.host;
-                /* /ai_provider falls back to the bare hostname for a gateway it
-                   has no entry for, which leaves summary equal to host. Skip it
-                   there rather than print the hostname twice. */
-                if (info.summary && info.summary !== info.host) {
-                    text += " — " + info.summary;
-                }
-                $model.text(text + ".");
+                if (info.summary && info.summary !== info.host) { text += " — " + info.summary; }
+                model.textContent = text + ".";
             });
         }
-    };
-
-    /**
-     * Open a pathway from a citation in the report, and interpret it.
-     *
-     * Two things happen together, which is the point of the feature: the
-     * pathway diagram opens in the main view, and a pathway-specific
-     * interpretation is requested and shown in this widget. The widget lives on
-     * document.body rather than inside a step view, so it stays visible over
-     * the pathway once the app switches to step 4.
-     */
-    this.openPathway = function(pathwayID, pathwayName) {
-        if (!pathwayID) return;
-        var me = this;
-        var label = pathwayName || pathwayID;
-
-        this.expand();
-
-        var opened = false;
-        try {
-            var mainView = (typeof application !== "undefined" && application.getMainView)
-                ? application.getMainView() : null;
-            var jobView = mainView ? (mainView.getSubView("PA_Step3JobView") ||
-                                      mainView.getLastJobView()) : null;
-            if (jobView && typeof jobView.paintSelectedPathway === "function") {
-                jobView.paintSelectedPathway(pathwayID);
-                opened = true;
-            }
-        } catch (e) {
-            opened = false;
-        }
-
-        if (!opened) {
-            // Report it rather than silently showing only the text: the user
-            // asked for the pathway, and a missing diagram is a real outcome.
-            this.addMessage("assistant",
-                "I could not open the **" + label + "** diagram from here, but the " +
-                "interpretation below still applies to that pathway.");
-        }
-
-        if (this._pathwayRequestInFlight === pathwayID) return;
-        this._pathwayRequestInFlight = pathwayID;
-
-        this.addMessage("user", "Interpret " + label + " for this experiment.");
-        this.addLoadingIndicator();
-
-        $.ajax({
-            type: "POST",
-            url: SERVER_URL_AI_INTERPRET_PATHWAY,
-            data: { jobID: me.jobID, pathwayID: pathwayID },
-            success: function(response) {
-                me.removeLoadingIndicator();
-                me._pathwayRequestInFlight = null;
-                if (response && response.success && response.report) {
-                    me.displayReport(response.report, response.papers || [],
-                                     me.pathwayIndex || []);
-                } else {
-                    me.addMessage("assistant",
-                        "I could not interpret **" + label + "**: " +
-                        ((response && response.message) || "unknown error") + ".");
-                }
-            },
-            error: function() {
-                me.removeLoadingIndicator();
-                me._pathwayRequestInFlight = null;
-                me.addMessage("assistant",
-                    "The request for **" + label + "** failed. Please try again.");
-            }
-        });
-    };
-
-    this.displayCitations = function(papers) {
-        if (!papers || papers.length === 0) return;
-
-        var toggleHtml = '<div class="ai-citations-toggle">&#9656; Show ' + papers.length + ' citations</div>';
-        var listHtml = '<div class="ai-citations-list" style="display:none;">';
-        for (var i = 0; i < papers.length; i++) {
-            var p = papers[i];
-            var refLabel = p.ref_index ? '[' + p.ref_index + '] ' : '';
-            listHtml += '<div class="ai-citation-item" data-pmid="' + (p.pmid || "") + '">';
-            listHtml += '  <div class="ai-citation-title"><span class="ai-citation-ref">' + refLabel + '</span>' + (p.title || "Untitled") + '</div>';
-            /* What the agent actually read for this paper. The pipeline stores
-               full_text_available per paper; older jobs predate the field, so
-               its absence renders nothing rather than a wrong claim. */
-            var sourceRead = (p.full_text_available === true) ? ' &middot; full text read'
-                : (p.full_text_available === false) ? ' &middot; abstract read' : '';
-            listHtml += '  <div class="ai-citation-meta">' + (p.first_author || "") + ' et al., ' + (p.journal || "") + ' (' + (p.year || "") + ')' + sourceRead + '</div>';
-            listHtml += '  <div class="ai-citation-pmid">PMID: ' + (p.pmid || "N/A") + '</div>';
-            listHtml += '</div>';
-        }
-        listHtml += '</div>';
-
-        var $container = this.$root.find(".ai-widget-messages");
-        $container.append(toggleHtml + listHtml);
-
-        // Bind toggle
-        var $toggle = $container.find(".ai-citations-toggle").last();
-        var $list = $container.find(".ai-citations-list").last();
-        $toggle.on("click", function() {
-            if ($list.is(":visible")) {
-                $list.slideUp(200);
-                $toggle.html("&#9656; Show " + papers.length + " citations");
-            } else {
-                $list.slideDown(200);
-                $toggle.html("&#9662; Hide citations");
-            }
-        });
-
-        // Citation click opens PubMed
-        $list.find(".ai-citation-item").on("click", function() {
-            var pmid = $(this).data("pmid");
-            if (pmid) {
-                window.open("https://pubmed.ncbi.nlm.nih.gov/" + pmid + "/", "_blank");
-            }
-        });
-
-        // Scroll to bottom
-        $container.scrollTop($container[0].scrollHeight);
     };
 
     this.addMessage = function(role, content, isHtml) {

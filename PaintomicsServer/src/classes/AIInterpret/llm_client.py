@@ -15,15 +15,6 @@ logger = logging.getLogger(__name__)
 # - read: 180s per chunk — if the API hasn't sent any data in 3 min, it's hung
 DEFAULT_TIMEOUT = (15, 180)
 
-# Read timeout for short, high-fan-out calls -- per-citation verification,
-# quote lookup, paper filtering. Measured on the CSIC gateway: the median such
-# call returns in ~3.5s while roughly one in sixteen stalls for ~60s, and a
-# ThreadPoolExecutor waits for the slowest. At the 180s default a single
-# straggler holds a phase for three minutes before the retry below (which
-# usually succeeds in seconds) even begins. Cutting the read timeout turns the
-# existing retry into straggler hedging without new machinery.
-SHORT_CALL_TIMEOUT = (15, int(os.getenv("AI_SHORT_CALL_READ_TIMEOUT", "45")))
-
 # Not every OpenAI-compatible gateway implements response_format. Verified
 # working on the CSIC gateway (vLLM 0.26.0, guided decoding) on 2026-08-07;
 # a self-hosted server behind the same API can still reject it with a 400.

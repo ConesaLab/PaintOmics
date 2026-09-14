@@ -188,10 +188,15 @@ class PubMedClient:
     # the retrying wrapper like every other call. (_request_with_retry does its
     # own throttling, so the explicit _throttle() calls are gone.)
 
-    def search(self, query, max_results=5):
-        """ESearch: returns list of PMIDs."""
+    def search(self, query, max_results=5, sort=None):
+        """ESearch: returns list of PMIDs. ``sort="relevance"`` asks PubMed for
+        its Best Match order; the default is newest first, which for a
+        well-studied gene returns this month's papers, not the ones that
+        established the claim."""
         params = {**self._base_params(), "db": "pubmed", "term": query,
                   "retmax": max_results, "retmode": "json"}
+        if sort:
+            params["sort"] = sort
         r = self._request_with_retry("GET", self.ESEARCH_URL, params=params, timeout=15)
         r.raise_for_status()
         return _filter_ids(r.json().get("esearchresult", {}).get("idlist", []))

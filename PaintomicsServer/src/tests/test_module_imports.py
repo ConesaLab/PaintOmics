@@ -45,11 +45,8 @@ EXCLUDED_PREFIXES = (
 CRITICAL = (
     "src.paintomicsserver",
     "src.classes.AIInterpret.agent",
-    "src.classes.AIInterpret.shared",
-    "src.classes.AIInterpret.clusters",
     "src.classes.AIInterpret.llm_client",
-    "src.classes.AIInterpret.verification",
-    "src.classes.AIInterpret.context_builder",
+    "src.classes.AIInterpret.walker.service",
     "src.servlets.AIInterpretServlet",
     "src.servlets.PathwayAcquisitionServlet",
     "src.classes.JobInstances.PathwayAcquisitionJob",
@@ -143,21 +140,6 @@ def test_critical_runtime_modules_import():
                        "\n    ".join(broken)
 
 
-def test_agent_finds_the_symbols_it_imports_from_verification():
-    """The exact shape of the 2026-08-06 merge break: the entry module
-    importing a name that verification no longer defines. Importing agent
-    covers this, but this asserts the contract directly so the cause is
-    obvious, not inferred."""
-    from src.classes.AIInterpret import verification
-
-    for symbol in ("verify_report_v2", "redact_unverified_v2",
-                   "renumber_citations", "parse_references_section",
-                   "render_references_section"):
-        assert hasattr(verification, symbol), (
-            "verification.%s is gone; agent.py imports it" % symbol
-        )
-
-
 def main():
     warnings.filterwarnings("ignore")
     # Match how launch_server.py sets up sys.path so imports resolve the same
@@ -171,7 +153,6 @@ def main():
     tests = [
         test_every_tracked_module_imports,
         test_critical_runtime_modules_import,
-        test_agent_finds_the_symbols_it_imports_from_verification,
     ]
     for t in tests:
         _check(t.__name__, t)

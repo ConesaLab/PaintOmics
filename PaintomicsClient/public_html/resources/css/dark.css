@@ -836,7 +836,6 @@
 [data-theme="dark"] .ai-activity-row.is-failed .ai-activity-detail { color: #ff8a80; }
 [data-theme="dark"] .ai-pathway-link { color: var(--pa-ai-pathway-link); }
 [data-theme="dark"] .ai-pathway-link:hover { color: var(--pa-ai-pathway-link-hover); }
-[data-theme="dark"] .ai-citations-toggle { color: var(--pa-link); }
 /* The report's attribution caption. ai-interpret.css sets #555 on white, which
    is 2.03:1 once the bubble goes dark. --pa-ink-muted (#8B8E96) on
    --pa-ai-bubble-bg (#24262B) measures 4.62:1, over AA for the 11px it is set
@@ -1501,7 +1500,6 @@
 [data-theme="dark"] div[id ^= "pathwayNetworkBox_"].fullscreen { background-color: var(--pa-surface-page); }
 [data-theme="dark"] div[id ^= "pathwayNetworkWaitBox_"] { background-color: rgba(23, 24, 27, 0.76); }
 [data-theme="dark"] span.networkClusterImage > i { background-color: rgba(30, 31, 35, 0.54); }
-[data-theme="dark"] span.networkClusterImage.networkAICluster:hover { background-color: rgba(255, 255, 255, 0.06); }
 /* The network toolbar, its status line and its two popovers used to need three
    translucent literals here because main.css painted them with
    `rgba(255,255,255,.91)`. They are stated in tokens now - see
@@ -1749,7 +1747,6 @@
 }
 [data-theme="dark"] .ai-widget-progress.is-done { background: var(--pa-toast-success-bg); }
 [data-theme="dark"] .ai-widget-progress.is-error { background: var(--pa-toast-error-bg); }
-[data-theme="dark"] .ai-citation-item:hover { background: var(--pa-surface-quiet); }
 [data-theme="dark"] .ai-send-btn:disabled { background: var(--pa-btn-neutral-bg); }
 [data-theme="dark"] .ai-gdpr-disclaimer {
 	background: var(--pa-surface);
@@ -2144,3 +2141,17 @@
 :root[data-theme="dark"] #threshold_box .paClassPill-off { background: rgba(255, 255, 255, 0.08) !important; color: #A1B0C0; }
 :root[data-theme="dark"] #threshold_box .paClassPillDot { background: #7DD87F !important; }
 :root[data-theme="dark"] .metaboliteHead > h3.metaboliteTitle { color: #E3EAF2; }
+
+/* ---------------------------------------------------------------------------
+   Agentic Graph Walk (graph-walk.css): the Step 4 Walk column and the
+   universal walk under the AI report. The accent stays the teal the legs are
+   drawn in on the (light) diagram; the inks that sit on dark surfaces lift. */
+:root[data-theme="dark"] {
+  --pa-walk-accent-ink: #7FD9CC;
+  --pa-walk-chip-bg: rgba(20, 184, 166, 0.16);
+  --pa-walk-seed: #D97706;
+  --pa-walk-error-ink: #F2A08F;
+  --pa-walk-error-bg: rgba(200, 77, 47, 0.18);
+  --pa-walk-focus-bg: rgba(20, 184, 166, 0.12);
+  --pa-walk-rule: rgba(255, 255, 255, 0.10);
+}

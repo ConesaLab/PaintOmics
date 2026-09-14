@@ -36,6 +36,8 @@ class WriterContext:
     dropped: list = field(default_factory=list)
     done: bool = False
     trace: list = field(default_factory=list)
+    read: set = field(default_factory=set)          # refs opened with read_paper
+    loop_error: str | None = None                   # the model loop ended on this exception
 
 
 def _fail(name):
@@ -59,7 +61,7 @@ async def search_literature(ctx: RunContextWrapper[WriterContext], query: str, t
     c = ctx.context
     c.searches.append({"query": query, "topic_tag": topic_tag})
     try:
-        pmids = await asyncio.to_thread(c.pubmed.search, query, SEARCH_HITS)
+        pmids = await asyncio.to_thread(c.pubmed.search, query, SEARCH_HITS, "relevance")
         new = [p for p in pmids if str(p) not in c.pmid_to_ref]
         papers = await asyncio.to_thread(c.pubmed.fetch_abstracts, new) if new else []
     except Exception as exc:                                          # noqa: BLE001
@@ -101,6 +103,7 @@ async def read_paper(ctx: RunContextWrapper[WriterContext], ref_index: int, sect
         except Exception as exc:                                      # noqa: BLE001
             return "Full text unavailable (%s); the abstract:\n%s" % (exc, _abstract(paper))
     text = (paper.get("sections") or {}).get(section) if section != "abstract" else _abstract(paper)
+    c.read.add(int(ref_index))
     c.trace.append({"tool": "read_paper", "ref": int(ref_index), "section": section})
     return "[%d] %s\n%s" % (int(ref_index), section, (text or "(section not available)")[:6000])
 
@@ -130,7 +133,7 @@ async def submit_statements(ctx: RunContextWrapper[WriterContext], statements_js
         if isinstance(stmt, dict):
             stmt["n"] = i
     statements = [s for s in statements if isinstance(s, dict)]
-    checked, count_problem = verify.verify_statements(statements, c.walker, c.papers)
+    checked, count_problem = verify.verify_statements(statements, c.walker, c.papers, c.read)
     failing = [(s, p) for s, p in checked if p]
     c.trace.append({"tool": "submit_statements", "attempt": c.submits, "n": len(statements),
                     "failing": len(failing), "count_problem": count_problem})
@@ -156,9 +159,9 @@ INSTRUCTIONS = """You are the Writer of an Agentic Graph Walk. You receive the d
 
 Write 3 to 5 statements. Each names its evidence as [node, layer] pairs (cites), the legs it rests on, and:
 - grounded_in: the drawn edges on the chain it restates, as {leg, db}. A relation the pathway draws is supported by the pathway: cite the leg, never search for it.
-- beyond: every claim that goes past what the drawn edges say (a direction against the drawn sign, a mechanism, a causal timing). Each needs a paper found with search_literature and read with read_paper, or hypothesis: true and prose worded as a hypothesis.
+- beyond: every claim that goes past what the drawn edges say (a direction against the drawn sign, a mechanism, a causal timing). Each needs a paper found with search_literature and read with read_paper, or hypothesis: true and prose worded as a hypothesis. Cite only a paper you read whose title or abstract is about the genes of the claim; searches return PubMed's best matches, so prefer the study that established the claim over a recent paper that mentions it in passing.
 
-A value is evidence only if its layer is flagged relevant; a non-relevant value may be cited only to say it did not change, and the prose must say "not relevant" next to it. Read timing against the card: a difference already present at the baseline is not a response. Where layers disagree, say so; a series that changes sign at every point is noise, not a disagreement.
+A value is evidence only if its layer is flagged relevant; a non-relevant value may be cited only to say it did not change, and the prose must say "not relevant" next to it. Read timing against the card: a difference already present at the baseline is not a response. An omic the card lists as unlabeled has no time points or order: call its columns c1..cN and never give its values early, late, baseline, peak or over-time words; code refuses them. Where layers disagree, say so; a series that changes sign at every point is noise, not a disagreement.
 
 Finish with submit_statements (a JSON array). Use check_my_citations before it.
 """
@@ -209,6 +212,7 @@ async def run_writer_async(walker, card_text, pubmed, max_turns=30, model=None, 
         await Runner.run(agent, prompt, context=ctx, max_turns=max_turns)
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[writer] the loop ended early: %s", exc)
+        ctx.loop_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
     return ctx
 
 

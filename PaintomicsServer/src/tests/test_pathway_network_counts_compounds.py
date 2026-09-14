@@ -406,25 +406,11 @@ class DefaultMinFeaturesTest(unittest.TestCase):
 
 
 class OmicClassFallbackTest(unittest.TestCase):
-    """A job recording neither class is read as gene-based on BOTH sides.
+    """A job recording neither class is read as gene-based.
 
-    clusters.py says so outright (`genes or not compounds`). The client used to
-    report {genes: false, compounds: false}, which leaves the denominator
-    unknown for every class, switches the coverage filter off, and still shows
-    the slider at 50% -- a control that visibly does nothing."""
-
-    def test_the_server_reads_a_job_with_no_omic_as_gene_based(self):
-        from src.classes.AIInterpret import clusters
-
-        class _Job(object):
-            def getGeneBasedInputOmics(self):
-                return []
-
-            def getCompoundBasedInputOmics(self):
-                return []
-
-        self.assertEqual({"genes": True, "compounds": False},
-                         clusters._omic_classes(_Job()))
+    The client used to report {genes: false, compounds: false}, which leaves the
+    denominator unknown for every class, switches the coverage filter off, and
+    still shows the slider at 50% -- a control that visibly does nothing."""
 
     def test_the_client_agrees(self):
         with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:
@@ -432,7 +418,7 @@ class OmicClassFallbackTest(unittest.TestCase):
         start = source.index("this.omicClasses = {\n\t\t\t/*")
         window = source[start:start + 900]
         self.assertIn("|| !hasCompoundOmics", window,
-                      "the client must fall back to genes the way the server does")
+                      "the client must fall back to genes when a job records no omic class")
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")

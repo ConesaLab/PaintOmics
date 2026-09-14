@@ -59,6 +59,22 @@ def greedy(walker, seeds=None, steps=None, per_seed=None):
     return walker
 
 
+def greedy_from(walker, node_id, steps):
+    """A short greedy walk from one named node, for the chat: the hottest
+    relevant unvisited neighbour each turn, then back along the chain to the
+    last node that still has one; stops when none is left or steps are spent."""
+    walker.start_at(node_id, steps, "chat: walk from a gene the user named")
+    while not walker.done:
+        pick = _pick_greedy(walker.neighbour_rows()) if walker.budget["steps"] > 0 else None
+        if pick:
+            walker.step(pick["id"], "greedy policy: %s" % walker.overlay.layer_text(pick["id"]).split("\n")[0],
+                        "the hottest relevant unvisited neighbour (heat %.2f)" % pick["heat"])
+            continue
+        walker.stop("no relevant unvisited neighbour left" if walker.budget["steps"] > 0 else "steps spent",
+                    "greedy policy from %s" % walker.label(node_id))
+    return walker
+
+
 def random_walk(walker, seeds=None, steps=None, rng=None):
     """A random legal step each turn, the same plan as greedy would take."""
     rng = rng or random.Random(0)

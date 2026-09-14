@@ -332,8 +332,8 @@ settings and the export options; [Feature details](5_2_detailed_views.md) and
 
 * See the same analysis read end to end, with its real numbers and what they do
   and do not support: [A worked example](6_1_use_case.md).
-* Ask the AI agent to read the whole result and draft an interpretation:
-  [The pathway interpretation](ai-interpretation.md).
+* Let the AI agent walk the whole result and draft an interpretation:
+  [The interpretation](ai-interpretation.md).
 * Model regulation explicitly, rather than layer by layer:
   [Regulatory omics with MORE](4_6_Regulatory_omics.md).
 * Share the job, or keep it: [Accounts, storage and

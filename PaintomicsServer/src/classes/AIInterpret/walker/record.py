@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 
 SCHEMA = 1
@@ -32,6 +33,80 @@ def seal(job_id, scope, network, overlay, walker, card, statements, dropped, res
         "statements": statements, "dropped": dropped, "results": results,
         "papers": papers, "checks": checks or {}, "model_used": model_used, "timings": timings,
     }
+
+
+def renumber_citations(statements, dropped, results, papers):
+    """Number the papers 1..n in the order the reader meets them: the Results
+    section first, then the kept statements. Rewrites every [N] (and each
+    number of [N, M]) in the Results text and in the statements, the
+    statements' paper fields, and returns the papers map holding only the
+    cited papers under their new numbers. Retrieved papers nothing cites are
+    left out: a reference list numbered by retrieval order jumped to [17]
+    for a section citing three papers."""
+    from src.classes.AIInterpret.walker import verify
+
+    order = []
+
+    def meet(text):
+        for ref in verify.cited_refs(text):
+            if ref in papers and ref not in order:
+                order.append(ref)
+
+    if results:
+        meet(results.get("summary"))
+        for paragraph in results.get("paragraphs") or []:
+            meet(paragraph.get("text"))
+    for stmt in statements:
+        meet(stmt.get("claim"))
+        meet(stmt.get("prose"))
+        for ref in verify.statement_papers(stmt):
+            if ref in papers and ref not in order:
+                order.append(ref)
+    mapping = {old: new for new, old in enumerate(order, 1)}
+
+    def rewrite(text):
+        def one(match):
+            numbers = [int(x) for x in re.split(r"\s*[,;]\s*", match.group(1))]
+            kept = [str(mapping[n]) for n in numbers if n in mapping]
+            return "[%s]" % ", ".join(kept) if kept else ""
+        return verify.PAPER_LIST_RE.sub(one, str(text)) if text else text
+
+    if results:
+        results["summary"] = rewrite(results.get("summary"))
+        for paragraph in results.get("paragraphs") or []:
+            paragraph["text"] = rewrite(paragraph.get("text"))
+    def rewrite_why(text):
+        # The Verifier's reasons name papers by their retrieval number; a
+        # dropped statement's paper is usually not in the list, so it is named
+        # by PMID rather than by a number the reference list does not hold.
+        def one(match):
+            names = []
+            for n in (int(x) for x in re.split(r"\s*[,;]\s*", match.group(1))):
+                if n in mapping:
+                    names.append("[%d]" % mapping[n])
+                elif n in papers:
+                    names.append("PMID %s" % papers[n].get("pmid"))
+                else:
+                    names.append("[?]")
+            return ", ".join(names)
+        return verify.PAPER_LIST_RE.sub(one, str(text)) if text else text
+
+    for stmt in dropped:
+        if stmt.get("why"):
+            stmt["why"] = rewrite_why(stmt["why"])
+    for stmt in list(statements) + list(dropped):
+        for key in ("claim", "prose"):
+            if stmt.get(key):
+                stmt[key] = rewrite(stmt[key])
+        if stmt.get("papers"):
+            stmt["papers"] = [mapping[verify.paper_ref(p)] for p in stmt["papers"]
+                              if verify.paper_ref(p) in mapping]
+        for beyond in stmt.get("beyond") or []:
+            if isinstance(beyond, dict) and beyond.get("paper") is not None:
+                beyond["paper"] = mapping.get(verify.paper_ref(beyond["paper"]))
+            if isinstance(beyond, dict) and beyond.get("claim"):
+                beyond["claim"] = rewrite(beyond["claim"])
+    return {mapping[old]: papers[old] for old in order}
 
 
 def save(record, out_dir, name=None):

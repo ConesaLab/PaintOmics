@@ -5,7 +5,9 @@ Sources (all optional; whatever is present is read):
   * KEGG   -- ``<data_dir>/current/<org>/kgml/*.kgml`` through the KGML parser
               the metabolite hub already uses.
   * Reactome -- ``<data_dir>/current/<org>/reactome/*.graph.json`` reactions:
-              input or catalyst -> output.
+              the proteins of the inputs, catalysts, activators and
+              requirements -> the proteins of the outputs, complexes and sets
+              expanded to their members; inhibitors -> outputs, signed -.
   * OmniPath -- the ``omnipath_network`` collection of the organism's Mongo
               database: ``{ID, edges: [[uniprot, uniprot, type], ...]}``.
 
@@ -29,13 +31,17 @@ import json
 import logging
 import os
 import re
+import threading
+import zlib
 from collections import defaultdict
 
 from src.common.KeggGraph.parser import parse_directory
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 1
+CACHE_VERSION = 3                  # 2: Reactome complexes and sets expanded; 3: Reactome names
+REACTOME_FAN_MAX = 36              # member pairs one reaction may add; larger sets are skipped
+REACTOME_MAX_DEPTH = 8             # nesting of complexes and sets followed
 # KGML relation subtypes -> sign. Anything else (binding, indirect, ...) is 0.
 SIGN_BY_SUBTYPE = {
     "activation": 1, "expression": 1,
@@ -227,6 +233,19 @@ def _read_pathway_names(org_dir):
                 parts = line.rstrip("\n").split("\t")
                 if len(parts) >= 2 and parts[0].startswith("R-"):
                     names[parts[0]] = parts[1]
+    # The installed ReactomePathway.txt carries ids only, so a Reactome leg read
+    # "Reactome:R-MMU-9717189". Each pathway's diagram file names it.
+    for graph_path in glob.glob(os.path.join(org_dir, "reactome", "*.graph.json")):
+        pathway = os.path.basename(graph_path)[:-len(".graph.json")]
+        if pathway in names:
+            continue
+        try:
+            with open(os.path.join(org_dir, "reactome", pathway + ".json"), encoding="utf-8") as handle:
+                name = json.load(handle).get("displayName")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if name:
+            names[pathway] = str(name)
     return names
 
 
@@ -264,7 +283,39 @@ def _add_kegg(net, org_dir, k2sym):
     return read
 
 
+def _reactome_leaves(nodes, db_id, memo, depth=0):
+    """The gene ids under one Reactome entity: itself when it is a protein the
+    UniProt map knows, and every protein inside a complex or a set, however
+    deeply nested (children are dbIds of the same graph)."""
+    if db_id in memo:
+        return memo[db_id]
+    memo[db_id] = frozenset()                  # a cycle reads as empty, not as recursion
+    node = nodes.get(db_id)
+    if node is None or depth > REACTOME_MAX_DEPTH:
+        return memo[db_id]
+    out = set()
+    kegg = node.get("_kegg")
+    if kegg:
+        out.add(kegg)
+    for child in node.get("children") or []:
+        out |= _reactome_leaves(nodes, child, memo, depth + 1)
+    memo[db_id] = frozenset(out)
+    return memo[db_id]
+
+
 def _add_reactome(net, org_dir, u2k, k2sym):
+    """Reactions as gene -> gene edges: every protein among a reaction's inputs,
+    catalysts, activators and requirements to every protein among its outputs
+    (+), inhibitors to outputs (-).
+
+    A reaction's participants are mostly complexes and sets, not proteins: read
+    as proteins only, the 524 mouse pathways gave 659 edges and 126 pathways a
+    walk could enter (FOXO-mediated transcription had none). Expanded to their
+    member proteins they give 21,306 edges over 404 pathways. A reaction whose
+    expansion would join more than REACTOME_FAN_MAX pairs is skipped: those are
+    the large sets (neutrophil degranulation alone expands to 58,324 pairs),
+    where the pairs say "in the same bag", not "one acts on the other".
+    """
     files = sorted(glob.glob(os.path.join(org_dir, "reactome", "*.graph.json")))
     for path in files:
         try:
@@ -274,19 +325,32 @@ def _add_reactome(net, org_dir, u2k, k2sym):
             logger.warning("[walker] unreadable Reactome graph %s: %s", path, exc)
             continue
         pathway = graph.get("stId") or os.path.basename(path).split(".")[0]
-        by_db_id = {}
+        nodes = {}
         for node in graph.get("nodes") or []:
             kegg = u2k.get(str(node.get("identifier") or ""))
             if kegg:
-                by_db_id[node.get("dbId")] = "g:" + kegg
+                node = dict(node, _kegg="g:" + kegg)
                 net.add_node("g:" + kegg, k2sym.get(kegg, kegg), "gene")
+            nodes[node.get("dbId")] = node
+        memo = {}
         for reaction in graph.get("edges") or []:
-            sources = [by_db_id.get(x) for x in
-                       (reaction.get("inputs") or []) + (reaction.get("catalysts") or [])]
-            targets = [by_db_id.get(x) for x in reaction.get("outputs") or []]
-            for a in filter(None, sources):
-                for b in filter(None, targets):
+            def members(keys):
+                out = set()
+                for key in keys:
+                    for db_id in reaction.get(key) or []:
+                        out |= _reactome_leaves(nodes, db_id, memo)
+                return out
+            sources = members(("inputs", "catalysts", "activators", "requirements"))
+            inhibitors = members(("inhibitors",))
+            targets = members(("outputs",))
+            if (len(sources) + len(inhibitors)) * len(targets) > REACTOME_FAN_MAX:
+                continue
+            for a in sorted(sources):
+                for b in sorted(targets):
                     net.add_edge(a, b, 1, "Reactome:" + pathway, "reaction")
+            for a in sorted(inhibitors):
+                for b in sorted(targets):
+                    net.add_edge(a, b, -1, "Reactome:" + pathway, "inhibition")
     return len(files)
 
 
@@ -373,18 +437,27 @@ def load_or_build(organism, data_dir, mongo_db=None, cache_dir=None):
         cached_omnipath = (data.get("sources") or {}).get("omnipath", 0)
         if data.get("signature") == signature and (mongo_db is None or cached_omnipath > 0):
             return Network.from_dict(data)
-    except (OSError, ValueError, KeyError):
+    except (OSError, EOFError, ValueError, KeyError, zlib.error):
         pass
     net = build_network(organism, data_dir, mongo_db)
     if mongo_db is not None and not net.sources.get("omnipath"):
         logger.warning("[walker] OmniPath was requested but read nothing; not caching this build")
         return net
+    # Written to a private temporary name and renamed into place: a walk in
+    # another worker may be reading the cache while this one rebuilds it, and
+    # a half-written gzip reads as EOFError, not as a stale cache.
+    tmp_path = "%s.%d.%d.tmp" % (cache_path, os.getpid(), threading.get_ident())
     try:
         os.makedirs(cache_dir, exist_ok=True)
         data = net.to_dict()
         data["signature"] = signature
-        with gzip.open(cache_path, "wt", encoding="utf-8") as handle:
+        with gzip.open(tmp_path, "wt", encoding="utf-8") as handle:
             json.dump(data, handle)
+        os.replace(tmp_path, cache_path)
     except OSError as exc:
         logger.warning("[walker] could not cache the network at %s: %s", cache_path, exc)
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
     return net

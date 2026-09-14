@@ -341,5 +341,6 @@ not exported.
 * [The pathway view](5_1_browsing_pathways.md) — what the paint icon opens.
 * [Preparing your data](2_1_accepted_input.md) — the relevant features file,
   which supplies K and k.
-* [The AI interpretation](ai-interpretation.md) — reads this table and writes
-  up what it means, with citations.
+* [The AI interpretation](ai-interpretation.md) — walks the interactions behind
+  these pathways with your values on them and writes up what the walk shows, with
+  citations.

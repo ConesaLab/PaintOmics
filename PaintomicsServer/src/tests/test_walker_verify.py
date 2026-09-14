@@ -106,12 +106,12 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertIn("Seen, not walked", html_page)
 
     def test_a_rewrite_with_a_bad_n_is_skipped_not_fatal(self):
-        from src.classes.AIInterpret.walker import cli
+        from src.classes.AIInterpret.walker import service
 
         class _Client(object):
             def complete_json(self, *args, **kwargs):
                 return {"statements": [{"n": "one", "claim": "x"}, {"n": 2, "claim": "y"}, "junk", {"claim": "no n"}]}
-        out = cli.rewrite_once(_Client(), "card", "chain", [{"n": 2, "claim": "y"}], {2: {}})
+        out = service.rewrite_once(_Client(), "card", "chain", [{"n": 2, "claim": "y"}], {2: {}})
         self.assertEqual(list(out), [2])
 
     def test_statement_count(self):
@@ -138,6 +138,158 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertTrue(any("link paragraph 2 quotes a value" in p for p in problems))
         self.assertTrue(any("link paragraph 2 cites a paper" in p for p in problems))
         self.assertTrue(any("statement 7" in p for p in problems))
+
+    def test_citations_are_renumbered_in_order_of_first_use(self):
+        from src.classes.AIInterpret.walker import record as record_mod
+        papers = {3: {"pmid": "3"}, 7: {"pmid": "7"}, 9: {"pmid": "9"}, 11: {"pmid": "11"}}
+        results = {"title": "t", "summary": "first [7].", "paragraphs": [{"from_statement": 1, "legs": [1],
+                                                                          "text": "then [3, 7] and [e1]."}]}
+        statements = [{"n": 1, "claim": "c", "prose": "p [3]", "papers": [3, 9],
+                       "beyond": [{"claim": "b", "paper": 9, "hypothesis": False}]}]
+        out = record_mod.renumber_citations(statements, [], results, papers)
+        self.assertEqual(sorted(out), [1, 2, 3])
+        self.assertEqual(out[1]["pmid"], "7")
+        self.assertEqual(out[2]["pmid"], "3")
+        self.assertEqual(out[3]["pmid"], "9")
+        self.assertEqual(results["summary"], "first [1].")
+        self.assertEqual(results["paragraphs"][0]["text"], "then [2, 1] and [e1].")
+        self.assertEqual(statements[0]["papers"], [2, 3])
+        self.assertEqual(statements[0]["beyond"][0]["paper"], 3)
+        self.assertNotIn("11", [p["pmid"] for p in out.values()], "an uncited paper stayed in the list")
+
+    def test_a_cited_paper_must_be_read_and_about_the_claim(self):
+        node = self.chain[0]["to"]
+        label = self.walker.label(node)
+        stmt = self.good_statement()
+        stmt["beyond"] = [{"claim": "%s is repressed by the upstream factor" % label, "paper": 3, "hypothesis": False}]
+        off_topic = {3: {"title": "A herbal extract and muscle", "abstract": "nothing about it"}}
+        self.assertTrue(any("without being read" in p for p in verify.verify_statement(stmt, self.walker, off_topic, set())))
+        self.assertTrue(any("does not mention" in p for p in verify.verify_statement(stmt, self.walker, off_topic, {3})))
+        on_topic = {3: {"title": "%s repression" % label, "abstract": ""}}
+        self.assertEqual([p for p in verify.verify_statement(stmt, self.walker, on_topic, {3}) if "[3]" in p], [])
+
+    def test_a_paragraph_keeps_its_statements_citations(self):
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        text = ("The walk began at %s, which read %s at the first point [e1]. " % (
+            self.walker.label(node), value)) * 12
+        results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1], "text": text}]}
+        problems = verify.verify_results(results, [{"n": 1, "papers": [2]}], [], self.walker)
+        self.assertTrue(any("drops [2]" in p for p in problems), problems)
+        results["paragraphs"][0]["text"] = text + "It is documented [2]."
+        self.assertFalse(any("drops" in p for p in verify.verify_results(results, [{"n": 1, "papers": [2]}], [],
+                                                                         self.walker)))
+
+    def test_a_connective_paragraph_that_quotes_a_value_is_pruned(self):
+        from src.classes.AIInterpret.walker import narrate
+        results = {"paragraphs": [{"from_statement": 1, "legs": [1], "text": "Aaa rose to +1.00 [1]."},
+                                  {"from_statement": None, "legs": [], "text": "The map draws that edge."},
+                                  {"from_statement": None, "legs": [], "text": "Bbb stood at +2.00."},
+                                  {"from_statement": None, "legs": [], "text": "As the literature shows [2]."}]}
+        self.assertEqual(narrate.prune_connectives(results), 2)
+        self.assertEqual([p["text"] for p in results["paragraphs"]],
+                         ["Aaa rose to +1.00 [1].", "The map draws that edge."])
+        self.assertIn("Exactly 5 paragraphs", narrate.BRIEF % (5, 4, 300, 900))
+
+    def test_a_sentence_with_a_misquoted_value_is_dropped_not_the_section(self):
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        results = {"summary": "It moved to +9.99. The walk began.", "paragraphs": [
+            {"from_statement": 1, "legs": [1], "text": "It read %s at the start [e1]. It then reached +9.99 at 6h." % value},
+            {"from_statement": 2, "legs": [2], "text": "Only +8.88 here."}]}
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker), 3)
+        self.assertEqual(results["summary"], "The walk began.")
+        self.assertEqual([p["text"] for p in results["paragraphs"]], ["It read %s at the start [e1]." % value])
+
+    def test_no_timing_word_on_an_unlabeled_layer(self):
+        walker = Walker(self.graph, self.ov, "KEGG:tst00001", params_for("pathway"))
+        walker.start_at("g:2", 5)
+        answer = walker.step("tst-miR-1", "miRNA-seq values rise across the columns", "the regulator")
+        self.assertNotIn("REFUSED", answer)
+        self.assertEqual(verify.timing_on_unlabeled("tst-miR-1 rose late over the time course.", walker),
+                         ["miR-1"])
+        # With or without the organism prefix: the walker's label and the layer
+        # text name the miRNA differently, and the model writes either.
+        self.assertEqual(verify.timing_on_unlabeled("The miRNA miR-1 peaked at c3.", walker), ["miR-1"])
+        # A timing word belongs to the node named nearest before it: the three
+        # statements a live walk lost gave the word to a gene, not the miRNA.
+        bbb = walker.label("g:2")
+        self.assertEqual(verify.timing_on_unlabeled(
+            "tst-miR-1 targets %s, which fell late in gene expression." % bbb, walker), [])
+        self.assertEqual(verify.timing_on_unlabeled(
+            "%s is partly baseline-elevated, and its neighbour miR-1 is up." % bbb, walker), [])
+        self.assertEqual(verify.timing_on_unlabeled("%s fell while miR-1 rose late." % bbb, walker), ["miR-1"])
+        self.assertEqual(verify.timing_on_unlabeled("Late in the series, miR-1 rose.", walker), ["miR-1"])
+        self.assertEqual(verify.timing_on_unlabeled("tst-miR-1 rose from c1 +0.40 to c3 +1.60.", walker), [])
+        self.assertEqual(verify.timing_on_unlabeled("Bbb fell late in gene expression.", walker), [])
+
+    def test_every_paper_a_statement_leans_on_is_read_and_on_topic(self):
+        label = self.walker.label(self.chain[0]["to"])
+        off_topic = {4: {"title": "An unrelated herbal extract", "abstract": "nothing"}}
+        on_topic = {4: {"title": "%s in muscle" % label, "abstract": ""}}
+        listed = dict(self.good_statement(), claim="%s is repressed [4]" % label, papers=[4])
+        in_words = dict(self.good_statement(), claim="%s is repressed" % label, prose="%s falls [4]." % label)
+        for stmt in (listed, in_words):
+            self.assertTrue(any("without being read" in p
+                                for p in verify.verify_statement(stmt, self.walker, off_topic, set())), stmt)
+            self.assertTrue(any("does not mention" in p
+                                for p in verify.verify_statement(stmt, self.walker, off_topic, {4})), stmt)
+            self.assertEqual([p for p in verify.verify_statement(stmt, self.walker, on_topic, {4}) if "[4]" in p], [])
+        unknown = dict(self.good_statement(), prose="as shown [8].")
+        self.assertTrue(any("[8] was never retrieved" in p for p in verify.verify_statement(unknown, self.walker, {}, set())))
+
+    def test_a_paragraph_cites_only_what_its_statement_cites(self):
+        from src.classes.AIInterpret.walker import record as record_mod
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        kept = [{"n": 1, "claim": "c", "prose": "p [1]", "papers": [1]}]
+        text = ("The walk began at %s, which read %s at the first point [e1] [1]. " % (
+            self.walker.label(node), value)) * 12
+        results = {"title": "t", "summary": "It moved [2].",
+                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": text + "It drives wasting [2]."}]}
+        problems = verify.verify_results(results, kept, [], self.walker)
+        self.assertTrue(any("cites [2], which its statement does not cite" in p for p in problems), problems)
+        self.assertTrue(any("summary cites [2]" in p for p in problems), problems)
+        self.assertEqual(verify.drop_uncited_sentences(results, kept), 2)
+        self.assertNotIn("[2]", results["paragraphs"][0]["text"] + results["summary"])
+        self.assertFalse(any("[2]" in p for p in verify.verify_results(results, kept, [], self.walker)))
+        papers = {1: {"pmid": "11"}, 2: {"pmid": "22"}}
+        self.assertEqual(sorted(record_mod.renumber_citations(kept, [], results, papers)), [1])
+
+    def test_model_shaped_garbage_is_an_objection_not_a_crash(self):
+        stmt = dict(self.good_statement(), papers=3, grounded_in=1, beyond="x", legs="1")
+        problems = verify.verify_statement(stmt, self.walker, {}, set())
+        for field in ("papers", "grounded_in", "beyond", "legs"):
+            self.assertTrue(any(field + " is not a list" in p for p in problems), (field, problems))
+        self.assertEqual(verify.statement_papers(stmt), [])
+        results = {"summary": "s", "paragraphs": ["Aaa rose.", {"from_statement": "S1", "legs": "e1", "text": "x"}]}
+        problems = verify.verify_results(results, [{"n": 1}], [], self.walker)
+        self.assertTrue(any("paragraph 1 is not an object" in p for p in problems), problems)
+        self.assertTrue(any("statement S1, which was not kept" in p for p in problems), problems)
+        from src.classes.AIInterpret.walker import narrate
+        self.assertEqual(narrate.prune_connectives(results), 0)
+        verify.drop_unrecorded_sentences(results, self.walker)
+        verify.drop_uncited_sentences(results, [{"n": 1}])
+
+    def test_an_unsigned_value_must_be_a_recorded_magnitude(self):
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]          # "+1.90" or "−0.35"
+        magnitude = value.lstrip("+−-")
+        results = {"summary": "", "paragraphs": [
+            {"from_statement": 1, "legs": [1], "text": "It changed by %s at the start [e1]. It rose to 9.99 at 6h." % magnitude}]}
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker), 1)
+        self.assertEqual(results["paragraphs"][0]["text"], "It changed by %s at the start [e1]." % magnitude)
+        self.assertEqual(verify.quoted_values("relevant when |value| > 1.00 or p < 0.05, within ±0.6"), [])
+        self.assertEqual(verify.quoted_values("it fell by 3.24 and rose to +2.13"), ["3.24", "+2.13"])
+
+    def test_a_dropped_statements_reason_names_papers_the_list_holds(self):
+        from src.classes.AIInterpret.walker import record as record_mod
+        papers = {3: {"pmid": "33"}, 7: {"pmid": "77"}}
+        kept = [{"n": 1, "claim": "c [3]", "prose": "p", "papers": [3]}]
+        dropped = [{"n": 2, "claim": "d", "why": "[7] does not mention Foxo1; [3] is fine; paper [9] was never retrieved"}]
+        out = record_mod.renumber_citations(kept, dropped, None, papers)
+        self.assertEqual(out, {1: {"pmid": "33"}})
+        self.assertEqual(dropped[0]["why"], "PMID 77 does not mention Foxo1; [1] is fine; paper [?] was never retrieved")
 
     def test_a_range_is_not_a_quoted_value(self):
         self.assertEqual(verify.NUMBER_RE.findall("peaks late (18-24h) and 0h-2h"), [])

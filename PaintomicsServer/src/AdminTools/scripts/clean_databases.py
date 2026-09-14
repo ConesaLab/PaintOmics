@@ -73,6 +73,7 @@ JOBID_INDEXES = [
     ('pathwaysCollection', "jobID"),
     ('foundFeaturesCollection', "jobID"),
     ('aiInterpretationCollection', "jobID"),
+    ('aiWalkCollection', [("jobID", 1), ("scope", 1)]),
 ]
 
 def cleanDatabases(force=False):
@@ -310,6 +311,8 @@ def removeJobByJobID(connection, user_id, job_id):
     # papers and the user's chat with the agent, which is to say the most
     # sensitive part of the job outliving the job itself.
     connection[MONGODB_DATABASE]['aiInterpretationCollection'].delete_many({"jobID": job_id})
+    # ...and its graph walks, which quote the same values and papers.
+    connection[MONGODB_DATABASE]['aiWalkCollection'].delete_many({"jobID": job_id})
     #STEP 6. REMOVE THE JOB FROM DATABASE
     connection[MONGODB_DATABASE]['jobInstanceCollection'].delete_many({"jobID": job_id})
     #STEP 7. REMOVE THE JOB DIRECTORY FROM USER DIR

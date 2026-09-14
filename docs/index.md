@@ -24,7 +24,7 @@ tool work.*
 | **Work across four pathway databases** | [KEGG](1_1_kegg.md), [Reactome](1_2_reactome.md), [MapMan](1_3_mapman.md) and the [OmniPath](1_6_omnipath.md) interaction network, in whatever combination is installed for your species. |
 | **See the whole time course on one diagram** | Each matched feature is drawn as one box per condition, so a trend is visible without leaving the map. |
 | **Go beyond enrichment** | A [pathway interaction network](4_3_pathways_network.md), a [metabolite hub analysis](4_4_metabolite_hub_analysis.md), a [metabolite class activity test](4_5_metabolite_class_activity_analysis.md) and [regulatory modelling with MORE](4_6_Regulatory_omics.md). |
-| **Ask the AI agent to read the result** | It queries your own values, searches the literature, checks every quotation it prints, and hands you a cited draft. See [What the AI does](ai-overview.md). |
+| **Let the AI agent walk the result** | It walks the KEGG, Reactome and OmniPath interactions with your values on them, and writes what the walk shows as a Results section whose every value, leg and citation is checked. See [What the AI does](ai-overview.md). |
 
 ## Start here
 

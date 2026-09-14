@@ -136,14 +136,6 @@ services:
       # "AI file conversion is not enabled on this server" after the sandbox
       # has already read their file.
       AI_INPUT_CONVERTER: ${AI_INPUT_CONVERTER:-false}
-      # The code defaults all three OFF (clusters.py and agent_loop.py read them
-      # as os.getenv(..., "0") == "1"), and paintomics.org turns all three ON in
-      # its .env. This block is an allowlist, so leaving them out does not mean
-      # "use the default" -- it means the operator's own 1s never reach the
-      # container and production silently runs the arm it did not choose.
-      AI_CLUSTER_MODE: ${AI_CLUSTER_MODE:-0}
-      AI_FULL_AGENT: ${AI_FULL_AGENT:-0}
-      AI_AGENT_RESULTS_SECTION: ${AI_AGENT_RESULTS_SECTION:-0}
     volumes:
       # Single volume for both trees. On the Drago VM the Docker root lives on
       # the 1 TiB Cinder volume mounted at /var/lib/docker, so this is backed

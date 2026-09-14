@@ -322,9 +322,9 @@ call against a multi-phase run with literature retrieval.
 
 | Setting | Shipped default | What it controls |
 |---|---|---|
-| `AI_INTERPRETATION_ENABLED` | `true` | The [pathway interpretation](ai-interpretation.md) itself, and the switch the compound suggestions also test. It does not gate the input converter |
+| `AI_INTERPRETATION_ENABLED` | `true` | The [interpretation](ai-interpretation.md) itself, and the switch the compound suggestions also test. It does not gate the input converter |
 | `AI_COMPOUND_SUGGESTIONS_ENABLED` | `true` | The **Choose for me** button on the Step 2 compound disambiguation card. The server refuses a suggestion run while it is off, but the button is drawn on `AI_INTERPRETATION_ENABLED` and a configured key alone — turning only this one off leaves a button that reports the refusal |
-| `AI_INPUT_CONVERTER` | `false` | The [AI input converter](ai-input-converter.md). It ships inert: it spends gateway quota shared with report generation, so a deployment opts in |
+| `AI_INPUT_CONVERTER` | `false` | The [AI input converter](ai-input-converter.md). It ships inert: it spends gateway quota shared with the interpretation, so a deployment opts in |
 | `AI_LLM_PROVIDER` | `csic` | Which entry of `AI_PROVIDERS` to use. `dashscope` and `openrouter` are also defined |
 | `AI_CSIC_API_BASE` | `https://llm.iiia.es/v1` | The endpoint. An OpenAI-compatible gateway run by IIIA-CSIC; tokens are self-service from `https://console.llm.iiia.es` |
 | `AI_CSIC_API_KEY` | empty — the secret | Without it every AI request fails |

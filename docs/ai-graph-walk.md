@@ -1,13 +1,22 @@
-# The agentic graph walk
+# How the walk works
 
-The pathway interpretation reads a ranked table. The graph walk reads a graph: an agent
-starts at the places where your relevant features cluster, moves along the pathway's own
-edges, reads your values at every stop against your experiment design, and hands the chain
-it walked to a writer that may cite nothing else.
+The interpretation is a graph walk: an agent starts at the places where your relevant
+features cluster, moves along edges the databases draw, reads your values at every stop
+against your experiment design, and hands the chain it walked to a writer that may cite
+nothing else. This page describes that machinery; [The interpretation](ai-interpretation.md)
+describes what you see.
 
-This page describes the engine that ships in this release: the command-line runner, its
-sealed record and its HTML report. The Step 4 column, the chat tool and the report-time
-walk come in the next release.
+The universal walk over the whole network is the job's interpretation: it is queued when
+Step 2 finishes and shown in the AI panel. A pathway walk runs from the **Walk** column of a
+Step 4 diagram. The chat can read the universal walk, or walk a few steps from a gene you
+name with no model at all.
+
+Walks run on the same queue as the analyses, so the server runs at most one fewer walk than
+it has workers, and one job holds at most two walks at a time; a walk over either limit is
+refused with the reason and can be started again once one finishes. On a job its owner shared
+read-only, anyone with the link can start a walk that has never run, but only the owner can
+walk again or change the design card. A walk whose AI service fails is stored as failed and
+offers **Try again**; a walk whose job is deleted stops at its next step and stores nothing.
 
 ## What is walked
 
@@ -18,8 +27,11 @@ database, its pathway and a sign (activation and expression positive, inhibition
 repression negative). On mouse the union is about 14,000 nodes and 131,000 edges once the job's miRNAs are added,
 builds in about three seconds, and is cached beside the KGML directory.
 
-A **pathway walk** uses that network filtered to one pathway's tag. A **universal walk**
-uses the whole network. Your job is laid over either: a node is *relevant* when any of its
+Reactome reactions join proteins, and their participants are mostly complexes and sets:
+a complex or a set is read as its member proteins, and a reaction whose expansion would join
+more than 36 pairs is skipped, because a large set says "in the same bag", not "one acts on
+the other". A **pathway walk** uses that network filtered to one pathway's tag. A
+**universal walk** uses the whole network. Your job is laid over either: a node is *relevant* when any of its
 own layers is in your relevant list, every layer's values travel as text with your own
 column labels, and miRNAs from a miRNA-seq input become nodes of their own with an edge to
 each gene they are attached to. **Your values are never computed on.** The only number the
@@ -34,7 +46,7 @@ The walker's first tool, `scan`, ranks nodes by heat. Over the whole graph it fl
 seed candidates: relevant nodes that are not next to a hotter candidate. Around the
 current position it ranks what lies one to three steps away. The walker then `plan`s its
 seeds and its step budget under a ceiling code sets (40 steps on a pathway, 120 on the
-network), and moves with `step` and `jump`, giving at every move a *reading*: one sentence on
+network, and at least three steps per seed on the network), and moves with `step` and `jump`, giving at every move a *reading*: one sentence on
 what the values it walks onto say in the design's terms. Code refuses a step to a node that is
 not a neighbour, a second pass over an edge in the same direction, and a reading that names
 no layer of the node. Every neighbour shown is logged as seen.
@@ -46,14 +58,20 @@ the nodes seen but not walked, and the walker's notes. It writes three to five s
 Each cites its evidence as node and layer, names the legs it rests on, and separates what
 the pathway already draws (cited as the leg, never searched) from what it builds on top
 (a direction against the drawn sign, a mechanism, a causal timing), which needs a paper
-found on PubMed or must be worded as a hypothesis. Code checks every citation, the relevance
+found on PubMed (in PubMed's best-match order, not newest first) and read before it is
+cited, whose title or abstract names the claim's genes, or must be worded as a hypothesis. The same read and topic
+checks apply to every paper a statement cites, in its papers list or in its own words. Code checks every citation, the relevance
 of every value used as evidence, and the grounding; a second model call checks direction,
 timing, contrast, layer agreement and literature; a statement that fails is rewritten once
 and then dropped, and every drop is listed with its reason.
 
 The Narrator then writes a Results section from the kept statements only, every sentence
-tagged with its statement and its legs. Code checks that every quoted value appears verbatim
-in the record. A story that fails twice is dropped and the statements stand alone.
+tagged with its statement and its legs. It sees only the papers the kept statements cite.
+Code checks that every quoted value appears in the record (a signed value verbatim, an
+unsigned one as the magnitude of a recorded value), that a paragraph keeps every citation its
+statement makes and cites nothing its statement does not, and drops the sentences that fail. A story that
+fails twice is dropped and the statements stand alone. The cited papers are then numbered
+1..n in the order the reader meets them; retrieved papers nothing cites are left out.
 
 ## Running it
 

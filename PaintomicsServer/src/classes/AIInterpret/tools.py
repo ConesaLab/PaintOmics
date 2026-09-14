@@ -2,16 +2,14 @@
 Tool definitions and executors for AI chat function-calling.
 
 Chat tools (for follow-up Q&A):
-  - get_gene_timecourse: all timepoint values for a single gene
+  - get_feature_values: a gene's values in every layer under the user's labels
   - get_pathway_genes: matched genes in a pathway (fuzzy name matching)
   - compare_genes: side-by-side comparison of multiple genes
-
-Verification tools (Phase 5 sub-agent):
-  - search_paper_text: keyword search within a paper's full text
-  - fetch_paper_section: retrieve a specific section of a paper
+  - walk: the job's universal graph walk, or a short walk from a named gene
 """
 import logging
-import re
+from src.classes.AIInterpret.walker.card import labels_by_omic
+from src.classes.AIInterpret.walker.overlay import values_text
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +20,12 @@ CHAT_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "get_gene_timecourse",
+            "name": "get_feature_values",
             "description": (
-                "Return all timepoint values for a gene across every omic layer, "
-                "including differential-expression status and timepoint labels."
+                "Return a gene's values in every omic layer under the user's own "
+                "column labels, with the relevant flag per layer. The design card "
+                "says what the columns are (time points, doses or groups); a layer "
+                "whose file had no header is reported as unlabeled."
             ),
             "parameters": {
                 "type": "object",
@@ -65,8 +65,8 @@ CHAT_TOOLS = [
         "function": {
             "name": "compare_genes",
             "description": (
-                "Return a side-by-side comparison of values for multiple genes "
-                "across all omic layers."
+                "Return the values of several genes side by side, in every omic "
+                "layer, under the user's own column labels."
             ),
             "parameters": {
                 "type": "object",
@@ -81,6 +81,35 @@ CHAT_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "walk",
+            "description": (
+                "Return this job's universal graph walk: a chain of steps over KEGG, "
+                "Reactome and OmniPath interaction edges with the user's values at "
+                "every node, the statements that passed their checks, and the "
+                "Results section. With gene_symbol, walk a few steps from that gene "
+                "instead, to its relevant neighbours with the most surprising "
+                "neighbourhoods, and read the values yourself; that walk uses no "
+                "model and cites no paper."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "gene_symbol": {
+                        "type": "string",
+                        "description": "A gene to walk from. Omit it to read the stored universal walk.",
+                    },
+                    "steps": {
+                        "type": "integer",
+                        "description": "Steps for a walk from a gene, 3 to 12 (default 8).",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -88,27 +117,9 @@ CHAT_TOOLS = [
 # ---------------------------------------------------------------------------
 
 def _build_header_map(job_instance):
-    """Map omicName -> list of simplified timepoint labels from omicHeader.
-
-    Reads getGeneBasedInputOmics(); for each omic, omicHeader[0] is the gene
-    ID column and omicHeader[1:] are the data column labels.  Labels are
-    simplified by extracting the part after the last underscore (e.g.
-    "treatment_0h" -> "0h").
-    """
-    header_map = {}
-    for omic in job_instance.getGeneBasedInputOmics():
-        omic_name = omic.get("omicName", "")
-        headers = omic.get("omicHeader")
-        if headers and isinstance(headers, list) and len(headers) > 1:
-            labels = []
-            for h in headers[1:]:
-                col_str = str(h).strip()
-                parts = col_str.rsplit("_", 1)
-                labels.append(parts[-1] if len(parts) == 2 and parts[-1] else col_str)
-            header_map[omic_name] = labels
-        else:
-            header_map[omic_name] = None
-    return header_map
+    """omic name -> the user's column labels (None for an omic whose file had
+    no header). The one reader every AI surface shares: see walker.card."""
+    return labels_by_omic(job_instance)
 
 
 def _find_gene_by_symbol(job_instance, symbol):
@@ -120,36 +131,24 @@ def _find_gene_by_symbol(job_instance, symbol):
     return None
 
 
-def _find_matching_labels(header_map, n):
-    """Find labels from another omic with matching length, else return None."""
-    for labels in header_map.values():
-        if labels and len(labels) == n:
-            return labels
-    return None
-
-
 def _format_gene_omics(gene_obj, header_map):
-    """Format all omic values for a gene into a readable string."""
+    """One line per omic layer: the relevant flag and the values under the
+    user's labels. An omic whose file had no header, or whose header does not
+    fit its values, prints numbered columns and says so; it never borrows the
+    labels of another omic, which is how the miRNA columns of a job used to be
+    called time points."""
     lines = []
     for ov in gene_obj.getOmicsValues():
         omic_name = ov.getOmicName()
-        relevant = ov.isRelevant()
-        values = ov.getValues() or []
+        values = list(ov.getValues() or [])
         labels = header_map.get(omic_name)
-
-        de_status = "DE" if relevant else "not DE"
-
-        if not labels or len(labels) != len(values):
-            # Borrow labels from another omic with the same length
-            labels = _find_matching_labels(header_map, len(values))
-
-        if labels:
-            pairs = [f"{lbl}={v:.3f}" for lbl, v in zip(labels, values)]
-            val_str = ", ".join(pairs)
-        else:
-            val_str = ", ".join(f"{v:.3f}" for v in values)
-
-        lines.append(f"  {omic_name} ({de_status}): [{val_str}]")
+        if labels and len(labels) != len(values):
+            labels = None
+        flag = "relevant" if ov.isRelevant() else "not relevant"
+        text = values_text(values, labels) or "no values"
+        if labels is None and values:
+            text += "  (columns unlabeled)"
+        lines.append(f"  {omic_name} ({flag}): {text}")
     return "\n".join(lines) if lines else "  (no omic data)"
 
 
@@ -157,7 +156,7 @@ def _format_gene_omics(gene_obj, header_map):
 # Executor functions — each takes (job_instance, args_dict) -> str
 # ---------------------------------------------------------------------------
 
-def _exec_get_gene_timecourse(job_instance, args):
+def _exec_get_feature_values(job_instance, args):
     symbol = args.get("gene_symbol", "").strip()
     if not symbol:
         return "Error: gene_symbol is required."
@@ -172,7 +171,8 @@ def _exec_get_gene_timecourse(job_instance, args):
 
     return (
         f"Gene: {gene_obj.getName()} (ID: {gene_id})\n"
-        f"Omic profiles:\n{omics_text}"
+        f"Values per layer, under the user's labels (the design card says what the columns are):\n"
+        f"{omics_text}"
     )
 
 
@@ -209,20 +209,19 @@ def _exec_get_pathway_genes(job_instance, args):
             if gene is None:
                 continue
             name = gene.getName() or gid
-            # Brief summary: first omic's values and DE status
+            # Brief summary: the first layer, under its own labels only
             omics = gene.getOmicsValues()
             if omics:
                 ov = omics[0]
-                vals = ov.getValues() or []
-                de = "DE" if ov.isRelevant() else "not DE"
+                vals = list(ov.getValues() or [])
+                flag = "relevant" if ov.isRelevant() else "not relevant"
                 labels = header_map.get(ov.getOmicName())
-                if not labels or len(labels) != len(vals):
-                    labels = _find_matching_labels(header_map, len(vals))
-                if labels:
-                    val_str = ", ".join(f"{l}={v:.3f}" for l, v in zip(labels, vals))
-                else:
-                    val_str = ", ".join(f"{v:.3f}" for v in vals)
-                gene_lines.append(f"  {name} ({de}): [{val_str}]")
+                if labels and len(labels) != len(vals):
+                    labels = None
+                val_str = values_text(vals, labels) or "no values"
+                if labels is None and vals:
+                    val_str += "  (columns unlabeled)"
+                gene_lines.append(f"  {name}, {ov.getOmicName()} ({flag}): {val_str}")
             else:
                 gene_lines.append(f"  {name}: (no data)")
 
@@ -256,13 +255,28 @@ def _exec_compare_genes(job_instance, args):
     return "\n\n".join(parts)
 
 
+def _exec_walk(job_instance, args):
+    """The stored universal walk, or a short scripted walk from a named gene."""
+    from src.classes.AIInterpret.walker import service as walk_service
+    symbol = str(args.get("gene_symbol") or "").strip()
+    if symbol:
+        return walk_service.quick_walk(job_instance, symbol, args.get("steps") or 8)
+    from src.common.DAO.AIWalkDAO import AIWalkDAO
+    dao = AIWalkDAO()
+    try:
+        return walk_service.stored_walk_text(dao.find(job_instance.getJobID(), "network"))
+    finally:
+        dao.closeConnection()
+
+
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
 _EXECUTORS = {
-    "get_gene_timecourse": _exec_get_gene_timecourse,
+    "get_feature_values": _exec_get_feature_values,
     "get_pathway_genes": _exec_get_pathway_genes,
     "compare_genes": _exec_compare_genes,
+    "walk": _exec_walk,
 }
 
 
@@ -276,121 +290,3 @@ def execute_tool(tool_name, job_instance, arguments):
     except Exception as e:
         logger.exception(f"Tool execution error ({tool_name})")
         return f"Error executing {tool_name}: {str(e)}"
-
-
-# ===========================================================================
-# Interpretation tools — Phase 3 sub-agent evidence extraction
-# ===========================================================================
-
-
-# ===========================================================================
-# Verification tools — Phase 5 citation verification sub-agents
-# ===========================================================================
-
-
-def build_verification_executor(paper_index):
-    """Factory: returns a tool executor callable(name, args) -> str for verification tools."""
-    def executor(tool_name, args):
-        if tool_name == "search_paper_text":
-            return _exec_search_paper_text(paper_index, args)
-        if tool_name == "fetch_paper_section":
-            return _exec_fetch_paper_section(paper_index, args)
-        return f"Error: unknown verification tool '{tool_name}'."
-    return executor
-
-
-def _exec_search_paper_text(paper_index, args):
-    """Substring + keyword-overlap search within a paper's full text.
-
-    Returns up to 3 matching passages with 200-char context windows.
-    """
-    ref_idx = args.get("ref_index")
-    query = args.get("query", "").strip()
-
-    if ref_idx is None or not query:
-        return "Error: ref_index and query are required."
-
-    paper = paper_index.get(int(ref_idx))
-    if not paper:
-        return f"Error: No paper with reference index [{ref_idx}]."
-
-    # Concatenate all available sections
-    sections = paper.get("sections", {})
-    full_text = "\n\n".join(
-        f"[{name.upper()}] {text}"
-        for name, text in sections.items()
-        if text
-    )
-    if not full_text:
-        return f"No text available for paper [{ref_idx}]."
-
-    full_text_lower = full_text.lower()
-    query_lower = query.lower()
-
-    # Strategy 1: Direct substring search
-    matches = []
-    start = 0
-    while len(matches) < 3:
-        idx = full_text_lower.find(query_lower, start)
-        if idx == -1:
-            break
-        context_start = max(0, idx - 100)
-        context_end = min(len(full_text), idx + len(query) + 100)
-        matches.append(full_text[context_start:context_end])
-        start = idx + len(query)
-
-    # Strategy 2: keyword overlap if no direct matches
-    if not matches:
-        keywords = set(re.findall(r'\b\w{4,}\b', query_lower))
-        if keywords:
-            # Sliding window search
-            sentences = re.split(r'(?<=[.!?])\s+', full_text)
-            scored = []
-            for sent in sentences:
-                sent_lower = sent.lower()
-                overlap = sum(1 for kw in keywords if kw in sent_lower)
-                if overlap >= max(1, len(keywords) // 2):
-                    scored.append((overlap, sent))
-            scored.sort(key=lambda x: -x[0])
-            matches = [s for _, s in scored[:3]]
-
-    if not matches:
-        return f"No passages matching '{query}' found in paper [{ref_idx}]."
-
-    result_parts = [f"Found {len(matches)} passage(s) in paper [{ref_idx}]:"]
-    for i, m in enumerate(matches, 1):
-        # Truncate long matches
-        if len(m) > 400:
-            m = m[:400] + "..."
-        result_parts.append(f"\n--- Passage {i} ---\n{m}")
-
-    return "\n".join(result_parts)
-
-
-def _exec_fetch_paper_section(paper_index, args):
-    """Fetch a specific section from a paper."""
-    ref_idx = args.get("ref_index")
-    section = args.get("section", "").strip().lower()
-
-    if ref_idx is None or not section:
-        return "Error: ref_index and section are required."
-
-    paper = paper_index.get(int(ref_idx))
-    if not paper:
-        return f"Error: No paper with reference index [{ref_idx}]."
-
-    valid_sections = {"abstract", "introduction", "results", "discussion", "other"}
-    if section not in valid_sections:
-        return f"Error: section must be one of {valid_sections}."
-
-    text = paper.get("sections", {}).get(section)
-    if not text:
-        available = [s for s in valid_sections if paper.get("sections", {}).get(s)]
-        return (f"Section '{section}' not available for paper [{ref_idx}]. "
-                f"Available: {available or 'none'}.")
-
-    # Truncate if very long for context management
-    if len(text) > 6000:
-        text = text[:6000] + "\n... [truncated]"
-
-    return f"[{section.upper()}] from paper [{ref_idx}]:\n{text}"

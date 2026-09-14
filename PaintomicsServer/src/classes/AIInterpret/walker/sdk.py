@@ -71,7 +71,7 @@ Every node carries layers: the user's values as text with their own column label
 
 Procedure:
 1. scan(scope="graph"), then plan(seeds, steps, reason): choose which seed candidates tell distinct stories and how many steps you need. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it.
-2. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. Name the layer and quote its numbers; every answer shows the layers of the relevant neighbours, so read them before you step. "Check whether..." is not a reading.
+2. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. A layer the card lists as unlabeled has columns c1..cN with no time or order: read its direction and size, not its timing. Name the layer and quote its numbers; every answer shows the layers of the relevant neighbours, so read them before you step. "Check whether..." is not a reading.
 3. Walk from a seed before leaving it: step to its relevant neighbours and read them. jump (to an unvisited seed or a chain node) only when the neighbourhood is exhausted; code refuses a jump while a relevant unvisited neighbour is still open. Use the steps you planned.
 4. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
 5. note what the Writer should not miss. stop when every chosen seed has been read and what is left repeats what the chain shows.
@@ -85,13 +85,17 @@ async def run_walk_async(walker, card_text, max_turns=60, model=None, temperatur
     agent = Agent[WalkContext](name="Walker", model=model or _model(), instructions=INSTRUCTIONS,
                                model_settings=ModelSettings(temperature=temperature),
                                tools=WALKER_TOOLS)
-    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. Ceiling %d steps; at most %d seeds.\n"
+    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. Ceiling %d steps; at most %d seeds; at least %d steps per seed.\n"
                "Begin with scan(scope=\"graph\")." % (
-                   card_text, walker.scope, walker.params["ceiling"], walker.params["max_seeds"]))
+                   card_text, walker.scope, walker.params["ceiling"], walker.params["max_seeds"],
+                   walker.params.get("steps_per_seed", 1)))
     try:
         await Runner.run(agent, kickoff, context=ctx, max_turns=max_turns)
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[walker] the model loop ended early: %s", exc)
+        # Kept so the service can tell a gateway that failed from a model that
+        # chose to stop: the first is an error the user can retry.
+        walker.loop_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
     if not walker.done:
         walker.stop("the model stopped calling tools", "loop ended without stop: %s"
                     % ("turns spent" if len(walker.turns) >= max_turns - 1 else "no tool call"))

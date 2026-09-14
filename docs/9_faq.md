@@ -202,7 +202,7 @@ In pieces, yes:
 | MORE's regulation-per-condition table, as TSV | **Download (TSV)** under that table |
 | The pathway enrichment table, as XLS | **Download as XLS**, at the right-hand end of that table's toolbar |
 
-The AI report has no export button; copy what you need out of it. Deletion is
+The AI interpretation has no export button; copy what you need out of it. Deletion is
 permanent and there is no archive, so
 take out whatever matters rather than relying on the job surviving.
 
@@ -248,12 +248,12 @@ server; nothing is lost, because the job itself lives there.
 
 ### Is my data sent anywhere?
 
-If AI interpretation is enabled — and it ships enabled — the agent starts on
-its own as soon as Step 2 finishes, and it sends pathway names and statistics,
-the names of your matched features, **the measured values with their condition
-labels** and your experiment description to the gateway named in section 2 of
-the upload form. Pathway and feature names also reach PubMed and Europe PMC
-when it searches. Your uploaded files are not sent as files, and unmatched
+If AI interpretation is enabled — and it ships enabled — the graph walk starts on
+its own as soon as Step 2 finishes, and it sends the names of the features it
+walks past, **their measured values with your column labels**, the pathways
+their interactions belong to and your experiment description to the gateway
+named in section 2 of the upload form. Gene names and biological terms also
+reach PubMed and Europe PMC when its writer searches. Your uploaded files are not sent as files, and unmatched
 features are not sent at all. Read [What the AI does](ai-overview.md) before
 you upload anything sensitive: there is no per-job opt-out on the form, so the
 control you have is what you put in the files and in the condition labels.

@@ -12,6 +12,115 @@ from __future__ import annotations
 import json
 import re
 
+# A column is a time point when its label carries a time token: a number with a
+# unit ("24h", "0.5 min", "Ikaros_24h_rep1") or a unit with a number ("T0",
+# "day7", "W2"). Letters on either side break the token, so "H2O2" is not one.
+TIME_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9.])(?:\d+(?:\.\d+)?\s*(?:h|hr|hrs|hour|hours|min|mins|minute|minutes|d|day|days|"
+    r"w|wk|wks|week|weeks|sec|secs|mo|month|months)|(?:t|tp|time|timepoint|day|d|week|wk|w|hour|hr|h|month)"
+    r"[\s_-]?\d+(?:\.\d+)?)(?![A-Za-z])", re.I)
+NUMBER_LABEL_RE = re.compile(r"^-?\d+(\.\d+)?\s*[a-zA-Zµ%/]*$")
+TIME_WORDS = ("time course", "time-course", "timecourse", "time point", "timepoint", "time series", "kinetic")
+
+
+def shorten_labels(header):
+    """The user's column labels from an input file's header, minus a prefix
+    every label shares (``Ikaros/Control_0h`` -> ``0h``); None when the file
+    carried no header. The job store turns a missing header into the STRING
+    "None", and anything that is not a list of column names is no header."""
+    if not isinstance(header, (list, tuple)) or len(header) < 2:
+        return None
+    labels = [str(h).strip() for h in header[1:]]
+    prefix = labels[0]
+    for label in labels[1:]:
+        while prefix and not label.startswith(prefix):
+            prefix = prefix[:-1]
+    cut = max(prefix.rfind("_"), prefix.rfind("/"), prefix.rfind(" "))
+    if cut > 0 and all(len(label) > cut + 1 for label in labels):
+        labels = [label[cut + 1:] for label in labels]
+    return labels
+
+
+def labels_by_omic(job_instance):
+    """omic name -> the user's labels, or None for an omic whose file had no
+    header. Every reader of the job's values goes through this, so the chat,
+    the report and the walk print the same labels and never borrow another
+    omic's."""
+    labels = {}
+    for getter in ("getGeneBasedInputOmics", "getCompoundBasedInputOmics"):
+        try:
+            omics = getattr(job_instance, getter)() or []
+        except Exception:                                      # noqa: BLE001
+            omics = []
+        for omic in omics:
+            name = omic.get("omicName") if isinstance(omic, dict) else None
+            if name:
+                labels[name] = shorten_labels(omic.get("omicHeader"))
+    return labels
+
+
+def axis_kind(labels, design_text=""):
+    """What the columns are, read from the labels and the design text:
+    "time" (every label of a labeled omic is a time point, or the design says
+    time course and the labels are numbers), "ordered" (numbers: doses,
+    concentrations), "groups" (anything else: conditions by name),
+    "unlabeled" (no omic carries a header). Only "time" and "ordered" allow
+    talk of trajectories, peaks and early or late responses."""
+    labeled = [l for l in (labels or {}).values() if l]
+    if not labeled:
+        return "unlabeled"
+    text = str(design_text or "").lower()
+    says_time = any(word in text for word in TIME_WORDS)
+    all_time = all(all(TIME_TOKEN_RE.search(x) for x in l) for l in labeled)
+    all_numbers = all(all(NUMBER_LABEL_RE.match(x) for x in l) for l in labeled)
+    if all_time or (says_time and all_numbers):
+        return "time"
+    if all_numbers:
+        return "ordered"
+    return "groups"
+
+
+def job_card(job_instance):
+    """The deterministic card for a stored job: the design text's first
+    sentence, the value type if the text names it, the axis, the labels, and
+    which omics are unlabeled. No model call; cheap enough for every request."""
+    labels = labels_by_omic(job_instance)
+    try:
+        design_text = job_instance.getExperimentDesign() or ""
+    except Exception:                                          # noqa: BLE001
+        design_text = ""
+    conditions = []
+    try:
+        conditions = list(getattr(job_instance, "conditionNames", None) or [])
+    except TypeError:
+        conditions = []
+    card = deterministic_card(design_text, conditions, labels)
+    card["axis_kind"] = axis_kind(labels, design_text)
+    card["labels"] = labels
+    card["unlabeled"] = sorted(name for name, l in labels.items() if not l)
+    return card
+
+
+def card_lines(card):
+    """The card as the lines every prompt carries."""
+    kind = card.get("axis_kind", "groups")
+    meaning = {"time": "the columns are time points in order",
+               "ordered": "the columns are ordered values (doses or concentrations)",
+               "groups": "the columns are conditions or groups; they have no order",
+               "unlabeled": "no omic carries column labels"}[kind]
+    lines = ["Design card:",
+             "- perturbation: %s" % card.get("perturbation", "not stated"),
+             "- a value is: %s" % card.get("value", "as given"),
+             "- axis: %s (%s)" % (card.get("axis", "not stated"), meaning),
+             "- baseline: %s" % card.get("baseline", "not stated"),
+             "- relevant means: %s" % card.get("relevant", "not stated"),
+             "- columns: %s" % card.get("columns", "")]
+    if card.get("unlabeled"):
+        lines.append("- no timing or order claims on: %s (their columns are unlabeled)"
+                     % ", ".join(card["unlabeled"]))
+    return lines
+
+
 CARD_SCHEMA = {
     "type": "object",
     "properties": {

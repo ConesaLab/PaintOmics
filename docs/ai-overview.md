@@ -8,7 +8,7 @@ one can be switched off independently by whoever runs the server.
 |---|---|---|
 | **[Input conversion](ai-input-converter.md)** | Step 1, on a file you pick | Turns a file that is not in PaintOmics' format — a DESeq2 table, a MaxQuant output, a multi-sheet workbook — into one that is, in your browser, and shows you the script it used. |
 | **[Compound disambiguation](8_step_by_step.md#compound-disambiguation)** | Step 2, **Choose for me** | Picks the most likely KEGG compound for each ambiguous metabolite name, using your organism and your experiment description. |
-| **[Pathway interpretation](ai-interpretation.md)** | Step 3, **AI Interpret** | Reads your results and the literature and writes a cited draft of what they mean. |
+| **[Interpretation](ai-interpretation.md)** | Step 3, **AI Interpret**; Step 4, **Walk** | Walks the KEGG, Reactome and OmniPath interactions with your values on them and writes a checked, cited Results section of what the walk shows. |
 
 ## The rules they all follow
 
@@ -18,16 +18,12 @@ IIIA-CSIC, the Artificial Intelligence Research Institute of the Spanish
 National Research Council, on hardware in Spain — and the **Where your data
 goes** link opens a full statement of what leaves the server. Read it once, and
 read this alongside it, because on one point the interface is narrower than the
-code: pathway names, p-values, feature names and **the measured values with
-their condition labels** are sent to the model, together with your experiment
-description.
-
-That is not limited to the pathways being interpreted. The agent can ask for the
-values of any gene it can name **anywhere in your upload**, including genes in
-pathways that never reached significance — the tool exists precisely so it
-cannot write about a gene whose value it has not seen. What is never sent is
-your uploaded files as files, features that failed to map to any identifier, and
-anything about your account.
+code: feature names and **the measured values with their column labels** of
+every node the walk reaches or shows are sent to the model, together with your
+experiment description, and the chat can ask for the values of any gene it can
+name **anywhere in your upload**. What is never sent is your uploaded files as
+files, features that failed to map to any identifier, and anything about your
+account.
 
 Searches also reach NCBI PubMed and Europe PMC. The query is composed by the
 model, not assembled from a fixed template, and the prompt it composes from
@@ -36,19 +32,20 @@ may reach a third-party search API, not only the gateway.
 
 **The model never grades its own work.** Every AI output is checked by
 something deterministic before you see it. A converted file must pass the same
-format validator your own upload would; a claim in the report that cites a
-paper must quote a sentence that actually appears in that paper, or the claim
-is removed and the citations renumbered.
+format validator your own upload would. In the interpretation, every quoted
+value must match your upload, every leg must be an interaction a database
+draws, and every cited paper must have been retrieved and read and must name
+the genes of the claim; a statement that fails is rewritten once and then
+dropped.
 
-**Nothing is presented as fact.** Every report ends with the line *"Drafted by
+**Nothing is presented as fact.** Every interpretation ends with the line *"Drafted by
 a large language model, not by a person. Check every claim and every citation
 against the sources before relying on it."* — inside the same block as the
 text, so copying the write-up copies the attribution.
 
 **Its work is inspectable.** The converter shows the Python it wrote and the
-validator's verdict; the interpretation shows the tool calls it is making as it
-works, and prints the verbatim sentence behind each citation together with
-whether it came from an abstract or a full text.
+validator's verdict; the interpretation lists the legs as the agent walks them,
+and shows every leg, statement and dropped statement with its reason.
 
 ## What is on by default
 
@@ -57,7 +54,7 @@ running.
 
 | Setting | Ships as | Controls |
 |---|---|---|
-| `AI_INTERPRETATION_ENABLED` | **on** | The report, the follow-up chat, the per-pathway drill-down and **Draft this for me**. |
+| `AI_INTERPRETATION_ENABLED` | **on** | The interpretation, the follow-up chat, the Step 4 **Walk** column and **Draft this for me**. |
 | `AI_COMPOUND_SUGGESTIONS_ENABLED` | **on** | Step 2's **Choose for me**. Needs `AI_INTERPRETATION_ENABLED` as well. |
 | `AI_INPUT_CONVERTER` | **off** | The input converter. It ships inert because it spends the same gateway quota as the reports. |
 
@@ -70,7 +67,7 @@ states](ai-interpretation.md#when-it-does-not-work).
     There is no consent checkbox on the form. Submitting a job through the
     upload form records consent for that job, and the server re-checks it on
     every request that would send anything outward — starting the
-    interpretation, a follow-up question, a per-pathway drill-down. A job whose
+    interpretation, a follow-up question, a pathway walk. A job whose
     record says otherwise is refused. What replaces the checkbox is the
     **Where your data goes** statement, shown before you submit rather than
     buried in a tick-box.

@@ -112,9 +112,10 @@ from src.servlets.AIInterpretServlet import (
     aiGenerateExpDesign,
     aiInterpretChat,
     aiInterpretInitiate,
-    aiInterpretPathway,
     aiInterpretReport,
     aiInterpretStatus,
+    aiWalkStart,
+    aiWalkStatus,
     getAIProviderInfo,
 )
 from src.common.UserSessionManager import UserSessionManager
@@ -834,7 +835,7 @@ class Application(object):
 
         @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_status', methods=['OPTIONS', 'POST'])
         def aiInterpretStatusHandler():
-            return aiInterpretStatus(request, Response()).getResponse()
+            return aiInterpretStatus(request, Response(), self.queue).getResponse()
 
         @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_report', methods=['OPTIONS', 'POST'])
         def aiInterpretReportHandler():
@@ -844,9 +845,14 @@ class Application(object):
         def aiInterpretChatHandler():
             return aiInterpretChat(request, Response()).getResponse()
 
-        @self.app.route(SERVER_SUBDOMAIN + '/ai_interpret_pathway', methods=['OPTIONS', 'POST'])
-        def aiInterpretPathwayHandler():
-            return aiInterpretPathway(request, Response()).getResponse()
+        # Agentic Graph Walk: filed on the queue, polled for progress.
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_walk_start', methods=['OPTIONS', 'POST'])
+        def aiWalkStartHandler():
+            return aiWalkStart(request, Response(), self.queue).getResponse()
+
+        @self.app.route(SERVER_SUBDOMAIN + '/ai_walk_status', methods=['OPTIONS', 'POST'])
+        def aiWalkStatusHandler():
+            return aiWalkStatus(request, Response(), self.queue).getResponse()
 
         # Who receives the data, answered before the user consents rather than
         # after the feature breaks. Until this existed, the only string in the
