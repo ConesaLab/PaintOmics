@@ -75,6 +75,8 @@ def values_text(values, labels):
             number = float(v)
         except (TypeError, ValueError):
             continue
+        if number != number:            # NaN marks an unmeasured cell, not a reading
+            continue
         label = labels[i] if labels and i < len(labels) else "c%d" % (i + 1)
         out.append("%s %s%.2f" % (label, "+" if number >= 0 else "−", abs(number)))
     return " · ".join(out)

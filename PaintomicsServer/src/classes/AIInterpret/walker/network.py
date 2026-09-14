@@ -336,15 +336,22 @@ def build_network(organism, data_dir, mongo_db=None):
     return net
 
 
+SOURCE_PATTERNS = ("kgml/*.kgml", "reactome/*.graph.json", "mapping/uniprot2kegg.list",
+                   "pathways.list", "ReactomePathway.txt", "mapping/kegg2genesymbol.list",
+                   "mapping/reactome/NCBI2Reactome.txt")
+
+
 def _signature(org_dir):
-    """Names and sizes of the source files, hashed: a changed install rebuilds."""
+    """Name, size and modification time of every file the build reads, hashed:
+    a changed install rebuilds, a same-size edit included."""
     digest = hashlib.sha1()
-    for pattern in ("kgml/*.kgml", "reactome/*.graph.json", "mapping/uniprot2kegg.list"):
+    for pattern in SOURCE_PATTERNS:
         for path in sorted(glob.glob(os.path.join(org_dir, pattern))):
             try:
-                digest.update(("%s:%d" % (os.path.basename(path), os.path.getsize(path))).encode())
+                stat = os.stat(path)
             except OSError:
                 continue
+            digest.update(("%s:%d:%d" % (os.path.basename(path), stat.st_size, int(stat.st_mtime))).encode())
     return digest.hexdigest()[:16]
 
 

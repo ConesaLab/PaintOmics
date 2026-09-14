@@ -105,6 +105,35 @@ class WalkerEngineTest(unittest.TestCase):
                 self.assertLessEqual(h["heat"], ceiling + 0.3, node_id)
         self.assertGreater(ov.heat["g:1"]["heat"], ov.heat["g:3"]["heat"])
 
+    def test_vectorised_heat_matches_the_per_node_test(self):
+        from scipy.stats import hypergeom
+        graph, ov = self.fresh()
+        N = ov.N
+        K = ov.K
+        for node_id, h in ov.heat.items():
+            nb = graph.neighbours(node_id)
+            n = sum(1 for w in nb if w in ov.measured)
+            x = sum(1 for w in nb if w in ov.measured and ov.r.get(w))
+            n_total = N - (1 if node_id in ov.measured else 0)
+            k_total = K - (1 if (node_id in ov.measured and ov.r.get(node_id)) else 0)
+            p = float(hypergeom.sf(x - 1, n_total, k_total, n)) if n else 1.0
+            self.assertEqual((h["n"], h["x"], h["degree"]), (n, x, len(nb)), node_id)
+            self.assertAlmostEqual(h["p"], p, places=12, msg=node_id)
+
+    def test_a_nan_value_is_unmeasured_not_a_negative_reading(self):
+        self.assertEqual(ov_mod.values_text([float("nan"), 1.5, "x", None], ["0h", "2h", "6h", "12h"]), "2h +1.50")
+
+    def test_the_signature_sees_every_file_the_build_reads(self):
+        data_dir = fx.make_data_dir()
+        try:
+            org = os.path.join(data_dir, "current", "tst")
+            before = net_mod._signature(org)
+            with open(os.path.join(org, "pathways.list"), "a") as handle:
+                handle.write("path:tst00003\tA third pathway - Test organism (tst)\n")
+            self.assertNotEqual(before, net_mod._signature(org))
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
     def test_graph_scan_flags_non_adjacent_candidates(self):
         graph, ov = self.fresh()
         rows = heat_mod.scan_graph(graph, ov, sep=1, limit=12)

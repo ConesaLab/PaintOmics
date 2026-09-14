@@ -118,7 +118,15 @@ def rewrite_once(client, card_text, chain, failing, verdicts):
         return {}
     if not isinstance(out, dict):
         return {}
-    return {int(s["n"]): s for s in out.get("statements") or [] if isinstance(s, dict) and "n" in s}
+    rewritten = {}
+    for stmt in out.get("statements") or []:
+        if not isinstance(stmt, dict) or "n" not in stmt:
+            continue
+        try:
+            rewritten[int(stmt["n"])] = stmt
+        except (TypeError, ValueError):
+            continue
+    return rewritten
 
 
 def run(job_id, scope, policy="greedy", out_dir=None, data_dir=None, writer=True, max_turns=60, use_mongo=True):

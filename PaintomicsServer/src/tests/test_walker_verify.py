@@ -105,6 +105,15 @@ class WalkerVerifyTest(unittest.TestCase):
         html_page = report.render(rec, self.graph)
         self.assertIn("Seen, not walked", html_page)
 
+    def test_a_rewrite_with_a_bad_n_is_skipped_not_fatal(self):
+        from src.classes.AIInterpret.walker import cli
+
+        class _Client(object):
+            def complete_json(self, *args, **kwargs):
+                return {"statements": [{"n": "one", "claim": "x"}, {"n": 2, "claim": "y"}, "junk", {"claim": "no n"}]}
+        out = cli.rewrite_once(_Client(), "card", "chain", [{"n": 2, "claim": "y"}], {2: {}})
+        self.assertEqual(list(out), [2])
+
     def test_statement_count(self):
         out, problem = verify.verify_statements([self.good_statement()], self.walker, {})
         self.assertIn("1 statements", problem)

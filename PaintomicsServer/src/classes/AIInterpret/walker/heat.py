@@ -8,7 +8,6 @@ it has. Computed once per overlay; both scans only select and rank.
 """
 from __future__ import annotations
 
-import math
 from collections import deque
 
 import numpy as np
@@ -16,24 +15,42 @@ from scipy.stats import hypergeom
 
 
 def compute_heat(network, measured, relevant):
-    """{node: {n, x, p, heat, degree}} for every node of the network."""
-    N = len(measured)
-    K = sum(1 for v in measured if relevant.get(v))
-    out = {}
-    for node_id in network.nodes:
-        nb = network.neighbours(node_id)
-        n = sum(1 for w in nb if w in measured)
-        x = sum(1 for w in nb if w in measured and relevant.get(w))
-        n_total = N - (1 if node_id in measured else 0)
-        k_total = K - (1 if (node_id in measured and relevant.get(node_id)) else 0)
-        if n > 0 and n_total > 0:
-            p = float(hypergeom.sf(x - 1, n_total, k_total, n))
-        else:
-            p = 1.0
-        out[node_id] = {"n": n, "x": x, "p": p,
-                        "heat": -math.log10(max(p, 1e-300)) if n else 0.0,
-                        "degree": len(nb)}
-    return out
+    """{node: {n, x, p, heat, degree}} for every node of the network.
+
+    Neighbour counts are gathered in one pass over the adjacency; the
+    hypergeometric tail is one vectorised SciPy call over every node, not one
+    call per node (the planted-module grid recomputes heat hundreds of times).
+    """
+    ids = list(network.nodes)
+    index = {v: i for i, v in enumerate(ids)}
+    meas = np.zeros(len(ids), dtype=bool)
+    rel = np.zeros(len(ids), dtype=bool)
+    for v in measured:
+        i = index.get(v)
+        if i is not None:
+            meas[i] = True
+            rel[i] = bool(relevant.get(v))
+    n = np.zeros(len(ids), dtype=np.int64)
+    x = np.zeros(len(ids), dtype=np.int64)
+    degree = np.zeros(len(ids), dtype=np.int64)
+    for i, v in enumerate(ids):
+        nb = [index[w] for w in network.neighbours(v) if w in index]
+        degree[i] = len(nb)
+        if nb:
+            m = meas[nb]
+            n[i] = int(m.sum())
+            x[i] = int((m & rel[nb]).sum())
+    N = int(meas.sum())
+    K = int(rel.sum())
+    n_total = N - meas.astype(np.int64)
+    k_total = K - (meas & rel).astype(np.int64)
+    p = np.ones(len(ids))
+    live = (n > 0) & (n_total > 0)
+    if live.any():
+        p[live] = hypergeom.sf(x[live] - 1, n_total[live], k_total[live], n[live])
+    heat = np.where(n > 0, -np.log10(np.maximum(p, 1e-300)), 0.0)
+    return {v: {"n": int(n[i]), "x": int(x[i]), "p": float(p[i]), "heat": float(heat[i]),
+                "degree": int(degree[i])} for i, v in enumerate(ids)}
 
 
 def degree_cap(heat, percentile=99):

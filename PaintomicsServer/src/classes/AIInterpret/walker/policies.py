@@ -16,17 +16,29 @@ def _pick_greedy(rows):
     return None
 
 
-def greedy(walker, seeds=None, steps=None, per_seed=None):
-    """Run a whole walk. ``seeds`` and ``steps`` default to every candidate
-    (up to max_seeds) and to 5 steps per seed within the ceiling."""
+def _scan_and_plan(walker, seeds, steps, reason):
+    """The opening every scripted policy shares: scan the graph, default the
+    seeds to every candidate (up to max_seeds) and the steps to five per seed
+    within the ceiling, stop when there is nothing to seed, else plan.
+    Returns (seeds, steps), or None when the walk stopped."""
     walker.scan("graph")
     candidates = [r["id"] for r in walker.ranked if r["candidate"]]
     seeds = list(seeds or candidates[:walker.params["max_seeds"]])
     if not seeds:
         walker.stop("no seed candidate: nothing relevant with a measured neighbour", "no seed candidate")
-        return walker
+        return None
     steps = int(steps or min(walker.params["ceiling"], max(walker.params["min_steps"], 5 * len(seeds))))
-    walker.plan_walk(seeds, steps, "greedy policy: the hottest candidates, five steps each")
+    walker.plan_walk(seeds, steps, reason)
+    return seeds, steps
+
+
+def greedy(walker, seeds=None, steps=None, per_seed=None):
+    """Run a whole walk. ``seeds`` and ``steps`` default to every candidate
+    (up to max_seeds) and to 5 steps per seed within the ceiling."""
+    planned = _scan_and_plan(walker, seeds, steps, "greedy policy: the hottest candidates, five steps each")
+    if planned is None:
+        return walker
+    seeds, steps = planned
     per_seed = per_seed or max(1, steps // len(seeds))
     here = 0
     while not walker.done:
@@ -50,14 +62,10 @@ def greedy(walker, seeds=None, steps=None, per_seed=None):
 def random_walk(walker, seeds=None, steps=None, rng=None):
     """A random legal step each turn, the same plan as greedy would take."""
     rng = rng or random.Random(0)
-    walker.scan("graph")
-    candidates = [r["id"] for r in walker.ranked if r["candidate"]]
-    seeds = list(seeds or candidates[:walker.params["max_seeds"]])
-    if not seeds:
-        walker.stop("no seed candidate", "no seed candidate")
+    planned = _scan_and_plan(walker, seeds, steps, "random policy")
+    if planned is None:
         return walker
-    steps = int(steps or min(walker.params["ceiling"], max(walker.params["min_steps"], 5 * len(seeds))))
-    walker.plan_walk(seeds, steps, "random policy")
+    seeds, steps = planned
     while not walker.done:
         rows = [r for r in walker.neighbour_rows() if r["open"] and r["r"] is not None]
         if rows and walker.budget["steps"] > 0:
