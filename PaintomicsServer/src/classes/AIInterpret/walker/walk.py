@@ -26,7 +26,8 @@ NOTE_MAX_CHARS = 400
 SCAN_RADII = (1, 2, 3)
 
 
-def _sign_glyph(sign):
+def sign_glyph(sign):
+    """+, − or ? for an edge sign; the one definition every module prints."""
     return "+" if sign > 0 else ("−" if sign < 0 else "?")
 
 
@@ -156,7 +157,7 @@ class Walker:
         shown = rows[:self.params["names_shown"]]
         names = " · ".join("%s r=%s %.2f [%s%s%s]" % (
             row["label"], "—" if row["r"] is None else row["r"], row["heat"],
-            _sign_glyph(row["sign"]), "" if row["open"] else ", closed",
+            sign_glyph(row["sign"]), "" if row["open"] else ", closed",
             ", walked" if row["visited"] else "") for row in shown)
         more = "" if len(rows) <= len(shown) else " · %d more" % (len(rows) - len(shown))
         # The layers of the relevant open neighbours, so a reading can quote a
@@ -307,7 +308,7 @@ class Walker:
         self.visited.add(target)
         head = "e%d · %s → %s · %s · %s · %s %s · %s the arrow" % (
             leg.n, self.label(leg.src), self.label(leg.dst), edge["db"], edge["name"],
-            edge["subtype"] or "edge", _sign_glyph(edge["sign"]), edge["dir"])
+            edge["subtype"] or "edge", sign_glyph(edge["sign"]), edge["dir"])
         return self._log("step", args, head + "\n" + self._show_node())
 
     def jump(self, to, reading, reason=""):

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from agents import Agent, ModelSettings, RunContextWrapper, Runner, function_tool
 
 from src.classes.AIInterpret.agent import _model
+from src.classes.AIInterpret.walker.errors import tool_failure
 from src.classes.AIInterpret.walker.walk import Walker
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,7 @@ class WalkContext:
 
 
 def _fail(name):
-    """The SDK swallows a raising tool into a generic error; say which tool."""
-    def handler(ctx, error):
-        logger.warning("[walker] tool %s raised: %s", name, error)
-        return "TOOL ERROR in %s: %s. Try again with different arguments." % (name, error)
-    return handler
+    return tool_failure("walker", name, "Try again with different arguments.")
 
 
 @function_tool(name_override="scan", failure_error_function=_fail("scan"))

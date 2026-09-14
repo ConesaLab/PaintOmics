@@ -226,6 +226,43 @@ class WalkerEngineTest(unittest.TestCase):
         self.assertEqual(runs[0], runs[1])
         self.assertTrue(runs[0])
 
+    def test_a_policy_returns_the_walker_when_nothing_is_relevant(self):
+        graph, ov = self.fresh()
+        for node_id in list(ov.r):
+            ov.r[node_id] = False
+        ov.K = 0
+        ov.heat = heat_mod.compute_heat(graph, ov.measured, ov.r)
+        for policy in (policies.greedy, policies.random_walk):
+            w = policy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
+            self.assertIsInstance(w, Walker)
+            self.assertTrue(w.done)
+            self.assertEqual(w.plan, None)
+            self.assertEqual(w.record()["chain"], [])
+
+    def test_the_cache_never_serves_an_omnipath_free_graph_to_a_caller_with_mongo(self):
+        data_dir = fx.make_data_dir()
+        try:
+            without = net_mod.load_or_build("tst", data_dir)                        # no Mongo: cached
+            self.assertEqual(without.sources.get("omnipath"), 0)
+            self.assertNotIn(("g:1", "g:2"), {k for k, e in without.edges.items() if "OmniPath:opneTestPathway" in e["tags"]})
+            with_db = net_mod.load_or_build("tst", data_dir, fx.FakeMongo(fx.OMNIPATH_DOCS))   # must rebuild
+            self.assertEqual(with_db.sources.get("omnipath"), 1)
+            self.assertIn("OmniPath:opneTestPathway", with_db.edges[("g:1", "g:2")]["tags"])
+            again = net_mod.load_or_build("tst", data_dir, fx.FakeMongo(fx.OMNIPATH_DOCS))     # now cached
+            self.assertEqual(again.sources.get("omnipath"), 1)
+            self.assertEqual(net_mod.load_or_build("tst", data_dir, fx.FakeMongo([])).sources.get("omnipath"), 1)
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+        data_dir = fx.make_data_dir()
+        try:
+            empty = net_mod.load_or_build("tst", data_dir, fx.FakeMongo([]))       # asked, got nothing: not cached
+            self.assertEqual(empty.sources.get("omnipath"), 0)
+            self.assertFalse(os.path.exists(os.path.join(
+                data_dir, "current", "tst", "universal_network.v%d.json.gz" % net_mod.CACHE_VERSION)))
+            self.assertEqual(net_mod.load_or_build("tst", data_dir, fx.FakeMongo(fx.OMNIPATH_DOCS)).sources.get("omnipath"), 1)
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
     def test_random_policy_stays_legal(self):
         graph, ov = self.fresh()
         w = policies.random_walk(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))

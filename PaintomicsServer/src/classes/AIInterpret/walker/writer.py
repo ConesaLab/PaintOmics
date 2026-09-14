@@ -14,6 +14,8 @@ from agents import Agent, ModelSettings, RunContextWrapper, Runner, function_too
 
 from src.classes.AIInterpret.agent import _model
 from src.classes.AIInterpret.walker import verify
+from src.classes.AIInterpret.walker.errors import tool_failure
+from src.classes.AIInterpret.walker.walk import sign_glyph
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +39,7 @@ class WriterContext:
 
 
 def _fail(name):
-    def handler(ctx, error):
-        logger.warning("[writer] tool %s raised: %s", name, error)
-        return "TOOL ERROR in %s: %s." % (name, error)
-    return handler
+    return tool_failure("writer", name)
 
 
 def _paper_line(ref, paper):
@@ -174,7 +173,7 @@ def chain_text(walker):
             e = leg["edge"]
             lines.append("e%d · %s → %s · %s · %s · %s %s · %s the arrow" % (
                 leg["n"], walker.label(leg["from"]), walker.label(leg["to"]), e["db"], e["name"],
-                e["subtype"] or "edge", "+" if e["sign"] > 0 else ("−" if e["sign"] < 0 else "?"), e["dir"]))
+                e["subtype"] or "edge", sign_glyph(e["sign"]), e["dir"]))
         else:
             lines.append("J%d · jump → %s" % (leg["n"], walker.label(leg["to"])))
         lines.append("   reading: %s" % leg["reading"])

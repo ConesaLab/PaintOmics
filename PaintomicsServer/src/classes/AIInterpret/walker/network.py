@@ -59,6 +59,7 @@ class Network(object):
         self.pathway_names = {}
         self.uniprot_to_kegg = {}
         self.symbol_to_kegg = {}
+        self.sources = {}                  # pathways read per source, set by build_network
         self._adjacency = None
 
     # ---- construction -------------------------------------------------
@@ -141,6 +142,7 @@ class Network(object):
             "pathway_names": self.pathway_names,
             "uniprot_to_kegg": self.uniprot_to_kegg,
             "symbol_to_kegg": self.symbol_to_kegg,
+            "sources": self.sources,
             "nodes": self.nodes,
             "edges": [[a, b, e["sign"], e["subtype"], e["tags"]]
                       for (a, b), e in self.edges.items()],
@@ -152,6 +154,7 @@ class Network(object):
         net.pathway_names = data.get("pathway_names", {})
         net.uniprot_to_kegg = data.get("uniprot_to_kegg", {})
         net.symbol_to_kegg = data.get("symbol_to_kegg", {})
+        net.sources = data.get("sources", {})
         net.nodes = data["nodes"]
         for a, b, sign, subtype, tags in data["edges"]:
             net.edges[(a, b)] = {"sign": sign, "subtype": subtype, "tags": list(tags)}
@@ -323,13 +326,13 @@ def build_network(organism, data_dir, mongo_db=None):
     k2sym = _read_symbol_map(os.path.join(org_dir, "mapping", "kegg2genesymbol.list"),
                              os.path.join(org_dir, "mapping", "reactome", "NCBI2Reactome.txt"))
     net.symbol_to_kegg = {sym.upper(): kegg for kegg, sym in k2sym.items()}
-    counts = {
+    net.sources = {
         "kegg": _add_kegg(net, org_dir, k2sym),
         "reactome": _add_reactome(net, org_dir, net.uniprot_to_kegg, k2sym),
         "omnipath": _add_omnipath(net, mongo_db, net.uniprot_to_kegg, k2sym),
     }
     logger.info("[walker] network %s: %d nodes, %d edges from %s", organism,
-                len(net.nodes), len(net.edges), counts)
+                len(net.nodes), len(net.edges), net.sources)
     return net
 
 
@@ -346,7 +349,13 @@ def _signature(org_dir):
 
 
 def load_or_build(organism, data_dir, mongo_db=None, cache_dir=None):
-    """The cached network when its signature matches the install, else a rebuild."""
+    """The cached network when its signature matches the install, else a rebuild.
+
+    The file signature cannot see Mongo, so a graph built without the OmniPath
+    collection is never served to a caller that has it: the cache records how
+    many OmniPath pathways it holds, a caller with Mongo rejects a cache with
+    none, and a build that was asked for OmniPath and got nothing is not cached.
+    """
     org_dir = os.path.join(data_dir, "current", organism)
     cache_dir = cache_dir or org_dir
     signature = _signature(org_dir)
@@ -354,11 +363,15 @@ def load_or_build(organism, data_dir, mongo_db=None, cache_dir=None):
     try:
         with gzip.open(cache_path, "rt", encoding="utf-8") as handle:
             data = json.load(handle)
-        if data.get("signature") == signature:
+        cached_omnipath = (data.get("sources") or {}).get("omnipath", 0)
+        if data.get("signature") == signature and (mongo_db is None or cached_omnipath > 0):
             return Network.from_dict(data)
     except (OSError, ValueError, KeyError):
         pass
     net = build_network(organism, data_dir, mongo_db)
+    if mongo_db is not None and not net.sources.get("omnipath"):
+        logger.warning("[walker] OmniPath was requested but read nothing; not caching this build")
+        return net
     try:
         os.makedirs(cache_dir, exist_ok=True)
         data = net.to_dict()

@@ -77,6 +77,34 @@ class WalkerVerifyTest(unittest.TestCase):
         stmt["prose"] += ", not relevant"
         self.assertEqual([p for p in verify.verify_statement(stmt, self.walker, {}) if "non-relevant" in p], [])
 
+    def test_paper_refs_from_a_model_are_coerced_not_trusted(self):
+        self.assertEqual(verify.paper_ref(3), 3)
+        self.assertEqual(verify.paper_ref("3"), 3)
+        self.assertEqual(verify.paper_ref("[3]"), 3)
+        self.assertIsNone(verify.paper_ref(None))
+        self.assertIsNone(verify.paper_ref("abc"))
+        self.assertIsNone(verify.paper_ref(True))
+        stmt = self.good_statement()
+        stmt["papers"] = ["[3]"]
+        self.assertEqual([p for p in verify.verify_statement(stmt, self.walker, {3: {}}) if "paper" in p], [])
+        stmt["papers"] = ["abc"]
+        problems = verify.verify_statement(stmt, self.walker, {3: {}})              # no exception
+        self.assertTrue(any("never retrieved" in p for p in problems))
+        stmt["papers"] = []
+        stmt["beyond"] = [{"claim": "x", "paper": "[3]", "hypothesis": False}]
+        self.assertEqual([p for p in verify.verify_statement(stmt, self.walker, {3: {}}) if "beyond" in p], [])
+
+    def test_region_scene_keeps_the_seen_nodes_measured(self):
+        from src.classes.AIInterpret.walker import record as record_mod
+        from src.classes.AIInterpret.walker import report
+        rec = record_mod.seal("job", "KEGG:tst00001", self.graph, self.ov, self.walker, {}, [], [], None, {},
+                              "none", {})
+        svg, size = report.region_scene(rec, self.graph)
+        self.assertIn("<svg", svg)
+        self.assertNotIn("#e6e8eb", svg)      # every node of this graph is measured; none may draw as unmeasured
+        html_page = report.render(rec, self.graph)
+        self.assertIn("Seen, not walked", html_page)
+
     def test_statement_count(self):
         out, problem = verify.verify_statements([self.good_statement()], self.walker, {})
         self.assertIn("1 statements", problem)

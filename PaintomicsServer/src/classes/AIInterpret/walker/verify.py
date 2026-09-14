@@ -73,16 +73,27 @@ def verify_statement(stmt, walker, papers):
         if not isinstance(beyond, dict):
             problems.append("a beyond entry is not an object")
             continue
-        paper = beyond.get("paper")
         if beyond.get("hypothesis"):
             continue
-        if paper is None or int(paper) not in papers:
+        ref = paper_ref(beyond.get("paper"))
+        if ref is None or ref not in papers:
             problems.append("beyond claim %r has neither a retrieved paper nor the hypothesis flag"
                             % str(beyond.get("claim", ""))[:60])
     for paper in stmt.get("papers") or []:
-        if int(paper) not in papers:
+        ref = paper_ref(paper)
+        if ref is None or ref not in papers:
             problems.append("paper [%s] was never retrieved" % paper)
     return problems
+
+
+def paper_ref(value):
+    """A model-supplied paper reference as an int: 3, "3" or "[3]"; None otherwise."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    match = re.fullmatch(r"\s*\[?\s*(\d+)\s*\]?\s*", str(value or ""))
+    return int(match.group(1)) if match else None
 
 
 def verify_statements(statements, walker, papers):

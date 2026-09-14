@@ -142,3 +142,21 @@ def make_job():
         "6": FakeFeature("6", [FakeOmicValue(ge, "Fff", False, [0.0, 0.0, 0.1])]),
     }
     return FakeJob(genes)
+
+
+class FakeMongo(object):
+    """``db["omnipath_network"].find(...)`` over the documents given."""
+
+    def __init__(self, docs):
+        self._docs = docs
+
+    def __getitem__(self, name):
+        docs = self._docs if name == "omnipath_network" else []
+
+        class _Coll(object):
+            def find(self, *args, **kwargs):
+                return list(docs)
+        return _Coll()
+
+
+OMNIPATH_DOCS = [{"ID": "opneTestPathway", "edges": [["P00001", "P00002", "stimulation"]]}]

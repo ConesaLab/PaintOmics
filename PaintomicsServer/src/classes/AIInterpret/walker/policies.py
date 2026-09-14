@@ -23,8 +23,8 @@ def greedy(walker, seeds=None, steps=None, per_seed=None):
     candidates = [r["id"] for r in walker.ranked if r["candidate"]]
     seeds = list(seeds or candidates[:walker.params["max_seeds"]])
     if not seeds:
-        return walker.stop("no seed candidate: nothing relevant with a measured neighbour",
-                           "no seed candidate")
+        walker.stop("no seed candidate: nothing relevant with a measured neighbour", "no seed candidate")
+        return walker
     steps = int(steps or min(walker.params["ceiling"], max(walker.params["min_steps"], 5 * len(seeds))))
     walker.plan_walk(seeds, steps, "greedy policy: the hottest candidates, five steps each")
     per_seed = per_seed or max(1, steps // len(seeds))
@@ -54,7 +54,8 @@ def random_walk(walker, seeds=None, steps=None, rng=None):
     candidates = [r["id"] for r in walker.ranked if r["candidate"]]
     seeds = list(seeds or candidates[:walker.params["max_seeds"]])
     if not seeds:
-        return walker.stop("no seed candidate", "no seed candidate")
+        walker.stop("no seed candidate", "no seed candidate")
+        return walker
     steps = int(steps or min(walker.params["ceiling"], max(walker.params["min_steps"], 5 * len(seeds))))
     walker.plan_walk(seeds, steps, "random policy")
     while not walker.done:

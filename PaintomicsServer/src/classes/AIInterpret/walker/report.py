@@ -15,6 +15,8 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
+from src.classes.AIInterpret.walker.walk import sign_glyph
+
 TEAL, AMBER, GREY, RED = "#2E7D6E", "#C8642F", "#8a8f98", "#A33B2B"
 DBC = {"KEGG": TEAL, "Reactome": "#1F6FB2", "OmniPath": "#8A5FB2", "job": AMBER}
 
@@ -222,7 +224,8 @@ def region_scene(record, network=None, width=900, height=560):
     seeds = (walk.get("plan") or {}).get("seeds") or []
     rvals = {v: nodes.get(v, {}).get("r") for v in region}
     for row in walk.get("seen", []):
-        rvals.setdefault(row["id"], row["r"])
+        if rvals.get(row["id"]) is None:
+            rvals[row["id"]] = row["r"]
     parts = ['<svg viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg" style="width:100%%;height:auto;display:block;background:#fbfcfc">' % (width, height),
              '<defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">'
              '<path d="M0,0 L10,5 L0,10 z" fill="%s"/></marker></defs>' % TEAL]
@@ -353,7 +356,7 @@ def render(record, network=None, kgml_path=None, png_path=None):
         move = "%s → %s<div class='why'>%s</div>" % (
             esc(record["nodes"].get(leg["from"], {}).get("label", leg["from"])), esc(record["nodes"].get(leg["to"], {}).get("label", leg["to"])),
             esc("%s · %s · %s %s · %s" % (e.get("db"), e.get("name"), e.get("subtype") or "edge",
-                                          "+" if e.get("sign", 0) > 0 else ("−" if e.get("sign", 0) < 0 else "?"), e.get("dir"))) if e else "jump")
+                                          sign_glyph(e.get("sign") or 0), e.get("dir"))) if e else "jump")
         p.append("<tr><td><span class='leg %s'>%s</span></td><td>%s</td><td><div class='rd'>reads: %s</div><div class='why'>%s</div></td></tr>" % (
             "" if leg["kind"] == "step" else "j", leg["n"] if leg["kind"] == "step" else "J%d" % leg["n"], move, esc(leg["reading"]), esc(leg["reason"])))
     p.append("</table><div class='why'>stop: %s · %s</div></div>" % (esc(walk.get("stop_reason")), esc(walk.get("stop_reading"))))
