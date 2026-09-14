@@ -186,7 +186,6 @@ function MainView() {
 	this.showSignInDialog = function () {
 		var loggedIn = Ext.util.Cookies.get("userID") !== null;
 
-		//var noLogin = Ext.util.Cookies.get("nologin") !== null;
 		if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
 			var noLogin = true;
 		} else {
@@ -209,7 +208,6 @@ function MainView() {
 		sessionInfoBar.getComponent().updateLoginState();
 
 		var loggedIn = Ext.util.Cookies.get("userID") !== null;
-		//var noLogin = Ext.util.Cookies.get("nologin") !== null;
 		if (Ext.util.Cookies.get("nologin") == null && loggedIn !== true) {
 			var noLogin = true;
 		} else {
@@ -368,7 +366,6 @@ function MainView() {
 				xtype: 'container', itemId: 'mainViewCenterPanel', id: 'mainViewCenterPanel',
 				flex: 1, region: 'center', overflowY: "auto", style: "background-color:#f3f3f3;",
 				defaults: {border: 0},
-				// layout: {type: 'vbox', pack: 'start', align: 'stretch'},
 				items: []
 			}],
 			listeners: {
@@ -406,7 +403,6 @@ function MainView() {
 					me.watchHeaderFit();
 					me.initThemeToggle();
 
-					//TODO: AQUI
 					if (Ext.util.Cookies.get("silence") != null) {
 						console.log("Message already shown, ignoring.");
 					} else {

@@ -25,7 +25,6 @@
 * - PA_OmicSummaryPanel
 *
 */
-//Ext.require('Ext.chart.*');
 
 /**
 * Normalises the "mapped" slot of an omic summary (omicSummary[0]) into a
@@ -2283,7 +2282,6 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 					// branch filled it in; these three used to be implicit globals.
 					var mappedFeatures, mappedInfo, added_info;
 
-					// if (me.dataDistribution[1] !== -1 && me.dataDistribution[0] !== -1) {
 					if (! isCompoundOmic) {
 						// Mapped features can differ between used databases
 						mappedInfo = me.dataDistribution[0];
@@ -2339,21 +2337,7 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 
 					//   0        1       2    3    4    5     6,   7   8      9        10
 					//[MAPPED, UNMAPPED, MIN, P10, Q1, MEDIAN, Q3, P90, MAX, MIN_IR, Max_IR]
-					//TODO REVISAR...
-					//                    var yAxisMin = Math.floor(me.dataDistribution[9]) ;
-					//                    var yAxisMax = Math.floor(me.dataDistribution[10]) + 0.5;
-					//                    debugger;
 
-
-					// TODO: leave this prepared in case it's needed in the frontpage
-					// Ext.create('Ext.slider.MultiCustom', {
-					// 		 renderTo: "customvalues_" + divName + '_summary',
-					// 		 name: "customslider_" + me.omicName,
-					// 		 width: 240,
-					// 		 minValue: me.dataDistribution[2],
-					// 		 maxValue: me.dataDistribution[8],
-					// 		 customValues: [me.dataDistribution[2], me.dataDistribution[8]]
-					//  });
 
 					$('#' + divName + 'data_dstribution_plot').highcharts({
 						chart: {

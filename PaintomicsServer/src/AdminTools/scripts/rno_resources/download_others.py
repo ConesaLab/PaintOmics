@@ -42,11 +42,6 @@ try:
     resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("uniprot")[0]
     COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),  SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
 
-    #**************************************************************************
-    #STEP 2.4 GET ENSEMBL VEGA GENE ID -> TRANSCRIPT ID -> PEPTIDE ID -> ENTREZ ID
-    # resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("vega")[0]
-    # COMMON_BUILD_DB_TOOLS.downloadEnsemblMapping(resource, DESTINATION + resource.get("output"), SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-
 except Exception as ex:
     stderr.write("FAILED WHILE DOWNLOADING DATA " + str(ex))
     traceback.print_exc(file=stderr)

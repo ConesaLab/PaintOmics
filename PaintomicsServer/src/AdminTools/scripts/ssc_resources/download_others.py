@@ -10,10 +10,6 @@ import imp
 # DO NOT CHANGE THIS CODE
 #**************************************************************************
 
-#SPECIE = 'mmu'
-#ROOT_DIR = '/home/tian/paintomics/paintomics4/PaintomicsServer/src/AdminTools/'
-#DESTINATION = "/home/tian/mmu"
-
 
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools

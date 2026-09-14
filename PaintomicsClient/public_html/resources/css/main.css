@@ -2303,12 +2303,6 @@ input, textarea {
 /********************************************************************************
 **Message dialog styles
 *********************************************************************************/
-/* #powerTip is gone with it. jQuery PowerTip creates that element itself, so
-   the rule was correct in principle - but index.html never loads
-   js/libs/powertip/jquery.powertip.min.js, and nothing else references it, so
-   the plugin never runs and the element is never made. Tooltips in this
-   application come from ExtJS qtips and from tooltipster. */
-
 .fieldSet {
 	display: inline-flex;
 	height: 45px;
@@ -5583,59 +5577,12 @@ div.omicSelection div.omicPosition + div {
 /***********************************************************/
 
 
-/**STYLES FOR help tips ************************************/
-
-
 /***********************************************************/
-
-/* Both of these drew their icon from a PNG that is in neither the repository
-   nor the deployed image - `help_12x12.png` and `warning_12x12.png` have been
-   missing long enough that no build or deploy ever had them.
-
-   Neither rule reaches a user today, so this is latent rather than live.
-   `.formfieldHelpTip` is emitted only by resources/help/helpTips.js, which
-   index.html does not load and nothing else references or injects; a rendered
-   page contains no element with the class at all. `.warningTip` has no callers
-   in the tree either.
-
-   Fixed rather than deleted because the failure is in the reference, not the
-   rule: FontAwesome is loaded globally and is already how this stylesheet draws
-   checkbox and radio marks, so the glyphs need no file on disk and both work if
-   either is ever wired up. */
-.formfieldHelpTip {
-	cursor: help;
-}
-.formfieldHelpTip::before,
-.warningTip::before {
-	display: inline-block;
-	font-family: FontAwesome;
-	font-style: normal;
-	font-weight: normal;
-	line-height: 1;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-}
-.formfieldHelpTip::before {
-	content: "\f059";  /* question-circle */
-	color: var(--pa-ink-muted);
-}
-.warningTip {
-	line-height: 19px;
-	font-style: italic;
-	/* Was rgb(163,163,163), which is 2.3:1 on white - below the 4.5:1 the rest
-	   of this palette was retuned to, and a warning is the last thing that
-	   should be the hardest text on the page to read. */
-	color: var(--pa-ink-muted);
-}
-.warningTip::before {
-	content: "\f071";  /* exclamation-triangle */
-	margin-right: 5px;
-}
+/**STYLES FOR tips ******************************************/
+/***********************************************************/
 .x-tip-body {
 	font-size: 12px;
 }
-
-/*.icon-help{background-image:url(../images/info_16x16.png) !important;background-repeat:no-repeat;background-position:center;}*/
 
 
 /***********************************************************/
@@ -8110,7 +8057,7 @@ div.contentbox h2.po-omics-col-title {
    Two problems, one fix. Neptune paints its default button with a four-stop
    vertical gradient plus a GIF fallback, which is the single most dated surface
    left in the app; and its #3892d3 fill carries white at 3.38:1, the last
-   open WCAG failure from entry 2 of proposed-changes.md, deferred at the time
+   open WCAG failure recorded against the client, deferred at the time
    precisely because the fill could not be changed without also owning the
    hover, focus, pressed and disabled states. This owns all of them.
 

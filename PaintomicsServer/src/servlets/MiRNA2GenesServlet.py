@@ -205,10 +205,6 @@ def fromMiRNAtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formField
         fileNames=jobInstance.fromMiRNA2Genes()
         # Updata jobInstance
 
-        #for dic in jobInstance.geneBasedInputOmics:
-        #    if dic['omicName'] == 'Transcriptomics data':
-        #        dic['relevantAssociationsFile'] = fileNames[2]
-
         logging.info("STEP1 - Executing MiRNA2Gene function... DONE")
 
         #************************************************************************

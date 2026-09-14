@@ -711,7 +711,6 @@ Ext.define('Ext.upload.ItemGridPanel', {
         }
 
         var itemStatus = item.getStatus();
-        // debug.log('[' + item.getStatus() + '] [' + record.get('status') + ']');
         if (itemStatus != record.get('status')) {
             this.scrollIntoView(record);
             record.set('status', item.getStatus());
@@ -831,7 +830,6 @@ Ext.define('Ext.upload.StatusBar', {
  */
 Ext.define('Ext.upload.Queue', {
     extend: 'Ext.util.MixedCollection',
-//    requires: ['Ext.upload.Item'],
     /**
      * Constructor.
      *

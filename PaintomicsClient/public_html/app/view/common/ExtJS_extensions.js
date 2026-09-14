@@ -124,7 +124,6 @@ Ext.define('Ext.grid.column.ActionCustom', {
                 }
             }
         }
-        // return me.callParent(arguments);
     }
 });
 
@@ -153,7 +152,6 @@ Ext.define('Ext.grid.LiveSearchGridPanel', {
         listeners: {
             refresh: function (view) {
                 initializeTooltips(".helpTip");
-//                initializeTooltips(".customactioncolumn > .x-action-col-icon");
             }
         }},
     regExpProtect: /\\|\/|\+|\\|\.|\[|\]|\{|\}|\?|\$|\*|\^|\|/gm, // detects regexp reserved word
@@ -1050,16 +1048,6 @@ Ext.applyIf(Ext.draw.Component.prototype, {
         }
         return me;
     },
-//    multiplePan: function(movements) {
-//        var me = this;
-//        var dir, dist;
-//        for (var i in movements) {
-//            dir = movements[i][0];
-//            dist = movements[i][1];
-//            this.pan(dir, dist);
-//        }
-//        return me;
-//    },
     drag: function (distX, distY) {
         var me = this;
         if (distX < 0) {
@@ -1578,7 +1566,6 @@ Ext.dom.Element.override((function () {
  * @class Ext.dom.Element
  */
 Ext.define('Ext.slider.MultiCustom', {
-    // extend: 'Ext.form.FieldContainer',
     extend: 'Ext.panel.Panel',
     alias: 'widget.multicustomslider',
     layout:  {
@@ -1590,14 +1577,9 @@ Ext.define('Ext.slider.MultiCustom', {
     style: 'margin: 10px auto;',
 
     config: {
-      // dataCallback: null,
-      // dataOmic: null,
-      // dataValues: null,
       minValue: 0,
       maxValue: 0,
       customValues: [0, 0]
-      // idMinValue: null,
-      // idMaxValue: null
     },
 
     initComponent: function() {
@@ -1628,12 +1610,8 @@ Ext.define('Ext.slider.MultiCustom', {
           },
           {
               xtype: 'numberfield',
-              // hideTrigger: true,
-              // flex: 0.25,
-              // style: 'margin-right:10px',
               width: 50,
               name: 'minvalue',
-              // cls: 'unstyled',
               value: this.customValues[0],
               minValue: this.minValue,
               maxValue: this.customValues[1],
@@ -1663,21 +1641,13 @@ Ext.define('Ext.slider.MultiCustom', {
                       this.up('panel').down('hiddenfield[name="' + me.id + "_customMinValue" + '"]').setValue(newValues[0]);
                       this.up('panel').down('hiddenfield[name="' + me.id + "_customMaxValue" + '"]').setValue(newValues[1]);
 
-                      // me.dataValues.splice(11, 2, ...newValues);
-
-                      // Callback must point to setDataDistributionSummaries(newDistribution, omicName)
-                      // me.dataCallback(me.dataValues, me.dataOmic);
                   }
               }
           },
           {
               xtype: 'numberfield',
-              // hideTrigger: true,
-              // flex: 0.25,
-              // style: 'margin-left:10px',
               width: 50,
               name: 'maxvalue',
-              // cls: 'unstyled',
               value: this.customValues[1],
               minValue: this.customValues[0],
               maxValue: this.maxValue,

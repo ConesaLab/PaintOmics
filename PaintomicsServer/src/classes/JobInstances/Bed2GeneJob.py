@@ -67,20 +67,6 @@ class Bed2GeneJob(Job):
         self.summarizationMethod  = "mean"
         self.reportRegions        = ["all"]
 
-    # def getOptions(self, scriptLocation, gtfFile, dataFile, tmpFile):
-    #     return [
-    #         scriptLocation,
-    #         "-r", self.report,
-    #         "-q", str(self.distance),
-    #         "-t", str(self.tss),
-    #         "-p", str(self.promoter),
-    #         "-v", str(self.geneAreaPercentage),
-    #         "-w", str(self.regionAreaPercentage),
-    #         "-G", self.geneIDtag,
-    #         "-g", gtfFile,
-    #         "-b", dataFile,
-    #         "-o", tmpFile,
-    #     ]
     def getOptions(self):
         """Build the options dict for DHS_exon_association.run().
 
@@ -646,7 +632,5 @@ class Bed2GeneJob(Job):
             return [{'max': selectedRegions[indices[0]]}]
         else:
             return dictSelectedRegions
-
-
 
 

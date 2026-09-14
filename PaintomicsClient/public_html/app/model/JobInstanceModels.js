@@ -138,19 +138,6 @@ function JobInstance(jobID) {
 		return this.classes;
 	}
 
-	//this.getClass = function (classID) {
-	//	for (var i in this.classes) {
-	//		if (classID == this.classes[i].getID()) {
-	//			return this.classes[i];
-	//		}
-	//	}
-	//	return null;
-	//};
-
-	//this.addClass = function (classID) {
-	//	this.classes.push(classID);
-	//};
-
 
 
 	this.setPathways = function (pathways) {
@@ -173,7 +160,6 @@ function JobInstance(jobID) {
 		return null;
 	};
 	this.addPathway = function (pathway) {
-		//TODO: CHECK CLASSES?
 		this.pathways.push(pathway);
 	};
     this.getOmicNames = function() {
@@ -283,7 +269,6 @@ function JobInstance(jobID) {
 		return this.foundCompounds;
 	};
 	this.addFoundCompound = function (compoundSet) {
-		//TODO: CHECK CLASSES?
 		this.foundCompounds.push(compoundSet);
 	};
 	this.getOmicHeaders = function(omicName = null, mode = null) {
@@ -600,7 +585,6 @@ function JobInstance(jobID) {
 					});
 					return null;
 				}
-				//TODO: SAVE SUMMARY AS DICT??
 				this.dataDistributionSummaries[omicsAux[i].omicName] = omicsAux[i].omicSummary;
 			}
 			omicsAux = this.getCompoundBasedInputOmics();
@@ -614,7 +598,6 @@ function JobInstance(jobID) {
 					});
 					return null;
 				}
-				//TODO: SAVE SUMMARY AS DICT??
 				this.dataDistributionSummaries[omicsAux[i].omicName] = omicsAux[i].omicSummary;
 			}
 		}

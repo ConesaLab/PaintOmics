@@ -217,7 +217,6 @@ function SessionInfoBar() {
                         var text = (loggedIn == true) ? Ext.util.Cookies.get("userName") : "Please Sign In";
                         this.queryById('buttonSessionOptions').setText(text);
                         this.queryById('signInButton').setVisible(loggedIn !== true);
-//                        this.queryById('myDataButton').setVisible(loggedIn === true);
                         this.queryById('signOutButton').setVisible(loggedIn === true);
                         $(".loggedOption").css("display", (loggedIn == true) ? "block" : "none");
                     }

@@ -54,10 +54,6 @@ try:
 
     #*************************************************************************
 
-    #resource = COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("reactome")[0]
-    #COMMON_BUILD_DB_TOOLS.downloadFile(resource.get("url"), resource.get("file"), DESTINATION + resource.get("output"),
-    #                                   SERVER_SETTINGS.DOWNLOAD_DELAY_1, SERVER_SETTINGS.MAX_TRIES_1)
-
 except Exception as ex:
     stderr.write("FAILED WHILE DOWNLOADING DATA " + str(ex))
     traceback.print_exc(file=stderr)

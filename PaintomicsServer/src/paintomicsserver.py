@@ -123,7 +123,6 @@ from src.common.KeggInformationManager import KeggInformationManager
 from src.common.JobInformationManager import JobInformationManager
 
 
-
 def revalidateEntryDocument(response):
     """Stop index.html being served from cache without revalidating.
 
@@ -304,9 +303,6 @@ class Application(object):
                     filename_cleaned = sub("[^0-9]", "", split_name[0]) if source_type is None else split_name[0]
 
 
-                #logging.info( "Name is: " + str( KEGG_DATA_DIR ) + str( source_dir ) + '/png/thumbnails/',
-                #                  str( filename_prefix ) + str( filename_cleaned ) + '_thumb.png' )
-
                 if str(filename).endswith("_thumb"):
                     return send_from_directory(KEGG_DATA_DIR + source_dir + '/png/thumbnails/', filename_prefix + filename_cleaned + '_thumb.png')
                 else:
@@ -453,7 +449,6 @@ class Application(object):
         #******************************************************************************************
 
 
-
         #******************************************************************************************
         #     ______ _____ _      ______  _____
         #   |  ____|_   _| |    |  ____|/ ____|
@@ -576,8 +571,6 @@ class Application(object):
         #*******************************************************************************************
         ##* DATA MANIPULATION SERVLETS HANDLERS - END
         #*******************************************************************************************
-
-
 
 
         #*******************************************************************************************
@@ -968,7 +961,6 @@ class Application(object):
             response = Response()
             response.setContent({"success": False})
             return response.getResponse()
-            #return adminServletDeleteOrganism(request, Response(), organism_code, self.ROOT_DIRECTORY).getResponse()
 
         ##*******************************************************************************************
         ##* MONITOR THE USAGE OF RAM AND CPU
@@ -1092,8 +1084,6 @@ class Application(object):
         #PREPARE LOGGING
         configureLogging(self.ROOT_DIRECTORY + 'conf/logging.cfg')
 
-        #self.app.config['MAX_CONTENT_LENGTH'] = SERVER_MAX_CONTENT_LENGTH * pow(1024, 2)
-
     def ensureIndexes(self):
         # Idempotent and near-free when the indexes exist. Until now they were
         # created only by the 24h cron, so a fresh deployment scanned
@@ -1144,7 +1134,6 @@ class Application(object):
         # Explicitly kick off the background thread
         cron.start()
 
-        #@cron.interval_schedule(seconds=1)
         def scheludeTask():
             cleanDatabases(force=True)
             clearFailedData()
@@ -1210,9 +1199,6 @@ class Response(object):
     def setStatus(self, status):
         self.status=status
         return self
-    def getStatus(self):
-        return self.status
-
     def setContentType(self, content_type):
         self.content_type=content_type
         return self

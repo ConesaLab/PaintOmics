@@ -130,7 +130,7 @@ def test_the_live_archive_holds_no_stub_runs():
             continue
     assert not bad, (
         "%d stub/test run(s) are in the live measurement corpus, which every "
-        "round in docs/ai-agent-benchmark.md is scored from: %s"
+        "round in docs/dev/ai-agent-benchmark.md is scored from: %s"
         % (len(bad), ", ".join(sorted(bad)[:8])))
 
 

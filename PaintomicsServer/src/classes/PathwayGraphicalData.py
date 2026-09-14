@@ -37,8 +37,6 @@ class PathwayGraphicalData(Model):
     #******************************************************************************************************************
     # GETTERS AND SETTER
     #******************************************************************************************************************
-    def getVisibleOmics(self):
-        return  self.visibleOmics
     def setVisibleOmics(self, visibleOmics):
         self.visibleOmics = visibleOmics
     def getFeaturesGraphicalData(self):
@@ -51,16 +49,6 @@ class PathwayGraphicalData(Model):
     def setImageSize(self, size):
         self.imageWidth = size[0]
         self.imageHeight = size[1]
-
-    def setImageWidth(self, imageWidth):
-        self.imageWidth = imageWidth
-    def getImageWidth(self):
-        return self.imageWidth
-
-    def setImageHeight(self, imageHeight):
-        self.imageHeight = imageHeight
-    def getImageHeight(self):
-        return self.imageHeight
 
     #******************************************************************************************************************
     # OTHER FUNCTIONS

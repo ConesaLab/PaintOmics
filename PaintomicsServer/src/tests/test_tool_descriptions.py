@@ -103,7 +103,6 @@ def test_the_lead_prompt_does_not_contradict_itself_about_checking_citations():
         "contradiction arose: %s" % (len(mentions), mentions))
 
 
-
 # Prompts that are defined but used nowhere. The two V2 prompts that sat here
 # since March 2026 were deleted in the dead-code pass (reports/deadcode.md);
 # a new orphan goes in here only with a reason it is being kept.
@@ -168,26 +167,12 @@ def test_no_new_orphan_prompts():
         % ", ".join(orphans))
 
 
-
-# Top-level definitions in src/classes/AIInterpret that nothing calls, as of
-# 2026-08-18. All predate the agent-arm work and live on the shipped path;
-# recorded here so they are visible, and so a NEW one fails the build.
-# redact_unverified is the v1 of the redactor whose v2 was fixed this session --
-# precisely the shape of trap that matters: editing the dead twin measures
-# nothing.
-KNOWN_ORPHAN_DEFS = {
-    "build_subagent_filter_prompt",
-    "build_two_pass_interpretation_prompt",
-    "build_synthesis_prompt",
-    "build_interpretation_executor",
-    "redact_unverified",
-    # Surfaced when this check moved from regex to AST, which stopped counting
-    # docstring and test mentions as calls. Both predate the agent arm and both
-    # have a live successor; deleting shipped code is a separate change against
-    # master, so they are pinned rather than removed.
-    "Verdict",          # superseded by _parse_json_verdict's free-text parsing
-    "verify_report",    # superseded by verify_report_v2
-}
+# Top-level definitions in src/classes/AIInterpret that nothing calls and that
+# are kept on purpose. Empty since the 2026-09 cleanup removed the seven that
+# had accumulated (the v1 redactor, verify_report, the two-pass and synthesis
+# prompt builders, the interpretation executor and the Verdict model); a NEW
+# one fails the build.
+KNOWN_ORPHAN_DEFS = set()
 
 
 def _names_read_in(source):
@@ -224,9 +209,8 @@ def _names_read_in(source):
 def test_no_new_orphan_definitions_in_the_ai_package():
     """A function nobody calls reads as live code to the next person.
 
-    166 top-level definitions in src/classes/AIInterpret; five are called from
-    nowhere. That set is pinned rather than deleted -- removing shipped code is
-    a separate change against master -- but it must not grow.
+    Every top-level definition in src/classes/AIInterpret must be read from
+    somewhere outside the tests; the exceptions live in KNOWN_ORPHAN_DEFS.
     """
     import ast
     from collections import Counter
@@ -272,7 +256,6 @@ def test_no_new_orphan_definitions_in_the_ai_package():
         "to KNOWN_ORPHAN_DEFS with a reason" % ", ".join(orphans))
 
 
-
 def test_the_evidence_block_separates_data_claims_from_literature_claims():
     """Round 30 shipped 16 citations across 62 161 characters of prose (0.26 per
     thousand) against the workflow arm's 24 across 26 599 (0.90). It grounds
@@ -290,7 +273,6 @@ def test_the_evidence_block_separates_data_claims_from_literature_claims():
         "unsupportable mechanism is not given an exit")
     assert len(block) < 1500, (
         "the block rides in every delegated prompt; %d chars is a tax" % len(block))
-
 
 
 def _check(name, fn):

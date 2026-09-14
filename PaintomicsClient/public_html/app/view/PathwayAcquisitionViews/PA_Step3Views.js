@@ -162,7 +162,6 @@ function PA_Step3JobView() {
 		/********************************************************/
 		/* STEP 2.1.A LOAD VISUAL OPTIONS IF ANY                */
 		/********************************************************/
-		// TODO: KEEP COMPATIBILITY WITH ALREADY SAVED VISUAL OPTIONS
 		var defaultVisualOptions = {
 			//GENERAL OPTIONS
 			pathwaysVisibility: [],
@@ -191,7 +190,6 @@ function PA_Step3JobView() {
 			showNodeLabels : true,
 			useCombinedPvalCheckbox: true,
 			autoSaveNodePositions: false,
-			//showEdgeLabels : false,
 			edgesClass : 'l',
 			minNodeSize: 1,
 			maxNodeSize: 8,
@@ -1399,10 +1397,6 @@ function PA_Step3JobView() {
 			],
 			listeners: {
 				boxready: function() {
-					//SOME EVENT HANDLERS
-//					$(".backButton").click(function() {
-//						me.backButtonHandler();
-//					});
 					$(".mappingButton").click(function() {
 						var cmp = Ext.getCmp('statsViewContainer');
 						cmp.getEl().toggle();
@@ -1664,11 +1658,6 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		/**********************************************************/
 		var mainClassifications = [], secondClassifications = [], mainClassificationInstance, secClassificationInstance, drilldownAux;
 		var classificationID, secondClassificationID;
-
-		// var totalPathways = 0;
-		// for(var i in pathways){
-		// 	if(pathways[i].visible){totalPathways++;}
-		// }
 
 		for (classificationID in classificationData){
 			mainClassificationInstance = classificationData[classificationID];
@@ -2442,7 +2431,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				/********************************************************/
 				/* STEP 1.B.2 SET NODE SIZE BASED ON PATHWAY RELEVANCE  */
 				/********************************************************/
-				//elem.data.size = (pValue <= visualOptions.minPValue)? 20 + 2 * (visualOptions.minPValue - pValue):12;
 				elem.data.size = 20 + 2 * (visualOptions.minPValue - pValue);
 
 				/********************************************************/
@@ -2570,7 +2558,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				{container: $('#pathwayNetworkBox_' + me.dbid)[0], type: 'canvas' },
 				//{container: $('#pathwayNetworkBoxSVG_' + me.dbid)[0], type: 'svg' }
 			],
-			//renderers: [{container: $('#pathwayNetworkBox')[0], type: 'svg' }],
 			settings: {
 				zoomMin: 0.01,
 				zoomMax: 10,
@@ -2862,7 +2849,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			me.network.settings({
 				drawEdges:true,
 				drawEdgeLabels:false,
-				//edgeLabelThreshold: ((visualOptions.showEdgeLabels===true?0:8)),
 				labelThreshold : ((visualOptions.showNodeLabels===true?1:8))
 			});
 			me.network.renderers[0].render();
@@ -2876,10 +2862,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 
 		var sigmaForceLink = sigma.layouts.configForceLink(me.network, {
 			linLogMode: true,       //provides the most readable placement
-			//edgeWeightInfluence: 1, //If the edges are weighted, this weight will be taken into consideration in the computation of the attraction force
-			// scalingRatio: 3,        //the larger the graph will be
 			gravity: 2,           // It attracts nodes to the center of the spatialization space
-			// barnesHutOptimize: true, //NOT WORKING
 			//Rendering options
 			startingIterations: 1,
 			iterationsPerRender: 2,
@@ -3409,44 +3392,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	*/
 	this.downloadNetwork = function(option){
 		if(option === "png"){
-			// sigma.plugins.image(this.network, this.network.renderers[0], {
-			// 	download:true,
-			// 	clip: true,
-			// 	labels: true,
-			// 	margin: 30,
-			// 	// size: 400,
-			// 	format: 'png',
-			// 	background: 'white',
-			// 	zoom: true,
-			// 	filename:'paintomics_network_plugin' + this.getParent("PA_Step3JobView").getModel().getJobID() + '.png'
-			// });
 
 			var newCanvas =  $('<canvas/>')[0];
-			// var scaleFactor = 2;
 			newCanvas.height = $("#pathwayNetworkBox_" + this.dbid).height();// * scaleFactor;
 			newCanvas.width = $("#pathwayNetworkBox_" + this.dbid).width();// * scaleFactor;
-			// newCanvas.style.width = $("#pathwayNetworkBox").width() + "px";
-			// newCanvas.style.height = $("#pathwayNetworkBox").height() + "px"
 
 			var ctx3 = newCanvas.getContext('2d');
-			// ctx3.scale(scaleFactor, scaleFactor);
 			ctx3.drawImage($("#pathwayNetworkBox_" + this.dbid + " canvas.sigma-scene")[0], 0, 0);
 			ctx3.drawImage($("#pathwayNetworkBox_" + this.dbid + " canvas.sigma-glyphs")[0], 0, 0);
-
-			// Avoid network error when image is too large
-			// function dataURLtoBlob(dataurl) {
-			//     var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
-			//         bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
-			//     while(n--){
-			//         u8arr[n] = bstr.charCodeAt(n);
-			//     }
-			//     return new Blob([u8arr], {type:mime});
-			// }
-			//
-			// var imgData = newCanvas.toDataURL('image/png')
-			// var strDataURI = imgData.substr(22, imgData.length);
-			// var blob = dataURLtoBlob(imgData);
-			// URL.createObjectURL(blob)
 
 			$('<a target="_blank" id="downloadNetworkLink_' + this.dbid + '" download="paintomics_network_' + this.dbid + '_' + this.getParent("PA_Step3JobView").getModel().getJobID() + '.png" style="display:none;"></a>').attr("href", newCanvas.toDataURL('image/png'))[0].click();
 
@@ -3605,7 +3558,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		visualOptions.backgroundLayout =  $("#background-layout-check_" + me.dbid).is(":checked");
 		visualOptions.showNodeLabels =  $("#show-node-labels-check_" + me.dbid).is(":checked");
 		visualOptions.useCombinedPvalCheckbox =  $("#use-combined-pval-check_" + me.dbid).is(":checked");
-		//visualOptions.showEdgeLabels =  $("#show-edge-labels-check").is(":checked");
 
 
 		/********************************************************/
@@ -3638,11 +3590,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		/********************************************************/
 		/* STEP 5. HIDE THE SETTINGS PANEL                      */
 		/********************************************************/
-		// $("#networkSettingsPanel").hide(200, function(){
-		// 	$("#networkDetailsPanel").show();
-		// 	$("#patwaysDetailsWrapper").slideUp();
-		// 	$("#networkClustersContainer").slideDown();
-		// });
 
 		if(updateNeeded){
 			/**************************************************************/
@@ -3655,7 +3602,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			/********************************************************/
 			me.network.settings({
 				drawEdges:true,
-				//edgeLabelThreshold: ((visualOptions.showEdgeLabels===true?0:8)),
 				labelThreshold : ((visualOptions.showNodeLabels===true?1:8))
 			});
 			me.network.renderers[0].render();
@@ -3725,7 +3671,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 
 		$("#background-layout-check_" + this.dbid).attr("checked", visualOptions.backgroundLayout===true);
 		$("#show-node-labels-check_" + this.dbid).attr("checked", visualOptions.showNodeLabels===true);
-		//$("#show-edge-labels-check").attr("checked", visualOptions.showEdgeLabels===true);
 		$("#save-node-positions-check_" + this.dbid).attr("checked", visualOptions.pathwaysPositions!==undefined);
 		$("#auto-save-node-positions-check_" + this.dbid).attr("checked", visualOptions.autoSaveNodePositions === true);
 		$("#pre-auto-save-node-positions-check_" + me.dbid).toggle(visualOptions.pathwaysPositions!==undefined);
@@ -3748,7 +3693,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		// Adjust the height of the other panels
 		var currentHeight = this.getComponent().getHeight();
 
-		//this.getComponent().items.getAt(0).setHeight(currentHeight);
 		this.getComponent().doLayout();
 
 		/********************************************************/
@@ -3790,10 +3734,8 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			   type: "hbox",
 			   align: "stretch"
 			},*/
-			//style: "max-width:1800px; margin: 5px 10px; ",
 			items: [ {
 				xtype: 'box', id: 'networkDetailsPanel_' + me.dbid,
-				//autoHeight: true, flex: 1,
 				/* No `contentbox`, and no <h2> of its own: this is a pane inside
 				   the card's rail, and the rail's tab already names it. It keeps
 				   `lateralOptionsPanel` because that is what dresses the controls
@@ -3821,7 +3763,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'</div>'
 			},{
 				xtype: 'box',  id : 'networkSettingsPanel_' + me.dbid,
-				//autoHeight: true, flex: 1,
 				// paSettingsPanel: a column of grouped controls, so its h4s are
 				// group labels rather than names and main.css tracks them out.
 				// Deliberately not on the Details panel beside it, whose h4 is
@@ -3904,7 +3845,6 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'<a href="javascript:void(0)" class="paNetRailHide helpTip" title="Hide this panel and give the graph the whole card"><i class="fa fa-times"></i></a>'
 			},{
 				xtype: 'box', id: 'networkPanel_' + me.dbid,
-				//autoHeight: true, flex: 4,
 				/* `paNetMain` is the graph half of the grid, and the element that
 				   full screen expands - see setFullScreenNetwork. No `contentbox`:
 				   the card around the whole explorer draws the only border here. */
@@ -4265,7 +4205,6 @@ function PA_Step3PathwayNetworkTooltipView() {
 	/***********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.show = function(x,y, model, omicDataType, dataDistributionSummaries, visualOptions) {
 		this.getComponent().showAtPos(x,y);
 		if (this.featureView.getModel() !== model) {
@@ -4275,17 +4214,14 @@ function PA_Step3PathwayNetworkTooltipView() {
 		return this;
 	};
 
-	//TODO: DOCUMENTAR
 	this.hide = function(){
 		this.getComponent().hide();
 	};
 
-	//TODO: DOCUMENTAR
 	this.showPathwayDetails = function(){
 		this.getParent().showPathwayDetails(this.featureView.getModel());
 	};
 
-	//TODO: DOCUMENTAR
 	this.hidePathwayDetails = function(){
 		this.getParent().hidePathwayDetails();
 	};
@@ -4603,7 +4539,6 @@ function PA_Step3PathwayDetailsView() {
 			return this;
 		};
 
-	//TODO: DOCUMENTAR
 	this.generateHeatmap = function (targetID, omicName, metagenes, dataDistributionSummaries) {
 			var featureValues, x = 0, y = 0, maxX = -1, series = [], yAxisCat = [], serie;
 			for (var i in metagenes) {
@@ -4734,7 +4669,6 @@ function PA_Step3PathwayDetailsView() {
 			return heatmap;
 		};
 
-	//TODO: DOCUMENTAR
 	this.generatePlot = function (targetID, omicName, metagenes, dataDistributionSummaries, heatmap) {
 			var series = [],
 			scaledValues, min, max,
@@ -4900,7 +4834,6 @@ function PA_Step3PathwayTableView() {
 	/***********************************************************************
 	* GETTER AND SETTERS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.loadModel= function(model){
 		var me = this;
 
@@ -4977,12 +4910,10 @@ function PA_Step3PathwayTableView() {
 			}
 
 			pathwayData = {
-				// selected: pathwayModel.isSelected(),
 				pathwayID: pathwayModel.getID(),
 				title: pathwayModel.getName(),
 				matchedGenes: pathwayModel.getMatchedGenes().length,
 				matchedCompounds: pathwayModel.getMatchedCompounds().length,
-				// combinedSignificancePvalues: pathwayModel.getCombinedSignificanceValues(),
 				mainCategory: pathwayModel.getClassification().split(";")[0],
 				secCategory: pathwayModel.getClassification().split(";")[1],
 				visible: pathwayModel.isVisible(),
@@ -5112,7 +5043,6 @@ function PA_Step3PathwayTableView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.updateObserver = function() {
 		var me = this;
 		var defaultCombinedPvaluesMethod = me.getParent().visualOptions.selectedCombinedMethod;
@@ -5134,26 +5064,6 @@ function PA_Step3PathwayTableView() {
 						me.getParent().paintSelectedPathway(grid.getStore().getAt(rowIndex).get('pathwayID'));
 					}
 				}]
-				// }, {
-				// 	xtype: 'customcheckcolumn',
-				// 	header: 'Select',
-				// 	dataIndex: 'selected',
-				// 	width: 55,
-				// 	menuDisabled: true,
-				// 	listeners: {
-				// 		checkchange: {
-				// 			scope: gridPanel,
-				// 			fn: function(elem, rowIndex) {
-				// 				var record = this.getStore().getAt(rowIndex);
-				//
-				// 				var model = me.getModel().getPathway(record.get("pathwayID"));
-				// 				model.setSelected(!model.isSelected());
-				//
-				// 				this.getView().select(rowIndex);
-				// 				this.getStore().sort();
-				// 			}
-				// 		}
-				// 	}
 			}, {
 				text: 'ID',
 				dataIndex: 'pathwayID',
@@ -5227,12 +5137,10 @@ function PA_Step3PathwayTableView() {
 		];
 		//DEFINE FIXED FIELDS FOR THE MODEL
 		var rowModel = {
-			// selected: {name: "selected", defaultValue: false},
 			pathwayID: {name: "pathwayID"},
 			title: {name: "title", defaultValue: ''},
 			matchedGenes: {name: "matchedGenes", defaultValue: '0'},
 			matchedCompounds: {name: "matchedCompounds", defaultValue: '0'},
-			//combinedSignificancePvalue: {name: "combinedSignificancePvalue", defaultValue: ''},
 			mainCategory: {name: "mainCategory",defaultValue: ''},
 			secCategory: {name: "secCategory",defaultValue: ''},
 			visible: {name: "visible", defaultValue: true},
@@ -5460,7 +5368,6 @@ function PA_Step3PathwayTableView() {
 		return(associatedPathways);
 	};
 
-	//TODO: DOCUMENTAR
 	this.updateVisiblePathways = function(loadRemote=false){
 		var store = this.getComponent().queryById("pathwaysGridPanel").getStore();
 		var indexedPathways = this.getAssociatedPathways();
@@ -5670,7 +5577,6 @@ function PA_Step3PathwayTableView() {
 		var selectedAdjustedMethod = me.getParent().getVisualOptions().selectedAdjustedMethod;
 		var conditionNames = me.model.conditionNames || [];
 
-		//TODO: REMOVE THIS SPAGETTI CODE :/
 		var renderFunction = function(value, metadata, record) {
 			var myToolTipText = "<b style='display:block; width:200px'>" + metadata.column.text.replace(/<\/br>/g, " ") + "</b>";
 			metadata.style = "height: 40px; font-size:12px;"
@@ -5868,7 +5774,6 @@ function PA_Step3PathwayTableView() {
 		return this;
 	};
 
-	//TODO: DOCUMENTAR
 	this.getSelectedPathways = function() {
 		var selectedPathways = [];
 		this.getComponent().queryById("pathwaysGridPanel").getStore().query("selected", true).each(function(item) {
@@ -6044,7 +5949,6 @@ function PA_Step3PathwayTableView() {
 														text: 'Apply',
 														margin: '10 5 10 10',
 														width: 80,
-														//cls: 'button btn-success btn-right',
 														handler: function() {
 															var tip = Ext.ComponentQuery.query("[itemId=stoufferTip]")[0];
 															var sliders = tip.query("slider");
@@ -6110,7 +6014,6 @@ function PA_Step3StatsView() {
 	/***********************************************************************
 	* GETTER AND SETTERS
 	***********************************************************************/
-	//TODO: DOCUMENTAR
 	this.loadModel= function(model){
 		var me = this;
 
@@ -7920,8 +7823,6 @@ var getMinMax = function(dataDistributionSummaries, option) {
 	} else if (option === "riMinMax") { //IF USE MIN MAX FOR INTERQUARTIL RANGE (OMIT OUTLIERS)
 		range = paColourRange(dataDistributionSummaries[9], dataDistributionSummaries[10]);
 
-		//    } else if (option === "localMinMax") {//IF USE MIN MAX FOR INTERQUARTIL RANGE (OMIT OUTLIERS)
-		//        //TODO: IMPLEMENT
 	} else if (option === "p10p90") { //IF USE PERCENTILES 10 AND 90
 		range = paColourRange(dataDistributionSummaries[3], dataDistributionSummaries[7]);
 		absRange = paColourRange(dataDistributionSummaries[2], dataDistributionSummaries[8]);
@@ -9095,8 +8996,6 @@ var renderFunctionLimit = function (value, metadata, record) {
 					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
 					'</table>';
-				// myToolTipText = myToolTipText + "Features matched: " + ) + "</br>";
-				// myToolTipText = myToolTipText + "Relevant features matched: " +  + "</br>";
 				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
 			}
 

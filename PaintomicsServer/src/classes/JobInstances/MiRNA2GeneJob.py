@@ -401,12 +401,6 @@ class MiRNA2GeneJob(Job):
 
         return nConditions, error
 
-    ##*************************************************************************************************************
-    # This function...
-    #
-    # @param {type}
-    # @returns
-    ##*************************************************************************************************************
     def fromMiRNA2Genes(self):
         #STEP 1. GET THE FILES PATH AND PREPRARE THE OPTIONS
         logging.info("READING FILES...")
@@ -586,12 +580,7 @@ class MiRNA2GeneJob(Job):
                         # relevant regulators (depends on configuration options).
                         if self.report == "DE":# and not isRelevant:
                             isRelevantAssociation = isRelevantAssociation and isRelevant
-                            #continue
 
-                        #FILTER BY SELECTION METHODS, IF CORRELATION OR FC IS LOWER THAN THE CUTOFF, IGNORE ENTRY
-                        # if score < self.cutoff:
-                        #     isRelevantAssociation = False
-                        #     #continue
                     else:
                         isRelevantAssociation = geneID.lower() + ':::' + mirnaID.lower() in relevantAssociations
 
@@ -644,7 +633,6 @@ class MiRNA2GeneJob(Job):
                 genesToMiRNAFile.write("# Gene name\tmiRNA ID\tDE\tScore\tSelection\n")
                 #TODO: RE-ENABLE THIS CODE
                 regulator2genesOutput.write("# Gene name\t"+ header + "\n")
-                #mirna2genesOutput.write("# Gene name\tmiRNA ID\t"+ header + "\n")
                 regulator2genesRelevant.write("# Gene name\tmiRNA ID\n")
 
                 logging.info("ORDERING miRNAS BY CORRELATION / FC...")
@@ -683,10 +671,6 @@ class MiRNA2GeneJob(Job):
                         #WRITE RESULTS TO genesToMiRNAFile FILE -->   gen_id mirna relevant score
                         genesToMiRNAFile.write(lineAux + ("*" if omicValue.isRelevant() else "") + "\t" + str(score) + "\t" + self.selection_method + "\n")
 
-                        #WRITE RESULTS TO miRNA2Gene_output FILE -->   gen_id mirna values
-                        #TODO: RE-ENABLE THIS CODE
-                        # mirna2genesOutput.write(lineAux + '\t'.join(map(str, omicValue.getValues())) + "\n")
-                        # mirna2genesOutput.write(geneID + "\t" + '\t'.join(map(str, omicValue.getValues())) + "\n")
                         regulator2genesOutput.write(":::".join([geneID, omicValue.getOriginalName()]) + "\t" + '\t'.join(map(str, omicValue.getValues())) + "\n")
 
                         # Associations file (trimmed down version including only those regulators present on

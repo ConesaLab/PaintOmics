@@ -723,8 +723,6 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     #***********************************************************************************
     databaseConvertion = getDatabasesByOrganismCode(organism)
 
-    # Remove the user not-selected databases
-    # databases_codes = [dbid for dbname, dbid in databaseConvertion[0].iteritems() if dbname in databases]
 
     gene_databases = databaseConvertion[0]
     symbol_databases = databaseConvertion[1]
@@ -996,10 +994,6 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     #***********************************************************************************
     #* STEP 1. CALCULATE THE MAX NUMBER OF THREADS AND PREPARE DATA
     #***********************************************************************************
-    # try:
-    #     nThreads = min(cpu_count(), MAX_THREADS)        #NUMBER OF THREADS
-    # except NotImplementedError as ex:
-    #     nThreads = MAX_THREADS
 
     # Avoid unnecesary calculations when there are no features
     if len(featureList) < 1:
@@ -1016,13 +1010,6 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     nLinesPerThread = int(ceil(len(featureList)/nThreads)) + 1
     #SPLIT THE ARRAY IN n PARTS
     genesListParts = chunks(featureList, nLinesPerThread)
-
-
-    #***********************************************************************************
-    #matchedFeatures = list()
-    #notMatchedFeatures = list()
-    #foundFeatures = list()
-    #***********************************************************************************
 
 
     manager=Manager()
@@ -1316,11 +1303,6 @@ def findCompoundIDByFeatureName(jobID, featureName, db):
     @returns {List} matchedFeatures, a list of translated identifiers
     @returns {Boolean} found, True if we found at least one translation
     """
-    #Check if the id is ath the cache of translation
-    # TODO: change "KEGG" for the proper database or leave it as it is?
-    # featureIDs = KeggInformationManager().findInTranslationCache(jobID, featureName, "compound")
-    # if(featureIDs != None):
-    #     return featureIDs, True
 
     matchedFeatures=[]
     name = (featureName or "").strip()
@@ -1377,7 +1359,6 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
 
     try:
         matches=0
-        # matchedCompoundIDsTable={}
         for feature in featureList:
             if feature.getName() != "" and feature.getName()!= None:
                 matchedCompounds, found = findCompoundIDByFeatureName(jobID, feature.getName(), db)
@@ -1385,8 +1366,6 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
                 if(found == True):
                     matches+=1 #computes the total unique matching
                     oldName = feature.getName()
-                    # matchedCompoundIDsTable[oldName] = matchedCompounds
-                    # matchedElement = {"title" : oldName, "mainCompounds" : [], "otherCompounds" : []}
                     matchedElement = FoundFeature("")
                     matchedElement.setTitle(oldName)
 
@@ -1457,7 +1436,6 @@ def mapCompoundsIdentifiers(jobID, featureList, matchedFeatures, notMatchedFeatu
         _handOver(matchedFeatures, resultSlot, localMatched)
         _handOver(notMatchedFeatures, resultSlot, localNotMatched)
         foundFeatures.append(matches)
-        # matchedCompoundIDsTablesList.append(matchedCompoundIDsTable)
 
         return True
 
@@ -1479,10 +1457,6 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     #***********************************************************************************
     #* STEP 1. CALCULATE THE MAX NUMBER OF THREADS AND PREPARE DATA
     #***********************************************************************************
-    # try:
-    #     nThreads = min(cpu_count(), MAX_THREADS)        #NUMBER OF THREADS
-    # except NotImplementedError as ex:
-    #     nThreads = MAX_THREADS
     nThreads = MAX_THREADS
 
     logging.info("USING " + str(nThreads) + " THREADS")
@@ -1504,14 +1478,6 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     matchedFeatures = manager.list([None] * len(compoundsListParts))
     notMatchedFeatures= manager.list([None] * len(compoundsListParts))
     foundFeatures= manager.list([0]*nThreads)
-
-    #matchedFeatures = list()
-    #notMatchedFeatures = list()
-    #foundFeatures = list()
-    #for compoundListPart in compoundsListParts:
-    #   mapCompoundsIdentifiers(jobID, compoundListPart, matchedFeatures, notMatchedFeatures, foundFeatures)
-
-    # matchedCompoundIDsTablesList=manager.list() #STORES THE MAPPING RESULTS TO UPDATE LATER THE CACHE
 
     #***********************************************************************************
     #* STEP 2. START THE MAPPING USING N DIFFERENT THREADS IN PARALLEL
@@ -1545,9 +1511,6 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
     #***********************************************************************************
     #* STEP 3. COMBINE THE RESULTS FOR ALL THE THREADS
     #***********************************************************************************
-    #COMBINE DICTIONARIES
-    # for matchedCompoundIDsTable in matchedCompoundIDsTablesList:
-    #     KeggInformationManager().updateTranslationCache(jobID, matchedCompoundIDsTable, "compound")
 
     foundFeatures = sum(foundFeatures)
 

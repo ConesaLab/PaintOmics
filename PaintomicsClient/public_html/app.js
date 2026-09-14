@@ -153,7 +153,6 @@ function showBootFailureMessage(error) {
 }
 
 function Application() {
-    //TODO: CARGAR COSAS A PETICION?
     this.models = ['JobInstanceModels', "FeatureModels", "PathwayModels"];
     this.views = [
         'MainView',
@@ -308,18 +307,6 @@ function Application() {
         } else {
             if (Ext.isIE) {
                 showWarningMessage("Using Internet Explorer?", {message: "PaintOmics AI was developed to work on Internet Explorer, however some features could not work properly.</br>We recommend to work with Chrome or Firefox.", closeTimeout: 5, showButton: true});
-//            } else if (Ext.isGecko) {
-//                var version = navigator.userAgent.toLowerCase().split("firefox/");
-//                if (version.length > 1) {
-//                    try {
-//                        var version = parseFloat(version[1]);
-//                        if (version >= 22) {
-//                            showWarningMessage("Using Firefox?", {message: "From version 22 of Firefox, the Paintomics application looks bigger in the screen.<br>Please, accommodate the application to your browser window using the zoom tool (Ctrl and keys +/-)", closeTimeout: 5, showButton: true});
-//                        }
-//                    } catch (error) {
-//
-//                    }
-//                }
             } else if (Ext.isSafari) {
                 showWarningMessage("Using Safari?", {message: "PaintOmics AI was developed to work in Safari, however some features could not work properly.<br>We recommend to work with Chrome or Firefox.", closeTimeout: 5, showButton: true});
             }

@@ -92,7 +92,7 @@ cd PaintOmics
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-Rscript -e 'install.packages(c("purrr","amap","cluster","factoextra","mclust","optparse"))'
+Rscript -e 'install.packages(c("purrr","amap","cluster","factoextra","mclust"))'
 
 cd PaintomicsServer
 python src/launch_server.py             # http://localhost:8000

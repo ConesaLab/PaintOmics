@@ -7,67 +7,6 @@ from src.conf.serverconf import AI_VERIFICATION_FUZZY_THRESHOLD
 # Legacy verification (kept for backward compat)
 # ---------------------------------------------------------------------------
 
-def verify_report(report_text, gene_whitelist, collected_papers, job_instance):
-    """
-    Returns {"score": 0.0-1.0, "issues": [...], "gene_accuracy": float, "pmid_accuracy": float}
-    Gene check is informational only — does NOT trigger redaction.
-    Only fabricated PMIDs trigger redaction.
-    """
-    issues = []
-
-    # 1. Gene whitelist check (informational — many valid gene family names won't be in the dataset)
-    mentioned_genes = _extract_gene_mentions(report_text)
-    valid_genes = sum(1 for g in mentioned_genes if g.upper() in gene_whitelist)
-    gene_accuracy = valid_genes / max(len(mentioned_genes), 1)
-    gene_issues = []
-    for g in mentioned_genes:
-        if g.upper() not in gene_whitelist:
-            gene_issues.append(f"Gene '{g}' not found in analysis data")
-
-    # 2. PMID existence check — this is the critical one
-    cited_pmids = set(re.findall(r'PMID[:\s]*(\d{7,8})', report_text))
-    paper_pmids = {p["pmid"] for p in collected_papers}
-    valid_pmids = cited_pmids & paper_pmids
-    pmid_accuracy = len(valid_pmids) / max(len(cited_pmids), 1)
-    pmid_issues = []
-    for pmid in cited_pmids - paper_pmids:
-        pmid_issues.append(f"PMID {pmid} not in retrieved papers")
-    issues.extend(pmid_issues)
-
-    # 3. P-value check (informational)
-    pval_issues = _check_pvalues(report_text, job_instance)
-    issues.extend(pval_issues)
-
-    # Gene issues are informational only — add them but don't use for redaction
-    issues.extend(gene_issues)
-
-    # Score: weight PMID accuracy heavily, gene accuracy lightly (too many false positives)
-    score = 0.5 * pmid_accuracy + 0.2 * gene_accuracy + 0.3 * (1 - min(len(pval_issues) / 5, 1))
-    return {"score": round(score, 2), "issues": issues,
-            "gene_accuracy": round(gene_accuracy, 2), "pmid_accuracy": round(pmid_accuracy, 2)}
-
-
-def redact_unverified(text, issues):
-    """Remove sentences containing fabricated PMIDs only. Gene issues are informational."""
-    # Only redact for fabricated PMIDs — gene mentions are too noisy for redaction
-    bad_pmids = {i.split("PMID ")[1].split(" ")[0] for i in issues if "PMID " in i and "not in" in i}
-    if not bad_pmids:
-        return text, 0
-
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    clean = []
-    removed = 0
-    for s in sentences:
-        if any(p in s for p in bad_pmids):
-            removed += 1
-        else:
-            clean.append(s)
-    result = " ".join(clean)
-    if removed:
-        result += f"\n\n> **Note:** {removed} statement(s) with unverified citations were removed."
-    return result, removed
-
-
 # ---------------------------------------------------------------------------
 # V2 verification — [N] citation format with fuzzy text matching
 # ---------------------------------------------------------------------------

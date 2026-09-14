@@ -334,13 +334,6 @@ function DM_MyDataFileListView() {
 							property: 'submissionDate',
 							direction: 'DESC'
 						}]
-						// sorters: [{
-						// 	property: 'omicType',
-						// 	direction: 'ASC'
-						// }, {
-						// 	property: 'dataType',
-						// 	direction: 'ASC'
-						// }]
 					}),
 					columns: [{
 						text: 'File Name',
@@ -1611,8 +1604,6 @@ Ext.define('Paintomics.view.common.OmicInputSelectorDialog', {
 				}
 			}*/
 		});
-
-		//DM_InputList.setController(application.getController("DataManagementController"));
 
 		me.items = [DM_InputList];
 		me.callParent(arguments);

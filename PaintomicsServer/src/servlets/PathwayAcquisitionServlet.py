@@ -612,17 +612,6 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
             mappingComp, pValueInDict, classificationDict, exprssionMetabolites, adjustPvalue, totalRelevantFeaturesInCategory, featureSummary, compoundRegulateFeatures = jobInstance.compundsClassification(metaboliteClassThreshold)
             hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )
 
-            # set compound sources to all database
-            #if len(jobInstance.databases) >= 2:
-            #    foundCompoundsCopy = [i for i in jobInstance.foundCompounds]
-            #    foundCompoundsCopy = jobInstance.foundCompounds.copy()
-
-            #    if "Reactome" in jobInstance.databases:
-            #        for compound in foundCompoundsCopy:
-            #            compound.matchingDB = "KEGG"
-
-            #    jobInstance.foundCompounds = jobInstance.foundCompounds + foundCompoundsCopy
-
         # MORE Regulation Analysis: parse the rpc table for the Step 3 panel.
         # Independent of metabolomics — runs whenever the job has MORE-produced
         # geneBasedInputOmics. Self-skips otherwise.
@@ -632,8 +621,6 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         # Step 2. GENERATING PATHWAYS INFORMATION
         #****************************************************************
 
-        #if selectedCompounds:
-        #    hubAnalysisResult = jobInstance.hubAnalysis( ROOT_DIRECTORY )
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...DONE")
 
         #****************************************************************
@@ -1152,9 +1139,6 @@ def pathwayAcquisitionSaveImage(request, response):
         fileName = "paintomics_" + requestedFileName.replace(" ", "_").replace("/", "_") + "_" + jobID
         fileFormat = request.form.get("format")
 
-        # userID = jobInstance.getUserID()
-        # userDirID = userID if userID is not None else "nologin"
-        # path = CLIENT_TMP_DIR + userDirID + jobInstance.getOutputDir().replace(CLIENT_TMP_DIR + userDirID, "")
         path = jobInstance.getOutputDir()
         logging.info("The path is xxx: " + path)
 

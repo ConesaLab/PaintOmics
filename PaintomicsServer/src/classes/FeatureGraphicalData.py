@@ -46,33 +46,3 @@ class FeatureGraphicalData(Model):
         self.name = name
     def getName(self):
         return self.name
-
-    def setType(self, type):
-        self.type = type
-    def getType(self):
-        return self.type
-
-    def setX(self, x):
-        self.x = x
-    def getX(self):
-        return self.x
-
-    def setY(self, y):
-        self.y = y
-    def getY(self):
-        return self.y
-
-    def setBoxWidth(self, boxWidth):
-        self.boxWidth = boxWidth
-    def getBoxWidth(self):
-        return self.boxWidth
-
-    def setBoxHeight(self, boxHeight):
-        self.boxHeight = boxHeight
-    def getBoxHeight(self):
-        return self.boxHeight
-
-    def setVisible(self, visible):
-        self.visible = visible
-    def isVisible(self):
-        return self.visible

@@ -39,7 +39,7 @@
 	<link rel="stylesheet" type="text/css" href="js/libs/jquery-ui/jquery-ui.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/tooltipster-master/dist/css/tooltipster.bundle.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/odometer/odometer-theme-default.css" />
-	<link rel="stylesheet" type="text/css" href="resources/css/main.css?v=2.29" />
+	<link rel="stylesheet" type="text/css" href="resources/css/main.css?v=2.30" />
 	<link rel="stylesheet" type="text/css" href="resources/css/inputformat.css?v=2.17" />
 	<link rel="stylesheet" type="text/css" href="resources/css/inputconvert.css?v=0.7" />
 	<link rel="stylesheet" type="text/css" href="resources/css/ai-interpret.css?v=1.7" />
@@ -78,9 +78,7 @@
 
 	<!--COMPONENTS AND LAYOUTS LIBRARY -->
 	<script type="text/javascript" src="js/libs/extjs/ext-all.js"></script>
-	<!-- <script type="text/javascript" src="js/libs/jquery/jquery-2.min.js"></script> -->
 	<script type="text/javascript" src="js/libs/jquery/jquery-3.1.0.js"></script>
-	<!-- <script type="text/javascript" src="js/libs/jquery/jquery-migrate-1.4.1.js"></script> -->
 	<script type="text/javascript" src="js/libs/jquery/jquery-migrate-3.0.0.js"></script>
 	<!-- INDEXDB LIBRARY -->
 	<script type="text/javascript" src="js/libs/dexie/dexie.min.js"></script>
@@ -90,15 +88,12 @@
 	<script type="text/javascript" src="js/libs/highcharts/modules/heatmap.js"></script>
 	<script type="text/javascript" src="js/libs/highcharts/modules/drilldown.js"></script>
 	<script type="text/javascript" src="js/libs/highcharts/highcharts-more.js"></script>
-	<!-- <script type="text/javascript" src="js/libs/highcharts/modules/exporting.js"></script>
-	<script type="text/javascript" src="js/libs/highcharts/modules/offline-exporting.js"></script> -->
 
 	<!--NETWORKS LIBRARY -->
 	<!-- sigma.js, the Linkurious fork, still draws the PATHWAY network in
 	     PA_Step3Views.js. The MORE regulator-target network moved to
 	     Cytoscape.js below; the two coexist deliberately rather than one
 	     migration being held up by the other. -->
-	<!-- <script type="text/javascript" src="js/libs/linkurious/sigma.js"></script> -->
 	<script type="text/javascript" src="js/libs/linkurious/sigma.min.js?v=0.1"></script>
 	<script type="text/javascript" src="js/libs/linkurious/plugins.js?v=0.2"></script>
 	<!-- Cytoscape.js (MIT) — the MORE regulator-target network. Vendored rather
@@ -106,8 +101,6 @@
 	     offline behind its own nginx, and a CDN script tag is a hard
 	     dependency on outbound network access at page load. -->
 	<script type="text/javascript" src="js/libs/cytoscape/cytoscape.min.js?v=3.34.0"></script>
-	<!-- <script type="text/javascript" src="js/libs/linkurious/plugins.custom.min.js"></script> -->
-	<!-- <script type="text/javascript" src="js/libs/linkurious/test.min.js"></script> -->
 	<!--CLUSTERING LIBRARY -->
 	<script type="text/javascript" src="js/libs/clusterfck/clusterfck.js"></script>
 	<!--RANDOM COLORS LIBRARY -->
@@ -128,9 +121,9 @@
 	<script type="text/javascript" src="resources/ServerConfiguration.js?v=1.6"></script>
 	<!--CUSTOM SENCHA EXTENSIONS-->
 	<script type="text/javascript" src="app/view/common/Util.js?v=3.1"></script>
-	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=0.8"></script>
+	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=0.9"></script>
 	<script type="text/javascript" src="app/view/common/OrganismSearch.js?v=1.1"></script>
-	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.3"></script>
+	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.4"></script>
 	<!--LAYOUT DEBUG OVERLAY - inert until ctrl+alt+G or ?guides=1 -->
 	<script type="text/javascript" src="app/view/common/AlignmentGuides.js?v=4.2"></script>
 
@@ -156,7 +149,7 @@
 	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js?v=2.6"></script>
 
 	<!--LAUNCH APPLICATION -->
-	<script type="text/javascript" src="app.js?v=0.6"></script>
+	<script type="text/javascript" src="app.js?v=0.7"></script>
 
 	<script type="text/javascript">
 	window.onbeforeunload = function (e) {

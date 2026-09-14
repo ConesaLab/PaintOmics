@@ -115,19 +115,13 @@ markdown_extensions:
 #   - dev/ is maintainer documentation -- deployment procedure, internal traps
 #     and the engineering notes for the two AI arms -- and says on its own
 #     first line that it is not for users;
-#   - the two engineering directories hold dated implementation plans and
-#     design specs;
+#   - superpowers/ holds the dated design specs;
 #   - diagrams/ is 5.9 MB of editable .drawio sources and PDFs of the AI agent's
 #     architecture, referenced by no published page. mkdocs copies every
 #     non-markdown file under docs/ verbatim, so without this line all of it
-#     shipped to the public site;
-#   - ai-agent-benchmark.md and ai-agent-tooling-notes.md are running
-#     measurement records for an internal comparison of the two AI arms.
+#     shipped to the public site.
 exclude_docs: |
    mkdocs-pins.txt
    dev/
    diagrams/
    superpowers/
-   frontend-modernization/
-   ai-agent-benchmark.md
-   ai-agent-tooling-notes.md

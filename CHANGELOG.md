@@ -116,6 +116,9 @@ merged them where one exists.
 - Vendored build toolchains that nothing installed or served, and a second `requirements.txt` that was raising 33 phantom dependency alerts.
 - The six-phase AI workflow arm, superseded by the agent workflow.
 - Dead code across the server, including the 154 rows the audit marked for deletion and the eight star imports in the application entry point.
+- The unused three quarters of the vendored client: every ExtJS build, source tree, locale and theme except the one bundle and the Neptune stylesheet the page loads, the Highcharts source and examples plus two older Highcharts copies, an unused sigma.js, PowerTip, duplicate jQuery builds, the tooltipster and Bootstrap source trees, and the admin panel's unminified libraries. The upload widget's unused dialogs, the ExtJS grid-filter copy, a fully commented-out user model, the retired help-tip script and its CSS, and the static example archives that the manifest-built download replaced.
+- Server code nothing called: the AI package's superseded prompt builders, redactor, verifier and evidence extractor, the admin restore handler no route reached, the Vega identifier processor (BioMart retired it) with its 23 query files, and the model accessors no Python caller used. Commented-out code and 2014-era `TODO` placeholders across the server, the species install scripts and the client views.
+- One-off engineering artefacts: the August dead-code and quality reports and their scripts, the AI-loop experiment logs, the dated implementation plans, the frontend proposal document, the PaintOmics 3 install script and Mongo shell script, and stray editor files.
 
 ## PaintOmics 4 and earlier
 

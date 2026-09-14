@@ -79,9 +79,6 @@ def userManagementSignIn(request, response):
 
         if userInstance == None:
             raise CredentialException("The email or password you entered is incorrect.")
-        #TODO: LINK PARA ACTIVAR CUENTAS
-        # elif userInstance.isActivated() == False:
-        #     raise CredentialException("Account not activated, please check your email inbox and follow the instructions for account activation.")
 
         logging.info("STEP1 - READ PARAMS AND CHECK IF USER ALREADY EXISTS...OK USER EXISTS" )
         #****************************************************************

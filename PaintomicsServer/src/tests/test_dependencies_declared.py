@@ -205,9 +205,7 @@ def test_there_is_exactly_one_requirements_file():
 
     Nothing read the stub: the image installs the root file
     (deploy/Dockerfile), and there are no CI workflows. Deleting it is what the
-    deployment plan called for in the first place -- see
-    docs/superpowers/plans/2026-08-05-drago-cloud-deployment.md, "Delete:
-    PaintomicsServer/src/requirements.txt".
+    deployment plan called for in the first place.
 
     So the guard is inverted: a second manifest anywhere in the tree is the
     defect, whether it duplicates the pins or merely points at them.

@@ -197,7 +197,6 @@ function Pathway(ID) {
      * OTHER FUNCTIONS
      **********************************************************************************/
     this.loadFromJSON = function (jsonObject) {
-        //TODO: HACER EN BUCLE AUTOMATICO?
         if (jsonObject.name !== undefined) {
             this.name = jsonObject.name;
         }
@@ -272,7 +271,6 @@ function PathwayGraphicalData() {
     this.imageWidth = 0;
     this.imageHeight = 0;
     this.pathwayID = "";
-    //TODO: MAKE OPTIONS BEFORE PAINTING
     this.colorScale = "bwr"; //(RED-BLACK-GREEN -> "rbg", BLUE-WHITE-RED -> "bwr")
     this.colorReferences = "p10p90"; //[absoluteMinMax, riMinMax, localMinMax, p10p90]
 
@@ -280,7 +278,6 @@ function PathwayGraphicalData() {
      ** GETTERS AND SETTERS
      *****************************/
     this.setVisibleOmics = function (visibleOmics) {
-        //WARNING: KEEP USING SAME VARIABLE, COULD NOT WORK
         this.visibleOmics.length = 0;
         for (var i in visibleOmics) {
             this.visibleOmics.push(visibleOmics[i]);
@@ -341,7 +338,6 @@ function PathwayGraphicalData() {
      * OTHER FUNCTIONS
      **********************************************************************************/
     this.loadFromJSON = function (jsonObject) {
-        //TODO: HACER EN BUCLE AUTOMATICO?
         if (jsonObject.visibleOmics !== undefined) {
             this.visibleOmics = jsonObject.visibleOmics;
         }
@@ -437,7 +433,6 @@ function FeatureGraphicalData(type) {
      * OTHER FUNCTIONS
      **********************************************************************************/
     this.loadFromJSON = function (jsonObject) {
-        //TODO: HACER EN BUCLE AUTOMATICO?
         if (jsonObject.id != null && jsonObject.id !== '') {
             this.id = jsonObject.id;
         } else if (jsonObject.ID != null && jsonObject.ID !== '') {

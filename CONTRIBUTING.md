@@ -18,12 +18,12 @@ missing values and duplicate identifiers, PEP 8, DRY.
 | `PaintomicsServer/src/AdminTools/` | `DBManager.py`, the species installer |
 | `PaintomicsServer/src/examplefiles/` | Example datasets and their `datasets/manifest.json` |
 | `PaintomicsServer/src/benchmarks/` | `bench_runner.py`, the pipeline kernel the regression harness drives |
-| `PaintomicsServer/src/tests/` | 282 standalone test suites and `run_all.py` |
+| `PaintomicsServer/src/tests/` | The standalone test suites and `run_all.py` |
 | `PaintomicsServer/src/resources/example_serverconf.py` | Configuration template; the real `src/conf/serverconf.py` is gitignored |
 | `PaintomicsClient/public_html/` | The ExtJS 4.2.1 client; `index.html` is the entry document |
 | `docs/` | mkdocs sources for the user guide (`mkdocs.yml` at the root) |
 | `deploy/` | Docker Compose stack, `Dockerfile`, `smoke-test.sh`, `fetch-example-gtf.sh`, operator runbook |
-| `scripts/` | `regression.sh` / `regression.py`, `ci/` (the gate's helpers), `perf/`, `deadcode_report.py` |
+| `scripts/` | `regression.sh` / `regression.py`, `ci/` (the gate's helpers), `perf/` |
 | `tests/baseline/` | Regression baselines, one directory per example dataset |
 | `requirements.txt` | The only pip manifest in the tree |
 

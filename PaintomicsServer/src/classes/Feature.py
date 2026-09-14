@@ -49,16 +49,6 @@ class Feature(Model):
     def getName(self):
         return self.name
 
-    def setUrl(self, url):
-        self.url = url
-    def getUrl(self):
-        return self.url
-
-    def setFeatureType(self, featureType):
-        self.featureType = featureType
-    def getFeatureType(self):
-        return self.featureType
-
     def setOmicsValues(self, omicsValues):
         self.omicsValues = omicsValues
 

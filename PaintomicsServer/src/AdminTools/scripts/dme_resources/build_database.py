@@ -4,18 +4,11 @@ import traceback
 from sys import argv, stderr
 from subprocess import CalledProcessError
 
-#DATA_DIR = '/home/tian/database/KEGG_DATA/current/dme/'
-#SPECIE = 'dme'
-#ROOT_DIR = '/home/tian/paintomics4/PaintomicsServer/src/AdminTools/'
-#LOG_FILE = '/home/tian/Downloads/database/KEGG_DATA/current/install.log'
-
 
 SPECIE      = argv[1]
 ROOT_DIR    = argv[2].rstrip("/") + "/"      #Should be src/AdminTools
 DATA_DIR    = argv[3].rstrip("/") + "/"
 LOG_FILE    = argv[4]
-
-
 
 
 COMMON_BUILD_DB_TOOLS = imp.load_source('common_build_database', ROOT_DIR + "scripts/common_build_database.py")
@@ -26,7 +19,6 @@ COMMON_BUILD_DB_TOOLS.ROOT_DIR= ROOT_DIR
 COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/" + SPECIE + "_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.COMMON_RESOURCES = imp.load_source('download_conf',  ROOT_DIR + "scripts/common_resources/download_conf.py").EXTERNAL_RESOURCES
 COMMON_BUILD_DB_TOOLS.SERVER_SETTINGS = imp.load_source('serverconf.py',  ROOT_DIR + "../conf/serverconf.py")
-
 
 
 #**************************************************************************
@@ -42,7 +34,6 @@ try:
     COMMON_BUILD_DB_TOOLS.processRefSeqData()
     COMMON_BUILD_DB_TOOLS.processUniProtData()
     COMMON_BUILD_DB_TOOLS.processRefSeqGeneSymbolData()
-    # COMMON_BUILD_DB_TOOLS.processVegaData()
     # Drosophila's KEGG gene ids are Dmel_CG#### -- its own identifier space,
     # not Entrez -- so `organismDB` translates KEGG into `kegg_id` for dme and
     # this call is the ONLY thing that builds that table (plus kegg_gene_symbol
