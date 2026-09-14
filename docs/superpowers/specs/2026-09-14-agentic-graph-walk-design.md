@@ -31,7 +31,9 @@ report. Step 4 column, chat tool and report-time hook are the next PR.
   edges (stimulation +, inhibition −). Nodes are keyed by KEGG gene id (`g:<entrez>`) or
   compound (`c:<id>`); UniProt ids map through `mapping/uniprot2kegg.list`. Every edge carries
   its database, pathway and sign. MapMan contributes membership tags only (no edges) and is out
-  of scope for mouse. Measured on mmu: 18,931 nodes, 113,327 edges, 3.3 s including the overlay.
+  of scope for mouse. Measured on mmu with the STATegra job laid over it: 13,947 nodes, 131,093 edges (the
+  parser keeps only nodes that carry an edge), 124 hubs above the 99th degree percentile, built in
+  1.5 s from the cache and about 3 s cold.
 * The **job overlay**: for every node the job measured, `r = OR` over its own layers of the
   `relevant` flag (itself OR over conditions); the layer text (omic, member, flag, values with
   the user's column labels); the job's miRNAs as regulator nodes with miRNA → target edges

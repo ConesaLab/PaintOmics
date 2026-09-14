@@ -159,8 +159,16 @@ class Walker:
             _sign_glyph(row["sign"]), "" if row["open"] else ", closed",
             ", walked" if row["visited"] else "") for row in shown)
         more = "" if len(rows) <= len(shown) else " · %d more" % (len(rows) - len(shown))
-        return "%s\nlayers:\n%s\nneighbours (%d): %s%s\n%s" % (
+        # The layers of the relevant open neighbours, so a reading can quote a
+        # node's values BEFORE stepping onto it (the protocol's "candidates with
+        # full layer text"); the rest are known by name, r and heat only.
+        detail = []
+        for row in [r for r in rows if r["r"] == 1 and r["open"]][:self.params["candidates"]]:
+            detail.append("  %s (r=1, heat %.2f):\n%s" % (
+                row["label"], row["heat"], _indent(self.overlay.layer_text(row["id"]), "    ")))
+        return "%s\nlayers:\n%s\nneighbours (%d): %s%s\n%s%s" % (
             head, _indent(self.overlay.layer_text(node_id)), len(rows), names, more,
+            ("relevant neighbours' layers:\n" + "\n".join(detail) + "\n") if detail else "",
             self._budget_line())
 
     # ------------------------------------------------------------- tools

@@ -15,8 +15,8 @@ One network per organism, built once at install from the annotation files the in
 already ships: KEGG relations from the KGML, Reactome reactions from each pathway's graph
 file, and OmniPath interactions. Nodes are genes and compounds; every edge carries its
 database, its pathway and a sign (activation and expression positive, inhibition and
-repression negative). On mouse the union is about 19,000 nodes and 113,000 edges and reads
-in a few seconds, then is cached beside the KGML directory.
+repression negative). On mouse the union is about 14,000 nodes and 131,000 edges once the job's miRNAs are added,
+builds in about three seconds, and is cached beside the KGML directory.
 
 A **pathway walk** uses that network filtered to one pathway's tag. A **universal walk**
 uses the whole network. Your job is laid over either: a node is *relevant* when any of its
