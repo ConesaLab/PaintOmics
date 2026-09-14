@@ -47,6 +47,11 @@ CRITICAL = (
     "src.classes.AIInterpret.agent",
     "src.classes.AIInterpret.llm_client",
     "src.classes.AIInterpret.walker.service",
+    # imported lazily by service.run for a model walk, so an import error here
+    # would otherwise surface only in a queue worker
+    "src.classes.AIInterpret.walker.parallel",
+    "src.classes.AIInterpret.walker.writer",
+    "src.classes.AIInterpret.walker.sdk",
     "src.servlets.AIInterpretServlet",
     "src.servlets.PathwayAcquisitionServlet",
     "src.classes.JobInstances.PathwayAcquisitionJob",

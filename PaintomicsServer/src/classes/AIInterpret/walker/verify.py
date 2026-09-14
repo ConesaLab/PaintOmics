@@ -48,6 +48,13 @@ def cited_refs(text):
     return refs
 STATEMENT_MIN, STATEMENT_MAX = 3, 5
 RESULTS_WORDS = {"pathway": (150, 450), "network": (300, 900)}
+# The walker's working words. In a statement or a Results section they narrate
+# the walk instead of reporting biology: "the calcium cluster read led to the
+# Syk kinase seed via a jump". Name the genes instead. Only the unambiguous
+# forms are refused: "seed" is ordinary in a plant job and in a miRNA's seed
+# region, and "a jump at 12h" describes values, so those two are left to the
+# prompts.
+JARGON_RE = re.compile(r"\b(clusters?|the walk(?:er)?|via a jump|jump(?:s|ed|ing)? (?:to|from|back))\b", re.I)
 
 
 def chain_nodes(chain):
@@ -194,12 +201,16 @@ def _as_list(stmt, key, problems):
     return []
 
 
-def verify_statement(stmt, walker, papers, read=None):
+def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=True):
     """The objections to one submitted statement; an empty list is a pass.
 
     ``read``: the refs the Writer opened with read_paper; when given, a paper
     may be cited only after it was read, and a claim that names genes of the
-    chain may cite only a paper whose title or abstract names one of them."""
+    chain may cite only a paper whose title or abstract names one of them.
+    ``part``: (first, last), the legs this statement's Writer covers.
+    ``names_genes``: False when a paper agent reads every cited paper for the
+    passage that states the claim, which asks more than a gene name in the
+    abstract and does not fail a paper that names the protein another way."""
     problems = []
     chain = walker.record()["chain"]
     n_legs = len(chain)
@@ -209,6 +220,12 @@ def verify_statement(stmt, walker, papers, read=None):
     for leg in legs:
         if not isinstance(leg, int) or isinstance(leg, bool) or leg < 1 or leg > n_legs:
             problems.append("leg e%s is not on the chain" % leg)
+        elif part is not None and not part[0] <= leg <= part[1]:
+            problems.append("leg e%s is outside your part of the walk (e%d to e%d)" % (leg, part[0], part[1]))
+    words = JARGON_RE.findall(" ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")]))
+    if words:
+        problems.append("uses the walker's word %r: name the genes or describe them biologically"
+                        % sorted({w.lower() for w in words})[0])
     cites = _as_list(stmt, "cites", problems)
     if not cites:
         problems.append("cites no [node · layer]")
@@ -275,7 +292,7 @@ def verify_statement(stmt, walker, papers, read=None):
             problems.append("[%d] is cited without being read: call read_paper on it first" % ref)
             continue
         genes = genes_for.get(ref) or claim_genes
-        if genes and not _paper_names_any(papers[ref], genes):
+        if names_genes and genes and not _paper_names_any(papers[ref], genes):
             problems.append("[%d] does not mention %s; cite a paper about the claim or mark it a hypothesis"
                             % (ref, ", ".join(sorted(genes))))
     return problems
@@ -356,14 +373,61 @@ def paper_ref(value):
     return int(match.group(1)) if match else None
 
 
-def verify_statements(statements, walker, papers, read=None):
-    """[(statement, problems)] for every statement, plus a count objection."""
-    out = [(s, verify_statement(s, walker, papers, read)) for s in statements]
+def verify_statements(statements, walker, papers, read=None, count=None, legs=None, names_genes=True):
+    """[(statement, problems)] for every statement, plus a count objection.
+    ``count`` = (fewest, most) statements; ``legs`` = the Writer's part."""
+    lo, hi = count or (STATEMENT_MIN, STATEMENT_MAX)
+    out = [(s, verify_statement(s, walker, papers, read, legs, names_genes)) for s in statements]
     count_problem = None
-    if not (STATEMENT_MIN <= len(statements) <= STATEMENT_MAX):
-        count_problem = "%d statements; between %d and %d are required" % (
-            len(statements), STATEMENT_MIN, STATEMENT_MAX)
+    if not (lo <= len(statements) <= hi):
+        count_problem = "%d statements; between %d and %d are required" % (len(statements), lo, hi)
     return out, count_problem
+
+
+def citation_pairs(stmt):
+    """(paper, claim) for every citation a statement makes: each beyond claim
+    with its paper, then any other paper the statement cites, for its claim."""
+    pairs = []
+    beyond = stmt.get("beyond") if isinstance(stmt.get("beyond"), (list, tuple)) else []
+    for entry in beyond:
+        if isinstance(entry, dict) and not entry.get("hypothesis"):
+            ref = paper_ref(entry.get("paper"))
+            if ref is not None and (ref, entry.get("claim")) not in pairs:
+                pairs.append((ref, str(entry.get("claim") or stmt.get("claim") or "")))
+    covered = {ref for ref, _claim in pairs}
+    for ref in statement_refs(stmt):
+        if ref not in covered:
+            pairs.append((ref, str(stmt.get("claim") or "")))
+    return pairs
+
+
+def drop_jargon_sentences(results):
+    """Remove every Results sentence that narrates the walk (JARGON_RE); return
+    how many went. Paragraphs left empty go too."""
+    count = {"dropped": 0}
+
+    def keep(text):
+        out = []
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[(])", str(text or "")):
+            if JARGON_RE.search(sentence):
+                count["dropped"] += 1
+                continue
+            out.append(sentence)
+        return " ".join(out)
+
+    paragraphs = []
+    for paragraph in results.get("paragraphs") or []:
+        if isinstance(paragraph, dict):
+            text = keep(paragraph.get("text"))
+            if not text.strip():
+                continue
+            paragraph = dict(paragraph, text=text)
+        paragraphs.append(paragraph)
+    results["paragraphs"] = paragraphs
+    for key in ("summary", "title"):
+        if results.get(key):
+            results[key] = keep(results[key])
+    return count["dropped"]
 
 
 def drop_unrecorded_sentences(results, walker):
@@ -420,8 +484,9 @@ def _in_record(token, numbers):
     return token in numbers or ("+" + token) in numbers or ("−" + token) in numbers
 
 
-def verify_results(results, kept, dropped, walker, scope="pathway"):
-    """Objections to the Narrator's Results section."""
+def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None):
+    """Objections to the Narrator's Results section. ``words_range`` = (fewest,
+    most) words; RESULTS_WORDS by scope otherwise."""
     problems = []
     chain = walker.record()["chain"]
     paragraphs = results.get("paragraphs") or []
@@ -477,13 +542,16 @@ def verify_results(results, kept, dropped, walker, scope="pathway"):
         for label in timing_on_unlabeled(text, walker):
             problems.append("paragraph %d gives %s a timing or order word, but its layer has no column labels"
                             % (i, label))
+        if JARGON_RE.search(text):
+            problems.append("paragraph %d narrates the walk (%s); report the biology and name the genes"
+                            % (i, JARGON_RE.search(text).group(0)))
     for n in kept_ids - covered:
         problems.append("statement %d is not covered" % n)
     for stmt in dropped:
         head = " ".join(str(stmt.get("claim", "")).split()[:5]).lower()
         if head and any(head in str(p.get("text", "")).lower() for p in paragraphs if isinstance(p, dict)):
             problems.append("a dropped statement is mentioned: %r" % head)
-    lo, hi = RESULTS_WORDS["network" if scope == "network" else "pathway"]
+    lo, hi = words_range or RESULTS_WORDS["network" if scope == "network" else "pathway"]
     if not (lo <= words <= hi):
         problems.append("%d words; between %d and %d are required" % (words, lo, hi))
     return problems

@@ -1,10 +1,10 @@
 # The interpretation
 
-When a job finishes, PaintOmics AI interprets it by walking a graph. An agent
-walks the network of every KEGG, Reactome and OmniPath interaction known for your
-organism, with your values laid on its nodes. It starts where your relevant
-features cluster, reads your values at every stop against your experiment
-design, and hands the chain it walked to a writer that may cite nothing else. A
+When a job finishes, PaintOmics AI interprets it by walking a graph. AI agents
+walk the network of every KEGG, Reactome and OmniPath interaction known for your
+organism, with your values laid on its nodes. They start where your relevant
+features concentrate, read your values at every stop against your experiment
+design, and hand the chain they walked to writers that may cite nothing else. A
 checked Results section comes out of that chain.
 
 It is a draft for you to check, not a conclusion. It is grounded in two things
@@ -36,8 +36,9 @@ nothing else.
 
 The panel lists the legs as the agent walks them, newest last, with a progress
 bar through its stages: reading the network, reading the design, walking,
-writing statements, checking them, and writing the Results section. A walk of
-the whole network takes a few minutes.
+writing statements, checking them, and writing the Results section. Several
+agents work at once, and a walk of the whole network finishes within ten
+minutes, usually in about five.
 
 ## What the result contains
 
@@ -45,7 +46,10 @@ the whole network takes a few minutes.
   kept statement in the order the walk found them. Each paragraph ends with chips
   for the legs it rests on. Numbers in brackets such as `[1]` link to the papers
   on PubMed, numbered in the order they are first cited.
-* **The cited papers**, numbered as the text cites them.
+* **The cited papers**, numbered as the text cites them. Under each paper is the
+  passage the citation rests on, in the paper's own words, with where it sits:
+  the abstract, or the part of the main text (results, discussion, introduction).
+  Hover over a `[1]` in the text to read its passage without scrolling.
 * **The statements** that passed the checks. Each one separates what the pathway
   already draws (cited as a leg) from what goes beyond it (a paper the writer
   read, or a hypothesis worded as one). Dropped statements are listed with the
@@ -53,8 +57,9 @@ the whole network takes a few minutes.
 * **The walk itself:** every leg, the edge it followed and the database and
   pathway that draw it, and the reading the agent gave at that stop.
 
-Every quoted value, every leg and every citation is checked by code before you
-see it. A statement that fails the checks is rewritten once and then dropped. A
+Every quoted value, every leg and every citation is checked before you see it.
+A citation is kept only when an agent reading the paper found the passage that
+states the claim, and code found that passage in the paper. A statement that fails the checks is rewritten once and then dropped. A
 Results section that fails twice is dropped too, and the statements stand alone.
 
 !!! note "There is no export"
@@ -96,4 +101,6 @@ steps from a gene you name. The conversation is kept with the job.
 * It does not know your hypothesis unless you wrote it in **Experiment design**.
 * It is a language model. It can write a fluent paragraph that is wrong about your
   biology. The checks verify that its values are yours, its legs are drawn and its
-  papers were retrieved and read. Whether the argument holds is your judgement.
+  papers contain the passage shown. Whether the argument holds is your judgement.
+* It reads the main text of a paper only when PubMed Central or Europe PMC carries
+  it. Otherwise the passage comes from the abstract.

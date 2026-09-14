@@ -122,7 +122,7 @@ class WalkerVerifyTest(unittest.TestCase):
         node = self.chain[0]["to"]
         value = self.ov.layer_text(node).split("·")[0].split()[-1]   # the first quoted value
         kept = [{"n": 1}]
-        text = ("The walk began at %s, which read %s at the first point [e1]. " % (
+        text = ("At the first time point in this series, the gene %s read %s [e1]. " % (
             self.walker.label(node), value)) * 12
         good = {"title": "t", "summary": "s", "paragraphs": [
             {"from_statement": 1, "legs": [1], "text": text},
@@ -171,7 +171,7 @@ class WalkerVerifyTest(unittest.TestCase):
     def test_a_paragraph_keeps_its_statements_citations(self):
         node = self.chain[0]["to"]
         value = self.ov.layer_text(node).split("·")[0].split()[-1]
-        text = ("The walk began at %s, which read %s at the first point [e1]. " % (
+        text = ("At the first time point in this series, the gene %s read %s [e1]. " % (
             self.walker.label(node), value)) * 12
         results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1], "text": text}]}
         problems = verify.verify_results(results, [{"n": 1, "papers": [2]}], [], self.walker)
@@ -194,11 +194,11 @@ class WalkerVerifyTest(unittest.TestCase):
     def test_a_sentence_with_a_misquoted_value_is_dropped_not_the_section(self):
         node = self.chain[0]["to"]
         value = self.ov.layer_text(node).split("·")[0].split()[-1]
-        results = {"summary": "It moved to +9.99. The walk began.", "paragraphs": [
+        results = {"summary": "It moved to +9.99. Aaa rose.", "paragraphs": [
             {"from_statement": 1, "legs": [1], "text": "It read %s at the start [e1]. It then reached +9.99 at 6h." % value},
             {"from_statement": 2, "legs": [2], "text": "Only +8.88 here."}]}
         self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker), 3)
-        self.assertEqual(results["summary"], "The walk began.")
+        self.assertEqual(results["summary"], "Aaa rose.")
         self.assertEqual([p["text"] for p in results["paragraphs"]], ["It read %s at the start [e1]." % value])
 
     def test_no_timing_word_on_an_unlabeled_layer(self):
@@ -243,7 +243,7 @@ class WalkerVerifyTest(unittest.TestCase):
         node = self.chain[0]["to"]
         value = self.ov.layer_text(node).split("·")[0].split()[-1]
         kept = [{"n": 1, "claim": "c", "prose": "p [1]", "papers": [1]}]
-        text = ("The walk began at %s, which read %s at the first point [e1] [1]. " % (
+        text = ("At the first time point in this series, the gene %s read %s [e1] [1]. " % (
             self.walker.label(node), value)) * 12
         results = {"title": "t", "summary": "It moved [2].",
                    "paragraphs": [{"from_statement": 1, "legs": [1], "text": text + "It drives wasting [2]."}]}

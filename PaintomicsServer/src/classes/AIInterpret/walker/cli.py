@@ -45,11 +45,11 @@ def _log_stage(stage, percent, detail, walker):
         logger.info("[walker] %3d%% %s: %s", percent, stage, detail)
 
 
-def run(job_id, scope, policy="greedy", out_dir=None, data_dir=None, writer=True, max_turns=60, use_mongo=True):
+def run(job_id, scope, policy="greedy", out_dir=None, data_dir=None, writer=True, use_mongo=True):
     job = load_job(job_id)
     rec, network, graph, tag = service.run(
         job, job_id, service.check_scope(scope), policy=policy, data_dir=data_dir, writer=writer,
-        max_turns=max_turns, use_mongo=use_mongo, progress=_log_stage)
+        use_mongo=use_mongo, progress=_log_stage)
     out_dir = out_dir or os.path.join(CLIENT_TMP_DIR, "walks")
     json_path = record_mod.save(rec, out_dir)
     kgml, png = None, None
@@ -91,7 +91,6 @@ def main(argv=None):
     ap.add_argument("--data-dir", default=None)
     ap.add_argument("--no-writer", action="store_true")
     ap.add_argument("--no-mongo", action="store_true", help="skip the OmniPath collection")
-    ap.add_argument("--max-turns", type=int, default=60)
     ap.add_argument("--evaluate", action="store_true", help="run Test 1 instead of a walk")
     ap.add_argument("--plants", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
@@ -115,7 +114,7 @@ def _main(args):
         print(jpath, hpath, sep="\n")
         return 0
     rec, jpath, hpath = run(args.job, args.scope, args.policy, args.out, args.data_dir,
-                            not args.no_writer, args.max_turns, not args.no_mongo)
+                            not args.no_writer, not args.no_mongo)
     walk = rec["walk"]
     print("chain: %d legs · %s" % (len(walk["chain"]), rec["timings"]))
     print("statements: %d kept, %d dropped · results: %s" % (

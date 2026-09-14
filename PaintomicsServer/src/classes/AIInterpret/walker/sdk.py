@@ -63,44 +63,69 @@ async def stop(ctx: RunContextWrapper[WalkContext], reading: str, reason: str) -
     return ctx.context.walker.stop(reading, reason)
 
 
-WALKER_TOOLS = [scan, plan, step, jump, note, stop]
+PLANNER_TOOLS = [scan, plan]
+SEGMENT_TOOLS = [scan, step, jump, note, stop]
 
-INSTRUCTIONS = """You are the walker of an Agentic Graph Walk over a biological graph with a user's multi-omics data laid over it.
+_READING_RULES = """Every node carries layers: the user's values as text with their own column labels, and a flag saying whether the user marked that layer relevant. Heat is how surprising a node's neighbourhood's relevant count is given its size. You never compute on values; you read them against the design card.
 
-Every node carries layers: the user's values as text with their own column labels, and a flag saying whether the user marked that layer relevant. Heat is how surprising a node's neighbourhood's relevant count is given its size. You never compute on values; you read them against the design card.
+Describe what you find as a biologist would: name the genes and proteins, or their biological role ("Itpr1, Itpr2 and Itpr3", "the IP3 receptors"). Never call a set of genes a cluster; readings, reasons and notes reach the Writers and the reader."""
 
-Procedure:
-1. scan(scope="graph"), then plan(seeds, steps, reason): choose which seed candidates tell distinct stories and how many steps you need. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it.
-2. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. A layer the card lists as unlabeled has columns c1..cN with no time or order: read its direction and size, not its timing. Name the layer and quote its numbers; every answer shows the layers of the relevant neighbours, so read them before you step. "Check whether..." is not a reading.
-3. Walk from a seed before leaving it: step to its relevant neighbours and read them. jump (to an unvisited seed or a chain node) only when the neighbourhood is exhausted; code refuses a jump while a relevant unvisited neighbour is still open. Use the steps you planned.
-4. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
-5. note what the Writer should not miss. stop when every chosen seed has been read and what is left repeats what the chain shows.
+PLANNER_INSTRUCTIONS = """You plan an Agentic Graph Walk over a biological graph with a user's multi-omics data laid over it.
 
-Rules code enforces: only a listed neighbour; an edge closes per direction; the reading must name a layer of the node; budgets are counters, a refusal costs nothing. A node that is hot but not relevant can be walked to; its heat comes from its neighbours.
-"""
+""" + _READING_RULES + """
+
+1. scan(scope="graph").
+2. plan(seeds, steps, reason): choose the seed candidates that tell distinct biological stories, in the order they should be reported, and the total steps. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it.
+3. After plan answers "plan set", reply with one sentence and stop calling tools. Several walkers then walk your seeds at the same time, one each."""
+
+SEGMENT_INSTRUCTIONS = """You walk ONE seed's neighbourhood in an Agentic Graph Walk over a biological graph with a user's multi-omics data laid over it. Other walkers walk the other seeds at the same time: an edge they walked shows as closed, a node they read as walked.
+
+""" + _READING_RULES + """
+
+1. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. A layer the card lists as unlabeled has columns c1..cN with no time or order: read its direction and size, not its timing. Name the layer and quote its numbers; every answer shows the layers of the relevant neighbours, so read them before you step. "Check whether..." is not a reading.
+2. Read the seed's relevant neighbours first, then follow what the values say. jump back to a node you walked when a branch is exhausted; code refuses a jump while a relevant unvisited neighbour is still open.
+3. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
+4. note what the Writer should not miss. Use your steps; stop when the neighbourhood is read and what is left repeats what you have.
+
+Rules code enforces: only a listed neighbour; an edge closes per direction; the reading must name a layer of the node; budgets are counters, a refusal costs nothing."""
 
 
-async def run_walk_async(walker, card_text, max_turns=60, model=None, temperature=0.2):
-    ctx = WalkContext(walker=walker, card=card_text)
-    agent = Agent[WalkContext](name="Walker", model=model or _model(), instructions=INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature),
-                               tools=WALKER_TOOLS)
-    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. Ceiling %d steps; at most %d seeds; at least %d steps per seed.\n"
-               "Begin with scan(scope=\"graph\")." % (
-                   card_text, walker.scope, walker.params["ceiling"], walker.params["max_seeds"],
-                   walker.params.get("steps_per_seed", 1)))
+async def _run_loop(agent, walker, prompt, max_turns):
+    ctx = WalkContext(walker=walker, card="")
     try:
-        await Runner.run(agent, kickoff, context=ctx, max_turns=max_turns)
+        await Runner.run(agent, prompt, context=ctx, max_turns=max_turns)
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[walker] the model loop ended early: %s", exc)
         # Kept so the service can tell a gateway that failed from a model that
         # chose to stop: the first is an error the user can retry.
         walker.loop_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
+
+
+async def run_plan_async(walker, card_text, max_turns=8, model=None, temperature=0.2):
+    """The planner: scan the graph and fix the seeds and the steps. Leaves
+    walker.plan None when the model never planned."""
+    agent = Agent[WalkContext](name="Planner", model=model or _model(), instructions=PLANNER_INSTRUCTIONS,
+                               model_settings=ModelSettings(temperature=temperature), tools=PLANNER_TOOLS)
+    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. At most %d seeds; at least %d steps per seed; ceiling %d steps.\n"
+               "Begin with scan(scope=\"graph\")." % (
+                   card_text, walker.scope, walker.params["max_seeds"], walker.params.get("steps_per_seed", 1),
+                   walker.params["ceiling"]))
+    await _run_loop(agent, walker, kickoff, max_turns)
+    return walker
+
+
+async def run_segment_async(walker, card_text, opening, others, max_turns, model=None, temperature=0.2):
+    """One seed's walker, already standing on its seed (``opening`` is what
+    start_at answered). Stopped by code when the model does not stop."""
+    agent = Agent[WalkContext](name="Walker", model=model or _model(), instructions=SEGMENT_INSTRUCTIONS,
+                               model_settings=ModelSettings(temperature=temperature), tools=SEGMENT_TOOLS)
+    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. You walk from %s; %s.\nOther walkers, at the same time: %s.\n\n"
+               "WHERE YOU STAND\n%s" % (card_text, walker.scope, walker.label(walker.current),
+                                         walker._budget_line(), others or "none", opening))
+    await _run_loop(agent, walker, kickoff, max_turns)
     if not walker.done:
         walker.stop("the model stopped calling tools", "loop ended without stop: %s"
                     % ("turns spent" if len(walker.turns) >= max_turns - 1 else "no tool call"))
     return walker
-
-
-def run_walk(walker, card_text, max_turns=60, model=None):
-    return asyncio.run(run_walk_async(walker, card_text, max_turns, model))

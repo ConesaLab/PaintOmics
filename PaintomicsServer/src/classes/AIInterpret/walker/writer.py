@@ -1,11 +1,17 @@
-"""The Writer: an agent loop that turns the sealed chain into 3-5 statements,
-each grounded in the drawn edges it rests on, with literature only for what
-is built on top of them. submit_statements is the only way to finish; the
-Verifier answers every submission and code keeps what passed.
+"""The Writers: agent loops that turn one part of the sealed chain each into
+statements, grounded in the drawn edges they rest on, with published biology
+for what is built on top of them. Several run at once over one walk
+(walker/parallel.py), sharing one numbered paper list.
+
+submit_statements is the only way to finish. The Verifier answers every
+submission: code checks the evidence, the legs and the wording, and a paper
+agent reads every cited paper in full and must find the passage that states
+the claim (walker/literature.py). What fails goes back to the Writer.
 """
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 from dataclasses import dataclass, field
@@ -13,6 +19,7 @@ from dataclasses import dataclass, field
 from agents import Agent, ModelSettings, RunContextWrapper, Runner, function_tool
 
 from src.classes.AIInterpret.agent import _model
+from src.classes.AIInterpret.walker import literature
 from src.classes.AIInterpret.walker import verify
 from src.classes.AIInterpret.walker.errors import tool_failure
 from src.classes.AIInterpret.walker.walk import sign_glyph
@@ -21,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 SEARCH_HITS = 8
 MAX_SUBMITS = 3
+READ_CHARS = 6000
 
 
 @dataclass
@@ -28,16 +36,30 @@ class WriterContext:
     walker: object
     card: str
     pubmed: object                      # PubMedClient
-    papers: dict = field(default_factory=dict)      # ref -> paper dict
-    pmid_to_ref: dict = field(default_factory=dict)
+    store: object = None                # LiteratureStore shared by every Writer of the walk
+    client: object = None               # the paper agent's LLM client; None leaves citations unchecked
+    legs: tuple | None = None           # (first, last) leg this Writer covers; None = the whole chain
+    count: tuple = (verify.STATEMENT_MIN, verify.STATEMENT_MAX)
+    citations: int = 2                  # papers this Writer should cite across its statements
+    paper_slots: object = None          # asyncio.Semaphore bounding the paper agents of the walk
+    deadline: float | None = None
     searches: list = field(default_factory=list)
     submits: int = 0
     kept: list = field(default_factory=list)
     dropped: list = field(default_factory=list)
+    last_passing: list = field(default_factory=list)   # what passed on the latest submission
     done: bool = False
     trace: list = field(default_factory=list)
     read: set = field(default_factory=set)          # refs opened with read_paper
     loop_error: str | None = None                   # the model loop ended on this exception
+
+    def __post_init__(self):
+        if self.store is None:
+            self.store = literature.LiteratureStore()
+
+    @property
+    def papers(self):
+        return self.store.papers
 
 
 def _fail(name):
@@ -62,21 +84,19 @@ async def search_literature(ctx: RunContextWrapper[WriterContext], query: str, t
     c.searches.append({"query": query, "topic_tag": topic_tag})
     try:
         pmids = await asyncio.to_thread(c.pubmed.search, query, SEARCH_HITS, "relevance")
-        new = [p for p in pmids if str(p) not in c.pmid_to_ref]
+        new = [p for p in pmids if str(p) not in c.store.pmid_to_ref]
         papers = await asyncio.to_thread(c.pubmed.fetch_abstracts, new) if new else []
     except Exception as exc:                                          # noqa: BLE001
         return "Search failed (%s)." % exc
     lines = []
     for paper in papers or []:
-        pmid = str(paper.get("pmid", ""))
-        if not pmid or pmid in c.pmid_to_ref:
+        if not str(paper.get("pmid", "")):
             continue
-        ref = len(c.papers) + 1
-        c.papers[ref] = dict(paper, ref_index=ref)
-        c.pmid_to_ref[pmid] = ref
-        lines.append(_paper_line(ref, paper))
+        ref, added = c.store.add(paper)
+        if added:
+            lines.append(_paper_line(ref, paper))
     for pmid in pmids:
-        ref = c.pmid_to_ref.get(str(pmid))
+        ref = c.store.pmid_to_ref.get(str(pmid))
         if ref and not any(l.startswith("[%d]" % ref) for l in lines):
             lines.append(_paper_line(ref, c.papers[ref]) + " -- already retrieved")
     total = len(pmids)
@@ -105,7 +125,7 @@ async def read_paper(ctx: RunContextWrapper[WriterContext], ref_index: int, sect
     text = (paper.get("sections") or {}).get(section) if section != "abstract" else _abstract(paper)
     c.read.add(int(ref_index))
     c.trace.append({"tool": "read_paper", "ref": int(ref_index), "section": section})
-    return "[%d] %s\n%s" % (int(ref_index), section, (text or "(section not available)")[:6000])
+    return "[%d] %s\n%s" % (int(ref_index), section, (text or "(section not available)")[:READ_CHARS])
 
 
 @function_tool(name_override="check_my_citations", failure_error_function=_fail("check_my_citations"))
@@ -119,10 +139,36 @@ async def check_my_citations(ctx: RunContextWrapper[WriterContext], draft: str) 
     return "\n".join(lines) or "no [N] in the draft"
 
 
-@function_tool(name_override="submit_statements", failure_error_function=_fail("submit_statements"))
-async def submit_statements(ctx: RunContextWrapper[WriterContext], statements_json: str) -> str:
-    """Submit 3-5 statements as a JSON array of objects {claim, prose, cites: [[node, layer], ...], legs: [N, ...], grounded_in: [{leg, db}], beyond: [{claim, paper: N or null, hypothesis: true/false}], papers: [N, ...]}. The only way to finish. The Verifier answers; fix what it objects to and resubmit, at most three times."""
-    c = ctx.context
+async def confirm_citations(c, checked):
+    """Send every citation of the statements code passed to the paper agents,
+    at once, and turn each unconfirmed one into an objection. A confirmed one
+    becomes the statement's evidence: {ref, claim, quote, section}."""
+    if c.client is None:
+        return
+    if c.paper_slots is None:
+        # Made here, inside the running loop: on Python 3.9 a semaphore binds
+        # to the loop current when it is created.
+        c.paper_slots = asyncio.Semaphore(4)
+    jobs = []
+    for stmt, problems in checked:
+        if problems:
+            continue
+        stmt["evidence"] = []
+        for ref, claim in verify.citation_pairs(stmt):
+            jobs.append((stmt, problems, ref, claim))
+    verdicts = await asyncio.gather(*(literature.check_citation(
+        c.store, c.client, c.pubmed, ref, claim, c.paper_slots, c.deadline) for _s, _p, ref, claim in jobs))
+    for (stmt, problems, ref, claim), verdict in zip(jobs, verdicts):
+        if verdict.get("supported"):
+            stmt["evidence"].append({"ref": ref, "claim": claim, "quote": verdict["quote"],
+                                     "section": verdict["section"], "full_text": verdict.get("full_text")})
+        else:
+            problems.append("[%d] does not support %r: %s. Cite a paper whose text states it, or word the "
+                            "claim as a hypothesis" % (ref, str(claim)[:80], verdict.get("why")))
+
+
+async def submit(c, statements_json):
+    """The Verifier's answer to one submission (the body of submit_statements)."""
     try:
         statements = json.loads(statements_json)
         assert isinstance(statements, list)
@@ -133,8 +179,11 @@ async def submit_statements(ctx: RunContextWrapper[WriterContext], statements_js
         if isinstance(stmt, dict):
             stmt["n"] = i
     statements = [s for s in statements if isinstance(s, dict)]
-    checked, count_problem = verify.verify_statements(statements, c.walker, c.papers, c.read)
+    checked, count_problem = verify.verify_statements(statements, c.walker, c.papers, c.read,
+                                                      count=c.count, legs=c.legs, names_genes=c.client is None)
+    await confirm_citations(c, checked)
     failing = [(s, p) for s, p in checked if p]
+    c.last_passing = [copy.deepcopy(dict(s, verifier="pass")) for s, p in checked if not p]
     c.trace.append({"tool": "submit_statements", "attempt": c.submits, "n": len(statements),
                     "failing": len(failing), "count_problem": count_problem})
     if (failing or count_problem) and c.submits < MAX_SUBMITS:
@@ -153,25 +202,35 @@ async def submit_statements(ctx: RunContextWrapper[WriterContext], statements_js
     return "accepted: %d kept, %d dropped by the Verifier. Done." % (len(c.kept), len(c.dropped))
 
 
+@function_tool(name_override="submit_statements", failure_error_function=_fail("submit_statements"))
+async def submit_statements(ctx: RunContextWrapper[WriterContext], statements_json: str) -> str:
+    """Submit your statements as a JSON array of objects {claim, prose, cites: [[node, layer], ...], legs: [N, ...], grounded_in: [{leg, db}], beyond: [{claim, paper: N or null, hypothesis: true/false}], papers: [N, ...]}. The only way to finish. The Verifier answers, and a paper agent reads every cited paper for the passage that states your claim; fix what they object to and resubmit, at most three times."""
+    return await submit(ctx.context, statements_json)
+
+
 WRITER_TOOLS = [search_literature, read_paper, check_my_citations, submit_statements]
 
-INSTRUCTIONS = """You are the Writer of an Agentic Graph Walk. You receive the design card, the chain (every leg with its edge, the walker's reading, and the node's layer values as the user labelled them), the nodes seen but not walked, and the walker's notes. The chain is the only evidence you may use.
+INSTRUCTIONS = """You are a Writer of an Agentic Graph Walk. You receive the design card and one part of the walk: its legs with their edges, the walker's readings and each node's layer values as the user labelled them, plus the notes. That part of the chain is the only data evidence you may use; other Writers cover the other parts.
 
-Write 3 to 5 statements. Each names its evidence as [node, layer] pairs (cites), the legs it rests on, and:
+Write the number of statements the brief asks for, about your legs only. Each names its evidence as [node, layer] pairs (cites), the legs it rests on, and:
 - grounded_in: the drawn edges on the chain it restates, as {leg, db}. A relation the pathway draws is supported by the pathway: cite the leg, never search for it.
-- beyond: every claim that goes past what the drawn edges say (a direction against the drawn sign, a mechanism, a causal timing). Each needs a paper found with search_literature and read with read_paper, or hypothesis: true and prose worded as a hypothesis. Cite only a paper you read whose title or abstract is about the genes of the claim; searches return PubMed's best matches, so prefer the study that established the claim over a recent paper that mentions it in passing.
+- beyond: what published biology adds to the values -- the established role of these genes, a known regulation or mechanism that explains the direction, what the change means for the cell. Each claim needs a paper found with search_literature and read with read_paper, or hypothesis: true and prose worded as a hypothesis. Searches return PubMed's best matches: prefer the study that established the claim over a paper that mentions it in passing.
 
-A value is evidence only if its layer is flagged relevant; a non-relevant value may be cited only to say it did not change, and the prose must say "not relevant" next to it. Read timing against the card: a difference already present at the baseline is not a response. An omic the card lists as unlabeled has no time points or order: call its columns c1..cN and never give its values early, late, baseline, peak or over-time words; code refuses them. Where layers disagree, say so; a series that changes sign at every point is noise, not a disagreement.
+Citations are checked. A paper agent reads every paper you cite, in full, and must find the passage that states your claim; a claim the paper does not state is sent back. So claim exactly what the paper says, and cite the paper where you read it. Aim for the number of papers the brief asks for across your statements, each on a different claim.
+
+Write like a paper. Name the genes and proteins ("Itpr1, Itpr2 and Itpr3", "the IP3 receptors"); never call a set of genes a cluster, and never use the walker's words seed, jump or the walk. A value is evidence only if its layer is flagged relevant; a non-relevant value may be cited only to say it did not change, and the prose must say "not relevant" next to it. Read timing against the card: a difference already present at the baseline is not a response. An omic the card lists as unlabeled has no time points or order: call its columns c1..cN and never give its values early, late, baseline, peak or over-time words; code refuses them. Where layers disagree, say so; a series that changes sign at every point is noise, not a disagreement.
 
 Finish with submit_statements (a JSON array). Use check_my_citations before it.
 """
 
 
-def chain_text(walker):
-    """The chain as the Writer, the sense check and the Narrator read it."""
+def chain_text(walker, legs=None):
+    """The chain as the Writers, the sense check and the Narrator read it;
+    ``legs`` = (first, last) keeps one part of it, numbered as in the whole."""
     rec = walker.record()
+    chosen = [leg for leg in rec["chain"] if legs is None or legs[0] <= leg["n"] <= legs[1]]
     lines = []
-    for leg in rec["chain"]:
+    for leg in chosen:
         if leg["kind"] == "step":
             e = leg["edge"]
             lines.append("e%d · %s → %s · %s · %s · %s %s · %s the arrow" % (
@@ -183,38 +242,47 @@ def chain_text(walker):
         lines.append("   reason: %s" % leg["reason"])
         lines.append("   layers of %s:\n%s" % (walker.label(leg["to"]),
                                                 "\n".join("      " + l for l in walker.overlay.layer_text(leg["to"]).splitlines())))
-    if rec["chain"]:
-        first = rec["chain"][0]["from"]
+    if chosen:
+        first = chosen[0]["from"]
         lines.insert(0, "start: %s\n   layers:\n%s" % (walker.label(first), "\n".join(
             "      " + l for l in walker.overlay.layer_text(first).splitlines())))
     return "\n".join(lines)
 
 
-def seen_text(walker, limit=20):
-    rows = walker.record()["seen"]
+def seen_text(walker, limit=20, legs=None):
+    rows = [r for r in walker.record()["seen"]
+            if legs is None or any(legs[0] - 1 <= a <= legs[1] for a in r["after_legs"])]
     rows = sorted(rows, key=lambda r: -r["heat"])[:limit]
     return "\n".join("%s · r=%s · heat %.2f · offered after e%s" % (
         r["label"], "—" if r["r"] is None else r["r"], r["heat"],
         ",e".join(str(x) for x in r["after_legs"][:4])) for r in rows) or "none"
 
 
-async def run_writer_async(walker, card_text, pubmed, max_turns=30, model=None, temperature=0.3):
-    ctx = WriterContext(walker=walker, card=card_text, pubmed=pubmed)
+def writer_prompt(c, others=""):
+    """The brief one Writer starts from: its legs, the notes on them, what the
+    other Writers cover, and how many statements and papers to write."""
+    walker, legs = c.walker, c.legs
+    rec = walker.record()
+    notes = [n for n in rec["notes"] if legs is None or legs[0] - 1 <= n["after_leg"] <= legs[1]]
+    part = "legs e%d to e%d" % legs if legs else "the whole chain"
+    return ("BRIEF\nWrite %d to %d statements about %s, citing about %d papers across them.\n\n"
+            "DESIGN CARD\n%s\n\nYOUR PART OF THE WALK (%s)\n%s\n\nSEEN FROM THESE LEGS, NOT WALKED (hottest)\n%s\n\n"
+            "NOTES\n%s\n\nOTHER PARTS, WRITTEN BY OTHER WRITERS\n%s\n\nSTOP: %s" % (
+                c.count[0], c.count[1], part, c.citations, c.card, part, chain_text(walker, legs),
+                seen_text(walker, legs=legs),
+                "\n".join("after e%d: %s" % (n["after_leg"], n["text"]) for n in notes) or "none",
+                others or "none", rec["stop_reason"]))
+
+
+async def run_writer_async(c, others="", max_turns=30, model=None, temperature=0.3):
+    """Run one Writer to its accepted submission, its turn limit or an error;
+    returns the context, whose kept/last_passing say what survived."""
     agent = Agent[WriterContext](name="Writer", model=model or _model(), instructions=INSTRUCTIONS,
                                  model_settings=ModelSettings(temperature=temperature),
                                  tools=WRITER_TOOLS)
-    rec = walker.record()
-    prompt = "DESIGN CARD\n%s\n\nCHAIN\n%s\n\nSEEN, NOT WALKED (hottest)\n%s\n\nNOTES\n%s\n\nSTOP: %s (%s)" % (
-        card_text, chain_text(walker), seen_text(walker),
-        "\n".join("after e%d: %s" % (n["after_leg"], n["text"]) for n in rec["notes"]) or "none",
-        rec["stop_reason"], rec["stop_reading"])
     try:
-        await Runner.run(agent, prompt, context=ctx, max_turns=max_turns)
+        await Runner.run(agent, writer_prompt(c, others), context=c, max_turns=max_turns)
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[writer] the loop ended early: %s", exc)
-        ctx.loop_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
-    return ctx
-
-
-def run_writer(walker, card_text, pubmed, max_turns=30, model=None):
-    return asyncio.run(run_writer_async(walker, card_text, pubmed, max_turns, model))
+        c.loop_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
+    return c

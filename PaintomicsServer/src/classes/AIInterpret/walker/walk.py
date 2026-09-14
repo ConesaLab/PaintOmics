@@ -78,6 +78,7 @@ class Walker:
     scans: int = 0
     refusals: int = 0
     steps_here: int = 0                          # steps taken since the last plan or jump
+    segments: list = field(default_factory=list)  # one per seed walked by its own walker: seed, legs
     on_turn: object = None                       # called with the walker after every logged turn
 
     # ------------------------------------------------------------ helpers
@@ -416,7 +417,7 @@ class Walker:
             "notes": list(self.notes), "stop_reason": self.stop_reason,
             "stop_reading": self.stop_reading, "budget_left": dict(self.budget),
             "turns": list(self.turns), "refusals": self.refusals, "scans": self.scans,
-            "done": self.done,
+            "done": self.done, "segments": list(self.segments),
         }
 
 

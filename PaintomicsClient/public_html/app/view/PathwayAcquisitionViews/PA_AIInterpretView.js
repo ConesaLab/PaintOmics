@@ -728,10 +728,12 @@ function PA_AIInterpretView() {
         };
         var counts = view.counts || {};
         bubble.appendChild(paWalkEl("h3", "ai-walk-title", "Graph walk across KEGG, Reactome and OmniPath"));
-        bubble.appendChild(paWalkEl("p", "pa-walk-meta", "An agent walked the network of every KEGG, Reactome and " +
+        var starts = counts.segments || 1;
+        bubble.appendChild(paWalkEl("p", "pa-walk-meta", "AI agents walked the network of every KEGG, Reactome and " +
             "OmniPath interaction for this organism (" + ((view.graph || {}).nodes || "?") + " nodes), with your " +
-            "values on its nodes, from the nodes whose neighbourhoods hold surprisingly many relevant features: " +
-            (counts.steps || 0) + " steps, " + (counts.jumps || 0) + " jumps."));
+            "values on its nodes. They started from " + starts + " node" + (starts === 1 ? "" : "s") +
+            " whose neighbourhoods hold surprisingly many relevant features and took " + (counts.steps || 0) +
+            " steps."));
         bubble.appendChild(paWalkResultsNode(view, {onLeg: focusLeg}));
         var references = paWalkReferencesNode(view);
         if (references) { bubble.appendChild(references); }

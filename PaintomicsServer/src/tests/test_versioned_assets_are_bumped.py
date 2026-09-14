@@ -151,7 +151,7 @@ PUBLISHED = {
     # longer exists is named as such rather than reported as "still in
     # progress".
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.5", "4fd61879ce3915abef84ead75479042b20ede2b15e600519720dc02428206858"),
+        "1.6", "d70a8d09b213ef078aea279ff999fe6cd741084a41808326665991c7f1d5bb9f"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -221,7 +221,7 @@ PUBLISHED = {
         "2.8", "b56c3ce3224ba610e1268b85339eaed7dbfea1eab8d70b6284895cfbade81f86"),
     # The Step 4 Walk column and the renderers the AI panel shares with it.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.1", "c5a09a3d80013980c89b8cb811558de8284f27f36a3ff90b02bf31d971bbf3a4"),
+        "1.2", "cb6898e2eece0ec3e5a98a48576bc5ead0ef1db2e283a484c6eee6e51b46877c"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

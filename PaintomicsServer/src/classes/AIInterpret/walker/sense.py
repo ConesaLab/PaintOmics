@@ -58,7 +58,11 @@ def sense_check(client, card_text, statements, chain_text, temperature=0.1):
     try:
         out = client.complete_json(
             [{"role": "system", "content": BRIEF}, {"role": "user", "content": prompt}],
-            "sense_check", SENSE_SCHEMA, lambda text: None, max_tokens=2500, temperature=temperature)
+            # Five verdicts with a note each: about 350 tokens a statement. A
+            # fixed 2,500 cut a twelve-statement answer off and the whole check
+            # read as unavailable.
+            "sense_check", SENSE_SCHEMA, lambda text: None, max_tokens=max(2500, 600 + 350 * len(statements)),
+            temperature=temperature)
     except Exception:                                                 # noqa: BLE001
         return None
     if not isinstance(out, dict) or not isinstance(out.get("verdicts"), list):

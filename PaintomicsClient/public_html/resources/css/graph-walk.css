@@ -207,7 +207,29 @@ a.pa-walk-pathway-link:hover {
 	font-size: 12px;
 }
 .pa-walk-reference-list li {
-	margin: 4px 0;
+	margin: 4px 0 8px;
+}
+/* The passage a paper agent found for a citation, as the paper words it. */
+.pa-walk-quote {
+	margin: 4px 0 2px;
+	padding: 4px 8px;
+	border-left: 2px solid var(--pa-walk-accent);
+	background: var(--pa-walk-focus-bg);
+	color: var(--pa-ink-body, #27272A);
+	font-size: 12px;
+	line-height: 1.45;
+}
+.pa-walk-quote-where {
+	display: block;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--pa-walk-accent-ink);
+}
+.pa-walk-quote-claim {
+	margin: 0 0 4px;
+	font-size: 11px;
+	color: var(--pa-ink-muted, #595959);
 }
 
 /* Statements. */

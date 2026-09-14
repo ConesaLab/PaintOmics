@@ -35,6 +35,15 @@ var PA_WALK_AXIS_WORDS = {
 	unlabeled: "no column labels"
 };
 
+/* Where in a paper a quoted passage sits, as the paper agent's check found it. */
+var PA_WALK_SECTION_WORDS = {
+	abstract: "Abstract",
+	introduction: "Main text · Introduction",
+	results: "Main text · Results",
+	discussion: "Main text · Discussion",
+	other: "Main text"
+};
+
 function paWalkEl(tag, className, text) {
 	var el = document.createElement(tag);
 	if (className) { el.className = className; }
@@ -97,7 +106,8 @@ function paWalkChipText(text, papers, options) {
 					link.href = "https://pubmed.ncbi.nlm.nih.gov/" + paper.pmid + "/";
 					link.target = "_blank";
 					link.rel = "noopener noreferrer";
-					link.title = String(paper.title || "Open in PubMed") + (paper.year ? " (" + paper.year + ")" : "");
+					link.title = String(paper.title || "Open in PubMed") + (paper.year ? " (" + paper.year + ")" : "") +
+						paWalkQuoteTitle(paper);
 					holder.appendChild(link);
 				} else {
 					holder.appendChild(document.createTextNode("[" + ref + "]"));
@@ -117,6 +127,32 @@ function paWalkChipText(text, papers, options) {
 		});
 	}
 	return holder;
+}
+
+/* The first confirmed passage of a paper, for a citation's hover text. */
+function paWalkQuoteTitle(paper) {
+	var first = ((paper && paper.evidence) || [])[0];
+	if (!first || !first.quote) { return ""; }
+	var quote = String(first.quote);
+	return "\n" + (PA_WALK_SECTION_WORDS[first.section] || "Main text") + ": \u201c" +
+		(quote.length > 240 ? quote.slice(0, 237) + "..." : quote) + "\u201d";
+}
+
+/* The passages a paper agent found in one paper: where each sits, the passage
+   exactly as the paper words it, and the claim it was cited for. */
+function paWalkEvidenceNodes(paper) {
+	var nodes = [];
+	((paper && paper.evidence) || []).forEach(function (item) {
+		if (!item || !item.quote) { return; }
+		var quote = paWalkEl("blockquote", "pa-walk-quote");
+		quote.appendChild(paWalkEl("span", "pa-walk-quote-where", PA_WALK_SECTION_WORDS[item.section] || "Main text"));
+		quote.appendChild(paWalkEl("span", "pa-walk-quote-text", "\u201c" + String(item.quote) + "\u201d"));
+		nodes.push(quote);
+		if (item.claim) {
+			nodes.push(paWalkEl("p", "pa-walk-quote-claim", "Cited for: " + String(item.claim)));
+		}
+	});
+	return nodes;
 }
 
 /* The checked Results section: title, summary, paragraphs in walk order. */
@@ -154,7 +190,8 @@ function paWalkResultsNode(view, options) {
 	});
 	box.appendChild(paWalkEl("p", "pa-walk-provenance",
 		"Written by a language model from the statements that passed the checks. Every number was " +
-		"matched against your values and every leg against the walk; verify the cited papers yourself."));
+		"matched against your values and every leg against the walk. Each citation was kept only when an " +
+		"agent reading the paper found the passage that states it; the passages are under the references."));
 	return box;
 }
 
@@ -165,7 +202,9 @@ function paWalkReferencesNode(view) {
 	var refs = Object.keys(papers).map(Number).filter(isFinite).sort(function (a, b) { return a - b; });
 	if (!refs.length) { return null; }
 	var box = paWalkEl("details", "pa-walk-references");
-	box.appendChild(paWalkEl("summary", null, refs.length + " cited paper" + (refs.length === 1 ? "" : "s")));
+	var quoted = refs.some(function (ref) { return ((papers[ref] || {}).evidence || []).length; });
+	box.appendChild(paWalkEl("summary", null, refs.length + " cited paper" + (refs.length === 1 ? "" : "s") +
+		(quoted ? ", each with the passage it is cited for" : "")));
 	var list = paWalkEl("ol", "pa-walk-reference-list");
 	refs.forEach(function (ref) {
 		var paper = papers[ref] || {};
@@ -182,6 +221,7 @@ function paWalkReferencesNode(view) {
 		}
 		item.appendChild(paWalkEl("span", "pa-walk-meta", " " + [paper.journal, paper.year].filter(Boolean).join(", ") +
 			(paper.pmid ? " · PMID " + paper.pmid : "")));
+		paWalkEvidenceNodes(paper).forEach(function (node) { item.appendChild(node); });
 		list.appendChild(item);
 	});
 	box.appendChild(list);

@@ -1,8 +1,8 @@
 # How the walk works
 
-The interpretation is a graph walk: an agent starts at the places where your relevant
-features cluster, moves along edges the databases draw, reads your values at every stop
-against your experiment design, and hands the chain it walked to a writer that may cite
+The interpretation is a graph walk: AI agents start at the places where your relevant
+features concentrate, move along edges the databases draw, read your values at every stop
+against your experiment design, and hand the chain they walked to writers that may cite
 nothing else. This page describes that machinery; [The interpretation](ai-interpretation.md)
 describes what you see.
 
@@ -17,6 +17,39 @@ refused with the reason and can be started again once one finishes. On a job its
 read-only, anyone with the link can start a walk that has never run, but only the owner can
 walk again or change the design card. A walk whose AI service fails is stored as failed and
 offers **Try again**; a walk whose job is deleted stops at its next step and stores nothing.
+
+## Agents in parallel
+
+A model walk runs as a team inside one time budget:
+
+1. A **planner** scans the graph and chooses the seeds and the steps.
+2. One **walker per seed** walks that seed's neighbourhood, four at a time. The walkers share
+   the edges already walked and the nodes already read, so no two walk the same edge in the
+   same direction and each sees what the others found. Their legs are merged into one
+   numbered chain, joined by a jump leg from one seed to the next.
+3. The chain is split into parts and one **Writer per part** writes its statements, four at a
+   time, over one shared paper list.
+4. A **paper agent** reads every paper a Writer cites and returns only the passage that states
+   the claim. It reads the abstract and, when PubMed Central or Europe PMC carries the
+   article, its introduction, results and discussion, not the 6,000 characters the Writer reads.
+   Code then finds that passage in the paper's own text and widens it to whole sentences.
+   A citation whose passage is not in the paper, or whose paper states no such thing, goes
+   back to the Writer as an objection.
+5. A **sense check** reads every statement, and the **Narrator** writes the Results section.
+
+| | network (the interpretation) | one pathway |
+|---|---|---|
+| seeds | up to 10, 5 to 8 steps each | up to 5, 3 to 6 steps each |
+| statements | 3 to 5 per part, up to 6 parts | 2 to 4 per part, up to 4 parts |
+| papers asked for | about 24 | about 12 |
+| Results section | 800 to 2,000 words | 400 to 1,200 words |
+| time budget | 10 minutes | 8 minutes |
+
+Every stage has a deadline. A walker past it is stopped at its next turn, a Writer past it
+keeps the statements that passed on its latest submission, and the sense check and the
+Narrator run only when there is time left for them. On the STATegra example the network
+interpretation took under five minutes: 49 legs from 10 seeds, 20 statements and 26 cited
+papers, each with its passage, in a 1,900-word Results section.
 
 ## What is walked
 
@@ -42,36 +75,40 @@ arithmetic reads from your data is that relevant flag.
 Every node gets a *heat*: how surprising the relevant count of its neighbourhood is, given
 the neighbourhood's size (a hypergeometric test). A hub is not hot for being a hub.
 
-The walker's first tool, `scan`, ranks nodes by heat. Over the whole graph it flags the
+The first tool, `scan`, ranks nodes by heat. Over the whole graph it flags the
 seed candidates: relevant nodes that are not next to a hotter candidate. Around the
-current position it ranks what lies one to three steps away. The walker then `plan`s its
-seeds and its step budget under a ceiling code sets (40 steps on a pathway, 120 on the
-network, and at least three steps per seed on the network), and moves with `step` and `jump`, giving at every move a *reading*: one sentence on
-what the values it walks onto say in the design's terms. Code refuses a step to a node that is
+current position it ranks what lies one to three steps away. The planner `plan`s the
+seeds and the step budget under the limits in the table above, and each walker moves with
+`step` and `jump`, giving at every move a *reading*: one sentence on what the values it
+walks onto say in the design's terms. Code refuses a step to a node that is
 not a neighbour, a second pass over an edge in the same direction, and a reading that names
 no layer of the node. Every neighbour shown is logged as seen.
 
 ## What the writer may say
 
-The Writer receives the design card, the chain with every reading and every layer's values,
-the nodes seen but not walked, and the walker's notes. It writes three to five statements.
-Each cites its evidence as node and layer, names the legs it rests on, and separates what
-the pathway already draws (cited as the leg, never searched) from what it builds on top
-(a direction against the drawn sign, a mechanism, a causal timing), which needs a paper
-found on PubMed (in PubMed's best-match order, not newest first) and read before it is
-cited, whose title or abstract names the claim's genes, or must be worded as a hypothesis. The same read and topic
-checks apply to every paper a statement cites, in its papers list or in its own words. Code checks every citation, the relevance
-of every value used as evidence, and the grounding; a second model call checks direction,
-timing, contrast, layer agreement and literature; a statement that fails is rewritten once
-and then dropped, and every drop is listed with its reason.
+Each Writer receives the design card, its part of the chain with every reading and every
+layer's values, the nodes seen from those legs, the walkers' notes, and one line on what the
+other Writers cover. It writes statements about its legs only. Each cites its evidence as node
+and layer, names the legs it rests on, and separates what the pathway already draws (cited as
+the leg, never searched) from what published biology adds (the established role of the genes,
+a known regulation, the mechanism behind a direction), which needs a paper found on PubMed (in
+PubMed's best-match order, not newest first), read before it is cited, and confirmed by the
+paper agent, or must be worded as a hypothesis. Code checks every citation, the relevance of
+every value used as evidence, the grounding, and the wording: a statement that calls a set of
+genes a cluster, or narrates the walk, goes back to be rewritten with the genes named. A second
+model call checks direction, timing, contrast, layer agreement and literature; a statement that
+fails is rewritten once and then dropped, and every drop is listed with its reason.
 
 The Narrator then writes a Results section from the kept statements only, every sentence
-tagged with its statement and its legs. It sees only the papers the kept statements cite.
+tagged with its statement and its legs. It sees only the papers the kept statements cite, each
+with the claim its paper agent confirmed, and writes as a paper reports results: code drops a
+sentence that calls genes a cluster or narrates the walk.
 Code checks that every quoted value appears in the record (a signed value verbatim, an
 unsigned one as the magnitude of a recorded value), that a paragraph keeps every citation its
 statement makes and cites nothing its statement does not, and drops the sentences that fail. A story that
 fails twice is dropped and the statements stand alone. The cited papers are then numbered
-1..n in the order the reader meets them; retrieved papers nothing cites are left out.
+1..n in the order the reader meets them; retrieved papers nothing cites are left out, and
+each cited paper carries its passages, the section each sits in, and the claim each supports.
 
 ## Running it
 

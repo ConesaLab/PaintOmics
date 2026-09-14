@@ -39,10 +39,12 @@ QUICK_STEPS = (3, 12)
 SEEN_SHOWN = 30
 
 STAGE_PERCENT = {"network": 5, "card": 10, "walk": 15, "writer": 60, "sense": 80, "narrate": 90}
-# The transport's retry deadline for a model walk, from its start: the walk,
-# the Writer, the sense check and the Narrator together. Measured on one KEGG
-# map: 76 + 40 + 8 + 8 s. A network walk may take up to three times the steps.
-RUN_SECONDS = {"pathway": 480, "network": 1200}
+# A model walk's time budget is parallel.PLANS[...]["run_seconds"]: the
+# walkers, the Writers and their paper agents, the sense check and the
+# Narrator together, and the transport's retry deadline.
+# Seconds the sense check and the Narrator need after the Writers stop.
+SENSE_MIN_SECONDS = 70
+NARRATE_MIN_SECONDS = 45
 
 HEARTBEAT_SECONDS = 60
 
@@ -165,7 +167,7 @@ def rewrite_once(client, card_text, chain, failing, verdicts):
     try:
         out = client.complete_json([{"role": "system", "content": "You revise interpretation statements to answer specific objections."},
                                     {"role": "user", "content": prompt}], "rewrite", REWRITE_SCHEMA,
-                                   lambda text: None, max_tokens=2500, temperature=0.2)
+                                   lambda text: None, max_tokens=max(2500, 700 * len(failing) + 500), temperature=0.2)
     except Exception:                                                 # noqa: BLE001
         return {}
     if not isinstance(out, dict):
@@ -226,7 +228,7 @@ def _pct(stage, walker=None):
     return STAGE_PERCENT.get(stage, 0)
 
 
-def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, max_turns=60, use_mongo=True,
+def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mongo=True,
         progress=None, card_override=None, cancelled=None):
     """The whole pipeline. Returns (record, network, graph, tag).
 
@@ -267,78 +269,26 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, max_tur
     timings["card"] = round(time.time() - t0, 1)
     card_text = walk_card_text(card)
     walker = Walker(graph, ov, tag, params_for("network" if tag == "network" else "pathway"))
-    walker.on_turn = on_turn
-    report("walk", "Scanning the graph for seeds", walker)
+    statements, dropped, results, papers, checks = [], [], None, {}, {}
     t0 = time.time()
     model_used = "none (scripted %s policy)" % policy
     if policy == "model":
-        from src.classes.AIInterpret.agent import set_run_deadline
-        from src.classes.AIInterpret.walker import sdk
-        # Bounds the transport's retries: without it a gateway outage retries
-        # every call for its full budget and the walk holds a worker for an hour.
-        set_run_deadline(time.time() + RUN_SECONDS["network" if tag == "network" else "pathway"])
-        sdk.run_walk(walker, card_text, max_turns=max_turns)
+        walker, statements, dropped, results, papers = _model_walk(
+            walker, tag, card_text, client, writer, report, halt_if_cancelled, cancelled, timings, checks)
         model_used = AI_PROVIDERS[AI_LLM_PROVIDER]["model"]
-        if walker.loop_error and not walker.chain:
-            # A gateway that failed is not a walk that found nothing: stored as
-            # done, the empty walk was final -- no Retry, and initiate answered
-            # already_finished for ever.
-            raise WalkError("The AI service failed before the walk took a step (%s). Start it again."
-                            % walker.loop_error)
-    elif policy == "random":
-        policies.random_walk(walker)
     else:
-        policies.greedy(walker)
-    walker.on_turn = None
-    timings["walk"] = round(time.time() - t0, 1)
-    halt_if_cancelled()
-    statements, dropped, results, papers, checks = [], [], None, {}, {}
-    if policy == "model" and writer and walker.chain:
-        from src.classes.AIInterpret.pubmed_client import PubMedClient
-        from src.classes.AIInterpret.walker import writer as writer_mod
-        report("writer", "Writing statements from the chain and checking their citations", walker)
+        walker.on_turn = on_turn
+        report("walk", "Scanning the graph for seeds", walker)
+        if policy == "random":
+            policies.random_walk(walker)
+        else:
+            policies.greedy(walker)
+        walker.on_turn = None
+        timings["walk"] = round(time.time() - t0, 1)
         halt_if_cancelled()
-        t0 = time.time()
-        wctx = writer_mod.run_writer(walker, card_text, PubMedClient())
-        timings["writer"] = round(time.time() - t0, 1)
-        if wctx.loop_error and not wctx.kept:
-            raise WalkError("The AI service failed while writing the statements (%s). Start the walk again."
-                            % wctx.loop_error)
-        statements, dropped = wctx.kept, wctx.dropped
-        papers = {ref: {"pmid": p.get("pmid"), "title": p.get("title"), "year": p.get("year"),
-                        "journal": p.get("journal")} for ref, p in wctx.papers.items()}
-        checks["writer_trace"] = wctx.trace
-        chain = writer_mod.chain_text(walker)
-        halt_if_cancelled()
-        if statements:
-            report("sense", "Checking each statement against the design and the values", walker)
-            t0 = time.time()
-            try:
-                _sense_pass(client, card_text, chain, statements, dropped, walker, wctx, checks)
-            except Exception:                                         # noqa: BLE001
-                # A malformed model answer drops this stage, not the walk: the
-                # statements it rewrote are set aside, the rest stay as the
-                # Verifier passed them.
-                logger.warning("[walker] the sense check failed", exc_info=True)
-                checks["sense"] = "failed"
-                for s in [s for s in statements if s.get("rewritten")]:
-                    statements.remove(s)
-                    dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
-                                    "why": "the sense check's rewrite could not be read", "by": "sense check"})
-            timings["sense"] = round(time.time() - t0, 1)
-        halt_if_cancelled()
-        if statements:
-            report("narrate", "Writing the Results section", walker)
-            t0 = time.time()
-            try:
-                results = _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks)
-            except Exception:                                         # noqa: BLE001
-                logger.warning("[walker] the Narrator's answer could not be checked", exc_info=True)
-                checks["results"] = ["the Narrator's answer could not be read"]
-                results = None
-            timings["narrate"] = round(time.time() - t0, 1)
     if papers:
         papers = record_mod.renumber_citations(statements, dropped, results, papers)
+        attach_evidence(statements, papers)
     rec = record_mod.seal(job_id, tag, graph, ov, walker, card, statements, dropped, results, papers,
                           model_used, timings, checks)
     # Labels for the plan's seeds and the nodes seen but not walked: the record's
@@ -349,7 +299,125 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, max_tur
     return rec, network, graph, tag
 
 
-def _sense_pass(client, card_text, chain, statements, dropped, walker, wctx, checks):
+def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelled, cancelled, timings, checks):
+    """The model walk (walker/parallel.py), then the sense check and the
+    Narrator, inside the scope's time budget. Returns (walker, statements,
+    dropped, results, papers)."""
+    import asyncio
+
+    from src.classes.AIInterpret.agent import set_run_deadline
+    from src.classes.AIInterpret.pubmed_client import PubMedClient
+    from src.classes.AIInterpret.walker import parallel
+    from src.classes.AIInterpret.walker import writer as writer_mod
+
+    plan = parallel.plan_for(tag)
+    started = time.time()
+    run_deadline = started + plan["run_seconds"]
+    # Bounds the transport's retries: without it a gateway outage retries every
+    # call for its full budget. Armed before asyncio.run, whose tasks copy it.
+    set_run_deadline(run_deadline)
+    walker.params.update({"max_seeds": plan["max_seeds"], "steps_per_seed": plan["seed_steps"][0],
+                          "ceiling": plan["max_seeds"] * plan["seed_steps"][1]})
+    statements, dropped, papers = [], [], {}
+
+    def preview(merged):
+        report("walk", "Walking: %s" % merged.counts_line(), merged)
+
+    async def pipeline():
+        report("walk", "Scanning the graph for seeds", walker)
+        merged = await parallel.walk_in_parallel(walker, card_text, plan, started + plan["walk_seconds"],
+                                                 cancelled, preview)
+        timings["walk"] = round(time.time() - started, 1)
+        if merged.loop_error and not merged.chain:
+            # A gateway that failed is not a walk that found nothing: stored as
+            # done, the empty walk was final -- no Retry, and initiate answered
+            # already_finished for ever.
+            raise WalkError("The AI service failed before the walk took a step (%s). Start it again."
+                            % merged.loop_error)
+        halt_if_cancelled()
+        if not (writer and merged.chain):
+            return merged, None
+        report("writer", "Writing statements and reading every cited paper", merged)
+        t0 = time.time()
+        writer_deadline = min(time.time() + plan["writer_seconds"],
+                              run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS)
+        written = await parallel.write_in_parallel(
+            merged, card_text, PubMedClient(), client, plan, writer_deadline, cancelled,
+            lambda detail: report("writer", detail, merged))
+        timings["writer"] = round(time.time() - t0, 1)
+        return merged, written
+
+    walker, written = asyncio.run(pipeline())
+    halt_if_cancelled()
+    if written is None:
+        return walker, statements, dropped, None, papers
+    statements, dropped, store, contexts = written
+    if not statements and contexts and all(c.loop_error for c in contexts):
+        raise WalkError("The AI service failed while writing the statements (%s). Start the walk again."
+                        % contexts[0].loop_error)
+    papers = {ref: {"pmid": p.get("pmid"), "title": p.get("title"), "year": p.get("year"),
+                    "journal": p.get("journal")} for ref, p in store.papers.items()}
+    checks["writer_trace"] = [entry for c in contexts for entry in c.trace]
+    checks["paper_agent"] = {"checked": store.checks, "trace": store.trace}
+    checks["parts"] = [list(c.legs) for c in contexts]
+    chain = writer_mod.chain_text(walker)
+    read = set()
+    for c in contexts:
+        read |= c.read
+    results = None
+    if statements and run_deadline - time.time() >= SENSE_MIN_SECONDS:
+        report("sense", "Checking each statement against the design and the values", walker)
+        t0 = time.time()
+        try:
+            _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks)
+        except Exception:                                             # noqa: BLE001
+            # A malformed model answer drops this stage, not the walk: the
+            # statements it rewrote are set aside, the rest stay as the Writers
+            # and the paper agents passed them.
+            logger.warning("[walker] the sense check failed", exc_info=True)
+            checks["sense"] = "failed"
+            for s in [s for s in statements if s.get("rewritten")]:
+                statements.remove(s)
+                dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
+                                "why": "the sense check's rewrite could not be read", "by": "sense check"})
+        timings["sense"] = round(time.time() - t0, 1)
+    elif statements:
+        checks["sense"] = "skipped: the time budget was spent"
+    halt_if_cancelled()
+    if statements and run_deadline - time.time() >= NARRATE_MIN_SECONDS:
+        report("narrate", "Writing the Results section", walker)
+        t0 = time.time()
+        try:
+            results = _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks,
+                               plan["words"], run_deadline)
+        except Exception:                                             # noqa: BLE001
+            logger.warning("[walker] the Narrator's answer could not be checked", exc_info=True)
+            checks["results"] = ["the Narrator's answer could not be read"]
+            results = None
+        timings["narrate"] = round(time.time() - t0, 1)
+    elif statements:
+        checks["results"] = ["no Results section: the time budget was spent"]
+    timings["total"] = round(time.time() - started, 1)
+    return walker, statements, dropped, results, papers
+
+
+def attach_evidence(statements, papers):
+    """Each cited paper carries the passages the paper agents found in it, with
+    the claim each supports and the statement that makes it."""
+    for ref, paper in papers.items():
+        seen, evidence = set(), []
+        for stmt in statements:
+            for item in stmt.get("evidence") or []:
+                key = (item.get("claim"), item.get("quote"))
+                if item.get("ref") == ref and key not in seen:
+                    seen.add(key)
+                    evidence.append({"claim": item.get("claim"), "quote": item.get("quote"),
+                                     "section": item.get("section"), "full_text": item.get("full_text"),
+                                     "statement": stmt.get("n")})
+        paper["evidence"] = evidence
+
+
+def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
     verdicts = sense_mod.sense_check(client, card_text, statements, chain)
     if verdicts is None:
         for s in statements:
@@ -369,7 +437,18 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, wctx, che
                 if key in new:
                     s[key] = new[key]
             s["rewritten"] = True
-    problems = {s["n"]: verify.verify_statement(s, walker, wctx.papers, wctx.read) for s in failing}
+    problems = {s["n"]: verify.verify_statement(s, walker, store.papers, read, names_genes=False) for s in failing}
+    for s in failing:
+        # A rewrite may not bring in a citation no paper agent confirmed.
+        evidence = []
+        for ref, claim in verify.citation_pairs(s):
+            verdict = store.verdict(ref, claim)
+            if verdict and verdict.get("supported"):
+                evidence.append({"ref": ref, "claim": claim, "quote": verdict["quote"],
+                                 "section": verdict["section"], "full_text": verdict.get("full_text")})
+            else:
+                problems[s["n"]].append("the rewrite cites [%d] for a claim no paper agent confirmed" % ref)
+        s["evidence"] = evidence
     again = sense_mod.sense_check(client, card_text, failing, chain) or {}
     for s in failing:
         s["sense"] = again.get(s["n"], s["sense"])
@@ -381,14 +460,20 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, wctx, che
                             "by": "sense check"})
 
 
-def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks):
-    words = (300, 900) if tag == "network" else (150, 450)
+def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None):
     kind = "network" if tag == "network" else "pathway"
-    # Only the papers the kept statements cite: the Narrator retells statements,
-    # and a retrieved paper no statement cites was never checked for the claim.
+    # Only the papers the kept statements cite, each with the claim a paper
+    # agent confirmed in it: the Narrator retells statements, and a retrieved
+    # paper no statement cites was never checked for the claim.
+    confirmed = {}
+    for s in statements:
+        for item in s.get("evidence") or []:
+            confirmed.setdefault(item["ref"], []).append(item["claim"])
     cited = {ref for s in statements for ref in verify.statement_refs(s)}
-    papers_text = "\n".join("[%d] %s (%s) PMID %s" % (r, p.get("title"), p.get("year"), p.get("pmid"))
-                            for r, p in sorted(papers.items()) if r in cited)
+    papers_text = "\n".join("[%d] %s (%s) PMID %s%s" % (
+        r, p.get("title"), p.get("year"), p.get("pmid"),
+        "".join("\n    states: %s" % claim for claim in confirmed.get(r, [])))
+        for r, p in sorted(papers.items()) if r in cited)
     def checked(results):
         if results is None:
             return ["no results"]
@@ -401,11 +486,14 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         uncited = verify.drop_uncited_sentences(results, statements)
         if uncited:
             checks["uncited_sentences_dropped"] = checks.get("uncited_sentences_dropped", 0) + uncited
-        return verify.verify_results(results, statements, dropped, walker, kind)
+        jargon = verify.drop_jargon_sentences(results)
+        if jargon:
+            checks["jargon_sentences_dropped"] = checks.get("jargon_sentences_dropped", 0) + jargon
+        return verify.verify_results(results, statements, dropped, walker, kind, words)
 
     results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words)
     problems = checked(results)
-    if problems and results is not None:
+    if problems and results is not None and (deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, objections=problems)
         problems = checked(results)
     checks["results"] = problems
@@ -467,13 +555,15 @@ def view(rec):
         "notes": walk.get("notes") or [], "stop_reason": walk.get("stop_reason"),
         "stop_reading": walk.get("stop_reading"),
         "counts": {"steps": steps, "jumps": len(walk["chain"]) - steps, "notes": len(walk.get("notes") or []),
+                   "segments": len(walk.get("segments") or []),
                    "scans": walk.get("scans"), "refusals": walk.get("refusals"),
                    "seen_not_walked": len(walk.get("seen") or [])},
         "seen": [{"id": r["id"], "label": r["label"], "r": r["r"], "heat": r["heat"]} for r in seen],
         "nodes": {node_id: {"label": n.get("label"), "kind": n.get("kind"), "r": n.get("r"),
                             "heat": n.get("heat"), "text": n.get("text")} for node_id, n in nodes.items()},
         "statements": [{k: s.get(k) for k in ("n", "claim", "prose", "cites", "legs", "grounded_in", "beyond",
-                                               "papers", "sense", "rewritten")} for s in rec.get("statements") or []],
+                                               "papers", "evidence", "sense", "rewritten")}
+                       for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
         "results": rec.get("results"),
         "papers": {str(ref): p for ref, p in (rec.get("papers") or {}).items()},

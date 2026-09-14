@@ -101,6 +101,9 @@ def renumber_citations(statements, dropped, results, papers):
         if stmt.get("papers"):
             stmt["papers"] = [mapping[verify.paper_ref(p)] for p in stmt["papers"]
                               if verify.paper_ref(p) in mapping]
+        if isinstance(stmt.get("evidence"), list):
+            stmt["evidence"] = [dict(item, ref=mapping[item["ref"]]) for item in stmt["evidence"]
+                                if isinstance(item, dict) and item.get("ref") in mapping]
         for beyond in stmt.get("beyond") or []:
             if isinstance(beyond, dict) and beyond.get("paper") is not None:
                 beyond["paper"] = mapping.get(verify.paper_ref(beyond["paper"]))
