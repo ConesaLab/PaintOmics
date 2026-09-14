@@ -163,6 +163,16 @@ class Queue:
     def fetch_job(self, job_id):
         return self.jobs.get(job_id, None)
 
+    def count_active(self, prefix=""):
+        """How many jobs whose id starts with prefix are queued or running.
+
+        Lets a caller cap one kind of job (the AI walks, ids "walk_...") so it
+        cannot take every worker from the rest: the queue is one FIFO deque."""
+        with self.lock:
+            return sum(1 for job_id, job in self.jobs.items()
+                       if str(job_id).startswith(prefix)
+                       and job.status in (JobStatus.QUEUED, JobStatus.STARTED))
+
     def get_result(self, job_id, remove=True):
         """Return a job's result, consuming it if it has finished.
 

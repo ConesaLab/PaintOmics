@@ -195,6 +195,7 @@ class PathwayAcquisitionJobDAO(DAO):
         # check above: everything below this point only runs when a job
         # belonging to this caller was actually deleted.
         for collectionName in ("aiInterpretationCollection",
+                               "aiWalkCollection",
                                "foundFeaturesCollection",
                                "visualOptionsCollection"):
             self.dbManager.getCollection(collectionName).delete_many({"jobID": id})

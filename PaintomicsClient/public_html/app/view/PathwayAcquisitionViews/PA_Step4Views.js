@@ -365,6 +365,7 @@ function PA_Step4PathwayView() {
 	this.featureSetDetailsPanel = null;
 	this.findFeaturesPanel = null;
 	this.visualOptionsPanel = null;
+	this.walkPanel = null;
 
 	/***********************************************************************
 	* GETTERS AND SETTERS
@@ -435,6 +436,13 @@ function PA_Step4PathwayView() {
 		/************************************************************/
 		this.showDiagramPanel();
 		this.showFindFeaturesPanel();
+		/* The Walk column is added here, before the first layout, so the
+		   diagram measures its width with the column already beside it. Only
+		   for a job whose owner allowed AI interpretation: the column's one
+		   action sends the job's values to the model gateway. */
+		if (this.getParent().getModel().aiConsent) {
+			this.showWalkPanel();
+		}
 
 		return this;
 	};
@@ -579,6 +587,24 @@ function PA_Step4PathwayView() {
 		}
 	};
 
+	/**
+	* The Agentic Graph Walk column (PA_Step4WalkView.js): walks this pathway's
+	* drawn interactions on the server and shows the legs and the checked
+	* Results section. Created once per pathway view; closing it only hides it.
+	*/
+	this.showWalkPanel = function() {
+		if (typeof PA_Step4WalkView !== "function") {
+			return;
+		}
+		if (this.walkPanel === null) {
+			this.walkPanel = new PA_Step4WalkView();
+			this.walkPanel.setParent(this);
+			this.walkPanel.loadModel(this.getModel());
+			this.getComponent().add(this.walkPanel.getComponent());
+		}
+		this.walkPanel.toggle(true);
+	};
+
 	this.showGlobalHeatmap = function() {
 		this.hideFeatureSetDetails();
 
@@ -646,6 +672,9 @@ function PA_Step4PathwayView() {
 		if ((this.findFeaturesPanel && this.findFeaturesPanel.isVisible()) ||
 		this.visualOptionsPanel && this.visualOptionsPanel.isVisible()) {
 			savedSpace += 350;
+		}
+		if (this.walkPanel && this.walkPanel.isVisible()) {
+			savedSpace += 340;
 		}
 
 		if (this.globalHeatmapView) {
@@ -728,6 +757,12 @@ function PA_Step4PathwayView() {
 					if (me.globalHeatmapView !== null) {
 						Ext.destroy(me.globalHeatmapView.getComponent());
 						me.globalHeatmapView = null;
+					}
+
+					if (me.walkPanel !== null) {
+						/* First: its layer lives inside the diagram's SVG. */
+						Ext.destroy(me.walkPanel.getComponent());
+						me.walkPanel = null;
 					}
 
 					if (me.diagramPanel !== null) {
@@ -1014,6 +1049,7 @@ function PA_Step4KeggDiagramView() {
 	*/
 	this.bindDiagramPanelControls = function() {
 		var me = this;
+		$(this.getComponent().el.dom).find(".pa-walk-open").on("click", function() { me.getParent().showWalkPanel(); });
 		$("#hideDiagramPanelButton").click(function() { me.getParent().hideDiagramPanel(); });
 		$("#expandDiagramPanelButton").click(function() { me.expand(); });
 		$("#shrinkDiagramPanelButton").click(function() { me.shrink(); });
@@ -1041,6 +1077,9 @@ function PA_Step4KeggDiagramView() {
 			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel"><i class="fa fa-expand"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="shrinkDiagramPanelButton" title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip" id="downloadDiagramPanelButton" title="Download the diagram"><i class="fa fa-download"></i> Download</a>' +
+			(this.getParent().getParent().getModel().aiConsent && this.model.getSource() !== "MapMan"
+				? '    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip pa-walk-open" title="Walk this pathway with the AI agent"><i class="fa fa-random"></i> Walk</a>'
+				: '') +
 			'   </div>' +
 			'   <h2>' + this.model.getName() + '</h2>' +
 			'</div>' +
@@ -1210,6 +1249,9 @@ function PA_Step4KeggDiagramView() {
 					}
 
 					//SOME EVENT HANDLERS
+					$(this.el.dom).find(".pa-walk-open").on("click", function() {
+						me.getParent().showWalkPanel();
+					});
 					$("#hideDiagramPanelButton").click(function() {
 						me.getParent().hideDiagramPanel();
 					});

@@ -12,8 +12,8 @@ abstract: >-
   layers can be read against each other rather than one at a time. It supports
   KEGG, Reactome and MapMan pathways for organisms across all biological
   kingdoms. PaintOmics AI is the successor to PaintOmics 4 and adds an AI
-  interpretation agent that drafts the biology from the ranked pathways with
-  citations that are checked back against the retrieved literature.
+  interpretation agent that walks the pathway interactions with the user's
+  values and writes the biology with citations checked by code.
 authors:
   - given-names: Tianyuan
     family-names: Liu

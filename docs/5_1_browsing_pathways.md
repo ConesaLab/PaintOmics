@@ -15,9 +15,9 @@ There are three ways in, and they all open the same view:
   [pathway enrichment](4_1_pathway_enrichment.md).
 * Step 3, the pathways network: hover a node and click **Paint** in the
   tooltip that opens.
-* An AI interpretation report: every pathway named in the report is a link,
+* The AI interpretation: every pathway a leg of the walk runs through is a link,
   and clicking it paints that pathway. See
-  [the pathway interpretation](ai-interpretation.md).
+  [the interpretation](ai-interpretation.md).
 
 KEGG, Reactome and MapMan pathways are all painted the same way. OmniPath
 publishes no diagram, so an OmniPath pathway opens as an interaction network

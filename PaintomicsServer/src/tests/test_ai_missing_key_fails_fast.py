@@ -136,8 +136,13 @@ class TestServletChecksBeforeSpendingAnything(unittest.TestCase):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
                     and node.func.id == "_requireLLMCredentials" and checkLine is None:
                 checkLine = node.lineno
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
-                    and node.func.attr == "enqueue" and enqueueLine is None:
+            # The walk is filed through _enqueueWalk, which calls the queue's
+            # enqueue; either spelling is the moment work is committed.
+            files = (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                     and node.func.attr == "enqueue") or \
+                    (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                     and node.func.id == "_enqueueWalk")
+            if files and enqueueLine is None:
                 enqueueLine = node.lineno
 
         self.assertIsNotNone(checkLine, "aiInterpretInitiate never checks credentials")

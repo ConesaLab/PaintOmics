@@ -36,7 +36,7 @@ Two halves, because either alone passes for the wrong reason:
   * the decision table, exercised against `_requireJobAccess` with a stubbed
     loader. This is the half that would catch a gate that refuses everything,
     which "the call is present" cannot;
-  * the presence of the call in each of the five job-scoped handlers, read off
+  * the presence of the call in each job-scoped handler, read off
     the syntax tree with comments stripped, so a handler added later without a
     gate fails here rather than shipping open.
 
@@ -67,7 +67,8 @@ JOB_SCOPED_HANDLERS = [
     "aiInterpretStatus",
     "aiInterpretReport",
     "aiInterpretChat",
-    "aiInterpretPathway",
+    "aiWalkStart",
+    "aiWalkStatus",
 ]
 
 GATE = "_requireJobAccess"
@@ -222,24 +223,6 @@ class AIRouteOwnershipWiringTest(unittest.TestCase):
         self.assertEqual([], unguarded,
                          "these AI routes accept a bare job id as "
                          "authorisation: " + ", ".join(unguarded))
-
-    def test_the_pathway_gate_precedes_the_cached_answer(self):
-        """aiInterpretPathway returns a cached report and never loads the job.
-
-        The cache branch answers and returns before the rest of the handler
-        runs, so a gate placed with the other job checks would sit after it and
-        miss precisely the requests that cost nothing to make and hand back the
-        most.
-        """
-        stripped = _stripComments(self.handlers["aiInterpretPathway"])
-        gateAt = stripped.find(GATE)
-        cacheAt = stripped.find("get_pathway_report")
-
-        self.assertNotEqual(gateAt, -1, "aiInterpretPathway has no gate")
-        if cacheAt != -1:
-            self.assertLess(gateAt, cacheAt,
-                            "the ownership check runs after the cached "
-                            "pathway report is returned, which is too late")
 
     def test_the_initiate_gate_precedes_the_enqueue(self):
         """Refusing after the pipeline is queued refuses nothing."""

@@ -1,122 +1,84 @@
-# The pathway interpretation
+# The interpretation
 
-When a job finishes, the PaintOmics AI agent reads the result — your values,
-your enriched pathways, and the literature — and writes a draft of what it
-means, with a citation behind every claim it takes from a paper.
+When a job finishes, PaintOmics AI interprets it by walking a graph. AI agents
+walk the network of every KEGG, Reactome and OmniPath interaction known for your
+organism, with your values laid on its nodes. They start where your relevant
+features concentrate, read your values at every stop against your experiment
+design, and hand the chain they walked to writers that may cite nothing else. A
+checked Results section comes out of that chain.
 
-It is a draft for you to check, not a conclusion. What makes it worth the read
-is that it is grounded in your own numbers: the agent queries the measurements
-you uploaded, so it can say *"Ccnd1 (−4.13), Ccnd2 (−3.40) and Cdk6 (−2.00)
-fall monotonically"* rather than *"cell-cycle genes were affected"*.
-
-![The AI interpretation report](img/ui/ai-report-key-findings.png)
-
-*The opening of a report on the STATegra example. The numbers in brackets are
-this job's own measurements; `[1]`, `[2]` link to the papers on PubMed.*
+It is a draft for you to check, not a conclusion. It is grounded in two things
+you can inspect: the interactions the databases draw, and your own numbers. A
+sentence such as *"Ccnd1 gene expression collapsed from +1.90 at 0h to −4.13 at
+24h"* quotes values the code has matched against your upload, on a leg the
+network draws. [How the walk works](ai-graph-walk.md) describes the machinery.
 
 ## Starting it
 
-You do not press anything. If AI interpretation is enabled on the server and
-the job was submitted through the upload form, the pipeline is queued the
-moment Step 2 finishes, and it runs while you look at your results.
+You do not press anything. If AI interpretation is enabled on the server and the
+job was submitted through the upload form, the walk is queued the moment Step 2
+finishes. It runs while you look at your results.
 
-The **AI Interpret** button in the Step 3 toolbar opens the panel; so does the
-circular mark floating in the bottom-right corner, whose badge tells you the
-state — spinning while it works, a green tick when the report is ready, a red
-exclamation if it failed. The panel is anchored to the page rather than to the
-results view, so it stays open and readable while you look at a painted
-pathway.
+The **AI Interpret** button in the Step 3 toolbar opens the panel. So does the
+circular mark in the bottom-right corner, whose badge shows the state: spinning
+while it works, a green tick when the result is ready, and a red exclamation if
+it failed. The panel is anchored to the page rather than to the results view, so
+it stays open over a painted pathway.
 
-Filling in **Experiment design** on the upload form is the single most useful
-thing you can do for the quality of the result. Without it the agent has your
-condition labels and nothing else, and it cannot know which direction of change
-you consider the treatment.
+Filling in **Experiment design** on the upload form is the most useful thing you
+can do for the result. The walk reads every value against a design card built
+from that text and from your column headers. The card says what a value is, what
+the columns are (time points, doses or unordered conditions), and which omics
+have no column labels. Without the text, the card has your column labels and
+nothing else.
 
 ## While it works
 
-![The agent's activity feed while the interpretation runs](img/ui/ai-activity-feed.png)
+The panel lists the legs as the agent walks them, newest last, with a progress
+bar through its stages: reading the network, reading the design, walking,
+writing statements, checking them, and writing the Results section. Several
+agents work at once, and a walk of the whole network finishes within ten
+minutes, usually in about five.
 
-*A run in progress. The panel names the tool the agent is using, counts the
-calls it has made, and lists the last six in plain words — "Searched PubMed",
-"Read a paper", "Noted a finding", "Checked its citations" — each with how long
-it took, if it took more than a second and a half.*
+## What the result contains
 
-The feed is there so that a long run is legible rather than a spinner. It is
-also the honest picture of how the agent works: it decides for itself which
-pathways to examine, which genes to pull the values for, and what to search;
-the budget for searches, papers and time is enforced by the tools, not by the
-model's good intentions.
+* **The Results section:** a title, a one-sentence summary, and one paragraph per
+  kept statement in the order the walk found them. Each paragraph ends with chips
+  for the legs it rests on. Numbers in brackets such as `[1]` link to the papers
+  on PubMed, numbered in the order they are first cited.
+* **The cited papers**, numbered as the text cites them. Under each paper is the
+  passage the citation rests on, in the paper's own words, with where it sits:
+  the abstract, or the part of the main text (results, discussion, introduction).
+  Hover over a `[1]` in the text to read its passage without scrolling.
+* **The statements** that passed the checks. Each one separates what the pathway
+  already draws (cited as a leg) from what goes beyond it (a paper the writer
+  read, or a hypothesis worded as one). Dropped statements are listed with the
+  reason.
+* **The walk itself:** every leg, the edge it followed and the database and
+  pathway that draw it, and the reading the agent gave at that stop.
 
-## What the report contains
-
-Five written sections, in this order:
-
-* **Key Findings** — three to five bullets, each tying a named observation to
-  the values behind it.
-* **Cross-Pathway Themes** — what recurs across the significant pathways, using
-  the cluster ids described below.
-* **Detailed Pathway Analysis** — a paragraph per pathway.
-* **Suggested Follow-up Experiments** — three to five, prioritised, each with a
-  technique, the reason, and what you would expect to see.
-* **Limitations and Caveats**.
-
-Then two tables that are **not** written by the model. They are rendered from
-the job's own data, so the numbers in them cannot drift:
-
-![The evidence table](img/ui/ai-report-evidence-table.png)
-
-*The Enriched Pathway Summary: pathway, source database, combined p-value, the
-per-omic p-values with relevant counts, and the genes driving it. Pathway names
-are links.*
-
-The second table, **Pathway Clusters**, lists the groups the agent formed by
-shared matched features, each with its id, label, member pathways and the core
-genes they share.
-
-Finally, the references.
-
-![The reference list](img/ui/ai-report-citations.png)
-
-*Each reference carries the verbatim sentence the agent relied on and whether
-it came from the abstract or the full text. The provenance line sits inside the
-report block, so copying the text copies it too.*
-
-Every citation is checked before you see it: the quoted sentence must actually
-occur in the source. A claim whose citation cannot be verified is removed from
-the report and the remaining citations are renumbered — so the absence of a
-claim you expected is a signal, not an oversight.
+Every quoted value, every leg and every citation is checked before you see it.
+A citation is kept only when an agent reading the paper found the passage that
+states the claim, and code found that passage in the paper. A statement that fails the checks is rewritten once and then dropped. A
+Results section that fails twice is dropped too, and the statements stand alone.
 
 !!! note "There is no export"
-    The report lives in the panel. There is no download, no PDF, and no
-    figures inside it. Select the text and copy it — the provenance line will
-    come with it, which is the point.
+    The result lives in the panel. Select the text and copy it; the line saying
+    it was drafted by a language model comes with it.
 
 ## Following a thread
 
-**Click a pathway name** anywhere in the report and two things happen at once:
-the diagram opens in the main view, and the agent writes a focused
-interpretation of that one pathway, citing only papers it already retrieved for
-it. These are generated on demand and cached, so only the pathways you actually
-open cost anything.
-
-**Click a cluster id** (`C01`, `C02`, …) to jump to that cluster's row in the
-Pathway Clusters table.
-
-**Colour the network by the agent's clusters.** Once the report exists, every
-[pathway network](4_3_pathways_network.md) gains an extra **Node coloring**
-option, **AI pathway clusters**, whose legend names each cluster and lets you
-hide its nodes.
+**Click a pathway** named on a leg to open its diagram in Step 4. The diagram's
+**Walk** column walks that one pathway on its own map. It shows the design card,
+which you can correct before you start. The legs appear on the map as numbered
+arcs while the agent walks, and the column ends with a Results section for that
+pathway.
 
 **Ask a follow-up question** in the box at the foot of the panel. The question
-goes to the model with the report as context *and* with the tools that read
-this job's data, so it can answer about a specific gene or value rather than
-only about the text it already wrote. The conversation is kept with the job.
-
-![A follow-up question answered from the job's own data](img/ui/ai-followup-chat.png)
-
-*The answer to "Which of the significant pathways is driven mainly by the
-DNase-seq layer rather than by gene expression?" — the per-omic p-values are
-this job's, not the report's, and each pathway name opens its diagram.*
+goes to the model with the walk as context, plus tools that read this job's
+data. Those tools return a gene's values in every layer under your own column
+labels, and they can compare genes, list a pathway's matched genes, or walk a few
+steps from a gene you name. The conversation is kept with the job.
 
 ## When it does not work
 
@@ -124,19 +86,21 @@ this job's, not the report's, and each pathway name opens its diagram.*
 |---|---|
 | The bar sits at 0%, "Not started", and never moves | The server has AI interpretation enabled but no API key for its provider. Nothing was spent and nothing was sent; this needs a server administrator. |
 | "AI interpretation is not enabled on this server." | `AI_INTERPRETATION_ENABLED` is off here. |
-| "Pipeline interrupted (no progress for 10 min). Click Retry." | The run stalled and was marked dead. **Retry** re-queues it. |
+| "The walk was interrupted (no progress for 10 min). Click Retry." | The walk stalled and was marked dead. **Retry** queues it again. |
 | "Your session expired…" | Sign in again and reopen the job from your job list. |
-| "This job is no longer stored on the server…" | The job passed its retention window — 7 days for a guest job, 14 for one belonging to a registered account. There is deliberately no Retry: the data it would interpret is gone. |
+| "This job is no longer stored on the server…" | The job passed its retention window: 7 days for a guest job, 14 for one belonging to a registered account. |
+| A pathway's Walk column says the pathway draws no interactions | MapMan bins, and the few KEGG and Reactome pathways that draw no gene-to-gene interactions, have nothing to walk. |
 
 ## What it cannot do
 
 * It cannot see your uploaded files. It sees matched features, their values and
-  their condition labels, and the pathway results.
-* It cannot see features that failed to map. A pathway that is invisible to the
-  enrichment is invisible to the agent.
-* It does not know your hypothesis unless you wrote it in **Experiment
-  design**.
-* It is a language model. It can write a fluent, well-cited paragraph that is
-  wrong about your biology. The citations are verified to be *real and
-  correctly quoted*; that the argument built on them holds is your judgement,
-  not the machine's.
+  their column labels.
+* It cannot walk an interaction no database draws. A relation outside KEGG,
+  Reactome and OmniPath, or between features that failed to map, is not in the
+  network.
+* It does not know your hypothesis unless you wrote it in **Experiment design**.
+* It is a language model. It can write a fluent paragraph that is wrong about your
+  biology. The checks verify that its values are yours, its legs are drawn and its
+  papers contain the passage shown. Whether the argument holds is your judgement.
+* It reads the main text of a paper only when PubMed Central or Europe PMC carries
+  it. Otherwise the passage comes from the abstract.

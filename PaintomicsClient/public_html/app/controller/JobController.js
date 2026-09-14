@@ -1092,11 +1092,6 @@ function JobController() {
 									jobID: response.jobID,
 									experimentDesign: response.experimentDesign || ""
 								},
-								success: function(aiResponse) {
-									if (aiResponse.success) {
-										jobModel.aiJobID = aiResponse.aiJobID;
-									}
-								},
 								error: function() {
 									console.warn("AI initiation failed — pathway analysis unaffected");
 								}

@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Integrative visualization and analysis of multi-omics data on KEGG, Reactome and MapMan pathways —<br>
-  now with an interpretation agent that reads the results and writes up the biology with citations you can check.</b>
+  now with an agent that walks your results across pathway interactions and writes up the biology with citations you can check.</b>
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ MORE regulatory model, multi-condition designs, and a rebuilt interface — see
 
 | Area | What changed |
 |---|---|
-| **AI interpretation** | New. An agent reads your ranked pathways, searches PubMed for supporting work, and drafts the biology with numbered, checkable citations — per pathway, across the whole analysis, and as follow-up questions. Opt-in per job. [Details below](#the-ai-interpretation-agent). |
+| **AI interpretation** | New. An agent walks the KEGG, Reactome and OmniPath interactions with your values on them and writes a checked Results section with numbered citations — across the whole network, on any one pathway from its diagram, and as follow-up questions. Opt-in per job. [Details below](#the-ai-interpretation-agent). |
 | **MORE regulatory model** | Regulatory Omics gained the [MORE](https://github.com/BiostatOmics/MORE) model behind a method chooser, with three engines: PLS1 on a Rust port (default, measured byte-identical to R and several hundred times faster), PLS1 on R, and MLR on R. A job predicted not to fit inside the queue's budget is refused at submit time instead of being killed at the end. |
 | **Regulator–target network** | New Step 3 panel drawing regulators against their targets with Cytoscape.js — free layout, per-condition colouring, search, spotlight, exports, and a "Find in pathways" hand-off into the pathway view. Regulation-per-condition tables sit alongside it. |
 | **Multi-condition designs** | Analyses run across any number of conditions, not two. Per-condition significance stars in the Step 4 heatmaps, in Metabolite Hub and in Class Activity; columns labelled with your condition names; a Stouffer weights panel; and the combined-p-value statistics checked against SciPy. |
@@ -57,21 +57,21 @@ MORE regulatory model, multi-condition designs, and a rebuilt interface — see
 | **Security** | Path traversal through job and file names closed; forgeable identity (`userID=0` and ID reuse) fixed; session and password-reset tokens drawn from `secrets`; per-request authorisation guards on job, image and admin routes; password hashes no longer sent to the admin panel; AI consent enforced server-side. |
 | **Statistics and correctness** | Enrichment counting, an independent denominator for the hub scorer, BH applied across the whole p-value vector, non-finite p-values dropped before FDR, reproducible metagene clustering, and the R drop-to-vector bug that silently killed metagenes for whole omic/database pairs. |
 | **Installers** | KEGG and Reactome download paths repaired (KEGG retired `/list/organism`; Reactome cached error bodies as data), every step made idempotent so reruns skip finished work, and an install that can no longer lose files it does not replace. |
-| **Tests** | 282 test scripts, including an end-to-end run against a real installed species, the real R backend rather than a double, an import smoke test over every tracked module, and a check that edited assets get their cache marker bumped. |
+| **Tests** | 227 test scripts, including an end-to-end run against a real installed species, the real R backend rather than a double, an import smoke test over every tracked module, and a check that edited assets get their cache marker bumped. |
 
 ## The AI interpretation agent
 
-It turns your ranked pathways into a written interpretation: it reads the
-cross-omic patterns, finds the supporting literature, and drafts the biology
-with citations you can check.
-
-The pipeline runs in six phases — triage the pathways worth reading, plan the
-literature searches, retrieve papers from PubMed, interpret each batch, synthesize
-one report, then verify it. **Verification is not cosmetic:** every claim and
-quotation is checked back against the retrieved sources, and what cannot be
-grounded is redacted rather than published. References are rendered from the
-retrieved records, in the order the citations are numbered, and each `[n]` links
-to PubMed.
+It interprets a job as an agentic graph walk. One network per organism holds
+every KEGG, Reactome and OmniPath interaction, with your values laid on its
+nodes. An agent walks it from the nodes whose neighbourhoods hold surprisingly
+many relevant features and reads the values at every stop against your
+experiment design. A writer turns the chain into statements that separate what
+the pathways already draw from what goes beyond them, and a narrator writes them
+up as a Results section. **The checks are code, not a second opinion:** every
+quoted value must match the upload, every leg must be a drawn interaction, and
+every citation must be a paper the writer retrieved and read. Each `[n]` links
+to PubMed. The same walk runs on a single pathway from the **Walk** column of its
+diagram.
 
 It is off unless you ask for it. The consent box in Step 1 says what leaves the
 server — your pathway results and the values of the matched features — and names
@@ -100,7 +100,7 @@ feature off entirely with `AI_INTERPRETATION_ENABLED=false`.
 | [Regulatory omics](https://conesalab.github.io/PaintOmics/4_6_Regulatory_omics/) (incl. MORE) | Which trans-acting regulators (miRNA, TF, SF, RBP…) drive the changes |
 | [Metagenes](https://conesalab.github.io/PaintOmics/4_7_Metagenes/) | The dominant expression trends inside a pathway |
 | [Pathway visualisation](https://conesalab.github.io/PaintOmics/5_1_browsing_pathways/) | All omics painted on one diagram, with per-feature heatmaps |
-| [AI interpretation](https://conesalab.github.io/PaintOmics/ai-interpretation/) | What the ranked pathways mean biologically, with literature to back it |
+| [AI interpretation](https://conesalab.github.io/PaintOmics/ai-interpretation/) | What the walk across your pathways' interactions shows biologically, with literature to back it |
 
 Two supporting tools convert data into a usable input format: **Regions to
 Genes** (RGmatch, for region-based assays) and **miRNA to Genes**. A file that

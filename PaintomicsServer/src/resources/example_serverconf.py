@@ -189,14 +189,14 @@ EMAIL_REPORT_RECIPIENTS = [
 AI_INTERPRETATION_ENABLED = os.getenv("AI_INTERPRETATION_ENABLED", "true").lower() == "true"
 
 # Step 2's "Choose for me" button. Separate from AI_INTERPRETATION_ENABLED so a
-# deployment can offer compound disambiguation without the literature pipeline
-# or the other way round -- they cost very differently (one short batched call
-# against a multi-phase run with PubMed retrieval). Both must be on for the
+# deployment can offer compound disambiguation without the interpretation or
+# the other way round -- they cost very differently (one short batched call
+# against a graph walk with a Writer and PubMed retrieval). Both must be on for the
 # button to appear; AI_INTERPRETATION_ENABLED remains the master switch.
 AI_COMPOUND_SUGGESTIONS_ENABLED = os.getenv("AI_COMPOUND_SUGGESTIONS_ENABLED", "true").lower() == "true"
 
 # AI-assisted conversion of uploaded files. Ships inert: it spends gateway
-# quota that is shared with AI report generation, so a deployment opts in.
+# quota that is shared with the AI interpretation, so a deployment opts in.
 AI_INPUT_CONVERTER = os.getenv("AI_INPUT_CONVERTER", "false").lower() == "true"
 
 # Provider used by src/classes/AIInterpret/. "csic" is the deployment default:
@@ -235,34 +235,13 @@ AI_PROVIDERS = {
 AI_PUBMED_EMAIL   = os.getenv("AI_PUBMED_EMAIL", "")
 AI_PUBMED_API_KEY = os.getenv("AI_PUBMED_API_KEY", "")                 # SECRET
 
-# Pipeline
-AI_MAX_PATHWAYS = 15
-AI_PATHWAYS_PER_BATCH = 5
-AI_PAPERS_PER_PATHWAY = 5
+# Sampling temperature of the AI chat.
 AI_TEMPERATURE = 0.3
-AI_MAX_CONCURRENT_PIPELINES = 2
 
-# Full-text fetching & verification
+# Full-text fetching for the graph walk's Writer (PubMed Central, Europe PMC).
 AI_MAX_SECTION_CHARS = int(os.getenv("AI_MAX_SECTION_CHARS", "12000"))
-AI_MAX_VERIFICATION_ITERATIONS = int(os.getenv("AI_MAX_VERIFICATION_ITERATIONS", "3"))
-AI_VERIFICATION_FUZZY_THRESHOLD = float(os.getenv("AI_VERIFICATION_FUZZY_THRESHOLD", "0.75"))
-AI_VERIFICATION_PROVIDER = os.getenv("AI_VERIFICATION_PROVIDER", "")
 AI_EUROPEPMC_DELAY = float(os.getenv("AI_EUROPEPMC_DELAY", "0.2"))
 
-# Phase 1: Triage
-AI_MAJOR_PATHWAY_MIN_OMICS = int(os.getenv("AI_MAJOR_PATHWAY_MIN_OMICS", "2"))
-AI_MAJOR_PATHWAY_MAX_PVAL = float(os.getenv("AI_MAJOR_PATHWAY_MAX_PVAL", "0.05"))
-
-# Phase 2: Search Planner
-AI_MAX_SEARCH_TASKS = int(os.getenv("AI_MAX_SEARCH_TASKS", "12"))
-AI_SEARCH_SUBAGENT_WORKERS = int(os.getenv("AI_SEARCH_SUBAGENT_WORKERS", "4"))
-# Citations are verified one sub-agent call each and are independent, so they
-# run concurrently. Same default as the search workers, so the pipeline never
-# issues more parallel LLM calls than it already did.
-AI_VERIFICATION_WORKERS = int(os.getenv("AI_VERIFICATION_WORKERS", "4"))
-AI_PAPERS_PER_SEARCH_TASK = int(os.getenv("AI_PAPERS_PER_SEARCH_TASK", "5"))
-AI_PAPERS_KEPT_PER_TASK = int(os.getenv("AI_PAPERS_KEPT_PER_TASK", "3"))
-AI_SEARCH_PLANNER_TEMPERATURE = float(os.getenv("AI_SEARCH_PLANNER_TEMPERATURE", "0.4"))
 # "Choose for me" on step 2: residual compound sets go to the gateway thirty
 # per call. The calls fan out over this many threads inside the one queue job
 # (they are independent; the worker is idle on I/O), and a run sends at most
@@ -270,7 +249,6 @@ AI_SEARCH_PLANNER_TEMPERATURE = float(os.getenv("AI_SEARCH_PLANNER_TEMPERATURE",
 # queue worker for more than a few batch budgets.
 COMPOUND_SUGGESTION_WORKERS = int(os.getenv("COMPOUND_SUGGESTION_WORKERS", "3"))
 COMPOUND_SUGGESTION_MAX_SETS = int(os.getenv("COMPOUND_SUGGESTION_MAX_SETS", "90"))
-AI_SEARCH_SUBAGENT_TEMPERATURE = float(os.getenv("AI_SEARCH_SUBAGENT_TEMPERATURE", "0.2"))
 
 # ========== MORE BACKEND ==========
 # Absolute path to `more-rs`, the Rust port of MORE and the only engine the

@@ -30,7 +30,8 @@ nav:
    - 'PaintOmics AI':
       - 'What the AI does': 'ai-overview.md'
       - 'Converting your input files': 'ai-input-converter.md'
-      - 'The pathway interpretation': 'ai-interpretation.md'
+      - 'The interpretation': 'ai-interpretation.md'
+      - 'How the walk works': 'ai-graph-walk.md'
    - 'Reference':
       - 'The KEGG pathways database': '1_1_kegg.md'
       - 'The Reactome pathways database': '1_2_reactome.md'
@@ -112,14 +113,12 @@ markdown_extensions:
 # that actually keeps them off it: `not_in_nav` only drops a page from the
 # navigation, and mkdocs still builds and publishes it at its URL, unlinked.
 #   - mkdocs-pins.txt is build input, not documentation;
-#   - dev/ is maintainer documentation -- deployment procedure, internal traps
-#     and the engineering notes for the two AI arms -- and says on its own
-#     first line that it is not for users;
+#   - dev/ is maintainer documentation -- deployment procedure and internal
+#     traps -- and says on its own first line that it is not for users;
 #   - superpowers/ holds the dated design specs;
-#   - diagrams/ is 5.9 MB of editable .drawio sources and PDFs of the AI agent's
-#     architecture, referenced by no published page. mkdocs copies every
-#     non-markdown file under docs/ verbatim, so without this line all of it
-#     shipped to the public site.
+#   - diagrams/ holds editable .drawio sources referenced by no published page.
+#     mkdocs copies every non-markdown file under docs/ verbatim, so without
+#     this line all of it would ship to the public site.
 exclude_docs: |
    mkdocs-pins.txt
    dev/

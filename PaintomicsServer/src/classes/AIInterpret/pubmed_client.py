@@ -188,10 +188,15 @@ class PubMedClient:
     # the retrying wrapper like every other call. (_request_with_retry does its
     # own throttling, so the explicit _throttle() calls are gone.)
 
-    def search(self, query, max_results=5):
-        """ESearch: returns list of PMIDs."""
+    def search(self, query, max_results=5, sort=None):
+        """ESearch: returns list of PMIDs. ``sort="relevance"`` asks PubMed for
+        its Best Match order; the default is newest first, which for a
+        well-studied gene returns this month's papers, not the ones that
+        established the claim."""
         params = {**self._base_params(), "db": "pubmed", "term": query,
                   "retmax": max_results, "retmode": "json"}
+        if sort:
+            params["sort"] = sort
         r = self._request_with_retry("GET", self.ESEARCH_URL, params=params, timeout=15)
         r.raise_for_status()
         return _filter_ids(r.json().get("esearchresult", {}).get("idlist", []))
@@ -223,9 +228,13 @@ class PubMedClient:
         root = ET.fromstring(xml_text)
         for article in root.findall(".//PubmedArticle"):
             pmid = article.findtext(".//PMID", "")
-            title = article.findtext(".//ArticleTitle", "")
+            # itertext, not .text: .text stops at the first inline element, so
+            # "(IP<sub>3</sub>) receptor" came back as "(IP" and a title with
+            # an italic gene name lost everything after it.
+            title_el = article.find(".//ArticleTitle")
+            title = _inline_text(title_el) if title_el is not None else ""
             abstract_parts = article.findall(".//AbstractText")
-            abstract = " ".join(el.text or "" for el in abstract_parts) if abstract_parts else ""
+            abstract = " ".join(_inline_text(el) for el in abstract_parts) if abstract_parts else ""
             year = article.findtext(".//PubDate/Year", "")
             journal = article.findtext(".//Journal/Title", "")
             authors_el = article.findall(".//Author")
@@ -436,6 +445,12 @@ class PubMedClient:
             logger.info(f"Paper PMID={pmid}: Tier 3 (abstract only) — no PMCID or full text unavailable")
 
         return list(paper_map.values())
+
+
+def _inline_text(element):
+    """An element's text with every inline child (<i>, <sub>, <sup>) kept, in
+    one line."""
+    return re.sub(r"\s+", " ", "".join(element.itertext())).strip()
 
 
 def _format_authors_short(first_author):

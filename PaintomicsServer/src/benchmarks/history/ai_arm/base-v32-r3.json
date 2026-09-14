@@ -1,8 +1,0 @@
-{
- "arm": "base",
- "jobID": "73I734364H",
- "status": "error",
- "wall_s": 600.0,
- "detail": "The interpretation exceeded its 10-minute limit and was stopped. The literature gateway was slow to answer; please try again later.",
- "stale_record": true
-}

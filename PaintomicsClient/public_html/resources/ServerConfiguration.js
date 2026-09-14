@@ -77,7 +77,8 @@ SERVER_URL_AI_INTERPRET_INITIATE = SERVER_URL + "ai_interpret_initiate";
 SERVER_URL_AI_INTERPRET_STATUS = SERVER_URL + "ai_interpret_status";
 SERVER_URL_AI_INTERPRET_REPORT = SERVER_URL + "ai_interpret_report";
 SERVER_URL_AI_INTERPRET_CHAT = SERVER_URL + "ai_interpret_chat";
-SERVER_URL_AI_INTERPRET_PATHWAY = SERVER_URL + "ai_interpret_pathway";
+SERVER_URL_AI_WALK_START = SERVER_URL + "ai_walk_start";
+SERVER_URL_AI_WALK_STATUS = SERVER_URL + "ai_walk_status";
 SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
 /* Who the analysis summaries are actually sent to. The provider, its host and
    the model are all chosen server-side by AI_LLM_PROVIDER and are all
@@ -86,6 +87,11 @@ SERVER_URL_AI_GENERATE_EXP_DESIGN = SERVER_URL + "ai_generate_exp_design";
    is a false statement. See getAIProviderInfo() in AIInterpretServlet.py. */
 SERVER_URL_AI_PROVIDER = SERVER_URL + "ai_provider";
 AI_POLL_INTERVAL = 3000;
+/* not_started polls (15 s apart) before the interpretation panel stops asking:
+   two minutes covers the Step 2 request that files the walk landing late. A job
+   analysed before the walk existed stays not_started until Start is pressed,
+   and that press polls again by itself. */
+AI_NOT_STARTED_POLLS = 8;
 /* Polls before "Choose for me" gives up. The server caps one gateway batch at
    180s (DEFAULT_BATCH_BUDGET_SECONDS) and nothing caps the number of batches --
    a job with more than 30 residual names runs two or more, so 100 x 3s = 5 min

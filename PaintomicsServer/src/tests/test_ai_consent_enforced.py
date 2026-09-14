@@ -222,6 +222,17 @@ class AIConsentEnforcedTest(unittest.TestCase):
                          "these send job data to the external service without "
                          "checking consent: %s" % sorted(unguarded))
 
+    def test_the_walk_start_checks_consent_before_it_queues(self):
+        """A walk sends the job's values to the model gateway from a queue
+        worker, so the refusal has to come before the walk is filed."""
+        stripped = _stripComments(self.handlers.get("aiWalkStart", ""))
+        consentAt = stripped.find("getAIConsent")
+        queueAt = stripped.find("_enqueueWalk(")
+        self.assertNotEqual(consentAt, -1, "aiWalkStart files a walk without asking for consent")
+        self.assertNotEqual(queueAt, -1, "aiWalkStart no longer files the walk here; update this test")
+        self.assertLess(consentAt, queueAt, "the consent is checked after the walk is filed")
+        self.assertIn("raise", stripped[consentAt:queueAt])
+
     def test_the_read_only_routes_are_not_gated(self):
         """Viewing a report already produced must keep working.
 

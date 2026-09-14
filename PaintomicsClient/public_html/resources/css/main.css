@@ -3899,15 +3899,6 @@ span.networkClusterImage > i {
 	line-height: 75px;
 }
 span.networkClusterImage.disabled > i {display:block;}
-/* AI pathway clusters (network colouring from the AI report): one legend
-   row per cluster instead of the metagene thumbnail grid. A hidden cluster
-   dims and strikes through rather than showing the eye overlay, which sized
-   itself for a 97px image. */
-span.networkClusterImage.networkAICluster {display: block; width: auto; margin: 2px 0; padding: 2px 4px; border-radius: 3px;}
-span.networkClusterImage.networkAICluster > i {display: none !important;}
-span.networkClusterImage.networkAICluster p {text-align: left; font-size: 11px; line-height: 1.35;}
-span.networkClusterImage.networkAICluster.disabled p {opacity: 0.45; text-decoration: line-through;}
-span.networkClusterImage.networkAICluster:hover {background-color: rgba(0, 0, 0, 0.05);}
 .mainInfoPanel {font-size: 12px;}
 .pathwayPlotwrappers h4{color: #B14C2D;/* was #D16949 - 3.60:1 */font-size: 13px;margin: 0;margin-top: 5px;}
 /* Vertical margin only. The horizontal 10px put the "Pathways network" card

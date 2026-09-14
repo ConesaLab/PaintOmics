@@ -527,68 +527,6 @@
     color: #555;          /* 7.46:1 on the white assistant bubble */
 }
 
-/* ── Citations ── */
-.ai-citations-toggle {
-    display: inline-block;
-    color: var(--pa-ai-blue, #4A90D9);
-    cursor: pointer;
-    font-size: var(--pa-ai-fs-sm);
-    margin-top: 8px;
-    user-select: none;
-}
-.ai-citations-toggle:hover {
-    text-decoration: underline;
-}
-.ai-citations-list {
-    margin-top: 6px;
-    padding: 0;
-    font-size: var(--pa-ai-fs-sm);
-}
-.ai-citation-item {
-    padding: 6px 8px;
-    border-bottom: 1px solid #f0f0f0;
-    cursor: pointer;
-}
-.ai-citation-item:hover {
-    background: #f5f5f5;
-}
-/* No size of its own: it sits inside .ai-citation-title and was restating it. */
-.ai-citation-ref {
-    color: var(--pa-ai-blue, #4A90D9);
-    font-weight: var(--pa-ai-bold);
-    margin-right: 2px;
-}
-.ai-citation-title {
-    font-weight: var(--pa-ai-bold);
-    color: #333;
-    font-size: var(--pa-ai-fs-sm);
-    margin-bottom: 1px;
-}
-.ai-citation-meta {
-    /* Was #888 - 3.54:1, below AA. A citation's journal and year are the part
-       a reader checks before trusting the claim above it. */
-    color: var(--pa-ink-muted, #595959);
-    font-size: var(--pa-ai-fs-xs);
-}
-.ai-citation-pmid {
-    color: var(--pa-ai-blue, #4A90D9);
-    font-size: var(--pa-ai-fs-xs);
-    font-weight: var(--pa-ai-bold);
-}
-
-/* ── Inline Citation Links ── */
-.ai-citation-link {
-    color: var(--pa-ai-blue, #4A90D9);
-    text-decoration: none;
-    font-weight: var(--pa-ai-bold);
-    cursor: pointer;
-    transition: color 0.2s;
-}
-.ai-citation-link:hover {
-    color: #2a6cb8;
-    text-decoration: underline;
-}
-
 /* ── Inline Pathway Links ── */
 /* Distinct from PubMed citations: these stay inside the app rather than opening
    an external site, so they are marked with a colour of their own and a dotted
@@ -610,28 +548,6 @@
     content: " \25B8";
     font-size: 0.85em;
     opacity: 0.7;
-}
-
-/* ── Cluster ids ── */
-/* "C01" in the prose is shorthand for a group of pathways. The dotted mark
-   says "there is more here"; the browser title on hover names the cluster
-   and its members, and a click scrolls to the row that defines it. */
-.ai-cluster-link {
-    color: inherit;
-    text-decoration: none;
-    font-weight: var(--pa-ai-bold);
-    cursor: help;
-    border-bottom: 1px dotted currentColor;
-    padding: 0 1px;
-    border-radius: 2px;
-}
-.ai-cluster-link:hover {
-    background-color: rgba(46, 139, 87, 0.12);
-    border-bottom-style: solid;
-}
-tr.ai-cluster-row-flash > td {
-    background-color: rgba(46, 139, 87, 0.18);
-    transition: background-color 0.6s;
 }
 
 /* ── Input Area ── */

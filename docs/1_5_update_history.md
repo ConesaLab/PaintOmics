@@ -13,11 +13,10 @@ server you are using — see [What the AI does](ai-overview.md#what-is-on-by-def
 
 ### New analyses
 
-* **AI pathway interpretation.** An agent reads your ranked pathways and your
-  own measurements, searches PubMed and Europe PMC, and drafts an
-  interpretation with numbered citations. Every quotation is checked against
-  the paper it came from, and a claim whose citation cannot be verified is
-  removed rather than published. See [The pathway
+* **AI interpretation.** An agent walks the network of every KEGG, Reactome and
+  OmniPath interaction for your organism with your values on its nodes, and a
+  writer turns the walk into a Results section with numbered citations. Every
+  value, leg and citation is checked by code before you see it. See [The
   interpretation](ai-interpretation.md).
 * **Metabolite class activity.** Whether a whole KEGG BRITE class responded,
   at three levels of the hierarchy — a permutation test on your own replicates

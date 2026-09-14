@@ -19,9 +19,6 @@ Three transport defects turned "one slow call" into "never finishes":
   2. Retries multiplied. ``AsyncOpenAI`` retries 408 twice on its own, and
      ``_paced_create`` retried the whole thing four times: 12 attempts, each
      eight minutes long.
-  3. Nothing bounded the call. ``run_hedged`` caps the short calls at 45 s, but
-     synthesis, gap-fill, top-up and the correction rewrite were bare
-     ``Runner.run`` awaits, and the heartbeat kept the job "alive" throughout.
 
 The tests below pin the fixed contract:
 
@@ -30,7 +27,6 @@ The tests below pin the fixed contract:
   * ``configure_sdk`` hands the SDK a client with ``max_retries=0`` and a
     finite timeout, and its ``create`` shim streams by default and passes a
     caller's ``stream=True`` straight through.
-  * ``bounded`` cancels an awaitable at its deadline instead of waiting on it.
 
 Usage:
     cd PaintomicsServer
@@ -106,7 +102,7 @@ class StreamReassemblyTest(unittest.TestCase):
             _chunk(delta={"role": "assistant", "content": None,
                           "tool_calls": [{"index": 0, "id": "call_a",
                                           "type": "function",
-                                          "function": {"name": "get_gene_timecourse",
+                                          "function": {"name": "get_feature_values",
                                                        "arguments": ""}}]}),
             _chunk(delta={"tool_calls": [{"index": 0,
                                           "function": {"arguments": "{\"gene_sym"}}]}),
@@ -122,7 +118,7 @@ class StreamReassemblyTest(unittest.TestCase):
         calls = done.choices[0].message.tool_calls
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[0].id, "call_a")
-        self.assertEqual(calls[0].function.name, "get_gene_timecourse")
+        self.assertEqual(calls[0].function.name, "get_feature_values")
         self.assertEqual(calls[0].function.arguments, '{"gene_symbol": "Ccl2"}')
         self.assertEqual(calls[1].id, "call_b")
         self.assertEqual(calls[1].function.name, "compare_genes")
@@ -305,33 +301,6 @@ class RateLimitRetryTest(unittest.TestCase):
         with self.assertRaises(openai.APIStatusError):
             asyncio.run(self.client.chat.completions.create(model="m", messages=[]))
         self.assertEqual(state["n"], 4)
-
-
-class BoundedAwaitTest(unittest.TestCase):
-
-    def test_bounded_cancels_at_the_deadline(self):
-        from src.classes.AIInterpret.agent import bounded
-        state = {"cancelled": False}
-
-        async def hang():
-            try:
-                await asyncio.sleep(30)
-            except asyncio.CancelledError:
-                state["cancelled"] = True
-                raise
-
-        async def go():
-            with self.assertRaises(asyncio.TimeoutError):
-                await bounded(hang(), 0.05, label="hang")
-        asyncio.run(go())
-        self.assertTrue(state["cancelled"])
-
-    def test_bounded_returns_the_value_in_time(self):
-        from src.classes.AIInterpret.agent import bounded
-
-        async def quick():
-            return 42
-        self.assertEqual(asyncio.run(bounded(quick(), 1.0, label="quick")), 42)
 
 
 if __name__ == "__main__":

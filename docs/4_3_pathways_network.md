@@ -118,7 +118,6 @@ top of the page says changes will not be saved; see
 |---|---|
 | **Classification** | The pathway's main classification in this database — the default, and the same palette the category pie and the table's colour stripe use. |
 | One entry per gene-based omic | The metagene cluster the pathway falls into for that omic, i.e. the regulatory trend its features follow. Grey means the pathway has no metagene for that omic. See [Metagenes](4_7_Metagenes.md). |
-| **AI pathway clusters** | The cluster the AI report was written from. Only offered once an interpretation has finished and produced a partition; grey means the pathway is in no cluster. See [The pathway interpretation](ai-interpretation.md). |
 
 Only gene-based omics are offered as colourings; there is no metagene
 clustering for compound data.
@@ -127,23 +126,7 @@ The **Details** pane is the legend for whichever of these is in force.
 Colouring by classification lists every classification with its letter badge.
 Colouring by an omic reports how many of that omic's clusters have nodes in
 this network out of how many exist, and draws each one's trend; clicking a
-trend hides that cluster's nodes and clicking it again brings them back. The
-same click-to-hide works on the AI cluster list, which gives each cluster's
-colour, identifier, label and member count.
-
-![The network coloured by the AI pathway clusters](img/ui/step3-network-ai-clusters.png)
-
-*The same KEGG network coloured by **AI pathway clusters** instead of by
-classification. The option appears in **Node coloring** only after an
-interpretation has produced a partition, and — like every other setting in this
-pane — it does nothing until **Apply** is pressed.*
-
-![The AI cluster legend in the Details pane](img/ui/step3-network-ai-cluster-legend.png)
-
-*The matching legend, in **Details**: how many of the report's clusters have
-nodes in this network, and one row per cluster with its colour, its `Cnn`
-identifier, the label the agent gave it and how many pathways it holds. Click a
-row to hide that cluster's nodes.*
+trend hides that cluster's nodes and clicking it again brings them back.
 
 Under the omic-cluster legend there is a **Modify number of clusters** slider
 (1 to 20) with its own **Apply**. It re-runs the clustering for that omic and

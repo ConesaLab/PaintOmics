@@ -1,22 +1,23 @@
 import json
 import logging
 import re
+import threading
 from datetime import datetime, timedelta
 
 from src.common.ServerErrorManager import handleException
 from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
+from src.common.DAO.AIWalkDAO import AIWalkDAO
 from src.common.JobInformationManager import JobInformationManager
-from src.classes.AIInterpret.agent import run_ai_agent
-from src.classes.AIInterpret.verification import normalize_citation_markers
 from src.common.PySiQ import JobStatus
 from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
 from src.classes.AIInterpret import model_fallback
-from src.classes.AIInterpret.prompts import (SYSTEM_PROMPT_CHAT,
-    SYSTEM_PROMPT_PATHWAY_FOCUS, build_pathway_focus_prompt)
-from src.classes.AIInterpret.context_builder import (build_pathway_context,
-    get_organism_name)
+from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT, design_guidance
+from src.classes.AIInterpret.walker import card as card_mod
+from src.classes.AIInterpret.walker import service as walk_service
 from src.classes.AIInterpret.tools import CHAT_TOOLS, execute_tool
+from src.classes.AIInterpret.organisms import get_organism_name
+from src.conf import serverconf as _serverconf
 from src.conf.serverconf import (AI_INTERPRETATION_ENABLED, AI_PROVIDERS,
     AI_LLM_PROVIDER, AI_TEMPERATURE)
 
@@ -199,8 +200,32 @@ def _requireJobAccess(jobID, userID):
     return jobInstance
 
 
+def _requireRewriteRight(jobInstance, userID):
+    """Refuse to replace a walk, or steer one with an edited design card, on a
+    read-only job the caller does not own.
+
+    Access lets a shared link read the interpretation; replacing it is a
+    write, and a read-only job is the owner's to write. The rule is the one
+    every job-mutating route in PathwayAcquisitionServlet applies. Starting a
+    walk that has never run, or re-filing one that failed, stays open to
+    anyone with access: it only produces what the owner asked for when they
+    ticked AI interpretation."""
+    if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
+        raise UserWarning("Invalid user for the job: it is read-only, so only its owner can "
+                          "start the walk again or change its design card.")
+
+
 def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
-    """Start or re-check the AI interpretation pipeline for a job."""
+    """Start the AI interpretation of a job: the universal graph walk.
+
+    The interpretation is an Agentic Graph Walk over the organism's universal
+    network (KEGG, Reactome and OmniPath interactions with the job's values on
+    every node): an agent walks it from the most surprising nodes, a Writer
+    turns the chain into checked statements, and a Narrator writes them up as
+    a Results section. /ai_interpret_status reports its progress and
+    /ai_interpret_report returns it. A call for a walk already filed or
+    finished reports that; a call after a failed walk files it again.
+    """
     userID = None
     try:
         userID = REQUEST.cookies.get('userID')
@@ -213,85 +238,62 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
-        experimentDesign = formFields.get("experimentDesign", "")
-
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
-        # Verify the job exists AND that this caller may have it. Running the
-        # pipeline spends this deployment's LLM budget and sends the job's
-        # analysis summary outward, so the entitlement question comes before
-        # the consent question.
+        # Entitlement before consent: the walk spends this deployment's model
+        # budget and sends the job's values to the gateway.
         jobInstance = _requireJobAccess(jobID, userID)
 
-        # The consent the upload page asks for was collected, stored and echoed
-        # back in four responses, and never checked before the pipeline ran.
-        # Posting this endpoint a jobID was enough: measured against a job whose
-        # record says aiConsent False, the request returned success and the
-        # pipeline went through triage, search planning, 8.1s of literature
-        # retrieval and synthesis, reaching out to
-        # https://llm.iiia.es/v1/chat/completions. It stopped there only because
-        # this machine has no API key; a deployment that has one would have sent
-        # the job's analysis summary. The PubMed queries need no key and had
-        # already gone out.
-        #
-        # The checkbox says "sends analysis summaries to external AI service",
-        # so someone clearing it is declining exactly that. Job ids travel --
-        # the results page prints a shareable URL -- so the decision has to be
-        # enforced here rather than by the client choosing not to ask.
+        # Job ids travel -- the results page prints a shareable URL -- so the
+        # consent the upload page collects is enforced here, not by the client
+        # choosing not to ask.
         if not jobInstance.getAIConsent():
             raise UserWarning(
                 "AI interpretation was not enabled for this job. Re-run the "
                 "analysis with 'Enable AI pathway interpretation' ticked if you "
-                "want its summaries sent to the external AI service.")
+                "want its values sent to the external AI service.")
 
-        # Check idempotency: is the AI pipeline already queued/running?
-        ai_job_id = "ai_" + jobID
-        existingJob = QUEUE_INSTANCE.fetch_job(ai_job_id)
-
-        # Also check if the DB record shows an error (stale job detected by status endpoint)
-        dao_check = AIInterpretDAO()
-        try:
-            db_record = dao_check.find_by_job_id(jobID)
-            db_status = db_record.get("status") if db_record else None
-        finally:
-            dao_check.closeConnection()
-
-        if existingJob is not None:
-            if existingJob.status == JobStatus.FINISHED and db_status != "error":
-                RESPONSE.setContent({"success": True, "jobID": jobID, "status": "already_finished"})
-                return RESPONSE
-            elif existingJob.status == JobStatus.FAILED or db_status == "error":
-                # Allow retry: clear old state and re-queue below
-                dao = AIInterpretDAO()
-                try:
-                    dao.save_progress(jobID, {"status": "queued", "percent": 0,
-                        "detail": "Retrying...", "report": None, "verification": None})
-                finally:
-                    dao.closeConnection()
-                QUEUE_INSTANCE.get_result(ai_job_id, remove=True)
-            else:
-                RESPONSE.setContent({"success": True, "jobID": jobID, "status": "already_running"})
-                return RESPONSE
-
-        # Enqueue the AI pipeline
-        QUEUE_INSTANCE.enqueue(
-            fn=run_ai_agent,
-            args=(jobID, experimentDesign, RESPONSE),
-            timeout=900,
-            job_id=ai_job_id
-        )
-
-        RESPONSE.setContent({"success": True, "jobID": jobID, "status": "queued"})
-
+        restart = str(formFields.get("restart", "")).lower() in ("1", "true", "yes")
+        if restart:
+            _requireRewriteRight(jobInstance, userID)
+        content = _enqueueWalk(QUEUE_INSTANCE, jobID, INTERPRETATION_SCOPE, None, restart)
+        if content.get("status") == "queued":
+            # The conversation was grounded in the interpretation this walk
+            # replaces; replayed into the new one it would argue with it.
+            dao = AIInterpretDAO()
+            try:
+                dao.clear_chat(jobID)
+            finally:
+                dao.closeConnection()
+        RESPONSE.setContent(content)
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretInitiate", userID=userID)
     finally:
         return RESPONSE
 
 
-def aiInterpretStatus(REQUEST, RESPONSE):
-    """Return current progress of the AI interpretation pipeline."""
+# The interpretation is the walk over the whole universal network; a pathway
+# walk (Step 4's Walk column) is scoped to one pathway and does not replace it.
+INTERPRETATION_SCOPE = "network"
+_TRACE_LEGS = 12
+
+
+def _walkTrace(doc):
+    """The walk's legs as the widget's activity feed: what the agent did, in
+    the {tool, args, result, ms, t} shape the feed renders."""
+    try:
+        live = json.loads(doc.get("liveJSON") or "null") or json.loads(doc.get("viewJSON") or "null") or {}
+    except ValueError:
+        live = {}
+    chain = live.get("chain") or []
+    trace = [{"tool": leg.get("kind"), "args": "%s → %s" % (leg.get("from_label"), leg.get("to_label")),
+              "result": "", "ms": 0, "t": leg.get("n")} for leg in chain]
+    return trace[-_TRACE_LEGS:], len(chain)
+
+
+def aiInterpretStatus(REQUEST, RESPONSE, QUEUE_INSTANCE=None):
+    """Progress of the job's interpretation walk."""
     dao = None
     userID = None
     try:
@@ -301,60 +303,33 @@ def aiInterpretStatus(REQUEST, RESPONSE):
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
-
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
-        # Progress is thin, but it still confirms a job id is real and says
-        # whether someone is running an interpretation on it. The client polls
-        # this every 3s, so it is also the cheapest oracle for guessing ids.
+        # Progress is thin, but it confirms a job id is real and says whether
+        # someone is interpreting it; the client polls every 3 s, so it is also
+        # the cheapest oracle for guessing ids.
         _requireJobAccess(jobID, userID)
 
-        dao = AIInterpretDAO()
-        record = dao.find_by_job_id(jobID)
-
-        if record is None:
-            RESPONSE.setContent({"success": True, "jobID": jobID,
-                "status": "not_started", "percent": 0, "detail": "Not started"})
-        else:
-            status = record.get("status", "unknown")
-
-            # Detect stale/dead jobs: if a non-terminal status hasn't been
-            # updated in AI_STALE_JOB_TIMEOUT, the worker thread is dead
-            # (e.g. killed by Flask debug reloader or crash without cleanup).
-            if status not in ("done", "error", "cancelled", "not_started"):
-                updated_at = record.get("updatedAt")
-                if updated_at and (datetime.utcnow() - updated_at) > AI_STALE_JOB_TIMEOUT:
-                    logging.warning(
-                        f"AI job {jobID} stale (status={status}, "
-                        f"updatedAt={updated_at}). Marking as error."
-                    )
-                    dao.save_progress(jobID, {
-                        "status": "error", "percent": 0,
-                        "detail": "Pipeline interrupted (no progress for 10 min). Click Retry.",
-                    })
-                    status = "error"
-
-            # What the agent has been DOING, not just how far along it is. The
-            # full-agent arm records every tool call, and until now that trace
-            # reached MongoDB and stopped there: the API never returned it, so
-            # a ten-minute run showed the user a percentage and nothing else.
-            # Trimmed to the tail because the widget shows a short feed and a
-            # long run makes hundreds of calls.
-            trace = record.get("toolTrace") or []
-            RESPONSE.setContent({
-                "success": True,
-                "jobID": jobID,
-                "status": status,
-                "percent": record.get("percent", 0) if status != "error" else 0,
-                "detail": record.get("detail", "") if status != "error"
-                    else "Pipeline interrupted (no progress for 10 min). Click Retry.",
-                "toolTrace": [{"tool": e.get("tool"), "args": e.get("args"),
-                               "result": e.get("result"), "ms": e.get("ms"),
-                               "t": e.get("t")}
-                              for e in trace[-12:] if isinstance(e, dict)],
-                "toolCalls": len(trace),
-            })
+        dao = AIWalkDAO()
+        doc = dao.find(jobID, INTERPRETATION_SCOPE)
+        if doc is None:
+            RESPONSE.setContent({"success": True, "jobID": jobID, "status": "not_started",
+                                 "percent": 0, "detail": "Not started"})
+            return RESPONSE
+        if _walkStale(doc, QUEUE_INSTANCE, walk_service.queue_id(jobID, INTERPRETATION_SCOPE)):
+            logging.warning("AI walk %s stale (status=%s, updatedAt=%s); marking as error",
+                            jobID, doc.get("status"), doc.get("updatedAt"))
+            dao.save_progress(jobID, INTERPRETATION_SCOPE, {
+                "status": "error", "stage": "error", "percent": 0,
+                "detail": "The walk was interrupted (no progress for 10 min). Click Retry.", "liveJSON": None})
+            doc = dao.find(jobID, INTERPRETATION_SCOPE)
+        trace, legs = _walkTrace(doc)
+        RESPONSE.setContent({
+            "success": True, "jobID": jobID, "status": doc.get("status", "unknown"),
+            "percent": doc.get("percent", 0), "detail": doc.get("detail", ""),
+            "toolTrace": trace, "toolCalls": legs,
+        })
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretStatus", userID=userID)
     finally:
@@ -363,8 +338,35 @@ def aiInterpretStatus(REQUEST, RESPONSE):
         return RESPONSE
 
 
+def _walkPathways(view, jobPathways=None):
+    """The pathways the walk's legs run through, as {id, name, source}, so the
+    chat's replies can link them the way the report's legs are linked.
+
+    The universal walk crosses pathways the job never analysed; those have no
+    diagram to open, so with ``jobPathways`` (the job's matched pathway ids)
+    only the job's own are listed and a link never opens nothing."""
+    seen, index = set(), []
+    for leg in view.get("chain") or []:
+        edge = leg.get("edge") or {}
+        if edge.get("db") in ("KEGG", "Reactome", "OmniPath") and edge.get("pathway") \
+                and edge["pathway"] not in seen \
+                and (jobPathways is None or edge["pathway"] in jobPathways):
+            seen.add(edge["pathway"])
+            index.append({"id": edge["pathway"], "name": edge.get("name") or edge["pathway"],
+                          "source": edge["db"]})
+    return index
+
+
+def _jobPathwayIDs(jobInstance):
+    """The ids of the pathways this job matched, or None when the job object
+    carries no pathway table (then nothing is filtered on it)."""
+    getter = getattr(jobInstance, "getMatchedPathways", None)
+    pathways = getter() if callable(getter) else None
+    return set(pathways) if isinstance(pathways, dict) else None
+
+
 def aiInterpretReport(REQUEST, RESPONSE):
-    """Return the completed AI interpretation report."""
+    """The sealed interpretation walk: Results, statements, legs, papers."""
     dao = None
     userID = None
     try:
@@ -374,43 +376,32 @@ def aiInterpretReport(REQUEST, RESPONSE):
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
-
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
 
-        # The report names the genes, the pathways and the direction of every
-        # effect in someone's experiment. This is the route that leaked it.
-        _requireJobAccess(jobID, userID)
+        # The walk names the genes, the pathways and the direction of every
+        # effect in someone's experiment.
+        jobInstance = _requireJobAccess(jobID, userID)
 
-        dao = AIInterpretDAO()
-        record = dao.find_by_job_id(jobID)
-
-        if record is None:
-            RESPONSE.setContent({"success": False, "jobID": jobID,
-                "message": "Report not ready yet."})
-        elif record.get("status") == "error":
-            RESPONSE.setContent({"success": False, "jobID": jobID,
-                "message": "AI interpretation failed: " + record.get("detail", "Unknown error"),
-                "status": "error"})
-        elif record.get("status") != "done":
-            RESPONSE.setContent({"success": False, "jobID": jobID,
-                "message": "AI interpretation is still in progress (" + str(record.get("percent", 0)) + "%).",
-                "status": record.get("status", "unknown")})
+        dao = AIWalkDAO()
+        doc = dao.find(jobID, INTERPRETATION_SCOPE)
+        view = None
+        if doc and doc.get("status") == "done" and doc.get("viewJSON"):
+            try:
+                view = json.loads(doc["viewJSON"])
+            except ValueError:
+                view = None
+        if doc is None:
+            RESPONSE.setContent({"success": False, "jobID": jobID, "message": "The interpretation has not started."})
+        elif doc.get("status") == "error":
+            RESPONSE.setContent({"success": False, "jobID": jobID, "status": "error",
+                                 "message": "AI interpretation failed: " + str(doc.get("detail") or "Unknown error")})
+        elif view is None:
+            RESPONSE.setContent({"success": False, "jobID": jobID, "status": doc.get("status", "unknown"),
+                                 "message": "AI interpretation is still in progress (%s%%)." % doc.get("percent", 0)})
         else:
-            RESPONSE.setContent({
-                "success": True,
-                "jobID": jobID,
-                "report": record.get("report", ""),
-                "verification": record.get("verification", {}),
-                "papers": record.get("papers", []),
-                # Lets the client turn pathway names in the report prose into
-                # links that open the pathway. Sent as id/name/source only.
-                "pathways": record.get("pathwayIndex", []),
-                # Cluster mode only: the shared-feature partition the report
-                # was written from (cluster ids, labels, member ids, core
-                # symbols), so the network view can colour by cluster.
-                "clusters": record.get("clusters"),
-            })
+            RESPONSE.setContent({"success": True, "jobID": jobID, "walk": view,
+                                 "pathways": _walkPathways(view, _jobPathwayIDs(jobInstance))})
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretReport", userID=userID)
     finally:
@@ -420,8 +411,10 @@ def aiInterpretReport(REQUEST, RESPONSE):
 
 
 def aiInterpretChat(REQUEST, RESPONSE):
-    """Handle follow-up chat with the AI about interpretation results."""
+    """Follow-up questions about the interpretation, answered with tools that
+    read the job's own values and the walk."""
     dao = None
+    walkDao = None
     userID = None
     try:
         userID = REQUEST.cookies.get('userID')
@@ -435,52 +428,52 @@ def aiInterpretChat(REQUEST, RESPONSE):
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
         userMessage = formFields.get("message", "")
-
         if not jobID:
             raise UserWarning("Missing jobID parameter.")
         if not userMessage.strip():
             raise UserWarning("Empty message.")
 
-        # The worst of the five. The chat tools read the job's own expression
-        # values to answer, and every turn is an LLM call this deployment pays
-        # for -- so an unguarded id was both a data leak and an open tab.
+        # The chat tools read the job's own values, and every turn is a model
+        # call this deployment pays for.
         _requireJobAccess(jobID, userID)
 
-        dao = AIInterpretDAO()
-        record = dao.find_by_job_id(jobID)
+        walkDao = AIWalkDAO()
+        walkDoc = walkDao.find(jobID, INTERPRETATION_SCOPE)
+        if walkDoc is None or walkDoc.get("status") != "done":
+            raise UserWarning("The interpretation must be finished before chatting.")
 
-        if record is None or record.get("status") != "done":
-            raise UserWarning("Report must be completed before chatting.")
-
-        # Same consent the initiate endpoint checks. This one sends the
-        # user's question and the job's context to the same external service,
-        # so declining has to stop it here too -- gating only the pipeline
-        # would leave three other ways out.
+        # Same consent the initiate endpoint checks: the question and the
+        # job's context go to the same external service.
         if not _consented(jobID):
             raise UserWarning(
                 "AI interpretation was not enabled for this job, so nothing "
                 "about it can be sent to the external AI service.")
 
-        # Build conversation context
-        report = record.get("report", "")
+        dao = AIInterpretDAO()
+        record = dao.find_by_job_id(jobID) or {}
         conversation = record.get("conversation", [])
 
+        job_instance = JobInformationManager().loadJobInstance(jobID)
+        # The design card tells the chat what the columns are, so a
+        # case-versus-control job is never read as a time course.
+        system = SYSTEM_PROMPT_CHAT
+        if job_instance is not None:
+            card = card_mod.job_card(job_instance)
+            system += ("\n\n" + "\n".join(card_mod.card_lines(card))
+                       + "\n" + design_guidance(card["axis_kind"]))
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT_CHAT},
-            {"role": "user", "content": f"Here is the analysis report for context:\n\n{report}"},
-            {"role": "assistant", "content": "I've reviewed the analysis report. What questions do you have?"},
+            {"role": "system", "content": system},
+            {"role": "user", "content": "Here is the interpretation of this job, a graph walk over its "
+                                        "universal network, for context:\n\n" + walk_service.stored_walk_text(walkDoc)},
+            {"role": "assistant", "content": "I've read the walk. What would you like to know?"},
         ]
         for msg in conversation:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": userMessage})
 
-        # Save user message
         dao.append_chat(jobID, "user", userMessage)
 
-        # Get LLM response (with tool access when job data is available)
         llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
-        job_instance = JobInformationManager().loadJobInstance(jobID)
-
         if job_instance is not None:
             tool_executor = lambda name, args: execute_tool(name, job_instance, args)
             reply = llm.complete_with_tools(
@@ -490,16 +483,16 @@ def aiInterpretChat(REQUEST, RESPONSE):
         else:
             reply = llm.complete(messages, max_tokens=2048, temperature=AI_TEMPERATURE)
 
-        # Save assistant reply (only the final text, not intermediate tool messages)
+        # Only the final text is stored, not the intermediate tool messages.
         dao.append_chat(jobID, "assistant", reply)
-
         RESPONSE.setContent({"success": True, "jobID": jobID, "response": reply})
-
     except Exception as ex:
         handleException(RESPONSE, ex, __file__, "aiInterpretChat", userID=userID)
     finally:
         if dao is not None:
             dao.closeConnection()
+        if walkDao is not None:
+            walkDao.closeConnection()
         return RESPONSE
 
 
@@ -749,55 +742,88 @@ def aiGenerateExpDesign(REQUEST, RESPONSE, EXAMPLE_FILES_DIR=None):
         return RESPONSE
 
 
-def _clusterContextBlock(clusters, pathwayID, pathwayIndex):
-    """Prompt text describing the stored cluster a pathway belongs to, or "".
+# ---------------------------------------------------------------------------
+# Agentic Graph Walk
+#
+# A walk runs on the queue, never on a request thread: a model walk with its
+# Writer and Narrator takes minutes, and four uWSGI threads serve the whole
+# site. /ai_walk_start files it (or reports the run already filed), the
+# worker stores progress, the growing chain and the sealed view in
+# aiWalkCollection, and /ai_walk_status reads them. The same consent and
+# access rules as every other AI route: a walk sends the job's values to the
+# model gateway.
+# ---------------------------------------------------------------------------
+AI_WALK_TIMEOUT = 1500          # seconds the queue allows one walk
+# The queue is one FIFO deque shared with Step 1, Step 2 and MORE, and a walk
+# holds its worker for minutes: walks may take every worker but one, and one
+# job may hold at most two (its interpretation and one pathway walk).
+AI_WALK_MAX_ACTIVE = max(1, int(getattr(_serverconf, "N_WORKERS", 4)) - 1)
+AI_WALK_MAX_PER_JOB = 2
+# The count and the enqueue are one step, or two requests arriving together
+# both pass the cap. One uWSGI process serves the site, so a thread lock holds.
+_WALK_FILING_LOCK = threading.Lock()
 
-    Reads the compact partition AIInterpretDAO.save_clusters stores; names come
-    from the pathway index. Never raises -- a malformed record just yields no
-    block, and the drill-down proceeds as it did before cluster mode.
+
+def _walkStale(doc, QUEUE_INSTANCE=None, queueID=None):
+    """A walk whose progress stopped for AI_STALE_JOB_TIMEOUT: the worker died,
+    or the server restarted mid-walk. A running walk writes a heartbeat every
+    minute (service.run_job), so silence means it is gone. A queued walk writes
+    nothing while it waits for a free worker, so it is stale only when the
+    queue no longer holds it."""
+    if not doc or doc.get("status") not in ("queued", "running"):
+        return False
+    updated = doc.get("updatedAt")
+    if not (updated and (datetime.utcnow() - updated) > AI_STALE_JOB_TIMEOUT):
+        return False
+    if doc.get("status") == "queued" and QUEUE_INSTANCE is not None and queueID:
+        waiting = QUEUE_INSTANCE.fetch_job(queueID)
+        if waiting is not None and waiting.status in (JobStatus.QUEUED, JobStatus.STARTED):
+            return False
+    return True
+
+
+def _enqueueWalk(QUEUE_INSTANCE, jobID, scope, card=None, restart=False):
+    """File one walk, or say why not. Returns the response body.
+
+    Idempotent per (job, scope): a walk already queued or running is
+    reported, a finished one is kept unless ``restart`` asks for a new run.
+    A new walk is refused while the job, or the server, holds its cap of
+    queued and running walks (AI_WALK_MAX_PER_JOB, AI_WALK_MAX_ACTIVE).
     """
+    queueID = walk_service.queue_id(jobID, scope)
+    dao = AIWalkDAO()
+    _WALK_FILING_LOCK.acquire()
     try:
-        if not clusters:
-            return ""
-        names = {p.get("id"): p.get("name") for p in (pathwayIndex or [])}
-        for c in clusters.get("clusters") or []:
-            members = list(c.get("members") or [])
-            satellites = list(c.get("satellites") or [])
-            if pathwayID not in members and pathwayID not in satellites:
-                continue
-            others = [names.get(pid, pid) for pid in members + satellites if pid != pathwayID]
-            lines = ["## Cluster context (from the analysis)",
-                     "This pathway belongs to %s (%s), a group of %d pathways that share "
-                     "matched features%s." % (
-                         c.get("id"), c.get("label"), len(members) + len(satellites),
-                         " (loosely connected)" if pathwayID in satellites else "")]
-            if others:
-                lines.append("Other members: " + "; ".join(others))
-            core = [s for s in (c.get("core") or []) if s]
-            if core:
-                lines.append("Shared core: " + ", ".join(core[:12]))
-            if c.get("hub_driven"):
-                lines.append("The cluster is held together only by hub features common to "
-                             "the whole network; do not present it as one module.")
-            lines.append("Say what THIS pathway adds beyond what the cluster shares.")
-            return "\n".join(lines)
-        if pathwayID in (clusters.get("standalone") or []):
-            return ("## Cluster context (from the analysis)\nThis pathway shares no cluster "
-                    "with any other significant pathway (standalone).")
-        return ""
-    except Exception:
-        return ""
+        doc = dao.find(jobID, scope)
+        queueJob = QUEUE_INSTANCE.fetch_job(queueID)
+        status = doc.get("status") if doc else None
+        live = queueJob is not None and queueJob.status not in (JobStatus.FINISHED, JobStatus.FAILED)
+        if status in ("queued", "running") and live and not _walkStale(doc, QUEUE_INSTANCE, queueID):
+            return {"success": True, "jobID": jobID, "scope": scope, "status": "already_running"}
+        if status == "done" and not restart:
+            return {"success": True, "jobID": jobID, "scope": scope, "status": "already_finished"}
+        if live:
+            return {"success": True, "jobID": jobID, "scope": scope, "status": "already_running"}
+        if QUEUE_INSTANCE.count_active(walk_service.queue_id(jobID, "")) >= AI_WALK_MAX_PER_JOB:
+            raise UserWarning("This job already has %d walks queued or running. Start this one when "
+                              "one of them has finished." % AI_WALK_MAX_PER_JOB)
+        if QUEUE_INSTANCE.count_active("walk_") >= AI_WALK_MAX_ACTIVE:
+            raise UserWarning("The server is already running %d AI walks, the most it runs at once so "
+                              "the analyses keep a free worker. Start this one again in a few minutes."
+                              % AI_WALK_MAX_ACTIVE)
+        dao.save_progress(jobID, scope, {"status": "queued", "stage": "queued", "percent": 0,
+                                         "detail": "Waiting for a free worker", "liveJSON": None,
+                                         "viewJSON": None})
+        QUEUE_INSTANCE.enqueue(fn=walk_service.run_job, args=(jobID, scope, card, "model"),
+                               timeout=AI_WALK_TIMEOUT, job_id=queueID)
+        return {"success": True, "jobID": jobID, "scope": scope, "status": "queued"}
+    finally:
+        _WALK_FILING_LOCK.release()
+        dao.closeConnection()
 
 
-def aiInterpretPathway(REQUEST, RESPONSE):
-    """Return a focused AI interpretation of one pathway.
-
-    Backs the pathway citations in the main report: clicking one opens the
-    pathway and asks for this. Generated lazily and cached, so only pathways a
-    user actually opens cost an LLM call, and opening the same one twice is
-    free.
-    """
-    dao = None
+def aiWalkStart(REQUEST, RESPONSE, QUEUE_INSTANCE):
+    """Start an Agentic Graph Walk on one pathway or on the universal network."""
     userID = None
     try:
         userID = REQUEST.cookies.get('userID')
@@ -810,104 +836,93 @@ def aiInterpretPathway(REQUEST, RESPONSE):
 
         formFields = REQUEST.form
         jobID = formFields.get("jobID")
-        pathwayID = formFields.get("pathwayID")
-        regenerate = formFields.get("regenerate", "") == "true"
+        if not jobID:
+            raise UserWarning("Missing jobID parameter.")
+        try:
+            scope = walk_service.check_scope(formFields.get("scope"))
+            card = walk_service.clean_card(formFields.get("card"))
+        except walk_service.WalkError as ex:
+            raise UserWarning(str(ex))
 
-        if not jobID or not pathwayID:
-            raise UserWarning("Missing jobID or pathwayID parameter.")
-
-        # Before the cache lookup, not after: the cached branch returns a
-        # stored pathway report and never reaches the load further down, so a
-        # gate placed with the other job checks would miss exactly the
-        # requests that cost nothing to make and hand back the most.
         jobInstance = _requireJobAccess(jobID, userID)
-
-        dao = AIInterpretDAO()
-
-        if not regenerate:
-            cached = dao.get_pathway_report(jobID, pathwayID)
-            if cached:
-                RESPONSE.setContent({
-                    "success": True, "jobID": jobID, "pathwayID": pathwayID,
-                    "report": cached.get("report", ""),
-                    "papers": cached.get("papers", []),
-                    "cached": True,
-                })
-                return RESPONSE
-
-        # The main pipeline must have run: its pathway index is what tells us
-        # which pathways were analysed, and its papers are the only literature
-        # we are allowed to cite.
-        pathwayIndex = dao.get_pathway_index(jobID)
-        if not pathwayIndex:
-            raise UserWarning("Run the AI interpretation for this job first.")
-
-        entry = next((p for p in pathwayIndex if p.get("id") == pathwayID), None)
-        if entry is None:
-            raise UserWarning("Pathway " + pathwayID + " was not part of the AI analysis. "
-                              "Only the pathways the report covers can be interpreted.")
-
-        # See _consented: this route sends job context outward as well.
+        # See _consented: a walk sends the job's values to the model gateway.
         if not jobInstance.getAIConsent():
             raise UserWarning(
                 "AI interpretation was not enabled for this job, so nothing "
                 "about it can be sent to the external AI service.")
 
-        record = dao.find_by_job_id(jobID) or {}
-        experimentDesign = record.get("experimentDesign", "")
-
-        # Rebuild the full context and pick this pathway out of it. The stored
-        # index deliberately holds only display fields; the gene-level detail
-        # the prompt needs has to be recomputed.
-        # Selected by id rather than "top AI_MAX_PATHWAYS by p-value": in
-        # cluster mode the index covers every significant pathway, most of
-        # which sit far below the top 15.
-        allPathways = build_pathway_context(jobInstance, pathway_ids=[pathwayID])
-        pathway = next((p for p in allPathways if p.get("id") == pathwayID), None)
-        if pathway is None:
-            raise UserWarning("Pathway " + pathwayID + " is no longer present in this job's results.")
-
-        # Papers are attributed to pathways by name (pipeline.py), so match on
-        # the name rather than the ID.
-        pathwayName = pathway.get("name")
-        papers = [
-            p for p in dao.get_papers_metadata(jobID)
-            if pathwayName in (p.get("pathways") or [])
-        ]
-
-        organismName = get_organism_name(jobInstance.getOrganism())
-        llm = LLMClient(AI_PROVIDERS[AI_LLM_PROVIDER], AI_LLM_PROVIDER)
-        prompt = build_pathway_focus_prompt(pathway, papers, experimentDesign, organismName)
-        # Cluster mode: tell the focus prompt which cluster this pathway sits
-        # in and what its members share, so the drill-down can say what this
-        # pathway adds beyond its cluster rather than re-describing the core.
-        clusterBlock = _clusterContextBlock(record.get("clusters"), pathwayID, pathwayIndex)
-        if clusterBlock:
-            prompt += "\n\n" + clusterBlock
-
-        report = llm.complete(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT_PATHWAY_FOCUS},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=1500,
-            temperature=AI_TEMPERATURE,
-        )
-        # "[3, 5]" -> "[3], [5]": the client linkifies single [N] markers only,
-        # so an unsplit multi-citation stays plain text instead of two links.
-        report = normalize_citation_markers(report)
-
-        citedPapers = [
-            {k: v for k, v in p.items() if k != "sections"} for p in papers
-        ]
-        dao.save_pathway_report(jobID, pathwayID, report, citedPapers)
-
-        RESPONSE.setContent({
-            "success": True, "jobID": jobID, "pathwayID": pathwayID,
-            "report": report, "papers": citedPapers, "cached": False,
-        })
+        restart = str(formFields.get("restart", "")).lower() in ("1", "true", "yes")
+        if restart or card is not None:
+            _requireRewriteRight(jobInstance, userID)
+        jobPathways = _jobPathwayIDs(jobInstance)
+        if scope != INTERPRETATION_SCOPE and jobPathways is not None \
+                and scope.split(":", 1)[1] not in jobPathways:
+            # Refused here, not in the worker: an id the job never matched
+            # would otherwise take a queue slot and load the whole network
+            # only to be turned down.
+            raise UserWarning("Pathway %s is not one of this job's pathways, so there is "
+                              "nothing of this job's to walk on it." % scope.split(":", 1)[1])
+        RESPONSE.setContent(_enqueueWalk(QUEUE_INSTANCE, jobID, scope, card, restart))
     except Exception as ex:
-        handleException(RESPONSE, ex, __file__, "aiInterpretPathway", userID=userID)
+        handleException(RESPONSE, ex, __file__, "aiWalkStart", userID=userID)
+    finally:
+        return RESPONSE
+
+
+def aiWalkStatus(REQUEST, RESPONSE, QUEUE_INSTANCE):
+    """Progress of one walk; the chain so far while it runs; the sealed view
+    when it is done; the design card the walk would read when none has run."""
+    dao = None
+    userID = None
+    try:
+        userID = REQUEST.cookies.get('userID')
+        sessionToken = REQUEST.cookies.get('sessionToken')
+        UserSessionManager().isValidUser(userID, sessionToken)
+
+        formFields = REQUEST.form
+        jobID = formFields.get("jobID")
+        if not jobID:
+            raise UserWarning("Missing jobID parameter.")
+        try:
+            scope = walk_service.check_scope(formFields.get("scope"))
+        except walk_service.WalkError as ex:
+            raise UserWarning(str(ex))
+
+        jobInstance = _requireJobAccess(jobID, userID)
+
+        dao = AIWalkDAO()
+        doc = dao.find(jobID, scope)
+        queueID = walk_service.queue_id(jobID, scope)
+        queueJob = QUEUE_INSTANCE.fetch_job(queueID)
+        if _walkStale(doc, QUEUE_INSTANCE, queueID):
+            logging.warning("AI walk %s %s stale (status=%s, updatedAt=%s); marking as error",
+                            jobID, scope, doc.get("status"), doc.get("updatedAt"))
+            dao.save_progress(jobID, scope, {"status": "error", "stage": "error", "percent": 0,
+                                             "detail": "The walk was interrupted. Start it again.",
+                                             "liveJSON": None})
+            doc = dao.find(jobID, scope)
+        status = doc.get("status") if doc else "not_started"
+        if status in ("done", "error") and queueJob is not None \
+                and queueJob.status in (JobStatus.FINISHED, JobStatus.FAILED):
+            # The worker's entry is spent; its outcome lives in the collection.
+            QUEUE_INSTANCE.get_result(queueID, remove=True)
+
+        content = {"success": True, "jobID": jobID, "scope": scope, "status": status,
+                   "stage": (doc or {}).get("stage"), "percent": (doc or {}).get("percent", 0),
+                   "detail": (doc or {}).get("detail", "")}
+        for field, key in (("liveJSON", "live"), ("viewJSON", "walk")):
+            raw = (doc or {}).get(field)
+            if raw:
+                try:
+                    content[key] = json.loads(raw)
+                except ValueError:
+                    content[key] = None
+        if status in ("not_started", "error"):
+            # The card the walk will read unless the user edits it first.
+            content["card"] = card_mod.job_card(jobInstance)
+        RESPONSE.setContent(content)
+    except Exception as ex:
+        handleException(RESPONSE, ex, __file__, "aiWalkStatus", userID=userID)
     finally:
         if dao is not None:
             dao.closeConnection()

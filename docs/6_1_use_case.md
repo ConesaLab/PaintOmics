@@ -292,35 +292,18 @@ which is where a per-gene version of the same cross-layer check lives; see
 
 ## What the AI made of the whole result
 
-Asked to interpret the job, the agent produced **"Synthesis Report:
-Ikaros-Driven B-Lineage Differentiation"**. It grouped the 114 significant
-pathways into 23 clusters, 18 of which have nodes in the KEGG network, and
-supported its statements with citations whose quoted text was checked verbatim
-against the sources.
+Asked to interpret the job, PaintOmics AI walks the network of every KEGG, Reactome and
+OmniPath interaction for mouse with this job's values on its nodes. It starts from the
+nodes whose neighbourhoods hold surprisingly many relevant features, reads the values at
+every stop against the time-course design, and writes what the chain shows as a checked
+Results section: every quoted value is matched against the upload, every leg is an
+interaction a database draws, and every citation was retrieved and read.
 
-![The interpretation report](img/ui/ai-report-full.png)
-
-*The report opens with Key Findings, each tying a named observation to the
-values behind it, then Cross-Pathway Themes referring to the clusters by the
-identifiers it gave them.*
-
-![The network coloured by AI pathway clusters](img/ui/step3-network-ai-clusters.png)
-
-*Once an interpretation exists, **AI pathway clusters** appears as a node
-colouring on the pathway network. Node-colouring changes take effect when
-**Apply** is pressed.*
-
-That recolouring is the most useful part of the interpretation for this
-analysis, because it answers the question the raw network raised: it puts a
-name on each connected neighbourhood and shows which of the 23 themes actually
-have pathways in the network. Grey nodes belong to no cluster.
-
-The report is a draft written by a language model, and it should be read the
-way you would read a capable colleague's first pass: the evidence table it
-builds is checkable against the enrichment table, its citations are checkable
-against the papers, and both are worth checking.
-[The pathway interpretation](ai-interpretation.md) sets out what it does, what
-it is given, and what it cannot do.
+The result is a draft written by a language model, and it should be read the way you would
+read a capable colleague's first pass: its values are checkable against the job, its legs
+against the pathways that draw them, and its citations against the papers.
+[The interpretation](ai-interpretation.md) sets out what it does, what it is given, and what
+it cannot do.
 
 ## What this run shows, and what it does not
 
