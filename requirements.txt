@@ -67,7 +67,7 @@ uWSGI==2.0.31
 # pymongo 4 is required, not optional: the deployment runs MongoDB 7, and
 # pymongo 3.11 speaks wire-protocol opcodes MongoDB removed in 5.1. See
 # src/tests/test_pymongo4_compat.py.
-pymongo==4.18.0
+pymongo==4.18.1
 
 # --- Scientific stack ---
 numpy==2.4.6
@@ -93,7 +93,7 @@ patsy==1.0.3
 # tinycss2, cssselect2 and defusedxml were pinned to 2019-era releases that
 # CairoSVG 2.9 does not work against. CairoSVG declares them without bounds, so
 # these pins are the resolved versions, recorded rather than left to float.
-CairoSVG==2.9.0
+CairoSVG==2.9.1
 cairocffi==1.7.1
 Pillow==12.3.0
 tinycss2==1.5.1
@@ -132,8 +132,8 @@ requests==2.34.2
 chardet==5.2.0
 
 # --- AI interpretation pipeline (src/classes/AIInterpret/) ---
-openai==3.8.0
-openai-agents==0.22.0
+openai==3.13.0
+openai-agents==0.22.2
 # Imported directly by AIInterpret/agent.py (Timeout for the SDK client,
 # HTTPError while iterating a completion stream -- openai wraps only the
 # initial request, so a mid-stream failure arrives as a raw transport error).
@@ -184,5 +184,5 @@ six==1.17.0
 # dead weight that only stayed invisible because the modules reaching it are
 # not on the request path. statsmodels 0.15.0 also pulls formulaic, which
 # imports wrapt directly.
-wrapt==2.4.0
+wrapt==2.4.1
 scriptinep3==0.3.1
