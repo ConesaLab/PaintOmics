@@ -102,6 +102,11 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertTrue(any("link paragraph 2 cites a paper" in p for p in problems))
         self.assertTrue(any("statement 7" in p for p in problems))
 
+    def test_a_range_is_not_a_quoted_value(self):
+        self.assertEqual(verify.NUMBER_RE.findall("peaks late (18-24h) and 0h-2h"), [])
+        self.assertEqual(verify.NUMBER_RE.findall("from -0.35 at 0h to +2.13, within ±0.6"), ["-0.35", "+2.13"])
+        self.assertEqual(verify.NUMBER_RE.findall("miR-151-3p rose to +2.00"), ["+2.00"])
+
     def test_deterministic_card_marks_unlabeled_columns(self):
         card = card_mod.deterministic_card("Ikaros induction over time. Values are log2 fold changes.",
                                            ["a", "b", "c"], self.ov.labels)

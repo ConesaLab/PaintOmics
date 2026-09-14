@@ -72,6 +72,7 @@ class Walker:
     done: bool = False
     scans: int = 0
     refusals: int = 0
+    steps_here: int = 0                          # steps taken since the last plan or jump
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -290,6 +291,7 @@ class Walker:
                                     l["omic"] for l in self.overlay.layers.get(target, [])})) or "unmeasured"))
         self.closed.add((self.current, target))
         self.budget["steps"] -= 1
+        self.steps_here += 1
         edge = self._edge_record(self.current, target)
         leg = Leg(len(self.chain) + 1, "step", self.current, target, str(reading), str(reason), edge)
         self.chain.append(leg)
@@ -315,7 +317,12 @@ class Walker:
             return self._refuse("jump", args, "%r is neither an unvisited seed nor on the chain." % to)
         if target == self.current:
             return self._refuse("jump", args, "Already standing on %s." % self.label(target))
+        if self.steps_here == 0 and any(r["r"] == 1 and r["open"] and not r["visited"]
+                                        for r in self.neighbour_rows()):
+            return self._refuse("jump", args, "Step first: %s still has a relevant unvisited neighbour. "
+                                "A jump is for an exhausted neighbourhood." % self.label(self.current))
         self.budget["jumps"] -= 1
+        self.steps_here = 0
         leg = Leg(len(self.chain) + 1, "jump", self.current, target, str(reading), str(reason), None)
         self.chain.append(leg)
         self.current = target

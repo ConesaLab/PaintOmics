@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import re
 
-NUMBER_RE = re.compile(r"[+\-−±]\s?\d+(?:\.\d+)?")
+# A quoted value is a signed decimal as the layer text prints it (+2.13, −0.35);
+# "18-24h" is a range, not a value, and ±0.6 is a bound the Narrator may write.
+NUMBER_RE = re.compile(r"(?<![\w.])[+\-−]\d+\.\d+")
 LEG_RE = re.compile(r"\[e(\d+)\]")
 PAPER_RE = re.compile(r"\[(\d+)\]")
 STATEMENT_MIN, STATEMENT_MAX = 3, 5
@@ -138,8 +140,6 @@ def verify_results(results, kept, dropped, walker, scope="pathway"):
             covered.add(int(origin))
         for match in NUMBER_RE.finditer(text):
             token = _norm(match.group(0))
-            if token.startswith("±"):
-                continue
             if token not in numbers:
                 problems.append("paragraph %d quotes %s, not in the record" % (i, match.group(0)))
     for n in kept_ids - covered:

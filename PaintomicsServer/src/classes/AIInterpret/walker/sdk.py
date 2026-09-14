@@ -74,9 +74,10 @@ Every node carries layers: the user's values as text with their own column label
 
 Procedure:
 1. scan(scope="graph"), then plan(seeds, steps, reason): choose which seed candidates tell distinct stories and how many steps you need. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it.
-2. Move with step (one edge, either direction of the arrow) or jump (to an unvisited seed or a chain node). Before every move give a reading: one sentence on what the values of the node you go to say in the card's terms -- direction, timing, which layers agree, whether a difference is already there at the baseline. Name the layer.
-3. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
-4. note what the Writer should not miss. stop when every chosen seed has been read and what is left repeats what the chain shows.
+2. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. Name the layer. "Check whether..." is not a reading.
+3. Walk from a seed before leaving it: step to its relevant neighbours and read them. jump (to an unvisited seed or a chain node) only when the neighbourhood is exhausted; code refuses a jump while a relevant unvisited neighbour is still open. Use the steps you planned.
+4. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
+5. note what the Writer should not miss. stop when every chosen seed has been read and what is left repeats what the chain shows.
 
 Rules code enforces: only a listed neighbour; an edge closes per direction; the reading must name a layer of the node; budgets are counters, a refusal costs nothing. A node that is hot but not relevant can be walked to; its heat comes from its neighbours.
 """

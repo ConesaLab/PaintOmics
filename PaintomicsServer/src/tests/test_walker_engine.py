@@ -173,16 +173,20 @@ class WalkerEngineTest(unittest.TestCase):
         w.plan_walk(cands[:2], 6)
         self.assertTrue(w.jump("Ggg", "x", "").startswith("REFUSED"))
         self.assertTrue(w.jump(cands[0], "x", "").startswith("REFUSED"))      # standing on it
-        self.assertTrue(w.jump(cands[1], "next seed", "").startswith("J1"))
+        if any(r["r"] == 1 and r["open"] for r in w.neighbour_rows()):
+            self.assertIn("Step first", w.jump(cands[1], "next seed", ""))    # neighbourhood not read
+            first = next(r for r in w.neighbour_rows() if r["r"] == 1 and r["open"])
+            w.step(first["label"], first["label"], "read it")
+        self.assertTrue(w.jump(cands[1], "next seed", "").startswith("J"))
         self.assertTrue(w.note("").startswith("REFUSED"))
         self.assertTrue(w.note("x" * 401).startswith("REFUSED"))
-        self.assertTrue(w.note("a note").startswith("noted after e1"))
+        self.assertTrue(w.note("a note").startswith("noted after e%d" % len(w.chain)))
         self.assertTrue(w.stop("done", "enough").startswith("done ·"))
         self.assertTrue(w.done)
         self.assertTrue(w.step("Aaa", "Aaa", "").startswith("REFUSED"))
         rec = w.record()
-        self.assertEqual(rec["chain"][0]["kind"], "jump")
-        self.assertEqual(rec["notes"][0]["after_leg"], 1)
+        self.assertEqual(rec["chain"][-1]["kind"], "jump")
+        self.assertEqual(rec["notes"][0]["after_leg"], len(rec["chain"]))
         self.assertEqual(rec["stop_reason"], "enough")
 
     def test_here_scan_needs_a_plan_and_a_legal_radius(self):

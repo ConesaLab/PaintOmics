@@ -142,6 +142,9 @@ def run(job_id, scope, policy="greedy", out_dir=None, data_dir=None, writer=True
         timings["card"] = round(time.time() - t0, 1)
     else:
         card = card_mod.deterministic_card(design_text, conditions, labels)
+    # The omics whose file carried no header: the walker may make no timing
+    # claim on them until the user confirms the columns.
+    card["unlabeled"] = ov_mod.relabel_unlabeled(ov)
     card_text = card_mod.card_text(card)
     walker = Walker(graph, ov, tag, params_for("network" if tag == "network" else "pathway"))
     t0 = time.time()
