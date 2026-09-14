@@ -165,6 +165,20 @@ class WalkerEngineTest(unittest.TestCase):
         self.assertTrue(shown <= set(w.seen))                                  # shown = seen
         self.assertTrue(any(v not in w.visited for v in shown))
 
+    def test_a_move_shows_the_relevant_neighbours_layers(self):
+        graph, ov = self.fresh()
+        w = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
+        w.scan("graph")
+        seed = [r for r in w.ranked if r["candidate"]][0]
+        answer = w.plan_walk([seed["label"]], 6)
+        relevant = [r for r in w.neighbour_rows() if r["r"] == 1 and r["open"]]
+        if relevant:
+            self.assertIn("relevant neighbours' layers:", answer)
+            self.assertIn(relevant[0]["label"] + " (r=1", answer)
+            self.assertIn(ov.layer_text(relevant[0]["id"]).splitlines()[0].split()[-1], answer)  # a value
+        else:
+            self.assertNotIn("relevant neighbours' layers:", answer)
+
     def test_jump_note_stop_rules(self):
         graph, ov = self.fresh()
         w = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
