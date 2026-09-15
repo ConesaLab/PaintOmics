@@ -166,7 +166,9 @@ relations and your values, not findings), and no Results section or statements.
    relevant neighbour inside it is unread, and every neighbour a walker sees carries its
    distance. Every module is labelled by its distance from the anchor and the header states
    the perturbation and its direction. The check passes when the walked nodes lie within two
-   steps of the anchor more often than the measured nodes at large do.
+   steps of the anchor more often than the measured nodes at large do; it does not apply, and
+   says so, when the gene has no relation in the network to anchor on (no pathway edge and no
+   target table) or when no measured node of the walked graph lies within two steps of it.
 
 ## Running it
 

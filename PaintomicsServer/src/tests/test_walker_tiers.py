@@ -189,6 +189,21 @@ class TitleGateTest(unittest.TestCase):
         results = {"title": "Aaa and Eee", "summary": "Eee rose while Ddd fell."}
         self.assertEqual(tiers.title_outruns_body(results, [stmt], self.walker), [])
 
+    def test_the_scope_name_is_not_a_claim(self):
+        stmt = self.statement(1, self.mech_leg)
+        results = {"title": "Ubiquitin mediated proteolysis: what changed after Ikzf1 induction", "summary": ""}
+        self.assertTrue(tiers.title_outruns_body(results, [stmt], self.walker))
+        self.assertEqual(tiers.title_outruns_body(results, [stmt], self.walker,
+                                                  scope_name="Ubiquitin mediated proteolysis"), [])
+        # blanking the scope name does not blank a verb of the title's own
+        other = next(label for label in (self.walker.label(v) for v in self.graph.nodes)
+                     if label != self.walker.label(self.mech_leg["to"]) and label in
+                     {self.walker.label(v) for v in self.graph.nodes})
+        results = {"title": "Longevity regulating pathway", "summary": "%s drives everything." % other}
+        problems = tiers.title_outruns_body(results, [stmt], self.walker, scope_name="Longevity regulating pathway")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("summary", problems[0])
+
     def test_a_named_gene_needs_a_mechanism_statement_about_it(self):
         stmt = self.statement(1, self.mech_leg)
         other = [name for name in ("Aaa", "Bbb", "Ccc", "Ddd", "Eee")

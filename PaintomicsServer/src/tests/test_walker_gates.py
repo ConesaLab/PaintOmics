@@ -150,6 +150,35 @@ class DirectionGateTest(unittest.TestCase):
 
 
 class ContextGateTest(unittest.TestCase):
+    def test_a_rewrite_that_drops_the_panel_gene_drops_its_old_verdict(self):
+        failing = [{"n": 4, "direction": [{"consistent": False, "insensitive": True}]},
+                   {"n": 5, "direction": [{"consistent": False, "insensitive": False}]}]
+        verdicts = {4: failing[0]["direction"], 5: failing[1]["direction"], 6: [{"consistent": True}]}
+        again = {5: [{"consistent": True, "insensitive": False}]}          # the rewrite of 4 cites no panel gene
+        service._refresh_direction(failing, again, verdicts)
+        self.assertIsNone(failing[0]["direction"])
+        self.assertEqual(failing[1]["direction"], again[5])
+        self.assertEqual(set(verdicts), {5, 6})
+        # and the gate over the kept statements passes
+        self.assertTrue(service.direction_gate(failing, [])["pass"])
+
+    def test_the_harness_reads_only_run_files_and_reports_without_a_decoy(self):
+        from src.classes.AIInterpret.walker import harness
+        self.assertEqual(harness._record_key("real", "pathway_mmu04068_2.json"), ("pathway_mmu04068", "2"))
+        self.assertEqual(harness._record_key("anchor_example", "decoy-Nr0b1_0.json"), ("decoy-Nr0b1", "0"))
+        self.assertIsNone(harness._record_key("context", "labels.json"))
+        self.assertIsNone(harness._record_key("real", "summary.json"))
+        self.assertIsNone(harness._record_key("real", "notes.txt"))
+        run = {"reachability": 0.9, "enrichment": {"p": 0.001}, "summary": {"statements": 3, "modules": 2}}
+        summary = {"job": "j", "scope": "network", "repeats": 1,
+                   "anchor": {"gene": "Ikzf1", "decoy": None, "targets": 30, "pass": True,
+                              "arms": {"anchored": [run], "unanchored": [dict(run, reachability=0.2)]},
+                              "rank_p": {"reachability": {"unanchored": 0.05}, "enrichment": {"unanchored": 0.05}}}}
+        text = harness.report(summary)
+        self.assertIn("decoy arm was not run", text)
+        self.assertIn("0.05 (unanchored)", text)
+        self.assertNotIn("(decoy)", text)
+
     def test_the_gate_counts_qualified_and_unqualified_citations(self):
         papers = {1: {"context": {"organism": "mouse", "system": "B-Lymphocytes",
                                   "match": {"organism": "same", "system": "same"}}},
@@ -185,6 +214,13 @@ class ContextGateTest(unittest.TestCase):
         self.assertTrue(verify.context_named("as shown in human T cells [3]", ctx))
         self.assertTrue(verify.context_named("in patients' lymphocytes [3]", ctx))
         self.assertFalse(verify.context_named("Cish is a SOCS protein [3]", ctx))
+        # the same organism, another system: the phrase a Writer uses for the heading names it
+        same = {"organism": "mouse", "system": "T-Lymphocytes", "match": {"organism": "same", "system": "other"}}
+        self.assertTrue(verify.context_named("in mouse T cells [3]", same))
+        self.assertTrue(verify.context_named("in T-cells [3]", same))
+        self.assertFalse(verify.context_named("in mouse B cells [3]", same))
+        liver = {"organism": "mouse", "system": "Hepatocytes", "match": {"organism": "same", "system": "other"}}
+        self.assertTrue(verify.context_named("in mouse liver [2]", liver))
         # a system named only by generic words ("HL-60 Cells" -> "HL-60") is not satisfied by "cells"
         hl60 = {"organism": "human", "system": "HL-60 Cells", "match": {"organism": "same", "system": "other"}}
         self.assertFalse(verify.context_named("in these cells Tspan3 falls [2]", hl60))

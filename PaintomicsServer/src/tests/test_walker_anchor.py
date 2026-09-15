@@ -34,6 +34,7 @@ class AnchorTest(unittest.TestCase):
         cls.org_dir = os.path.join(cls.data_dir, "current", "tst")
         with open(os.path.join(cls.org_dir, "mapping", "kegg2genesymbol.list"), "a") as handle:
             handle.write("tst:1\tCDS\t1:1..2\tAaa, Alpha, Ikaros-like; the first gene\n")   # an alias row
+            handle.write("tst:8\tCDS\t8:1..2\tIn, Was, Time, Hhh; a gene whose aliases are English words\n")
         with open(os.path.join(cls.org_dir, "mapping", "tf_targets.tsv"), "w") as handle:
             handle.write(TF_TARGETS)
         cls.aliases = anchor_mod.alias_map(cls.org_dir)
@@ -58,6 +59,18 @@ class AnchorTest(unittest.TestCase):
         self.assertEqual((genes, direction), (["Bbb"], "down"))
         genes, direction = anchor_mod.find_perturbed_genes("Six time points of a drug treatment.", self.aliases)
         self.assertEqual((genes, direction), ([], "unknown"))
+        # English words that are gene aliases in the table ("In", "Was", "Time") are never the perturbation
+        self.assertEqual(self.aliases["IN"], "In")
+        genes, direction = anchor_mod.find_perturbed_genes(
+            "In mouse B3 pre-B cells, Alpha was induced by tamoxifen over a time course.", self.aliases)
+        self.assertEqual((genes, direction), (["Aaa"], "up"))
+        genes, direction = anchor_mod.find_perturbed_genes("Bbb was knocked out in the liver.", self.aliases)
+        self.assertEqual((genes, direction), (["Bbb"], "down"))
+        genes, _direction = anchor_mod.find_perturbed_genes("The receptor was knocked down with siRNA.", self.aliases)
+        self.assertEqual(genes, [])
+        # a short symbol counts only when written as one: "was" is prose, "Was" a gene
+        genes, _direction = anchor_mod.find_perturbed_genes("Hhh knockout; Was induced.", self.aliases)
+        self.assertEqual(genes, ["In"])                           # Hhh -> In (the row's first name); "Was" is a stop word
         # a gene name far from any perturbation word is not the perturbation
         genes, _direction = anchor_mod.find_perturbed_genes(
             "Cells were treated with a knockdown of Alpha. " + "x" * 200 + " Bbb is a marker.", self.aliases)
@@ -128,9 +141,18 @@ class AnchorTest(unittest.TestCase):
         self.assertEqual(gate["pass"], reach > base)
         self.assertEqual(anchor_mod.anchor_gate(None, walker, ov, dist), {"pass": True, "not_applicable": True,
                                                                           "why": "the design names no perturbed gene"})
+        # a gene with no relation in the network cannot anchor a walk: the check does not apply
         off = anchor_mod.anchor_gate(dict(anchor, in_graph=False), walker, ov, dist)
-        self.assertFalse(off["pass"])
-        self.assertIn("not connected", off["why"])
+        self.assertTrue(off["pass"])
+        self.assertTrue(off["not_applicable"])
+        self.assertIn("no relation", off["why"])
+        self.assertIn("--tf-targets", off["why"])
+        # nor can a graph with no measured node within reach of it
+        far = anchor_mod.anchor_gate(anchor, walker, ov, {})
+        self.assertTrue(far["pass"])
+        self.assertTrue(far["not_applicable"])
+        self.assertEqual((far["reachability"], far["base_rate"]), (0.0, 0.0))
+        self.assertIn("nothing here to anchor on", far["why"])
 
     def test_an_anchored_scan_starts_the_walk_in_the_anchor_neighbourhood(self):
         from src.classes.AIInterpret.walker import heat as heat_mod
@@ -171,6 +193,21 @@ class AnchorTest(unittest.TestCase):
         self.assertIn("Ddd", answer)
         answer = walker.step("Ddd", "Ddd Gene expression −2.00", "in")
         self.assertTrue(answer.startswith("e1"), answer)
+
+    def test_the_scripted_greedy_walker_takes_the_next_neighbour_after_a_refusal(self):
+        network, _graph = self.fresh()
+        ov = ov_mod.overlay_job(network, fx.make_job())
+        dist = anchor_mod.distances(network, "g:5")
+        walker = Walker(network, ov, "network", params_for("pathway"))
+        walker.dist, walker.anchor = dist, {"gene": "Eee", "node": "g:5", "direction": "up", "in_graph": True}
+        policies.greedy(walker, steps=6)
+        # the anchored greedy walk must not spin on a refused far step: it walks,
+        # and it never leaves the neighbourhood while a relevant near node is unread
+        self.assertTrue(walker.done)
+        self.assertGreaterEqual(len(walker.chain), 1)
+        self.assertEqual(sum(1 for t in walker.turns if str(t["answer"]).startswith("REFUSED · 'g")), 0)
+        far = [leg for leg in walker.chain if leg.kind == "step" and (dist.get(leg.dst) or 0) > 2]
+        self.assertEqual(far, [])
 
     def test_a_decoy_has_a_regulon_of_similar_size(self):
         network, _graph = self.fresh()

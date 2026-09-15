@@ -230,7 +230,7 @@ def _near_anchor(stmt, walker, anchor):
     return False
 
 
-def title_outruns_body(results, kept, walker, anchor=None):
+def title_outruns_body(results, kept, walker, anchor=None, scope_name=None):
     """Objections to a Results title and summary whose verbs outrun the kept
     statements. An empty list passes.
 
@@ -240,9 +240,12 @@ def title_outruns_body(results, kept, walker, anchor=None):
     sentence names no gene. A sentence whose subject is the perturbation needs
     a mechanism statement resting on a leg at the anchor; an unanchored run may
     not put a mechanistic verb on the perturbation at all. A body with no
-    mechanism statement allows no mechanistic verb anywhere."""
+    mechanism statement allows no mechanistic verb anywhere. The scope's own
+    name is not the title's claim ("Ubiquitin mediated proteolysis", "Longevity
+    regulating pathway"), so ``scope_name`` is blanked before the verbs are read."""
     if not results:
         return []
+    scope_re = re.compile(re.escape(str(scope_name)), re.I) if scope_name else None
     chain = walker.record()["chain"]
     tiers = {int(s["n"]): s.get("tier") or statement_tier(s, chain) for s in kept}
     mechanism = [s for s in kept if tiers[int(s["n"])] == MECHANISM]
@@ -252,7 +255,7 @@ def title_outruns_body(results, kept, walker, anchor=None):
     sentences += [("summary", s) for s in _SENTENCE_RE.split(str(results.get("summary") or "")) if s.strip()]
     mech_nodes = {int(s["n"]): _statement_nodes(s, walker) for s in mechanism}
     for where, sentence in sentences:
-        verbs = mechanistic_verbs(sentence)
+        verbs = mechanistic_verbs(scope_re.sub(" ", sentence) if scope_re else sentence)
         if not verbs:
             continue
         head = "the %s says %r" % (where, ", ".join(sorted(set(verbs))))

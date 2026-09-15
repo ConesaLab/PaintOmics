@@ -618,10 +618,8 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
                                         {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
                                         walker, store, read)
         again, again_objections = direction_mod.direction_check(client, failing, walker)
+        _refresh_direction(failing, again, verdicts)
         for s in failing:
-            s["direction"] = again.get(s["n"], s.get("direction"))
-            if s["n"] in again:
-                verdicts[s["n"]] = again[s["n"]]
             if problems[s["n"]] or again_objections.get(s["n"]):
                 statements.remove(s)
                 dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
@@ -630,6 +628,18 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
     # The gate judges what the reader will see: a contradiction that was
     # dropped is the check working, not the check failing.
     checks["gates"]["direction"] = direction_gate(statements, dropped)
+
+
+def _refresh_direction(failing, again, verdicts):
+    """After a rewrite, a statement's verdict is the rewrite's, and none when
+    the rewrite no longer cites a panel gene: the old failing verdict would
+    otherwise fail the gate for a statement that no longer makes the claim."""
+    for s in failing:
+        s["direction"] = again.get(s["n"])
+        if s["n"] in again:
+            verdicts[s["n"]] = again[s["n"]]
+        else:
+            verdicts.pop(s["n"], None)
 
 
 def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
@@ -696,7 +706,7 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         jargon = verify.drop_jargon_sentences(results)
         if jargon:
             checks["jargon_sentences_dropped"] = checks.get("jargon_sentences_dropped", 0) + jargon
-        title = tiers.title_outruns_body(results, statements, walker, anchor)
+        title = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         return verify.verify_results(results, statements, dropped, walker, kind, words), title
 
     results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words)
@@ -717,12 +727,12 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         title_gate.update({"fallback": True, "objections": list(title_problems)})
         results["title"] = tiers.neutral_title(scope_name, card or {}, anchor)
         title_gate["sentences_dropped"] = tiers.drop_mechanistic_sentences(results)
-        title_problems = tiers.title_outruns_body(results, statements, walker, anchor)
+        title_problems = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         if title_problems:
             # the card's own words carried a verb: the bare scope name cannot
             results["title"], results["summary"] = scope_name, ""
             title_gate["fallback"] = "scope"
-            title_problems = tiers.title_outruns_body(results, statements, walker, anchor)
+            title_problems = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         problems = verify.verify_results(results, statements, dropped, walker, kind, words)
     checks["results"] = problems
     if results is None or problems:

@@ -346,12 +346,15 @@ def context_named(sentence, context):
             for word in [token] + token.split("-"):
                 if len(word) >= 4 and word.lower() not in _GENERIC_SYSTEM_WORDS and word not in words:
                     words.append(word)
+        # and the phrases a sentence would use for the heading ("T-Lymphocytes": "T cells")
+        from src.classes.AIInterpret.walker import literature
+        words.extend(literature.SYNONYMS.get(str(context["system"]).strip().lower(), ()))
     if not words:
         # an organism word alone, or a system whose only names are generic:
         # nothing specific the sentence could be asked to say
         return True
-    text = str(sentence or "").lower()
-    return any(word.lower().rstrip("s") in text for word in words)
+    text = str(sentence or "").lower().replace("-", " ")
+    return any(word.lower().replace("-", " ").rstrip("s") in text for word in words)
 
 
 def statement_papers(stmt):

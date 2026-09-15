@@ -232,7 +232,9 @@ def model_card(client, design_text, condition_names, labels_by_omic, temperature
         return fallback
     genes = card.get("perturbed_genes")
     card = {k: str(card.get(k, "")) for k in CARD_SCHEMA["required"] if k != "perturbed_genes"}
-    card["perturbed_genes"] = normalise_genes(genes, aliases) or list(fallback["perturbed_genes"])
+    # The model's answer stands, an explicit empty list included; the regex
+    # reading fills in only when the model gave none.
+    card["perturbed_genes"] = list(fallback["perturbed_genes"]) if genes is None else normalise_genes(genes, aliases)
     if card["perturbation_direction"] not in ("up", "down", "unknown"):
         card["perturbation_direction"] = fallback["perturbation_direction"]
     if card["perturbation_direction"] == "unknown" and card["perturbed_genes"]:

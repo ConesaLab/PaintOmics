@@ -193,6 +193,18 @@ def regate(path, job, scope, data_dir=None, permutation=None):
     return rec
 
 
+def _record_key(part, name):
+    """(stem, index) of a sealed run's file name under a run folder (real/,
+    perm/, anchor_*/), or None for anything else -- the panel folders hold
+    labels.json and pairs.json, which are not runs."""
+    if not name.endswith(".json") or not (part in ("real", "perm") or part.startswith("anchor_")):
+        return None
+    stem, _sep, index = name[:-5].rpartition("_")
+    if not stem or not index.isdigit():
+        return None
+    return stem, index
+
+
 def regate_directory(out_dir, job_id, ko_job_id=None, data_dir=None):
     """regate every sealed record under a harness directory: real/ and perm/
     (the scope in the file name, the permutation index in perm/), anchor_example/
@@ -204,10 +216,11 @@ def regate_directory(out_dir, job_id, ko_job_id=None, data_dir=None):
         if not os.path.isdir(folder):
             continue
         for name in sorted(os.listdir(folder)):
-            if not name.endswith(".json"):
+            key = _record_key(part, name)
+            if key is None:
                 continue
+            stem, index = key
             path = os.path.join(folder, name)
-            stem, index = name[:-5].rsplit("_", 1)
             if part in ("real", "perm"):
                 scope = stem.replace("pathway_", "pathway:") if stem.startswith("pathway_") else stem
                 rec = regate(path, job, scope, data_dir, int(index) if part == "perm" else None)
@@ -473,9 +486,13 @@ def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, deco
     if anchor is None or not anchor.get("in_graph"):
         return {"pass": False, "why": "%s is not connected in the network" % gene, "gene": gene}
     decoy = decoy or anchor_mod.decoy_for(anchor, rows, network, random.Random(7), aliases)
-    arms = {"anchored": {"perturbed_genes": [gene]},
-            "decoy": {"perturbed_genes": [decoy] if decoy else []},
-            "unanchored": {"perturbed_genes": []}}
+    arms = {"anchored": {"perturbed_genes": [gene]}}
+    if decoy:
+        arms["decoy"] = {"perturbed_genes": [decoy]}
+    else:
+        # without a decoy the arm would be a second unanchored arm: it is not run
+        logger.warning("[harness] no decoy of %s's kind and size in the network; the decoy arm is skipped", gene)
+    arms["unanchored"] = {"perturbed_genes": []}
     out = {"gene": gene, "decoy": decoy, "arms": {}, "targets": len(targets)}
     for arm, override in arms.items():
         metrics = []
@@ -501,8 +518,9 @@ def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, deco
     typical = {arm: statistics.median(values) if values else None for arm, values in reach.items()}
     typical_p = {arm: statistics.median(values) if values else 1.0 for arm, values in enrich.items()}
     out["medians"] = {"reachability": typical, "enrichment_p": typical_p}
-    out["rank_p"] = {"reachability": {arm: _rank_p(reach["anchored"], reach[arm], "greater") for arm in ("decoy", "unanchored")},
-                     "enrichment": {arm: _rank_p(enrich["anchored"], enrich[arm], "less") for arm in ("decoy", "unanchored")}}
+    others = [arm for arm in ("decoy", "unanchored") if arm in reach]
+    out["rank_p"] = {"reachability": {arm: _rank_p(reach["anchored"], reach[arm], "greater") for arm in others},
+                     "enrichment": {arm: _rank_p(enrich["anchored"], enrich[arm], "less") for arm in others}}
     out["pass"] = bool(reach["anchored"]) and all(p <= ALPHA for p in out["rank_p"]["reachability"].values()) and \
         all(p <= ALPHA for p in out["rank_p"]["enrichment"].values())
     return out
@@ -710,10 +728,13 @@ def report(summary):
         rank = arm.get("rank_p") or {}
         if rank:
             lines.append("")
-            lines.append("One-sided rank test, anchored against each arm: reachability p = %s (decoy), %s (unanchored); "
-                         "enrichment p = %s (decoy), %s (unanchored); %d known targets." % (
-                             rank["reachability"]["decoy"], rank["reachability"]["unanchored"],
-                             rank["enrichment"]["decoy"], rank["enrichment"]["unanchored"], arm.get("targets", 0)))
+            lines.append("One-sided rank test, anchored against each arm: reachability p = %s; enrichment p = %s; "
+                         "%d known targets.%s" % (
+                             ", ".join("%s (%s)" % (p, a) for a, p in rank.get("reachability", {}).items()),
+                             ", ".join("%s (%s)" % (p, a) for a, p in rank.get("enrichment", {}).items()),
+                             arm.get("targets", 0),
+                             "" if arm.get("decoy") else " No decoy of the anchor's kind and size was found, so the "
+                                                        "decoy arm was not run."))
         lines.append("")
     verdicts = [summary.get(k, {}).get("pass") for k in CHECKS if summary.get(k)]
     lines += ["## Verdict", "", "%d of %d checks pass on every repeat." % (sum(1 for v in verdicts if v), len(verdicts)), ""]

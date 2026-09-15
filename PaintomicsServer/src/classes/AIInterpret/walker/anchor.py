@@ -27,16 +27,27 @@ REACH_RADIUS = 2
 # The words that say what was done to the gene, and which way.
 UP_RE = re.compile(r"\b(?:induc(?:e|ed|es|ing|tion|ible)|over-?express(?:ed|ion|ing|es)?|activat(?:e|ed|es|ion|ing)|"
                    r"agonist|stimulat(?:e|ed|es|ion|ing)|gain[- ]of[- ]function|transgen(?:e|ic)|constitutive(?:ly)?)\b", re.I)
-DOWN_RE = re.compile(r"\b(?:knock-?outs?|KO|knock-?downs?|KD|delet(?:e|ed|es|ion|ing)|null|loss[- ]of[- ]function|"
+DOWN_RE = re.compile(r"\b(?:knock-?outs?|knock(?:ed)?[- ]?(?:out|down)|KO|knock-?downs?|KD|delet(?:e|ed|es|ion|ing)|null|loss[- ]of[- ]function|"
                      r"loss of|ablat(?:e|ed|ion)|silenc(?:e|ed|ing)|inhibit(?:or|ors|ion|ed|ing)? of|antagonist|"
                      r"siRNA|shRNA|CRISPR|-/-|depletion|depleted)\b", re.I)
 _VERB_RE = re.compile("%s|%s" % (UP_RE.pattern, DOWN_RE.pattern), re.I)
-_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]{1,15}")
+_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]{2,15}")           # three characters or more: "in", "of", "an" are aliases too
 _WINDOW = 80
-# Ordinary words that are also gene aliases somewhere in the table.
+# Ordinary words that are also gene aliases somewhere in the table (against the
+# mouse table "was" is Was, "in" Ahr, "of" Brip1, "an" Cdk5rap2, "time" a gene).
 _STOP = {"CELL", "CELLS", "MOUSE", "MICE", "HUMAN", "TIME", "COURSE", "CONTROL", "OVER", "WITH", "AND", "THE",
          "FOLD", "LOG", "LOG2", "RATIO", "GENE", "GENES", "TREATED", "TREATMENT", "AFTER", "BEFORE", "HOURS",
-         "DAYS", "MIN", "SAMPLE", "SAMPLES", "DATA", "SEQ", "RNA", "DNA", "PROTEIN", "WILD", "TYPE", "LINE"}
+         "DAYS", "MIN", "SAMPLE", "SAMPLES", "DATA", "SEQ", "RNA", "DNA", "PROTEIN", "WILD", "TYPE", "LINE",
+         "WAS", "WERE", "ARE", "FOR", "FROM", "INTO", "ONTO", "THAT", "THIS", "THESE", "THOSE", "THAN", "THEN",
+         "WHEN", "WHERE", "WHICH", "WHILE", "WITHIN", "WITHOUT", "UNDER", "UPON", "ABOUT", "ACROSS", "ALSO",
+         "ANY", "ALL", "EACH", "BOTH", "NOT", "BUT", "HAS", "HAD", "HAVE", "BEEN", "BEING", "USING", "USED",
+         "PER", "VIA", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "POINT", "POINTS", "CONDITION", "CONDITIONS",
+         "LEVEL", "LEVELS", "CHANGE", "CHANGES", "VALUE", "VALUES", "EXPRESSION", "VERSUS", "HOUR", "DAY", "WEEK",
+         "WEEKS", "MINUTE", "MINUTES", "STAGE", "STAGES", "EARLY", "LATE", "HIGH", "LOW", "MODEL", "MODELS",
+         "RESPONSE", "RESPONSES", "SET", "SETS", "DOSE", "DOSES", "DRUG", "DRUGS", "CULTURE", "CULTURED", "GROUP",
+         "GROUPS", "REPLICATE", "REPLICATES", "MEAN", "MEDIAN", "TOTAL", "NORMAL", "TISSUE", "BLOOD", "SERUM",
+         "BONE", "MARROW", "LIVER", "HEART", "BRAIN", "SKIN", "LUNG", "MUSCLE", "FAT", "COLD", "HEAT", "LIGHT",
+         "DARK", "MEDIUM", "MEDIA", "STRAIN", "MALE", "FEMALE", "AGE", "AGED", "YOUNG", "OLD", "ADULT"}
 
 
 def alias_map(org_dir):
@@ -75,6 +86,8 @@ def find_perturbed_genes(text, aliases):
         upper = token.upper()
         if upper in _STOP or upper not in aliases:
             continue
+        if len(token) <= 4 and token.islower() and not any(ch.isdigit() for ch in token):
+            continue                      # a short word written in lower case is prose, not a symbol
         if not any(abs(pos - match.start()) <= _WINDOW for pos, _d in verbs):
             continue
         symbol = aliases[upper]
@@ -310,21 +323,30 @@ def decoy_for(anchor, rows, network, rng, aliases=None, tolerance=0.3, pool_size
 
 def anchor_gate(anchor, walker, overlay, dist, targets=None, network=None, aliases=None):
     """The gate dict. Not applicable (and passing) when the design names no
-    gene; failing when the anchor is not in the network or the walk stayed no
-    closer to it than the measured nodes at large."""
+    gene, when the gene has no relation in the network to anchor on (no
+    pathway edge and no target table), or when no measured node of the walked
+    graph lies within REACH_RADIUS of it; failing when the walk stayed no
+    closer to the anchor than the measured nodes at large."""
     if anchor is None:
         return {"pass": True, "not_applicable": True, "why": "the design names no perturbed gene"}
     gate = {"pass": False, "not_applicable": False, "gene": anchor["gene"], "direction": anchor.get("direction"),
             "in_graph": bool(anchor.get("in_graph")), "reachability": None, "base_rate": None, "why": ""}
     if not anchor.get("in_graph"):
-        gate["why"] = ("%s is not connected in this organism's network, so the walk could not start from the "
-                       "perturbation" % anchor["gene"])
+        gate.update({"pass": True, "not_applicable": True, "why": (
+            "%s has no relation in this organism's network and no target table (mapping/tf_targets.tsv, "
+            "written by omnipathInstaller.py --tf-targets), so the walk could not be anchored on it"
+            % anchor["gene"])})
         return gate
     nodes = walked_nodes(walker)
     gate["reachability"] = round(reachability(nodes, dist), 3)
     gate["base_rate"] = round(base_rate(overlay, dist), 3)
     if targets and network is not None:
         gate["targets"] = target_enrichment(nodes, targets, overlay, network, aliases)
+    if gate["base_rate"] == 0:
+        gate.update({"pass": True, "not_applicable": True, "why": (
+            "no measured node of this graph lies within %d steps of %s: there is nothing here to anchor on"
+            % (REACH_RADIUS, anchor["gene"]))})
+        return gate
     gate["pass"] = gate["reachability"] > gate["base_rate"]
     if not gate["pass"]:
         gate["why"] = ("%.0f%% of the walked nodes lie within %d steps of %s, no more than the %.0f%% of all "
