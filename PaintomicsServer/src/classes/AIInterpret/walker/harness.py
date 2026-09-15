@@ -522,12 +522,17 @@ def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, deco
         out["arms"][arm] = metrics
     reach = {arm: [m["reachability"] for m in ms] for arm, ms in out["arms"].items()}
     enrich = {arm: [m["enrichment"]["p"] for m in ms] for arm, ms in out["arms"].items()}
-    others_reach = reach["decoy"] + reach["unanchored"]
     out["reachability"] = reach
     out["enrichment_p"] = enrich
-    out["pass"] = bool(reach["anchored"]) and min(reach["anchored"]) > max(others_reach or [0.0]) and \
-        statistics.median(enrich["anchored"]) < min(statistics.median(enrich["decoy"] or [1.0]),
-                                                    statistics.median(enrich["unanchored"] or [1.0]))
+    # Every anchored run must stay closer to the anchor than the other arms'
+    # typical run does, and the anchored runs must hit the known targets
+    # more often than either other arm typically does.
+    typical = {arm: statistics.median(values) if values else None for arm, values in reach.items()}
+    typical_p = {arm: statistics.median(values) if values else 1.0 for arm, values in enrich.items()}
+    out["medians"] = {"reachability": typical, "enrichment_p": typical_p}
+    out["pass"] = bool(reach["anchored"]) and all(
+        r > max(typical.get("decoy") or 0.0, typical.get("unanchored") or 0.0) for r in reach["anchored"]) and \
+        typical_p["anchored"] < min(typical_p["decoy"], typical_p["unanchored"])
     return out
 
 

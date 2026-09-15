@@ -132,6 +132,30 @@ class AnchorTest(unittest.TestCase):
         self.assertFalse(off["pass"])
         self.assertIn("not connected", off["why"])
 
+    def test_an_anchored_scan_starts_the_walk_in_the_anchor_neighbourhood(self):
+        from src.classes.AIInterpret.walker import heat as heat_mod
+        network, graph = self.fresh()
+        ov = ov_mod.overlay_job(graph, fx.make_job())
+        # anchor on E: its neighbours (C, D) are 1 step away, A and B further
+        dist = anchor_mod.distances(network, "g:5")
+        rows = heat_mod.scan_graph(graph, ov, 1, 12, dist)
+        candidates = [r for r in rows if r["candidate"]]
+        self.assertTrue(candidates)
+        self.assertEqual([r["dist"] for r in candidates], sorted(r["dist"] for r in candidates))   # nearest first
+        self.assertTrue(all(r["dist"] is not None for r in candidates))
+        walker = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
+        walker.dist, walker.anchor = dist, {"gene": "Eee", "node": "g:5", "direction": "up", "in_graph": True}
+        walker.scan("graph")
+        far = max(candidates, key=lambda r: r["dist"])
+        near = min(candidates, key=lambda r: r["dist"])
+        if far["dist"] > near["dist"]:
+            answer = walker.plan_walk([far["id"], near["id"]], 3, "far first")
+            self.assertTrue(answer.startswith("REFUSED"))
+            self.assertIn("nearest Eee", answer)
+        answer = walker.plan_walk([near["id"]], 3, "near first")
+        self.assertTrue(answer.startswith("plan set"))
+        self.assertIn("d=", walker.turns[-1]["answer"])                    # neighbours show their distance
+
     def test_a_decoy_has_a_regulon_of_similar_size(self):
         network, _graph = self.fresh()
         rows = anchor_mod.load_tf_targets(self.org_dir)

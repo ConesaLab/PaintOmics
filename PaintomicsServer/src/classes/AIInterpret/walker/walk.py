@@ -139,7 +139,8 @@ class Walker:
                          "r": int(bool(self.overlay.r.get(w))) if w in self.overlay.measured else None,
                          "heat": round(h.get("heat", 0.0), 2), "sign": edge["sign"],
                          "dir": direction, "open": (node_id, w) not in self.closed,
-                         "visited": w in self.visited})
+                         "visited": w in self.visited,
+                         "dist": self.dist.get(w) if self.dist else None})
         rows.sort(key=lambda r: (-(r["r"] or 0), -r["heat"], r["label"]))
         return rows
 
@@ -171,8 +172,9 @@ class Walker:
         for row in rows:
             self.seen.setdefault(row["id"], []).append(after)
         shown = rows[:self.params["names_shown"]]
-        names = " · ".join("%s r=%s %.2f [%s%s%s]" % (
+        names = " · ".join("%s r=%s %.2f%s [%s%s%s]" % (
             row["label"], "—" if row["r"] is None else row["r"], row["heat"],
+            "" if row.get("dist") is None else " d=%d" % row["dist"],
             sign_glyph(row["sign"]), "" if row["open"] else ", closed",
             ", walked" if row["visited"] else "") for row in shown)
         more = "" if len(rows) <= len(shown) else " · %d more" % (len(rows) - len(shown))
@@ -261,6 +263,16 @@ class Walker:
             return self._refuse("plan", args, "Choose at least one seed.")
         if len(chosen) > self.params["max_seeds"]:
             return self._refuse("plan", args, "At most %d seeds here." % self.params["max_seeds"])
+        if self.dist:
+            # anchored: the walk starts in the perturbed gene's neighbourhood
+            distances = {c: candidates[c].get("dist") for c in candidates if candidates[c].get("dist") is not None}
+            if distances:
+                nearest = min(distances.values())
+                first = distances.get(chosen[0])
+                if first is None or first > nearest:
+                    return self._refuse("plan", args, "The first seed must be a candidate nearest %s (d=%d): %s." % (
+                        (self.anchor or {}).get("gene", "the anchor"), nearest,
+                        ", ".join(candidates[c]["label"] for c, d in distances.items() if d == nearest)))
         try:
             steps = int(steps)
         except (TypeError, ValueError):

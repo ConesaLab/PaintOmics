@@ -84,12 +84,20 @@ def _within(network, start, radius, blocked):
     return dist
 
 
+ANCHOR_RADIUS = 2          # a candidate this close to the anchor is "in its neighbourhood"
+
+
 def scan_graph(network, overlay, sep, limit, dist=None):
     """Every measured node ranked by heat, with the seed candidates flagged:
     r = 1, n >= 1, not a hub, not a currency metabolite, and not within
-    ``sep`` edges of a hotter candidate. ``dist`` (node -> steps from the
-    anchor) is copied onto the rows when the run is anchored; it never
-    changes the ranking, which stays heat first."""
+    ``sep`` edges of a hotter candidate.
+
+    Anchored (``dist`` = node -> steps from the perturbed gene): half the
+    candidate slots are filled first from the anchor's neighbourhood
+    (within ANCHOR_RADIUS steps, hottest first), the rest by heat over the
+    whole graph, and the candidates are listed nearest the anchor first, so
+    the walk starts where the perturbation acts and moves outward. Every row
+    carries its distance."""
     rows = []
     for node_id in network.nodes:
         if node_id not in overlay.measured:
@@ -103,19 +111,30 @@ def scan_graph(network, overlay, sep, limit, dist=None):
                      "dist": None if dist is None else dist.get(node_id)})
     rows.sort(key=lambda r: (-r["heat"], -r["degree"], r["label"]))
     blocked = {}
-    chosen = 0
-    for row in rows:
-        if chosen >= limit:
-            break
-        if not row["r"] or row["n"] < 1 or row["hub"] or is_currency(row["id"]):
-            continue
-        if row["id"] in blocked:
-            row["skipped"] = blocked[row["id"]]
-            continue
-        row["candidate"] = True
-        chosen += 1
-        for w in _within(network, row["id"], sep, overlay.capped):
-            blocked.setdefault(w, row["label"])
+    chosen = {"n": 0}
+
+    def take(pool, quota):
+        for row in pool:
+            if chosen["n"] >= quota:
+                break
+            if row["candidate"] or not row["r"] or row["n"] < 1 or row["hub"] or is_currency(row["id"]):
+                continue
+            if row["id"] in blocked:
+                row["skipped"] = blocked[row["id"]]
+                continue
+            row["candidate"] = True
+            chosen["n"] += 1
+            for w in _within(network, row["id"], sep, overlay.capped):
+                blocked.setdefault(w, row["label"])
+
+    if dist:
+        near = [r for r in rows if r["dist"] is not None and r["dist"] <= ANCHOR_RADIUS]
+        take(near, max(1, limit // 2))
+    take(rows, limit)
+    if dist:
+        far = 10 ** 6
+        rows.sort(key=lambda r: (not r["candidate"], r["dist"] if r["candidate"] and r["dist"] is not None else far,
+                                 -r["heat"], -r["degree"], r["label"]))
     return rows
 
 

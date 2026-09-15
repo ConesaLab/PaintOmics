@@ -88,7 +88,7 @@ SEGMENT_INSTRUCTIONS = """You walk ONE seed's neighbourhood in an Agentic Graph 
 """ + _READING_RULES + """
 
 1. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. A layer the card lists as unlabeled has columns c1..cN with no time or order: read its direction and size, not its timing. Name the layer and quote its numbers; every answer shows the layers of the relevant neighbours, so read them before you step. "Check whether..." is not a reading.
-2. Read the seed's relevant neighbours first, then follow what the values say. jump back to a node you walked when a branch is exhausted; code refuses a jump while a relevant unvisited neighbour is still open.
+2. Read the seed's relevant neighbours first, then follow what the values say. When the brief names an ANCHOR, every neighbour shows its distance from it (d=): between neighbours of similar heat take the nearer one, and do not wander away from the perturbation for a marginally hotter node. jump back to a node you walked when a branch is exhausted; code refuses a jump while a relevant unvisited neighbour is still open.
 3. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
 4. note what the Writer should not miss. Use your steps; stop when the neighbourhood is read and what is left repeats what you have.
 
