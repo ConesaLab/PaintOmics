@@ -82,6 +82,13 @@ forced, in the order they were found:
   the same program; the five pre-fix runs are kept aside (`stale-prefix-real/`). The anchor
   and knockout arms measure where a walk went, not what it kept, so their pre-fix records
   stand, and their statement counts are the pre-fix ones.
+* **`--scope network` never reached the harness.** The command line rewrote the scope to the
+  example pathway whenever it read "network", which is that flag's own default, so
+  `--five-checks --scope network` measured the pathway a second time and the network
+  interpretation could not be measured at all. Found when the network stage wrote its records
+  under pathway names. The scope passes through now, with a test; the twenty-three runs that
+  measurement produced are a second, independent pathway sample and are kept as
+  `second-pathway-sample/`.
 * **Three repeats, not five.** Repeats were cut from five to three, so the exact rank tests
   of check 5 are read at p ≤ 0.05: complete separation of three runs against three is
   exactly 0.05, the smallest value the test can give. Check 1 needs twenty permutations for

@@ -135,8 +135,13 @@ def _main(args):
     if args.five_checks:
         from src.classes.AIInterpret.walker import harness
         out_dir = args.out or os.path.join(CLIENT_TMP_DIR, "walks", "five-checks")
+        # --scope reaches the harness as it was written. It used to be
+        # rewritten to the example pathway whenever it read "network", which is
+        # this flag's default, so `--scope network --only artifact` measured the
+        # pathway twice instead of the network interpretation and there was no
+        # way to ask for the network at all.
         summary = harness.run_five(args.job, out_dir, repeats=args.repeats, permutations=args.permutations,
-                                   scope=args.scope if args.scope != "network" else "pathway:mmu04068",
+                                   scope=service.check_scope(args.scope),
                                    ko_job_id=args.ko_job, data_dir=args.data_dir,
                                    only=args.only.split(",") if args.only else None, decoy=args.decoy)
         print(harness.report(summary))
