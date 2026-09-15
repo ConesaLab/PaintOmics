@@ -141,8 +141,8 @@ def structure_null(graph, overlay, params, real_walker, k=DEFAULT_K, seed=0):
     passed = p_modules < ALPHA or (real["modules"] >= 2 and p_heat < ALPHA)
     why = ""
     if not passed:
-        why = ("permuted flags give the scripted walker as many modules (%d real; p=%.2f) and seeds as hot "
-               "(p=%.2f) as the real flags do: on this graph the data has no structure a walk could find"
+        why = ("permuted data gives the scripted walker as many modules (%d real; p=%.2f) and seeds as hot "
+               "(p=%.2f) as the real data does: on this graph the data has no structure a walk could find"
                % (real["modules"], p_modules, p_heat))
     return {"k": k, "real": real, "walk": walk,
             "null_mean": {"modules": round(statistics.mean(null_modules), 2) if null_modules else 0.0,
