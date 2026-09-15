@@ -13,6 +13,8 @@ from collections import deque
 import numpy as np
 from scipy.stats import hypergeom
 
+from src.classes.AIInterpret.walker.tiers import is_currency
+
 
 def compute_heat(network, measured, relevant):
     """{node: {n, x, p, heat, degree}} for every node of the network.
@@ -82,9 +84,12 @@ def _within(network, start, radius, blocked):
     return dist
 
 
-def scan_graph(network, overlay, sep, limit):
+def scan_graph(network, overlay, sep, limit, dist=None):
     """Every measured node ranked by heat, with the seed candidates flagged:
-    r = 1, n >= 1, not a hub, and not within ``sep`` edges of a hotter candidate."""
+    r = 1, n >= 1, not a hub, not a currency metabolite, and not within
+    ``sep`` edges of a hotter candidate. ``dist`` (node -> steps from the
+    anchor) is copied onto the rows when the run is anchored; it never
+    changes the ranking, which stays heat first."""
     rows = []
     for node_id in network.nodes:
         if node_id not in overlay.measured:
@@ -94,14 +99,15 @@ def scan_graph(network, overlay, sep, limit):
                      "kind": network.nodes[node_id]["kind"],
                      "r": int(bool(overlay.r.get(node_id))), "heat": round(h["heat"], 2),
                      "x": h["x"], "n": h["n"], "degree": h["degree"],
-                     "hub": node_id in overlay.capped, "candidate": False, "skipped": None})
+                     "hub": node_id in overlay.capped, "candidate": False, "skipped": None,
+                     "dist": None if dist is None else dist.get(node_id)})
     rows.sort(key=lambda r: (-r["heat"], -r["degree"], r["label"]))
     blocked = {}
     chosen = 0
     for row in rows:
         if chosen >= limit:
             break
-        if not row["r"] or row["n"] < 1 or row["hub"]:
+        if not row["r"] or row["n"] < 1 or row["hub"] or is_currency(row["id"]):
             continue
         if row["id"] in blocked:
             row["skipped"] = blocked[row["id"]]

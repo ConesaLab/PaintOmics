@@ -15,6 +15,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from src.classes.AIInterpret.walker import heat as heat_mod
+from src.classes.AIInterpret.walker.tiers import edge_tier, is_currency
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,8 @@ class Walker:
     steps_here: int = 0                          # steps taken since the last plan or jump
     segments: list = field(default_factory=list)  # one per seed walked by its own walker: seed, legs
     on_turn: object = None                       # called with the walker after every logged turn
+    dist: dict | None = None                     # node -> steps from the anchor, when the run is anchored
+    anchor: dict | None = None                   # {gene, node, direction, ...} or None
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -128,7 +131,7 @@ class Walker:
         node_id = node_id or self.current
         rows = []
         for w in self.network.neighbours(node_id):
-            if w in self.overlay.capped:
+            if w in self.overlay.capped or is_currency(w):
                 continue
             edge, direction = self.network.edge_between(node_id, w)
             h = self.overlay.heat.get(w, {})
@@ -144,9 +147,11 @@ class Walker:
         edge, direction = self.network.edge_between(src, dst)
         tag = edge["tags"][0] if edge["tags"] else "?"
         db, _, pathway = tag.partition(":")
-        return {"db": db, "pathway": pathway, "name": self.network.pathway_name(tag),
-                "subtype": edge["subtype"], "sign": edge["sign"], "dir": direction,
-                "tags": len(edge["tags"])}
+        record = {"db": db, "pathway": pathway, "name": self.network.pathway_name(tag),
+                  "subtype": edge["subtype"], "sign": edge["sign"], "dir": direction,
+                  "tags": len(edge["tags"])}
+        record["tier"] = edge_tier(record)
+        return record
 
     def _budget_line(self):
         return "budget · %d steps · %d jumps · %d notes left" % (
@@ -193,15 +198,17 @@ class Walker:
             return self._refuse("scan", args, "The walk is over.")
         if scope == "graph":
             self.ranked = heat_mod.scan_graph(self.network, self.overlay,
-                                              self.params["sep"], self.params["candidates"])
+                                              self.params["sep"], self.params["candidates"], self.dist)
             self.scans += 1
             cands = [r for r in self.ranked if r["candidate"]]
             lines = ["%d measured nodes ranked by heat; %d seed candidates (relevant, not "
                      "within %d edge(s) of a hotter candidate); ceiling %d steps" % (
                          len(self.ranked), len(cands), self.params["sep"], self.params["ceiling"])]
             for i, row in enumerate(cands, 1):
-                lines.append("  candidate %d  %s · r=1 · heat %.2f (%d of %d) · degree %d" % (
-                    i, row["label"], row["heat"], row["x"], row["n"], row["degree"]))
+                lines.append("  candidate %d  %s · r=1 · heat %.2f (%d of %d) · degree %d%s" % (
+                    i, row["label"], row["heat"], row["x"], row["n"], row["degree"],
+                    "" if row.get("dist") is None else " · d=%d from %s" % (
+                        row["dist"], (self.anchor or {}).get("gene", "the anchor"))))
             hot = [r for r in self.ranked if not r["candidate"]][:8]
             if hot:
                 lines.append("  not candidates, hottest: " + " · ".join(

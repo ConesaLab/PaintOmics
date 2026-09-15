@@ -12,13 +12,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import time
 
 from src.conf.serverconf import (AI_LLM_PROVIDER, AI_PROVIDERS, KEGG_DATA_DIR, MONGODB_HOST,
                                  MONGODB_PORT)
+from src.classes.AIInterpret.walker import anchor as anchor_mod
 from src.classes.AIInterpret.walker import card as card_mod
+from src.classes.AIInterpret.walker import direction as direction_mod
+from src.classes.AIInterpret.walker import null as null_mod
+from src.classes.AIInterpret.walker import tiers
 from src.classes.AIInterpret.walker import narrate as narrate_mod
 from src.classes.AIInterpret.walker import network as net_mod
 from src.classes.AIInterpret.walker import overlay as ov_mod
@@ -33,7 +38,9 @@ logger = logging.getLogger(__name__)
 # "network", or "pathway:" and an id as the Step 4 view names it (KEGG
 # mmu04068, Reactome R-MMU-9614085). Anything else never reaches the queue.
 SCOPE_RE = re.compile(r"^(?:network|pathway:[A-Za-z0-9][A-Za-z0-9_.\-]{0,63})$")
-CARD_FIELDS = ("perturbation", "value", "axis", "baseline", "relevant")
+CARD_FIELDS = ("perturbation", "value", "axis", "baseline", "relevant", "system")
+CARD_LIST_FIELDS = ("perturbed_genes",)
+CARD_ENUM_FIELDS = {"perturbation_direction": ("up", "down", "unknown")}
 CARD_FIELD_MAX = 300
 QUICK_STEPS = (3, 12)
 SEEN_SHOWN = 30
@@ -47,6 +54,13 @@ SENSE_MIN_SECONDS = 70
 NARRATE_MIN_SECONDS = 45
 
 HEARTBEAT_SECONDS = 60
+# Seconds the direction check needs after the Writers stop (three short
+# calls per regulator a statement cites; usually none or a few).
+DIRECTION_MIN_SECONDS = 30
+# Permutations of the structure null: fewer on a graph where each costs a
+# heat pass over thousands of nodes.
+NULL_K, NULL_K_LARGE, LARGE_GRAPH_NODES = 50, 20, 5000
+GATES = ("artifact", "title", "direction", "context", "anchor")
 
 _MONGO = {"client": None}
 _MONGO_LOCK = threading.Lock()
@@ -90,6 +104,14 @@ def clean_card(raw):
         value = raw.get(key)
         if isinstance(value, str) and value.strip():
             card[key] = value.strip()[:CARD_FIELD_MAX]
+    for key in CARD_LIST_FIELDS:
+        value = raw.get(key)
+        if isinstance(value, (list, tuple, str)) and value:
+            card[key] = [str(g).strip()[:40] for g in card_mod.normalise_genes(value)][:8]
+    for key, allowed in CARD_ENUM_FIELDS.items():
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip().lower() in allowed:
+            card[key] = value.strip().lower()
     return card or None
 
 
@@ -122,21 +144,37 @@ def resolve_scope(network, scope):
                     "OmniPath pathways carry edges; MapMan bins do not)." % wanted)
 
 
-def build(job, scope, data_dir=None, use_mongo=True):
-    """(network, graph, overlay, tag): the organism network, the walk's graph
-    and the job overlay on it."""
+def org_dir_for(job, data_dir=None):
+    return os.path.join(data_dir or KEGG_DATA_DIR, "current", job.getOrganism())
+
+
+def build(job, scope, data_dir=None, use_mongo=True, card=None, aliases=None):
+    """(network, graph, overlay, tag, anchor, dist): the organism network, the
+    walk's graph, the job overlay on it, and -- when ``card`` names a perturbed
+    gene the organism knows -- the anchor with its known targets added to the
+    graph for this run and every node's distance from it."""
     organism = job.getOrganism()
     data_dir = data_dir or KEGG_DATA_DIR
     t0 = time.time()
     network = net_mod.load_or_build(organism, data_dir, mongo_for(organism) if use_mongo else None)
     tag = resolve_scope(network, scope)
     graph = network if tag == "network" else network.filter_pathway(tag)
+    anchor, dist = None, None
+    if card:
+        org_dir = os.path.join(data_dir, "current", organism)
+        aliases = aliases if aliases is not None else anchor_mod.alias_map(org_dir)
+        anchor = anchor_mod.resolve_anchor(card, network, org_dir, aliases)
+        if anchor is not None:
+            anchor_mod.add_anchor_edges(graph, network, anchor, anchor_mod.load_tf_targets(org_dir), aliases)
+            dist = anchor_mod.distances(network, anchor["node"]) if anchor["in_graph"] else {}
     ov = ov_mod.overlay_job(graph, job)
     if tag == "network":
         ov_mod.apply_degree_cap(ov, 99)
-    logger.info("[walker] graph %s: %d nodes, %d edges, N=%d, K=%d in %.1fs", tag, len(graph.nodes),
-                len(graph.edges), ov.N, ov.K, time.time() - t0)
-    return network, graph, ov, tag
+    logger.info("[walker] graph %s: %d nodes, %d edges, N=%d, K=%d%s in %.1fs", tag, len(graph.nodes),
+                len(graph.edges), ov.N, ov.K,
+                ", anchored on %s (%d target edges)" % (anchor["gene"], anchor.get("edges_added", 0)) if anchor else "",
+                time.time() - t0)
+    return network, graph, ov, tag, anchor, dist
 
 
 def llm_client():
@@ -183,11 +221,11 @@ def rewrite_once(client, card_text, chain, failing, verdicts):
     return rewritten
 
 
-def design_card(job, ov, policy, client=None, override=None):
+def design_card(job, labels, policy, client=None, override=None, aliases=None):
     """The card the walk reads: the user's edits when they made any, else one
-    model call for a model walk, else the deterministic card. The axis kind and
-    the unlabeled omics always come from the data, never from a model."""
-    labels = {name: ov.labels.get(name) for name in ov.labels}
+    model call for a model walk, else the deterministic card. The axis kind,
+    the unlabeled omics and the organism always come from the data, never from
+    a model; the perturbed genes are kept only when the organism knows them."""
     conditions = []
     try:
         conditions = list(job.conditionNames or [])
@@ -195,17 +233,19 @@ def design_card(job, ov, policy, client=None, override=None):
         pass
     design_text = job.getExperimentDesign() if hasattr(job, "getExperimentDesign") else ""
     if override:
-        card = card_mod.deterministic_card(design_text, conditions, labels)
+        card = card_mod.deterministic_card(design_text, conditions, labels, aliases)
         card.update(override)
+        card["perturbed_genes"] = card_mod.normalise_genes(card.get("perturbed_genes"), aliases)
         card["source"] = "user"
     elif policy == "model" and client is not None:
-        card = card_mod.model_card(client, design_text, conditions, labels)
+        card = card_mod.model_card(client, design_text, conditions, labels, aliases=aliases)
     else:
-        card = card_mod.deterministic_card(design_text, conditions, labels)
+        card = card_mod.deterministic_card(design_text, conditions, labels, aliases)
     card["axis_kind"] = card_mod.axis_kind(labels, design_text)
     # The omics whose file carried no header: the walker may make no timing
     # claim on them until the user confirms the columns.
-    card["unlabeled"] = ov_mod.relabel_unlabeled(ov)
+    card["unlabeled"] = sorted(name for name, l in labels.items() if l is None)
+    card["organism"] = card_mod.organism_word(job.getOrganism())
     return card
 
 
@@ -257,24 +297,29 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
             logger.warning("[walker] progress callback failed", exc_info=True)
 
     timings = {}
-    t0 = time.time()
-    report("network", "Reading the network and laying the job's values over it")
-    network, graph, ov, tag = build(job, scope, data_dir, use_mongo)
-    timings["build"] = round(time.time() - t0, 1)
-    halt_if_cancelled()
+    checks = {"gates": {}}
     client = llm_client() if policy == "model" else None
     t0 = time.time()
     report("card", "Reading the experiment design")
-    card = design_card(job, ov, policy, client, card_override)
+    aliases = anchor_mod.alias_map(org_dir_for(job, data_dir))
+    card = design_card(job, card_mod.labels_by_omic(job), policy, client, card_override, aliases)
     timings["card"] = round(time.time() - t0, 1)
+    halt_if_cancelled()
+    t0 = time.time()
+    report("network", "Reading the network and laying the job's values over it")
+    network, graph, ov, tag, anchor, dist = build(job, scope, data_dir, use_mongo, card, aliases)
+    timings["build"] = round(time.time() - t0, 1)
+    checks["anchor"] = anchor
+    halt_if_cancelled()
     card_text = walk_card_text(card)
     walker = Walker(graph, ov, tag, params_for("network" if tag == "network" else "pathway"))
-    statements, dropped, results, papers, checks = [], [], None, {}, {}
+    walker.dist, walker.anchor = dist, anchor
+    statements, dropped, results, papers = [], [], None, {}
     t0 = time.time()
     model_used = "none (scripted %s policy)" % policy
     if policy == "model":
         walker, statements, dropped, results, papers = _model_walk(
-            walker, tag, card_text, client, writer, report, halt_if_cancelled, cancelled, timings, checks)
+            walker, tag, card, card_text, client, writer, report, halt_if_cancelled, cancelled, timings, checks)
         model_used = AI_PROVIDERS[AI_LLM_PROVIDER]["model"]
     else:
         walker.on_turn = on_turn
@@ -286,6 +331,16 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
         walker.on_turn = None
         timings["walk"] = round(time.time() - t0, 1)
         halt_if_cancelled()
+    anchor_mod.label_segments(walker, dist or {})
+    gates = checks["gates"]
+    if "artifact" not in gates:
+        t0 = time.time()
+        gates["artifact"] = artifact_gate(walker)
+        timings["null"] = round(time.time() - t0, 1)
+    gates["anchor"] = anchor_mod.anchor_gate(anchor, walker, ov, dist or {}, network=network)
+    for name in GATES:
+        gates.setdefault(name, {"pass": True, "not_applicable": True, "why": "no statements were written"})
+    checks["rendered"] = all(bool(gates[name].get("pass")) for name in GATES)
     if papers:
         papers = record_mod.renumber_citations(statements, dropped, results, papers)
         attach_evidence(statements, papers)
@@ -299,10 +354,25 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     return rec, network, graph, tag
 
 
-def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelled, cancelled, timings, checks):
-    """The model walk (walker/parallel.py), then the sense check and the
-    Narrator, inside the scope's time budget. Returns (walker, statements,
-    dropped, results, papers)."""
+def artifact_gate(walker):
+    """Check 1 at request time: the structure null on the walk's own graph and
+    parameters, and no leg through a currency metabolite."""
+    k = NULL_K if len(walker.network.nodes) <= LARGE_GRAPH_NODES else NULL_K_LARGE
+    gate = null_mod.structure_null(walker.network, walker.overlay, walker.params, walker, k=k)
+    currency = sum(1 for leg in walker.chain if leg.kind == "step"
+                   and (tiers.is_currency(leg.src) or tiers.is_currency(leg.dst)))
+    gate["currency_legs"] = currency
+    if currency:
+        gate["pass"] = False
+        gate["why"] = ("; " if gate["why"] else "") + "%d leg(s) run through a currency metabolite" % currency
+    return gate
+
+
+def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_cancelled, cancelled, timings,
+                checks):
+    """The model walk (walker/parallel.py), then the checks and the Narrator,
+    inside the scope's time budget. Returns (walker, statements, dropped,
+    results, papers)."""
     import asyncio
 
     from src.classes.AIInterpret.agent import set_run_deadline
@@ -319,6 +389,9 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
     walker.params.update({"max_seeds": plan["max_seeds"], "steps_per_seed": plan["seed_steps"][0],
                           "ceiling": plan["max_seeds"] * plan["seed_steps"][1]})
     statements, dropped, papers = [], [], {}
+    gates = checks["gates"]
+    anchor = walker.anchor
+    card_ctx = {"organism": card.get("organism"), "system": card.get("system")}
 
     def preview(merged):
         report("walk", "Walking: %s" % merged.counts_line(), merged)
@@ -335,15 +408,19 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
             raise WalkError("The AI service failed before the walk took a step (%s). Start it again."
                             % merged.loop_error)
         halt_if_cancelled()
+        t0 = time.time()
+        report("walk", "Checking the walk against permuted data", merged)
+        gates["artifact"] = artifact_gate(merged)
+        timings["null"] = round(time.time() - t0, 1)
         if not (writer and merged.chain):
             return merged, None
         report("writer", "Writing statements and reading every cited paper", merged)
         t0 = time.time()
         writer_deadline = min(time.time() + plan["writer_seconds"],
-                              run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS)
+                              run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS - DIRECTION_MIN_SECONDS)
         written = await parallel.write_in_parallel(
             merged, card_text, PubMedClient(), client, plan, writer_deadline, cancelled,
-            lambda detail: report("writer", detail, merged))
+            lambda detail: report("writer", detail, merged), card_ctx=card_ctx)
         timings["writer"] = round(time.time() - t0, 1)
         return merged, written
 
@@ -356,7 +433,7 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
         raise WalkError("The AI service failed while writing the statements (%s). Start the walk again."
                         % contexts[0].loop_error)
     papers = {ref: {"pmid": p.get("pmid"), "title": p.get("title"), "year": p.get("year"),
-                    "journal": p.get("journal")} for ref, p in store.papers.items()}
+                    "journal": p.get("journal"), "context": p.get("context")} for ref, p in store.papers.items()}
     checks["writer_trace"] = [entry for c in contexts for entry in c.trace]
     checks["paper_agent"] = {"checked": store.checks, "trace": store.trace}
     checks["parts"] = [list(c.legs) for c in contexts]
@@ -364,7 +441,23 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
     read = set()
     for c in contexts:
         read |= c.read
+    chain_record = walker.record()["chain"]
+    for s in statements:
+        s["tier"] = tiers.statement_tier(s, chain_record)
     results = None
+    if statements and run_deadline - time.time() >= SENSE_MIN_SECONDS + DIRECTION_MIN_SECONDS:
+        report("sense", "Checking the direction of every regulator the statements lean on", walker)
+        t0 = time.time()
+        try:
+            _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks)
+        except Exception:                                             # noqa: BLE001
+            logger.warning("[walker] the direction check failed", exc_info=True)
+            gates["direction"] = {"pass": True, "not_applicable": True, "why": "the direction check could not run"}
+        timings["direction"] = round(time.time() - t0, 1)
+    elif statements:
+        gates["direction"] = {"pass": True, "not_applicable": True, "why": "skipped: the time budget was spent"}
+    gates["context"] = context_gate(statements, store.papers)
+    halt_if_cancelled()
     if statements and run_deadline - time.time() >= SENSE_MIN_SECONDS:
         report("sense", "Checking each statement against the design and the values", walker)
         t0 = time.time()
@@ -384,12 +477,13 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
     elif statements:
         checks["sense"] = "skipped: the time budget was spent"
     halt_if_cancelled()
+    scope_name = "The whole network" if tag == "network" else walker.network.pathway_name(tag)
     if statements and run_deadline - time.time() >= NARRATE_MIN_SECONDS:
         report("narrate", "Writing the Results section", walker)
         t0 = time.time()
         try:
             results = _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks,
-                               plan["words"], run_deadline)
+                               plan["words"], run_deadline, anchor=anchor, card=card, scope_name=scope_name)
         except Exception:                                             # noqa: BLE001
             logger.warning("[walker] the Narrator's answer could not be checked", exc_info=True)
             checks["results"] = ["the Narrator's answer could not be read"]
@@ -397,8 +491,45 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
         timings["narrate"] = round(time.time() - t0, 1)
     elif statements:
         checks["results"] = ["no Results section: the time budget was spent"]
+    if results is None:
+        gates.setdefault("title", {"pass": True, "not_applicable": True, "why": "no Results section to check"})
     timings["total"] = round(time.time() - started, 1)
     return walker, statements, dropped, results, papers
+
+
+def context_gate(statements, papers):
+    """Check 4 summarised over the kept statements: every citation's paper has
+    a confirmed passage, and every out-of-context paper is named as such in
+    the sentence that cites it (the Verifier objected to any that was not)."""
+    if not statements:
+        return {"pass": True, "not_applicable": True, "cited": 0, "why": "no statements were written"}
+    cited = in_context = qualified = unqualified = unconfirmed = 0
+    for stmt in statements:
+        confirmed = {item.get("ref") for item in stmt.get("evidence") or []}
+        for ref in verify.statement_refs(stmt):
+            sentence = " ".join(verify.citing_sentences(stmt, ref))
+            cited += 1
+            if ref not in confirmed:
+                unconfirmed += 1
+            paper = papers.get(ref) or {}
+            match = (paper.get("context") or {}).get("match") or {}
+            if "other" not in (match.get("organism"), match.get("system")):
+                in_context += 1
+            elif verify.context_named(sentence, paper.get("context")):
+                qualified += 1
+            else:
+                unqualified += 1
+    gate = {"pass": unqualified == 0 and unconfirmed == 0, "not_applicable": False, "cited": cited,
+            "in_context": in_context, "qualified": qualified, "unqualified_other": unqualified,
+            "unconfirmed": unconfirmed, "why": ""}
+    if not gate["pass"]:
+        parts = []
+        if unqualified:
+            parts.append("%d citation(s) lean on a paper from another organism or system without saying so" % unqualified)
+        if unconfirmed:
+            parts.append("%d citation(s) have no passage a paper agent confirmed" % unconfirmed)
+        gate["why"] = "; ".join(parts)
+    return gate
 
 
 def attach_evidence(statements, papers):
@@ -417,18 +548,12 @@ def attach_evidence(statements, papers):
         paper["evidence"] = evidence
 
 
-def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
-    verdicts = sense_mod.sense_check(client, card_text, statements, chain)
-    if verdicts is None:
-        for s in statements:
-            s["sense"] = None
-        checks["sense"] = "unavailable"
-        return
-    for s in statements:
-        s["sense"] = verdicts.get(s["n"])
-    failing = [s for s in statements if sense_mod.failed_fields(s.get("sense"))]
-    if not failing:
-        return
+def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store, read):
+    """One rewrite of the failing statements, re-verified by code and with
+    every citation checked against the paper agents' verdicts. ``notes`` is
+    {n: {field: note}}; returns {n: [problems]} for the rewritten statements."""
+    verdicts = {n: {field: {"ok": False, "note": note} for field, note in fields.items()}
+                for n, fields in notes.items()}
     rewritten = rewrite_once(client, card_text, chain, failing, verdicts)
     for s in failing:
         new = rewritten.get(s["n"])
@@ -442,13 +567,59 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
         # A rewrite may not bring in a citation no paper agent confirmed.
         evidence = []
         for ref, claim in verify.citation_pairs(s):
-            verdict = store.verdict(ref, claim)
+            verdict = store.verdict(ref, claim, " ".join(verify.citing_sentences(s, ref))) or store.verdict(ref, claim)
             if verdict and verdict.get("supported"):
                 evidence.append({"ref": ref, "claim": claim, "quote": verdict["quote"],
                                  "section": verdict["section"], "full_text": verdict.get("full_text")})
             else:
                 problems[s["n"]].append("the rewrite cites [%d] for a claim no paper agent confirmed" % ref)
         s["evidence"] = evidence
+        s["tier"] = tiers.statement_tier(s, walker.record()["chain"])
+    return problems
+
+
+def _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
+    """Check 3 on the kept statements: objections go back to the Writer once,
+    then the statement drops. Fills checks["gates"]["direction"]."""
+    verdicts, objections = direction_mod.direction_check(client, statements, walker)
+    for s in statements:
+        s["direction"] = verdicts.get(s["n"])
+    failing = [s for s in statements if objections.get(s["n"])]
+    dropped_here = 0
+    if failing:
+        problems = _rewrite_and_recheck(client, card_text, chain, failing,
+                                        {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
+                                        walker, store, read)
+        again, again_objections = direction_mod.direction_check(client, failing, walker)
+        for s in failing:
+            s["direction"] = again.get(s["n"], s.get("direction"))
+            if s["n"] in again:
+                verdicts[s["n"]] = again[s["n"]]
+            if problems[s["n"]] or again_objections.get(s["n"]):
+                statements.remove(s)
+                dropped_here += 1
+                dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
+                                "why": "; ".join(problems[s["n"]] + again_objections.get(s["n"], [])),
+                                "by": "direction check"})
+    checks["gates"]["direction"] = direction_mod.gate(verdicts, dropped_here)
+
+
+def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
+    verdicts = sense_mod.sense_check(client, card_text, statements, chain)
+    if verdicts is None:
+        for s in statements:
+            s["sense"] = None
+        checks["sense"] = "unavailable"
+        return
+    for s in statements:
+        s["sense"] = verdicts.get(s["n"])
+    failing = [s for s in statements if sense_mod.failed_fields(s.get("sense"))]
+    if not failing:
+        return
+    problems = _rewrite_and_recheck(
+        client, card_text, chain, failing,
+        {s["n"]: {k: verdicts[s["n"]][k]["note"] for k in sense_mod.failed_fields(s["sense"])} for s in failing},
+        walker, store, read)
     again = sense_mod.sense_check(client, card_text, failing, chain) or {}
     for s in failing:
         s["sense"] = again.get(s["n"], s["sense"])
@@ -460,7 +631,8 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
                             "by": "sense check"})
 
 
-def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None):
+def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None,
+             anchor=None, card=None, scope_name="Results"):
     kind = "network" if tag == "network" else "pathway"
     # Only the papers the kept statements cite, each with the claim a paper
     # agent confirmed in it: the Narrator retells statements, and a retrieved
@@ -474,9 +646,12 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         r, p.get("title"), p.get("year"), p.get("pmid"),
         "".join("\n    states: %s" % claim for claim in confirmed.get(r, [])))
         for r, p in sorted(papers.items()) if r in cited)
+    title_gate = {"pass": True, "not_applicable": False, "verbs_found": [], "rewritten": False, "fallback": False,
+                  "why": ""}
+
     def checked(results):
         if results is None:
-            return ["no results"]
+            return ["no results"], []
         pruned = narrate_mod.prune_connectives(results)
         if pruned:
             checks["connectives_pruned"] = checks.get("connectives_pruned", 0) + pruned
@@ -489,14 +664,36 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         jargon = verify.drop_jargon_sentences(results)
         if jargon:
             checks["jargon_sentences_dropped"] = checks.get("jargon_sentences_dropped", 0) + jargon
-        return verify.verify_results(results, statements, dropped, walker, kind, words)
+        title = tiers.title_outruns_body(results, statements, walker, anchor)
+        return verify.verify_results(results, statements, dropped, walker, kind, words), title
 
     results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words)
-    problems = checked(results)
-    if problems and results is not None and (deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
-        results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, objections=problems)
-        problems = checked(results)
+    problems, title_problems = checked(results)
+    title_gate["first_objections"] = list(title_problems)
+    if results is not None:
+        title_gate["verbs_found"] = sorted(set(tiers.mechanistic_verbs(
+            " ".join([str(results.get("title") or ""), str(results.get("summary") or "")]))))
+    if (problems or title_problems) and results is not None and (
+            deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
+        results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
+                                      objections=problems + title_problems)
+        problems, title_problems = checked(results)
+        title_gate["rewritten"] = True
+    if title_problems and results is not None and not problems:
+        # Check 2's last word: the title code writes, and the summary without
+        # the sentences that still outran the body.
+        results["title"] = tiers.neutral_title(scope_name, card or {})
+        removed = tiers.drop_mechanistic_sentences(results)
+        title_gate.update({"fallback": True, "sentences_dropped": removed,
+                           "why": "; ".join(title_problems)})
+        title_problems = tiers.title_outruns_body(results, statements, walker, anchor)
+        problems = verify.verify_results(results, statements, dropped, walker, kind, words)
     checks["results"] = problems
+    if results is None or problems:
+        checks["gates"]["title"] = {"pass": True, "not_applicable": True, "why": "no Results section to check"}
+    else:
+        title_gate["pass"] = not title_problems
+        checks["gates"]["title"] = title_gate
     if problems:
         checks["results_dropped"] = results
         return None
@@ -561,14 +758,18 @@ def view(rec):
         "seen": [{"id": r["id"], "label": r["label"], "r": r["r"], "heat": r["heat"]} for r in seen],
         "nodes": {node_id: {"label": n.get("label"), "kind": n.get("kind"), "r": n.get("r"),
                             "heat": n.get("heat"), "text": n.get("text")} for node_id, n in nodes.items()},
+        "segments": [dict(s) for s in walk.get("segments") or []],
         "statements": [{k: s.get(k) for k in ("n", "claim", "prose", "cites", "legs", "grounded_in", "beyond",
-                                               "papers", "evidence", "sense", "rewritten")}
+                                               "papers", "evidence", "sense", "rewritten", "tier", "direction")}
                        for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
         "results": rec.get("results"),
         "papers": {str(ref): p for ref, p in (rec.get("papers") or {}).items()},
         "checks": {"results": (rec.get("checks") or {}).get("results"),
-                   "sense": (rec.get("checks") or {}).get("sense")},
+                   "sense": (rec.get("checks") or {}).get("sense"),
+                   "gates": (rec.get("checks") or {}).get("gates") or {},
+                   "rendered": bool((rec.get("checks") or {}).get("rendered")),
+                   "anchor": (rec.get("checks") or {}).get("anchor")},
         "model_used": rec.get("model_used"), "timings": rec.get("timings"),
     }
 
@@ -650,7 +851,7 @@ def quick_walk(job, symbol, steps=8, data_dir=None, use_mongo=True):
     except (TypeError, ValueError):
         steps = 8
     steps = max(QUICK_STEPS[0], min(QUICK_STEPS[1], steps))
-    network, graph, ov, tag = build(job, "network", data_dir, use_mongo)
+    network, graph, ov, tag, _anchor, _dist = build(job, "network", data_dir, use_mongo)
     walker = Walker(graph, ov, tag, params_for("network"))
     node_id = walker._resolve(symbol, sorted(ov.measured)) or walker._resolve(symbol, list(graph.nodes))
     if node_id is None:

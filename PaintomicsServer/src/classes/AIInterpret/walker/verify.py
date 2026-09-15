@@ -295,7 +295,51 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
         if names_genes and genes and not _paper_names_any(papers[ref], genes):
             problems.append("[%d] does not mention %s; cite a paper about the claim or mark it a hypothesis"
                             % (ref, ", ".join(sorted(genes))))
+        context = papers[ref].get("context") or {}
+        match = context.get("match") or {}
+        if "other" in (match.get("organism"), match.get("system")):
+            sentence = " ".join(citing_sentences(stmt, ref))
+            if not context_named(sentence, context):
+                problems.append("[%d] is a %s paper; say so where you cite it (\"in %s\"), or cite one about %s"
+                                % (ref, " ".join(w for w in (context.get("organism"), context.get("system"))
+                                                 if w and w != "unknown"),
+                                   " ".join(w for w in (context.get("organism"), context.get("system"))
+                                            if w and w != "unknown"),
+                                   "this organism and system"))
     return problems
+
+
+def citing_sentences(stmt, ref):
+    """The prose sentences that cite paper ``ref`` as [N] (or in a list), as
+    the reader sees them; the beyond claim citing it when the prose does not;
+    the statement's claim when neither does."""
+    out = []
+    for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[(])", str(stmt.get("prose") or "")):
+        if ref in cited_refs(sentence):
+            out.append(sentence.strip())
+    if out:
+        return out
+    beyond = stmt.get("beyond") if isinstance(stmt.get("beyond"), (list, tuple)) else []
+    for entry in beyond:
+        if isinstance(entry, dict) and paper_ref(entry.get("paper")) == ref and entry.get("claim"):
+            out.append(str(entry["claim"]))
+    return out or [str(stmt.get("claim") or "")]
+
+
+def context_named(sentence, context):
+    """Whether a sentence names the organism or the system of the paper it
+    cites: "in human T cells [3]". True when the context is unknown."""
+    context = context or {}
+    match = context.get("match") or {}
+    words = []
+    if match.get("organism") == "other" and context.get("organism") not in (None, "", "unknown"):
+        words.append(str(context["organism"]))
+    if match.get("system") == "other" and context.get("system") not in (None, "", "unknown"):
+        words.extend(w for w in re.split(r"[\s,/-]+", str(context["system"])) if len(w) >= 4)
+    if not words:
+        return True
+    text = str(sentence or "").lower()
+    return any(word.lower().rstrip("s") in text for word in words)
 
 
 def statement_papers(stmt):

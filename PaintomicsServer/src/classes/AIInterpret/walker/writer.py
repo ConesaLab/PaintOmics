@@ -20,6 +20,7 @@ from agents import Agent, ModelSettings, RunContextWrapper, Runner, function_too
 
 from src.classes.AIInterpret.agent import _model
 from src.classes.AIInterpret.walker import literature
+from src.classes.AIInterpret.walker import regulators
 from src.classes.AIInterpret.walker import verify
 from src.classes.AIInterpret.walker.errors import tool_failure
 from src.classes.AIInterpret.walker.walk import sign_glyph
@@ -42,6 +43,7 @@ class WriterContext:
     count: tuple = (verify.STATEMENT_MIN, verify.STATEMENT_MAX)
     citations: int = 2                  # papers this Writer should cite across its statements
     paper_slots: object = None          # asyncio.Semaphore bounding the paper agents of the walk
+    card_ctx: dict | None = None        # {"organism", "system"} of the design, for the context match
     deadline: float | None = None
     searches: list = field(default_factory=list)
     submits: int = 0
@@ -89,12 +91,13 @@ async def search_literature(ctx: RunContextWrapper[WriterContext], query: str, t
     except Exception as exc:                                          # noqa: BLE001
         return "Search failed (%s)." % exc
     lines = []
-    for paper in papers or []:
-        if not str(paper.get("pmid", "")):
-            continue
+    # In-context papers first, each hit tagged with its organism, system and
+    # scope as its MeSH headings give them (check 4).
+    for paper in literature.rank_by_context([p for p in papers or [] if str(p.get("pmid", ""))], c.card_ctx or {}):
         ref, added = c.store.add(paper)
         if added:
-            lines.append(_paper_line(ref, paper))
+            tag = literature.context_line(paper.get("context") or {})
+            lines.append(_paper_line(ref, paper) + (" [%s]" % tag if tag else ""))
     for pmid in pmids:
         ref = c.store.pmid_to_ref.get(str(pmid))
         if ref and not any(l.startswith("[%d]" % ref) for l in lines):
@@ -157,14 +160,16 @@ async def confirm_citations(c, checked):
         for ref, claim in verify.citation_pairs(stmt):
             jobs.append((stmt, problems, ref, claim))
     verdicts = await asyncio.gather(*(literature.check_citation(
-        c.store, c.client, c.pubmed, ref, claim, c.paper_slots, c.deadline) for _s, _p, ref, claim in jobs))
+        c.store, c.client, c.pubmed, ref, claim, c.paper_slots, c.deadline,
+        sentence=" ".join(verify.citing_sentences(stmt, ref))) for stmt, _p, ref, claim in jobs))
     for (stmt, problems, ref, claim), verdict in zip(jobs, verdicts):
         if verdict.get("supported"):
             stmt["evidence"].append({"ref": ref, "claim": claim, "quote": verdict["quote"],
                                      "section": verdict["section"], "full_text": verdict.get("full_text")})
         else:
-            problems.append("[%d] does not support %r: %s. Cite a paper whose text states it, or word the "
-                            "claim as a hypothesis" % (ref, str(claim)[:80], verdict.get("why")))
+            problems.append("[%d] does not support %r: %s. Cite a paper whose text states it, word the "
+                            "claim as a hypothesis, or say no more than the paper does"
+                            % (ref, str(claim)[:80], verdict.get("why")))
 
 
 async def submit(c, statements_json):
@@ -217,6 +222,8 @@ Write the number of statements the brief asks for, about your legs only. Each na
 - beyond: what published biology adds to the values -- the established role of these genes, a known regulation or mechanism that explains the direction, what the change means for the cell. Each claim needs a paper found with search_literature and read with read_paper, or hypothesis: true and prose worded as a hypothesis. Searches return PubMed's best matches: prefer the study that established the claim over a paper that mentions it in passing.
 
 Citations are checked. A paper agent reads every paper you cite, in full, and must find the passage that states your claim; a claim the paper does not state is sent back. So claim exactly what the paper says, and cite the paper where you read it. Aim for the number of papers the brief asks for across your statements, each on a different claim.
+
+Context matters. Every search hit is tagged with the organism, cell type and scope its indexing gives it, in-context papers first. Prefer a paper from the design's organism and system; when you cite one from another (a human cohort for a mouse cell line, a liver study for B cells), say so in the sentence that cites it ("in human T cells [3]"); code refuses the citation otherwise.
 
 Write like a paper. Name the genes and proteins ("Itpr1, Itpr2 and Itpr3", "the IP3 receptors"); never call a set of genes a cluster, and never use the walker's words seed, jump or the walk. A value is evidence only if its layer is flagged relevant; a non-relevant value may be cited only to say it did not change, and the prose must say "not relevant" next to it. Read timing against the card: a difference already present at the baseline is not a response. An omic the card lists as unlabeled has no time points or order: call its columns c1..cN and never give its values early, late, baseline, peak or over-time words; code refuses them. Where layers disagree, say so; a series that changes sign at every point is noise, not a disagreement.
 
@@ -277,7 +284,8 @@ def writer_prompt(c, others=""):
 async def run_writer_async(c, others="", max_turns=30, model=None, temperature=0.3):
     """Run one Writer to its accepted submission, its turn limit or an error;
     returns the context, whose kept/last_passing say what survived."""
-    agent = Agent[WriterContext](name="Writer", model=model or _model(), instructions=INSTRUCTIONS,
+    agent = Agent[WriterContext](name="Writer", model=model or _model(),
+                                 instructions=INSTRUCTIONS + "\n" + regulators.reading_rule(),
                                  model_settings=ModelSettings(temperature=temperature),
                                  tools=WRITER_TOOLS)
     try:

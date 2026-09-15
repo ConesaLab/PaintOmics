@@ -15,7 +15,10 @@ from collections import namedtuple
 
 logger = logging.getLogger(__name__)
 
-Edge = namedtuple("Edge", "a b kind subtype pathway reversible")
+Edge = namedtuple("Edge", "a b kind subtype pathway reversible via")
+# ``via``: the KEGG compound id a ``compound`` relation is drawn through
+# (ECrel: two enzymes joined by the metabolite between them), else None.
+Edge.__new__.__defaults__ = (None,)
 
 
 def _names(entry):
@@ -67,20 +70,31 @@ def parse_pathway(path):
 
     edges = {}
 
-    def add(a, b, kind, subtype, reversible):
+    def add(a, b, kind, subtype, reversible, via=None):
         # An unnamed endpoint is never a real biological entity. The R pipeline
         # let one through as a node called "" that reached degree 1,381.
         if not a or not b or a == b:
             return
-        edges.setdefault((a, b), Edge(a, b, kind, subtype, pathway, reversible))
+        edges.setdefault((a, b), Edge(a, b, kind, subtype, pathway, reversible, via))
+
+    def mediator(relation):
+        """The compound a ``compound`` subtype names, by its entry id -> KEGG id."""
+        for sub in relation.findall("subtype"):
+            if sub.get("name") != "compound":
+                continue
+            for name in entries.get(sub.get("value") or "", []):
+                if types.get(name) == "compound":
+                    return name
+        return None
 
     for relation in root.findall("relation"):
         kind = relation.get("type") or "?"
         # D-1: THIS relation's own subtype children, in document order.
         subtype = ",".join(s.get("name") or "" for s in relation.findall("subtype"))
+        via = mediator(relation)
         for a in expand(relation.get("entry1")):
             for b in expand(relation.get("entry2")):
-                add(a, b, kind, subtype, False)
+                add(a, b, kind, subtype, False, via)
 
     for reaction in root.findall("reaction"):
         # D-2: attributes by name. `name` may hold several ids.
