@@ -15,10 +15,9 @@ from collections import namedtuple
 
 logger = logging.getLogger(__name__)
 
-Edge = namedtuple("Edge", "a b kind subtype pathway reversible via")
 # ``via``: the KEGG compound id a ``compound`` relation is drawn through
 # (ECrel: two enzymes joined by the metabolite between them), else None.
-Edge.__new__.__defaults__ = (None,)
+Edge = namedtuple("Edge", "a b kind subtype pathway reversible via", defaults=(None,))
 
 
 def _names(entry):

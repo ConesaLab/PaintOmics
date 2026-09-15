@@ -165,25 +165,23 @@ class WalkerSimulateKoTest(unittest.TestCase):
 
 
 class ShippedPtenDatasetTest(unittest.TestCase):
-    """The manifest registers the mouse knockout and ships its two data files."""
+    """The knockout ships as an unlisted dataset directory -- a fixture the
+    five-check harness loads by path, not a picker entry (a knockout planted
+    two steps down a network cannot meet the picker's planted-pathway coverage
+    floor) -- with its two data files and the expected lists."""
 
-    def test_the_manifest_has_the_scenario_and_its_files_exist(self):
+    def test_the_dataset_directory_ships_its_files(self):
+        folder = os.path.join(EXAMPLE_DIR, "datasets", "13-simulated-pten-knockout")
+        for name in ("data/gene_expression_values.tab", "data/gene_expression_relevant.tab",
+                     "expected/signal_features.txt", "expected/expected_pathways.txt", "README.md"):
+            path = os.path.join(folder, name)
+            self.assertTrue(os.path.isfile(path), "%s is missing" % path)
+            self.assertGreater(os.path.getsize(path), 0, path)
+        with open(os.path.join(folder, "data", "gene_expression_values.tab"), encoding="utf-8") as handle:
+            self.assertEqual(handle.readline().rstrip("\n"), "#geneID\t" + "\t".join(sim.COLUMNS))
         with open(MANIFEST, encoding="utf-8") as handle:
             manifest = json.load(handle)
-        entries = [entry for entry in manifest["scenarios"] if entry.get("id") == SCENARIO_ID]
-        self.assertEqual(len(entries), 1, "manifest.json must carry exactly one %r" % SCENARIO_ID)
-        entry = entries[0]
-        self.assertTrue(entry.get("simulated"))
-        self.assertEqual(entry.get("organism"), "mmu")
-        self.assertEqual(entry.get("conditions"), sim.COLUMNS)
-        self.assertEqual(len(entry["omics"]), 1)
-        omic = entry["omics"][0]
-        for key in ("dataFile", "relevantFile"):
-            path = os.path.join(EXAMPLE_DIR, omic[key])
-            self.assertTrue(os.path.isfile(path), "%s: %s is missing" % (key, path))
-            self.assertGreater(os.path.getsize(path), 0, path)
-        with open(os.path.join(EXAMPLE_DIR, omic["dataFile"]), encoding="utf-8") as handle:
-            self.assertEqual(handle.readline().rstrip("\n"), "#geneID\t" + "\t".join(sim.COLUMNS))
+        self.assertEqual([e for e in manifest["scenarios"] if e.get("id") == SCENARIO_ID], [])
 
 
 if __name__ == "__main__":

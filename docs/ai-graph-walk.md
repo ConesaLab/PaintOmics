@@ -110,6 +110,57 @@ fails twice is dropped and the statements stand alone. The cited papers are then
 1..n in the order the reader meets them; retrieved papers nothing cites are left out, and
 each cited paper carries its passages, the section each sits in, and the claim each supports.
 
+## Five checks before it is rendered
+
+Nothing the Writers and the Narrator produce reaches the page until the walk has passed five
+checks that can fail. Each is a verdict stored with the walk, shown as a chip above the
+Results section with its numbers on hover and its reason when it failed; a walk that fails
+any of them shows the checks, the reason and the walk itself (the legs are database
+relations and your values, not findings), and no Results section or statements.
+
+1. **Not a graph artifact.** After the walk, code permutes the relevant flag over the
+   measured nodes fifty times (twenty on the whole network), reruns the scripted walker on
+   each permutation and counts how many *modules* it finds -- a seed's neighbourhood holding
+   at least three relevant walked nodes -- and how hot its seeds are. The real walk must
+   find more modules than the permuted data does (empirical p below 0.05), or, when the
+   graph holds only one or two modules, seeds far hotter than chance. Every edge is also
+   *tiered*: a signed, directed relation (activation, inhibition, expression, a reaction, a
+   transcription-factor target) is a **mechanism**; a binding, an indirect effect, a shared
+   metabolite or the job's own miRNA pairing is an **association**. Currency metabolites --
+   ATP, ADP, phosphate, NAD, water and their kin -- are never walked and never a seed, and a
+   relation the KGML draws through one of them is not an edge of the network at all.
+2. **The title fits the body.** A statement inherits the weaker tier of the legs it rests
+   on. The title and the summary may use a mechanistic verb ("drives", "rewires", "shuts
+   down", "is induced by") only where a mechanism statement about those genes stands behind
+   it; a sentence whose subject is the perturbation needs a mechanism statement at the
+   anchor; a body of associations allows no such verb at all. The Narrator is sent back
+   once; if the title still outruns the body, code replaces it with "*pathway*: what changed
+   after *perturbation*" and removes the summary sentences that carried the verbs.
+3. **Direction logic.** A curated panel names the regulators whose sign is read backwards
+   by habit: **feedback reporters** (Cish, the Socs and Dusp families, Nfkbia, Spry, Axin2,
+   Smad7 ...) are induced by their own pathway, so their fall reports the pathway *down*;
+   **true inhibitors** (Pten, Tsc2, Cbl, Nf1, Ptpn6 ...) are brakes, so their fall reports
+   it *up*. For every statement that cites a panel gene, code derives the direction the
+   values imply, one short model call reads the direction the statement claims, and a
+   second asks whether the statement would still read as true with that gene's values
+   reversed. A claim that contradicts the data is sent back once and then dropped; a
+   statement that fits the values and their opposite alike is flagged as saying nothing.
+4. **Citations in context.** Every retrieved paper's MeSH headings give its organism, its
+   cell type or tissue and its scope (in vitro, in vivo, clinical, review). Search hits are
+   listed in-context first and tagged; a citation to a paper from another organism or
+   system must say so in the sentence that cites it ("in human T cells [3]") or it is
+   refused. The paper agent is shown the sentence as the reader sees it, not only the
+   claim, and refuses a sentence that attributes to the paper more than its passage states.
+5. **Anchored to the perturbation.** The design card names the perturbed gene and its
+   direction (read from the design text, or corrected by you before the walk). When the
+   organism ships a transcription-factor target table (`mapping/tf_targets.tsv`, CollecTRI
+   and TRRUST, written by `omnipathInstaller.py --tf-targets`), the anchor gets its known
+   targets as edges for this run, so a factor the pathway maps never drew -- Ikaros in the
+   example -- still has a neighbourhood to start from. Every module is labelled by its
+   distance from the anchor, the planner is told to start there, and the header states the
+   perturbation and its direction. The check passes when the walked nodes lie within two
+   steps of the anchor more often than the measured nodes at large do.
+
 ## Running it
 
 ```
@@ -120,6 +171,9 @@ PYTHONPATH=. python -m src.classes.AIInterpret.walker.cli --job <jobID> \
     --scope pathway:mmu04068 --policy model       # walker, Writer, checks, Narrator
 PYTHONPATH=. python -m src.classes.AIInterpret.walker.cli --job <jobID> \
     --scope pathway:mmu04068 --evaluate           # planted-module recall, no model
+PYTHONPATH=. python -m src.classes.AIInterpret.walker.cli --job <jobID> \
+    --scope pathway:mmu04068 --five-checks --repeats 5 --permutations 20 \
+    --ko-job <simulated knockout job>             # the five checks, offline, as ranges
 ```
 
 Each run writes a JSON record and a self-contained HTML report under `CLIENT_TMP_DIR/walks/`
@@ -135,3 +189,15 @@ over a grid of module sizes and background rates. On the STATegra example's FoxO
 step lands in or next to the module in at least 93 percent of plants; the scripted walker's
 recall of a 12-node module at a 0.33 background rate is about 0.4, which is the baseline the
 model policy is measured against.
+
+The five checks are measured offline as well, five times at the production temperatures
+so the guarantees hold across the model's own variation, and every number is reported as
+a range: twenty whole-pipeline runs on permuted data against five on the real data
+(statements kept, modules found); the title gate's first-draft violations; a panel of
+forty-one regulators in constructed statements, both classes above 90 percent with the
+injected sign flips flagged; fifty-six hand-labelled papers against the MeSH reading and
+twenty constructed paper pairs; and Ikzf1-anchored network walks against a decoy factor
+and unanchored walks on reachability and known-target enrichment, on the STATegra
+example and on a simulated Pten knockout (`examplefiles/datasets/13-simulated-pten-knockout`,
+an unlisted dataset built from the mouse network by `walker/simulate_ko.py`). The report
+is `docs/dev/tellme-five-checks.md`.

@@ -234,8 +234,10 @@ reachability and on target enrichment. The same on a **simulated knockout**: a m
 built by `walker/simulate_ko.py` from the real network — Pten set to −2.5 at every column
 with sign propagated along signed edges for two steps and noise elsewhere, relevance by
 |value| > 1 — anchored on Pten against a decoy and unanchored. The simulated files are
-written under `examplefiles/datasets/13-simulated-knockout/` with a manifest entry marked
-`simulated: true`, so the job can be loaded from the example picker.
+written under `examplefiles/datasets/13-simulated-pten-knockout/` as an unlisted dataset (no
+manifest entry: a knockout planted two steps down a network cannot meet the picker's
+planted-pathway coverage floor, and a listed dataset needs a CI baseline); the harness and the
+Step 1 upload form load it by path.
 
 ## 8. What the reader sees
 
