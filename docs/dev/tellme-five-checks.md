@@ -137,13 +137,51 @@ replaced by the neutral title "FoxO signaling pathway: what changed after Ikzf1
 perturbation"; the third ("Ikaros time course rewires FoxO signalling…") rested on a
 mechanism statement and stood.
 
-### 3 · Direction logic — pending
+### 3 · Direction logic — PASS
 
-The 164 constructed panel cases run after the knockout arms.
+164 constructed statements, one per panel row in each direction plus an injected sign flip in
+a fifth of them, three repeats:
 
-### 4 · Citations in context — pending
+| | feedback reporters (23 rows) | true inhibitors (18 rows) | injected flips flagged |
+|---|---|---|---|
+| accuracy | 0.978–1.000 | 1.000 | 0.976–1.000 |
 
-The 56 hand-labelled papers and 20 constructed pairs run with check 3.
+Both halves stay above the 90 percent the check demands in every repeat, and the
+counter-hypothesis step flagged all but one or two of the injected flips per run.
+
+### 4 · Citations in context — FAIL
+
+| axis | agreement with the hand labels (56 papers) | the check asks for |
+|---|---|---|
+| organism | 0.804 | > 0.85 |
+| system (cell type or tissue) | 0.589 | > 0.85 |
+| scope (in vitro, in vivo, clinical, review) | 0.571 | > 0.85 |
+
+In-context paper chosen in 18 of 20 constructed pairs, 0.90 in each of the three repeats,
+against a threshold of more than 0.90: short by one paper.
+
+Two defects the measurement exposed are fixed, and the numbers above are the fixed reading
+(the first run gave organism 0.732, system 0.375, scope 0.571):
+
+* PubMed prints MeSH headings alphabetically, and the reading took the first organism heading,
+  so "Animals, Humans, Mice" read as human for every mouse paper that also cites human work.
+  Every organism heading is read now; a paper indexed for several species reads as "mixed", and
+  the design's own organism among them counts as in context rather than as another organism.
+* The scope followed from that single organism: any non-human paper with no in-vitro heading
+  was called "in vivo". An animal heading says "in vivo" now, and an in-vitro heading outranks
+  it, because a cell line is where the work was done whatever the species.
+* The benchmark's own scoring compared a reader's sentence ("B cells; mb-1 promoter reporter
+  assays") with a MeSH heading ("B-Lymphocytes") by word overlap alone; it consults the same
+  synonym table the runtime uses.
+
+What is left is not a bug. MeSH indexes what a paper is about, not how the work was done: 20 of
+the 56 papers carry no cell-type heading at all, 13 no study-type heading, and where the reader
+wrote "mixed" for a paper doing both in vitro and in vivo work MeSH names one or neither. The
+reading agrees with a careful reader on the organism four times in five and on the other two
+axes about three times in five, so the runtime gate that rests on it is weaker than the check
+specifies. It is reported as failing rather than re-scored, and the qualifier rule is what
+still protects the reader: a citation whose organism or system differs from the design must say
+so in the sentence, and an unknown context demands nothing.
 
 ### 5 · Anchored to the perturbation, the example (Ikzf1) — FAIL on one of four comparisons
 

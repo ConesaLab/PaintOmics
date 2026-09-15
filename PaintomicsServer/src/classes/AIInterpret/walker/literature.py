@@ -293,6 +293,10 @@ ORGANISM_HEADINGS = {"Mice": "mouse", "Humans": "human", "Rats": "rat", "Zebrafi
                      "Saccharomyces cerevisiae": "yeast", "Arabidopsis": "arabidopsis", "Danio rerio": "zebrafish"}
 IN_VITRO_HEADINGS = ("Cell Line", "Cells, Cultured", "Cell Line, Tumor", "Cell Culture Techniques", "HEK293 Cells",
                      "HeLa Cells", "Jurkat Cells")
+# What says the work was done in a living animal, when no in-vitro heading
+# says otherwise.
+ANIMAL_HEADINGS = ("Animals", "Mice, Inbred C57BL", "Mice, Knockout", "Mice, Transgenic",
+                   "Disease Models, Animal", "Animals, Genetically Modified")
 CLINICAL_HEADINGS = ("Cohort Studies", "Case-Control Studies", "Prospective Studies", "Retrospective Studies",
                      "Clinical Trials as Topic", "Biomarkers, Tumor", "Prognosis", "Treatment Outcome", "Patients")
 # Headings that name an organism, a demographic or a generic material, not the
@@ -352,24 +356,40 @@ def _names_system(heading):
 
 
 def paper_context(paper) -> dict:
-    """{"organism", "system", "scope"} read from the paper's MeSH headings and publication types; "unknown" where MeSH says nothing. No model call."""
+    """{"organism", "organisms", "system", "scope"} read from the paper's MeSH
+    headings and publication types; "unknown" where MeSH says nothing. No model
+    call.
+
+    PubMed prints MeSH headings alphabetically, so "the first organism heading"
+    was reading "Animals, Humans, Mice" as human for every mouse paper that
+    also cites human work: 15 of the 56 hand-labelled papers. Every organism
+    heading is read instead, ``organisms`` holds them all and ``organism`` is
+    the one name when there is one and "mixed" when there are several.
+
+    Scope followed from that single organism: a non-human paper with no
+    in-vitro heading was called "in vivo" even when it was a cell-line study,
+    and a human one with no clinical heading fell to "unknown". An animal
+    heading is now what says "in vivo", and the in-vitro headings win over it,
+    since a cell line is where the work was done whatever the species is."""
     mesh = _heading_list(paper, "mesh")
     pub_types = _heading_list(paper, "pub_types")
-    # Organism: the first organism heading in document order, so a paper
-    # indexed "Humans" then "Mice" (human genes, mouse model) reads as human.
-    organism = next((org for org in map(_organism_of, mesh) if org), UNKNOWN)
+    organisms = []
+    for org in map(_organism_of, mesh):
+        if org and org not in organisms:
+            organisms.append(org)
+    organism = organisms[0] if len(organisms) == 1 else ("mixed" if organisms else UNKNOWN)
     system = next((h for h in mesh if _names_system(h)), UNKNOWN)
     if any("review" in pt.lower() for pt in pub_types):
         scope = "review"
     elif any(h in IN_VITRO_HEADINGS for h in mesh):
         scope = "in vitro"
-    elif organism == "human" and any(h in CLINICAL_HEADINGS for h in mesh):
+    elif "human" in organisms and any(h in CLINICAL_HEADINGS for h in mesh):
         scope = "clinical"
-    elif organism not in (UNKNOWN, "human"):
+    elif any(h in ANIMAL_HEADINGS for h in mesh) or [o for o in organisms if o != "human"]:
         scope = "in vivo"
     else:
         scope = UNKNOWN
-    return {"organism": organism, "system": system, "scope": scope}
+    return {"organism": organism, "organisms": organisms, "system": system, "scope": scope}
 
 
 def _known(value):
@@ -389,10 +409,13 @@ def context_match(card, ctx) -> dict:
     card = card if isinstance(card, dict) else {}
     ctx = ctx if isinstance(ctx, dict) else {}
     card_organism, paper_organism = _known(card.get("organism")), _known(ctx.get("organism"))
-    if not card_organism or not paper_organism:
+    # A paper indexed for several species is in context when the design's is
+    # among them: "mixed" against a mouse design is not another organism.
+    paper_organisms = [str(o).lower() for o in (ctx.get("organisms") or ([paper_organism] if paper_organism else []))]
+    if not card_organism or not paper_organisms:
         organism = UNKNOWN
     else:
-        organism = "same" if card_organism == paper_organism else "other"
+        organism = "same" if card_organism in paper_organisms else "other"
     card_system, paper_system = _known(card.get("system")), _known(ctx.get("system"))
     if not card_system or not paper_system:
         system = UNKNOWN
