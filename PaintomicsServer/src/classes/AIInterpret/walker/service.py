@@ -503,6 +503,13 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
     return walker, statements, dropped, results, papers
 
 
+def direction_gate(statements, dropped):
+    """Check 3 over the kept statements' direction verdicts, with the
+    statements the check dropped counted."""
+    kept = {int(s["n"]): s["direction"] for s in statements if s.get("direction")}
+    return direction_mod.gate(kept, sum(1 for d in dropped if d.get("by") == "direction check"))
+
+
 def context_gate(statements, papers):
     """Check 4 summarised over the kept statements: every citation's paper has
     a confirmed passage, and every out-of-context paper is named as such in
@@ -611,7 +618,9 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
                 dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
                                 "why": "; ".join(problems[s["n"]] + again_objections.get(s["n"], [])),
                                 "by": "direction check"})
-    checks["gates"]["direction"] = direction_mod.gate(verdicts, dropped_here)
+    # The gate judges what the reader will see: a contradiction that was
+    # dropped is the check working, not the check failing.
+    checks["gates"]["direction"] = direction_gate(statements, dropped)
 
 
 def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):

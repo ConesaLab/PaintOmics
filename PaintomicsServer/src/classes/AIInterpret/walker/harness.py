@@ -220,6 +220,9 @@ def regate(path, job, scope, data_dir=None, permutation=None):
     walker.segments = list(walk.get("segments") or [])
     gates = rec["checks"]["gates"]
     gates["artifact"] = service.artifact_gate(walker)
+    if any(s.get("direction") for s in rec.get("statements") or []) or \
+            any(d.get("by") == "direction check" for d in rec.get("dropped") or []):
+        gates["direction"] = service.direction_gate(rec.get("statements") or [], rec.get("dropped") or [])
     rec["checks"]["rendered"] = all(bool(gates[name].get("pass")) for name in service.GATES)
     rec.setdefault("harness", {})["regated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     _save(path, rec)

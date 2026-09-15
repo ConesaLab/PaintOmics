@@ -134,6 +134,21 @@ class AnswerCountTest(unittest.TestCase):
         self.assertFalse(model_fallback.is_down("http://x", "m"))
 
 
+class DirectionGateTest(unittest.TestCase):
+    def test_a_dropped_contradiction_does_not_fail_the_gate(self):
+        kept = [{"n": 1, "direction": [{"gene": "Inpp5d", "pathway": "PI3K-AKT", "class": "inhibitor", "data_sign": -1,
+                                       "implied": "up", "claimed": "up", "consistent": True, "insensitive": False}]},
+                {"n": 2, "direction": None}]
+        dropped = [{"n": 3, "claim": "Cish derepresses", "by": "direction check"}, {"n": 4, "claim": "x", "by": "verifier"}]
+        gate = service.direction_gate(kept, dropped)
+        self.assertTrue(gate["pass"])
+        self.assertEqual((gate["checked"], gate["consistent"], gate["dropped"]), (1, 1, 1))
+        kept[0]["direction"][0]["consistent"] = False
+        kept[0]["direction"][0]["claimed"] = "down"
+        self.assertFalse(service.direction_gate(kept, dropped)["pass"])
+        self.assertTrue(service.direction_gate([{"n": 1}], [])["not_applicable"])
+
+
 class ContextGateTest(unittest.TestCase):
     def test_the_gate_counts_qualified_and_unqualified_citations(self):
         papers = {1: {"context": {"organism": "mouse", "system": "B-Lymphocytes",
