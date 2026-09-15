@@ -113,7 +113,9 @@ class AnchorTest(unittest.TestCase):
         walker.segments = [{"seed": walker.plan["seeds"][0], "label": "s", "first": 1, "last": len(walker.chain), "stop": ""}]
         anchor_mod.label_segments(walker, dist)
         self.assertIsNotNone(walker.segments[0]["distance"])
-        reach = anchor_mod.reachability(walker, dist)
+        nodes = anchor_mod.walked_nodes(walker)
+        self.assertEqual(nodes, anchor_mod.walked_nodes(walker.record()["chain"]))   # a sealed chain reads the same
+        reach = anchor_mod.reachability(nodes, dist)
         base = anchor_mod.base_rate(ov, dist)
         self.assertTrue(0.0 <= reach <= 1.0)
         self.assertTrue(0.0 <= base <= 1.0)

@@ -205,15 +205,19 @@ def label_segments(walker, dist):
 
 
 def walked_nodes(walker):
+    """Every node the walk touched: the ends of its legs (a sealed record's
+    chain works too, its legs being dicts with "from" and "to")."""
     nodes = set()
-    for leg in walker.chain:
-        nodes.update((leg.src, leg.dst))
+    for leg in walker.chain if hasattr(walker, "chain") else walker:
+        if isinstance(leg, dict):
+            nodes.update((leg["from"], leg["to"]))
+        else:
+            nodes.update((leg.src, leg.dst))
     return nodes
 
 
-def reachability(walker, dist, radius=REACH_RADIUS):
-    """The share of walked nodes within ``radius`` steps of the anchor."""
-    nodes = walked_nodes(walker)
+def reachability(nodes, dist, radius=REACH_RADIUS):
+    """The share of walked ``nodes`` within ``radius`` steps of the anchor."""
     if not nodes:
         return 0.0
     return sum(1 for v in nodes if dist.get(v) is not None and dist[v] <= radius) / float(len(nodes))
@@ -227,7 +231,7 @@ def base_rate(overlay, dist, radius=REACH_RADIUS):
     return sum(1 for v in overlay.measured if dist.get(v) is not None and dist[v] <= radius) / float(len(overlay.measured))
 
 
-def target_enrichment(walker, targets, overlay, network, aliases=None):
+def target_enrichment(nodes, targets, overlay, network, aliases=None):
     """Known targets among the walked, measured genes: {walked, targets, hits,
     p} with the hypergeometric tail over the measured gene nodes."""
     universe = {v for v in overlay.measured if str(v).startswith("g:")}
@@ -236,7 +240,7 @@ def target_enrichment(walker, targets, overlay, network, aliases=None):
         node = _node_for(symbol, network, aliases)
         if node in universe:
             target_nodes.add(node)
-    walked = walked_nodes(walker) & universe
+    walked = set(nodes) & universe
     hits = len(walked & target_nodes)
     p = 1.0
     if walked and target_nodes:
@@ -276,10 +280,11 @@ def anchor_gate(anchor, walker, overlay, dist, targets=None, network=None, alias
         gate["why"] = ("%s is not connected in this organism's network, so the walk could not start from the "
                        "perturbation" % anchor["gene"])
         return gate
-    gate["reachability"] = round(reachability(walker, dist), 3)
+    nodes = walked_nodes(walker)
+    gate["reachability"] = round(reachability(nodes, dist), 3)
     gate["base_rate"] = round(base_rate(overlay, dist), 3)
     if targets and network is not None:
-        gate["targets"] = target_enrichment(walker, targets, overlay, network, aliases)
+        gate["targets"] = target_enrichment(nodes, targets, overlay, network, aliases)
     gate["pass"] = gate["reachability"] > gate["base_rate"]
     if not gate["pass"]:
         gate["why"] = ("%.0f%% of the walked nodes lie within %d steps of %s, no more than the %.0f%% of all "

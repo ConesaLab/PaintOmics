@@ -380,17 +380,9 @@ def _anchor_metrics(rec, network, ov, anchor_node, targets, aliases):
     """Reachability to the TRUE anchor and known-target enrichment of one
     record, whatever the run was anchored on."""
     dist = anchor_mod.distances(network, anchor_node)
-    nodes = set()
-    for leg in (rec.get("walk") or {}).get("chain") or []:
-        nodes.update((leg["from"], leg["to"]))
-    reach = (sum(1 for v in nodes if dist.get(v) is not None and dist[v] <= anchor_mod.REACH_RADIUS)
-             / float(len(nodes))) if nodes else 0.0
-
-    class _W(object):
-        chain = [type("L", (), {"src": a, "dst": b})() for a, b in
-                 ((leg["from"], leg["to"]) for leg in (rec.get("walk") or {}).get("chain") or [])]
-    enrichment = anchor_mod.target_enrichment(_W(), targets, ov, network, aliases)
-    return {"reachability": round(reach, 3), "enrichment": enrichment, "legs": len(nodes)}
+    nodes = anchor_mod.walked_nodes((rec.get("walk") or {}).get("chain") or [])
+    return {"reachability": round(anchor_mod.reachability(nodes, dist), 3),
+            "enrichment": anchor_mod.target_enrichment(nodes, targets, ov, network, aliases), "nodes": len(nodes)}
 
 
 def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, decoy=None, label="example"):
