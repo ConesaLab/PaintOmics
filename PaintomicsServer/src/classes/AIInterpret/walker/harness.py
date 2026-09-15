@@ -524,16 +524,29 @@ def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, deco
     enrich = {arm: [m["enrichment"]["p"] for m in ms] for arm, ms in out["arms"].items()}
     out["reachability"] = reach
     out["enrichment_p"] = enrich
-    # Every anchored run must stay closer to the anchor than the other arms'
-    # typical run does, and the anchored runs must hit the known targets
-    # more often than either other arm typically does.
+    # Five runs an arm: a one-sided rank test (exact Mann-Whitney) asks whether
+    # the anchored runs stay closer to the anchor, and hit more known targets
+    # (a smaller enrichment p), than each other arm's runs do.
     typical = {arm: statistics.median(values) if values else None for arm, values in reach.items()}
     typical_p = {arm: statistics.median(values) if values else 1.0 for arm, values in enrich.items()}
     out["medians"] = {"reachability": typical, "enrichment_p": typical_p}
-    out["pass"] = bool(reach["anchored"]) and all(
-        r > max(typical.get("decoy") or 0.0, typical.get("unanchored") or 0.0) for r in reach["anchored"]) and \
-        typical_p["anchored"] < min(typical_p["decoy"], typical_p["unanchored"])
+    out["rank_p"] = {"reachability": {arm: _rank_p(reach["anchored"], reach[arm], "greater") for arm in ("decoy", "unanchored")},
+                     "enrichment": {arm: _rank_p(enrich["anchored"], enrich[arm], "less") for arm in ("decoy", "unanchored")}}
+    out["pass"] = bool(reach["anchored"]) and all(p < ALPHA for p in out["rank_p"]["reachability"].values()) and \
+        all(p < ALPHA for p in out["rank_p"]["enrichment"].values())
     return out
+
+
+def _rank_p(anchored, others, alternative):
+    """One-sided exact Mann-Whitney p that the anchored values are greater
+    (or less) than the other arm's; 1.0 when an arm is empty."""
+    from scipy.stats import mannwhitneyu
+    if not anchored or not others:
+        return 1.0
+    try:
+        return round(float(mannwhitneyu(anchored, others, alternative=alternative, method="exact").pvalue), 4)
+    except ValueError:                       # identical values throughout
+        return 1.0
 
 
 def ko_targets(job, data_dir=None):
@@ -723,6 +736,13 @@ def report(summary):
                 a, " (%s)" % arm["decoy"] if a == "decoy" else "", _range([m["reachability"] for m in ms]),
                 _range([m["enrichment"]["p"] for m in ms], 4), _range([m["summary"]["statements"] for m in ms]),
                 _range([m["summary"]["modules"] for m in ms])))
+        rank = arm.get("rank_p") or {}
+        if rank:
+            lines.append("")
+            lines.append("One-sided rank test, anchored against each arm: reachability p = %s (decoy), %s (unanchored); "
+                         "enrichment p = %s (decoy), %s (unanchored); %d known targets." % (
+                             rank["reachability"]["decoy"], rank["reachability"]["unanchored"],
+                             rank["enrichment"]["decoy"], rank["enrichment"]["unanchored"], arm.get("targets", 0)))
         lines.append("")
     verdicts = [summary.get(k, {}).get("pass") for k in CHECKS if summary.get(k)]
     lines += ["## Verdict", "", "%d of %d checks pass on every repeat." % (sum(1 for v in verdicts if v), len(verdicts)), ""]
