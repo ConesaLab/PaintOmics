@@ -46,9 +46,10 @@ BRIEF = (
 )
 
 
-def sense_check(client, card_text, statements, chain_text, temperature=0.1):
+def sense_check(client, card_text, statements, chain_text, temperature=0.1, budget_seconds=None):
     """{n: {field: {ok, note}}}; None when the call fails (the caller then keeps
-    the statements marked unchecked rather than inventing verdicts)."""
+    the statements marked unchecked rather than inventing verdicts).
+    `budget_seconds` bounds the call, retries included."""
     body = json.dumps([{"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
                         "cites": s.get("cites"), "legs": s.get("legs"),
                         "grounded_in": s.get("grounded_in"), "beyond": s.get("beyond")}
@@ -62,7 +63,7 @@ def sense_check(client, card_text, statements, chain_text, temperature=0.1):
             # fixed 2,500 cut a twelve-statement answer off and the whole check
             # read as unavailable.
             "sense_check", SENSE_SCHEMA, lambda text: None, max_tokens=max(2500, 600 + 350 * len(statements)),
-            temperature=temperature)
+            temperature=temperature, budget_seconds=budget_seconds)
     except Exception:                                                 # noqa: BLE001
         return None
     if not isinstance(out, dict) or not isinstance(out.get("verdicts"), list):

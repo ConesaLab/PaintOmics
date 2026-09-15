@@ -50,11 +50,13 @@ STATEMENT_MIN, STATEMENT_MAX = 3, 5
 RESULTS_WORDS = {"pathway": (150, 450), "network": (300, 900)}
 # The walker's working words. In a statement or a Results section they narrate
 # the walk instead of reporting biology: "the calcium cluster read led to the
-# Syk kinase seed via a jump". Name the genes instead. Only the unambiguous
-# forms are refused: "seed" is ordinary in a plant job and in a miRNA's seed
-# region, and "a jump at 12h" describes values, so those two are left to the
-# prompts.
-JARGON_RE = re.compile(r"\b(clusters?|the walk(?:er)?|via a jump|jump(?:s|ed|ing)? (?:to|from|back))\b", re.I)
+# Syk kinase seed via a jump", "a network walk from the seed miRNA". Name the
+# genes instead. Only the unambiguous forms are refused: "seed" is ordinary in
+# a plant job (seed storage proteins) and in a miRNA's seed region, and "a jump
+# at 12h" describes values, so bare "seed" and "jump" are left to the prompts.
+JARGON_RE = re.compile(r"\b(clusters?|(?:a|an|the|this|our|each) (?:network |graph |pathway )?walk(?:er)?s?"
+                       r"|walk(?:ed|ing|s)? (?:from|to|through|along|across)|via a jump"
+                       r"|jump(?:s|ed|ing)? (?:to|from|back)|seed (?:nodes?|mirnas?))\b", re.I)
 
 
 def chain_nodes(chain):

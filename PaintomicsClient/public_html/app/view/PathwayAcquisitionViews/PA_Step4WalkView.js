@@ -160,9 +160,16 @@ function paWalkResultsNode(view, options) {
 	var results = view && view.results;
 	var box = paWalkEl("section", "pa-walk-results");
 	if (!results || !results.paragraphs || !results.paragraphs.length) {
-		var why = (view && view.checks && view.checks.results && view.checks.results.length)
-			? "The Results section did not pass its checks, so the statements below stand alone."
-			: "No Results section was written: no statement survived its checks.";
+		// checks.results holds the server's reason; a walk that ran out of time
+		// never had a section to check, and saying it failed its checks sent
+		// the reader looking for a fault in the statements.
+		var reasons = (view && view.checks && view.checks.results) || [];
+		var outOfTime = reasons.some(function (reason) { return /time budget/.test(String(reason)); });
+		var why = outOfTime
+			? "No Results section was written: the walk ran out of time before it could be. The statements below stand alone; Walk again to try for one."
+			: reasons.length
+				? "The Results section did not pass its checks, so the statements below stand alone."
+				: "No Results section was written: no statement survived its checks.";
 		box.appendChild(paWalkEl("p", "pa-walk-note", why));
 		return box;
 	}

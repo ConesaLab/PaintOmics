@@ -14,7 +14,10 @@ around the models:
   * the Writers share one numbered paper list and their statements are
     numbered once across the walk;
   * the walker's words (cluster, the walk, jumped to) never reach a statement
-    or the Results.
+    or the Results;
+  * every model call after the walk gives up by its stage's deadline: a
+    paper agent rate-limited near the Writers' deadline once held the
+    pipeline 54 s past it, and the walk sealed with no Results section.
 
     cd PaintomicsServer && PYTHONPATH=. python -m src.tests.test_walker_parallel
 """
@@ -146,10 +149,11 @@ class _Client(object):
     """The paper agent's gateway: answers from a table keyed by claim."""
 
     def __init__(self, answers):
-        self.answers, self.calls = answers, 0
+        self.answers, self.calls, self.budgets = answers, 0, []
 
-    def complete_json(self, messages, name, schema, parser, max_tokens=0, temperature=0.0):
+    def complete_json(self, messages, name, schema, parser, max_tokens=0, temperature=0.0, budget_seconds=None):
         self.calls += 1
+        self.budgets.append(budget_seconds)
         claim = messages[1]["content"].split("\n")[1]
         answer = self.answers.get(claim)
         if isinstance(answer, Exception):
@@ -243,6 +247,127 @@ class PaperAgentTest(unittest.TestCase):
         self.assertIsNone(store.verdict(1, "Aaa binds Ddd"), "a gateway error was cached as a verdict")
 
 
+class _Throttled(object):
+    """requests.Response double: a 429 asking for a long wait."""
+    status_code, text = 429, "rate limited"
+
+    def __init__(self, retry_after):
+        self.headers = {"Retry-After": str(retry_after)}
+
+    def raise_for_status(self):
+        import requests
+        err = requests.exceptions.HTTPError("HTTP 429")
+        err.response = self
+        raise err
+
+
+class _Budgets(object):
+    """A gateway that records the budget of every call and answers nothing."""
+
+    def __init__(self):
+        self.budgets = []
+
+    def complete_json(self, messages, name, schema, parser, max_tokens=0, temperature=0.0, budget_seconds=None):
+        self.budgets.append(budget_seconds)
+        return {}
+
+
+class StageBudgetTest(unittest.TestCase):
+    def test_a_rate_limited_paper_agent_gives_up_by_the_writers_deadline(self):
+        # The live failure: the paper agent's call runs on a thread that
+        # asyncio.run waits for, and a 429 asked it to sleep 84 s just before
+        # the Writers' deadline. With the real client and its real retry loop,
+        # no wait may run past the deadline.
+        from src.classes.AIInterpret import llm_client as lc
+        sleeps, real_post, real_sleep = [], lc.requests.post, lc.time.sleep
+        lc.requests.post = lambda *args, **kwargs: _Throttled(80)
+        lc.time.sleep = sleeps.append
+        try:
+            client = lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+                                   "fallback_models": []})
+            store = PaperAgentTest.store(None)
+
+            async def go():
+                return await literature.check_citation(store, client, _PubMed(), 1, "Aaa is a kinase",
+                                                       asyncio.Semaphore(1), time.time() + 60)
+            verdict = asyncio.run(go())
+        finally:
+            lc.requests.post, lc.time.sleep = real_post, real_sleep
+        self.assertFalse([s for s in sleeps if s >= 60],
+                         "a retry slept past the Writers' deadline: %s" % sleeps)
+        self.assertFalse(verdict["supported"])
+        self.assertTrue(verdict.get("transient"), "a check the gateway refused is not a verdict")
+
+    def test_the_pipeline_does_not_wait_for_a_thread_past_its_deadline(self):
+        # A thread cannot be cancelled, and asyncio.run's cleanup waits for it:
+        # whatever a paper agent or a PubMed fetch is still doing when the
+        # Writers' deadline passes, the sense check and the Narrator start on time.
+        import contextvars
+        run = contextvars.ContextVar("run", default=None)
+        seen = []
+
+        def straggler():
+            seen.append(run.get())
+            time.sleep(3)
+
+        async def pipeline():
+            thread = asyncio.ensure_future(asyncio.to_thread(straggler))
+            await parallel._wait([thread], time.time() + 0.2, None)
+            return "sealed"
+
+        run.set("this run")
+        started = time.time()
+        self.assertEqual(parallel.run_pipeline(pipeline()), "sealed")
+        self.assertLess(time.time() - started, 1.5, "the pipeline waited for a thread past its deadline")
+        self.assertEqual(seen, ["this run"], "the run's context (its deadline) did not reach the thread")
+
+    def test_the_results_floor_follows_the_statements_kept(self):
+        # A walk that kept 6 statements was refused a 368-word Results section
+        # against the plan's 400: the floor asked for padding, the page got none.
+        from src.classes.AIInterpret.walker import service
+
+        class Brief(_Budgets):
+            def complete_json(self, messages, *args, **kwargs):
+                self.briefs = getattr(self, "briefs", []) + [messages[0]["content"]]
+                return {}
+
+        def length_rule(n, words):
+            client = Brief()
+            statements = [{"n": i + 1, "claim": "c%d" % i} for i in range(n)]
+            service._narrate(client, "card", "chain", statements, [], None, {}, "pathway:x", {}, words)
+            return [line for line in client.briefs[0].splitlines() if line.startswith("- Length")][0]
+
+        self.assertEqual(length_rule(6, (400, 1200)), "- Length 300 to 1200 words.")
+        self.assertEqual(length_rule(10, (400, 1200)), "- Length 400 to 1200 words.",
+                         "a full set of statements keeps the plan's floor")
+
+    def test_the_paper_agent_is_given_the_time_left(self):
+        client = _Client({})
+        PaperAgentTest.check(None, PaperAgentTest.store(None), client, "Aaa is a kinase")
+        self.assertEqual(len(client.budgets), 1)
+        self.assertTrue(50 < client.budgets[0] <= 60, client.budgets)
+
+    def test_the_sense_check_leaves_the_narrator_its_time_and_the_narrator_stops_at_the_run_end(self):
+        from src.classes.AIInterpret.walker import service
+        client = _Budgets()
+        service._sense_pass(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, None, set(), {},
+                            deadline=time.time() + 40)
+        self.assertEqual(len(client.budgets), 1)
+        self.assertTrue(30 < client.budgets[0] <= 40, client.budgets)
+
+        client = _Budgets()
+        checks = {}
+        service._narrate(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, {}, "pathway:x", checks,
+                         (100, 200), deadline=time.time() + 30)
+        self.assertTrue(client.budgets and all(b is not None and 20 < b <= 30 for b in client.budgets),
+                        client.budgets)
+
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        client = _Budgets()
+        self.assertIsNone(narrate_mod.narrate(client, "card", [{"n": 1}], "chain", "", deadline=time.time() - 1))
+        self.assertEqual(client.budgets, [], "the Narrator was asked after the run was due")
+
+
 class WriterTest(_Fixture):
     def setUp(self):
         self.merged, _ = self.walk()
@@ -315,6 +440,15 @@ class WordingAndRecordTest(_Fixture):
         self.assertEqual(verify.drop_jargon_sentences(results), 2)
         self.assertEqual(results["summary"], "Foxo1 rose.")
         self.assertEqual(results["paragraphs"][0]["text"], "Syk rose, a jump at 12h.")
+        # Seen in sealed walks on 2026-09-15: the Narrator's summary and a
+        # Writer's statement narrated the walk without saying "the walk".
+        results = {"title": "Results", "paragraphs": [], "summary": (
+            "A network walk from the seed miRNA miR-151-3p reveals a repression module. "
+            "The seed miRNA mmu-miR-3074-1-3p falls. Walking from Syk to Ptk2b shows a late rise. "
+            "Its seed region pairs with the Prkcz 3' UTR. Seed storage proteins accumulate late.")}
+        self.assertEqual(verify.drop_jargon_sentences(results), 3)
+        self.assertEqual(results["summary"], "Its seed region pairs with the Prkcz 3' UTR. Seed storage proteins accumulate late.",
+                         "a miRNA's seed region and a plant's seeds are biology, not the walker's words")
 
     def test_renumbering_carries_each_passage_to_its_new_reference(self):
         from src.classes.AIInterpret.walker import service

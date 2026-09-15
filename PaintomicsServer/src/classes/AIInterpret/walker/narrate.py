@@ -6,6 +6,7 @@ story is dropped and the statements stand alone.
 from __future__ import annotations
 
 import json
+import time
 
 RESULTS_SCHEMA = {
     "type": "object",
@@ -88,7 +89,7 @@ def _embedded_json(text):
 
 
 def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
-            objections=None, temperature=0.3):
+            objections=None, temperature=0.3, deadline=None):
     """The Results dict, or None when the call fails.
 
     The token budget follows the word budget: a network Results section of up to
@@ -106,11 +107,14 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
     max_tokens = max(2500, int(words[1] * 5))
     brief = BRIEF % (len(kept), max(0, len(kept) - 1), words[0], words[1])
     for _attempt in range(2):                 # one more try when the reply is unreadable
+        budget = None if deadline is None else deadline - time.time()
+        if budget is not None and budget <= 0:
+            return None
         try:
             out = client.complete_json(
                 [{"role": "system", "content": brief}, {"role": "user", "content": prompt}],
                 "results_section", RESULTS_SCHEMA, _embedded_json, max_tokens=max_tokens,
-                temperature=temperature)
+                temperature=temperature, budget_seconds=budget)
         except Exception:                                             # noqa: BLE001
             out = None
         if isinstance(out, dict) and isinstance(out.get("paragraphs"), list):
