@@ -70,6 +70,18 @@ forced, in the order they were found:
   now permutes the way the request-time null does: the measured nodes of the walked graph
   exchange their measurements, flag and layers together. The eight feature-level runs are
   kept beside the report (`perm-featurelevel/`) and are not in the tables.
+* **A review pass found nine defects, and they split the measurement in two.** The fixes
+  (commit `020cfb93`: the design-text reading taking English words for genes, an unanchorable
+  gene withholding every interpretation, a rewritten statement keeping its old direction
+  verdict, the scope name's own verbs failing the title gate, a same-organism citation that
+  could not be qualified, and four more) landed after the anchor and knockout arms were
+  walked. Only one of them changes what a walk keeps: a citation to a paper of the design's
+  organism and another system is no longer refused for want of a qualifier, so a post-fix run
+  keeps marginally more statements. The real runs of check 1 were therefore walked again
+  against the permuted ones under the fixed code, since both arms of that comparison must be
+  the same program; the five pre-fix runs are kept aside (`stale-prefix-real/`). The anchor
+  and knockout arms measure where a walk went, not what it kept, so their pre-fix records
+  stand, and their statement counts are the pre-fix ones.
 * **Three repeats, not five.** Repeats were cut from five to three, so the exact rank tests
   of check 5 are read at p ≤ 0.05: complete separation of three runs against three is
   exactly 0.05, the smallest value the test can give. Check 1 needs twenty permutations for
