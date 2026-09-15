@@ -248,24 +248,64 @@ def target_enrichment(nodes, targets, overlay, network, aliases=None):
     return {"walked": len(walked), "targets": len(target_nodes), "hits": hits, "p": round(p, 5)}
 
 
-def decoy_for(anchor, rows, network, rng, aliases=None, tolerance=0.3):
-    """A transcription factor with a regulon (targets the network holds) within
-    ``tolerance`` of the anchor's, not the anchor: the harness's decoy."""
-    sizes = {}
+def neighbourhood(network, node, radius=REACH_RADIUS, extra=()):
+    """The nodes within ``radius`` steps of ``node`` in the network, plus
+    ``extra`` (a regulon the network does not draw yet) and their neighbours."""
+    seen = {node} | set(extra)
+    frontier = set(seen)
+    for _ in range(radius):
+        frontier = {w for u in frontier for w in network.neighbours(u)} - seen
+        seen |= frontier
+    return seen
+
+
+def decoy_for(anchor, rows, network, rng, aliases=None, tolerance=0.3, pool_size=40):
+    """The harness's decoy: a gene of the anchor's kind and size whose
+    neighbourhood shares the least with the anchor's. A transcription factor
+    anchor gets a factor with a regulon (targets the network holds) within
+    ``tolerance`` of its own; any other gene gets a gene of similar degree.
+    Among the ``pool_size`` closest in size, the one whose two-step
+    neighbourhood overlaps the anchor's least wins; ``rng`` breaks ties. A
+    decoy that shares the anchor's neighbourhood is no decoy: the first one
+    tried on the example walked 57-64 percent of its nodes within two steps
+    of the true anchor."""
+    node = anchor["node"]
+    regulons = {}
     for row in rows:
         target = _node_for(row["target"], network, aliases)
         if target is not None and target in network.nodes:
-            sizes.setdefault(row["tf"].upper(), set()).add(target)
-    mine = len(sizes.get(anchor["gene"].upper(), ()))
-    if not mine:
+            regulons.setdefault(row["tf"].upper(), set()).add(target)
+    mine = regulons.get(anchor["gene"].upper())
+    if mine:
+        pool = {_node_for(tf, network, aliases): (tf, targets) for tf, targets in regulons.items()
+                if tf != anchor["gene"].upper() and abs(len(targets) - len(mine)) <= tolerance * len(mine)}
+        pool.pop(None, None)
+        size_of = {cand: len(pool[cand][1]) for cand in pool}
+        extra_of = {cand: pool[cand][1] for cand in pool}
+        target_size = len(mine)
+    else:
+        degree = {v: len(network.neighbours(v)) for v in network.nodes if str(v).startswith("g:")}
+        target_size = degree.get(node, 0)
+        if not target_size:
+            return None
+        size_of = {v: d for v, d in degree.items() if v != node and abs(d - target_size) <= tolerance * target_size}
+        extra_of = {v: () for v in size_of}
+    if not size_of:
         return None
-    pool = sorted(tf for tf, targets in sizes.items()
-                  if tf != anchor["gene"].upper() and abs(len(targets) - mine) <= tolerance * mine
-                  and _node_for(tf, network, aliases) is not None)
-    if not pool:
-        return None
-    choice = rng.choice(pool)
-    return aliases.get(choice, choice.capitalize()) if aliases else choice.capitalize()
+    anchor_hood = neighbourhood(network, node, extra=mine or ())
+    candidates = sorted(size_of, key=lambda v: (abs(size_of[v] - target_size), v))[:pool_size]
+    scored = []
+    for cand in candidates:
+        hood = neighbourhood(network, cand, extra=extra_of[cand])
+        overlap = len(hood & anchor_hood) / float(len(hood) or 1)
+        scored.append((round(overlap, 3), cand))
+    least = min(score for score, _cand in scored)
+    choice = rng.choice(sorted(cand for score, cand in scored if score == least))
+    label = str(network.nodes[choice].get("label") or choice)
+    if mine:
+        tf = pool[choice][0]
+        return aliases.get(tf, tf.capitalize()) if aliases else tf.capitalize()
+    return (aliases or {}).get(label.upper(), label)
 
 
 def anchor_gate(anchor, walker, overlay, dist, targets=None, network=None, aliases=None):

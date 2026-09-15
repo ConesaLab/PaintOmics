@@ -516,7 +516,9 @@ def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, deco
     for arm, override in arms.items():
         metrics = []
         for i in range(repeats):
-            rec = _run_saved(_path(out_dir, "anchor_" + label, "%s_%d" % (arm, i)), job, job_id, "network",
+            # the decoy's records are named for it, so a different decoy is a different arm
+            stem = "decoy-%s" % decoy if arm == "decoy" and decoy else arm
+            rec = _run_saved(_path(out_dir, "anchor_" + label, "%s_%d" % (stem, i)), job, job_id, "network",
                              card_override=dict(override, perturbation_direction="up" if arm == "anchored" else "unknown"),
                              data_dir=data_dir)
             m = _anchor_metrics(rec, network, ov, anchor["node"], targets, aliases)

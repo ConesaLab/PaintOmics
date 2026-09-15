@@ -179,6 +179,11 @@ class AnchorTest(unittest.TestCase):
         decoy = anchor_mod.decoy_for(anchor, rows, network, random.Random(0), self.aliases)
         self.assertEqual(decoy, "Fff")                           # 2 targets in the network each
         self.assertIsNone(anchor_mod.decoy_for({"gene": "Zzz", "node": "g:0"}, rows, network, random.Random(0), self.aliases))
+        # a gene that is no transcription factor gets a decoy of similar degree, never itself
+        gene_decoy = anchor_mod.decoy_for({"gene": "Bbb", "node": "g:2"}, rows, network, random.Random(0), self.aliases)
+        self.assertIn(gene_decoy, {"Ccc", "Ddd", "Eee", "Fff"})
+        hood = anchor_mod.neighbourhood(network, "g:5")                # E: C, D, then B, A
+        self.assertEqual(hood, {"g:5", "g:3", "g:4", "g:2", "g:1"})
 
 
 if __name__ == "__main__":
