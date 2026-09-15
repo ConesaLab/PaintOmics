@@ -364,8 +364,40 @@ class StageBudgetTest(unittest.TestCase):
 
         from src.classes.AIInterpret.walker import narrate as narrate_mod
         client = _Budgets()
-        self.assertIsNone(narrate_mod.narrate(client, "card", [{"n": 1}], "chain", "", deadline=time.time() - 1))
+        with self.assertRaises(narrate_mod.OutOfTime):
+            narrate_mod.narrate(client, "card", [{"n": 1}], "chain", "", deadline=time.time() - 1)
         self.assertEqual(client.budgets, [], "the Narrator was asked after the run was due")
+
+    def test_a_narrator_that_ran_out_of_time_is_not_reported_as_failing_its_checks(self):
+        # The page shows "ran out of time" only for a reason with "time budget"
+        # in it; a Narrator that gave up at its deadline used to record "no
+        # results", which the page reads as a section that failed its checks.
+        import requests
+        from src.classes.AIInterpret.walker import service
+
+        class Failing(object):
+            def __init__(self, exc):
+                self.exc = exc
+
+            def complete_json(self, *args, **kwargs):
+                raise self.exc
+
+        def reason(exc, deadline):
+            checks = {}
+            out = service._narrate(Failing(exc), "card", "chain", [{"n": 1, "claim": "c"}], [], None, {},
+                                   "pathway:x", checks, (100, 200), deadline=deadline)
+            self.assertIsNone(out)
+            return checks["results"]
+
+        throttled = requests.exceptions.HTTPError("HTTP 429")
+        throttled.response = _Throttled(80)
+        soon = time.time() + 30
+        self.assertEqual(reason(requests.exceptions.Timeout("exceeded its budget"), soon), [service.RESULTS_OUT_OF_TIME])
+        self.assertEqual(reason(throttled, soon), [service.RESULTS_OUT_OF_TIME])
+        self.assertEqual(reason(ValueError("unreadable"), soon), ["no results"],
+                         "a broken answer is not the clock running out")
+        self.assertEqual(reason(requests.exceptions.Timeout("slow"), None), ["no results"],
+                         "without a deadline a timeout is the gateway's, not the run's")
 
 
 class WriterTest(_Fixture):
@@ -442,13 +474,15 @@ class WordingAndRecordTest(_Fixture):
         self.assertEqual(results["paragraphs"][0]["text"], "Syk rose, a jump at 12h.")
         # Seen in sealed walks on 2026-09-15: the Narrator's summary and a
         # Writer's statement narrated the walk without saying "the walk".
+        biology = ("Its seed region pairs with the Prkcz 3' UTR. Seed storage proteins accumulate late. "
+                   "Seed miRNAs regulate dormancy. Kinesin-1 walks along the microtubule. "
+                   "Myosin V walked from one actin filament to the next.")
         results = {"title": "Results", "paragraphs": [], "summary": (
             "A network walk from the seed miRNA miR-151-3p reveals a repression module. "
-            "The seed miRNA mmu-miR-3074-1-3p falls. Walking from Syk to Ptk2b shows a late rise. "
-            "Its seed region pairs with the Prkcz 3' UTR. Seed storage proteins accumulate late.")}
-        self.assertEqual(verify.drop_jargon_sentences(results), 3)
-        self.assertEqual(results["summary"], "Its seed region pairs with the Prkcz 3' UTR. Seed storage proteins accumulate late.",
-                         "a miRNA's seed region and a plant's seeds are biology, not the walker's words")
+            "The seed miRNA mmu-miR-3074-1-3p falls. " + biology)}
+        self.assertEqual(verify.drop_jargon_sentences(results), 2)
+        self.assertEqual(results["summary"], biology,
+                         "a miRNA's seed region, a plant's seeds and a walking motor protein are biology")
 
     def test_renumbering_carries_each_passage_to_its_new_reference(self):
         from src.classes.AIInterpret.walker import service

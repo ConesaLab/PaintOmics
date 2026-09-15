@@ -51,6 +51,9 @@ NARRATE_MIN_SECONDS = 45
 # retelling of 6 statements does not need 400 words, and padding one out is
 # where unsupported sentences come from.
 RESULTS_WORDS_PER_STATEMENT = 50
+# checks["results"] when there was no time for a Results section; the page
+# tells this apart from a section that failed its checks by "time budget".
+RESULTS_OUT_OF_TIME = "no Results section: the time budget was spent"
 
 HEARTBEAT_SECONDS = 60
 
@@ -402,7 +405,7 @@ def _model_walk(walker, tag, card_text, client, writer, report, halt_if_cancelle
             results = None
         timings["narrate"] = round(time.time() - t0, 1)
     elif statements:
-        checks["results"] = ["no Results section: the time budget was spent"]
+        checks["results"] = [RESULTS_OUT_OF_TIME]
     timings["total"] = round(time.time() - started, 1)
     return walker, statements, dropped, results, papers
 
@@ -505,12 +508,21 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             checks["jargon_sentences_dropped"] = checks.get("jargon_sentences_dropped", 0) + jargon
         return verify.verify_results(results, statements, dropped, walker, kind, words)
 
-    results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, deadline=deadline)
+    try:
+        results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, deadline=deadline)
+    except narrate_mod.OutOfTime:
+        # Not "no results": the page would say the section failed its checks.
+        checks["results"] = [RESULTS_OUT_OF_TIME]
+        return None
     problems = checked(results)
     if problems and results is not None and (deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
-        results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, objections=problems,
-                                      deadline=deadline)
-        problems = checked(results)
+        try:
+            results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
+                                          objections=problems, deadline=deadline)
+            problems = checked(results)
+        except narrate_mod.OutOfTime:
+            # The draft failed its checks; the time to repair it ran out.
+            problems = problems + ["no time was left to repair it"]
     checks["results"] = problems
     if problems:
         checks["results_dropped"] = results
