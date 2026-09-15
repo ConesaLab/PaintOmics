@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -272,8 +273,12 @@ def _pct(stage, walker=None):
 
 
 def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mongo=True,
-        progress=None, card_override=None, cancelled=None):
+        progress=None, card_override=None, cancelled=None, permutation=None):
     """The whole pipeline. Returns (record, network, graph, tag).
+
+    ``permutation`` (an integer seed) runs the pipeline on the job with its
+    measurements moved among the measured nodes of the walked graph -- the
+    null of check 1, used by the offline harness only.
 
     ``progress(stage, percent, detail, walker)`` is called at every stage and
     after every walker turn; it must not raise into the walk.
@@ -311,6 +316,9 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     t0 = time.time()
     report("network", "Reading the network and laying the job's values over it")
     network, graph, ov, tag, anchor, dist = build(job, scope, data_dir, use_mongo, card, aliases)
+    if permutation is not None:
+        ov = null_mod.permute_flags(graph, ov, random.Random(permutation))
+        checks["permutation"] = permutation
     timings["build"] = round(time.time() - t0, 1)
     checks["anchor"] = anchor
     halt_if_cancelled()

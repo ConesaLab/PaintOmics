@@ -1,9 +1,10 @@
 """Check 1 at request time: is the walk more than the graph would give any job?
 
 A permutation test of the DATA, not of the model: the scripted greedy walker
-runs once on the real relevant flags and fifty times on flags permuted over
-the measured nodes of the walked graph (a permuted job is one whose
-measurements landed on other genes; heat is recomputed each time). Two
+runs once on the real relevant flags and fifty times on measurements
+permuted over the measured nodes of the walked graph (a permuted job is one
+whose measurements landed on other genes: flag, values and direction move
+together; heat is recomputed each time). Two
 statistics per run: how many *modules* the walker found and the mean heat
 of the seeds it chose. A module is one stretch of the chain between jumps
 that holds at least three relevant walked nodes and whose signed legs agree
@@ -18,6 +19,7 @@ from __future__ import annotations
 import copy
 import random
 import statistics
+from collections import OrderedDict
 
 from src.classes.AIInterpret.walker import heat as heat_mod
 from src.classes.AIInterpret.walker import policies
@@ -30,13 +32,18 @@ ALPHA = 0.05
 
 
 def permute_flags(graph, overlay, rng):
-    """A shallow copy of the overlay whose relevant flags are permuted over the
-    measured nodes; heat recomputed on ``graph``. K is unchanged by construction."""
+    """A shallow copy of the overlay whose measured nodes have exchanged their
+    measurements: each node receives a donor node's relevant flag AND its
+    layers, so a node's direction travels with its flag (a permuted job is
+    one whose measurements landed on other genes; a flag without its values
+    would leave the null's relevant nodes directionless and no module could
+    form in it). Heat recomputed on ``graph``. K is unchanged by construction."""
     ov = copy.copy(overlay)
     nodes = sorted(overlay.measured)
-    flags = [bool(overlay.r.get(v)) for v in nodes]
-    rng.shuffle(flags)
-    ov.r = dict(zip(nodes, flags))
+    donors = list(nodes)
+    rng.shuffle(donors)
+    ov.r = {v: bool(overlay.r.get(d)) for v, d in zip(nodes, donors)}
+    ov.layers = OrderedDict((v, overlay.layers.get(d, [])) for v, d in zip(nodes, donors))
     ov.heat = heat_mod.compute_heat(graph, ov.measured, ov.r)
     ov.K = sum(1 for v in nodes if ov.r[v])
     return ov

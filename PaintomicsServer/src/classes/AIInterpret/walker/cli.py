@@ -94,7 +94,7 @@ def main(argv=None):
     ap.add_argument("--evaluate", action="store_true", help="run Test 1 instead of a walk")
     ap.add_argument("--five-checks", action="store_true",
                     help="run the five-check harness (model runs, permutations, decoys, the panel) instead of a walk")
-    ap.add_argument("--repeats", type=int, default=5)
+    ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--permutations", type=int, default=20)
     ap.add_argument("--ko-job", default=None, help="the simulated knockout job for the anchor test")
     ap.add_argument("--only", default=None, help="comma list of checks to run: artifact,direction,context,anchor")

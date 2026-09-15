@@ -197,10 +197,11 @@ step lands in or next to the module in at least 93 percent of plants; the script
 recall of a 12-node module at a 0.33 background rate is about 0.4, which is the baseline the
 model policy is measured against.
 
-The five checks are measured offline as well, five times at the production temperatures
+The five checks are measured offline as well, three times at the production temperatures
 so the guarantees hold across the model's own variation, and every number is reported as
-a range: twenty whole-pipeline runs on permuted data against five on the real data
-(statements kept, modules found); the title gate's first-draft violations; a panel of
+a range: twenty whole-pipeline runs on permuted data (the measured nodes of the walked
+graph exchange their measurements) against three on the real data (statements kept,
+modules found); the title gate's first-draft violations; a panel of
 forty-one regulators in constructed statements, both classes above 90 percent with the
 injected sign flips flagged; fifty-six hand-labelled papers against the MeSH reading and
 twenty constructed paper pairs; and Ikzf1-anchored network walks against a decoy factor

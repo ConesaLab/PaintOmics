@@ -183,10 +183,23 @@ def direction_check(client, statements, walker):
                     "which way they point" % hit["gene"])
             if fit is not None and not fit["consistent"] and verdict["consistent"]:
                 verdict["consistent"] = False
+                verdict["fit_note"] = fit.get("note") or ""
                 objections.setdefault(stmt["n"], []).append(
                     "the statement does not follow from %s's values: %s" % (hit["gene"], fit["note"]))
             verdicts.setdefault(stmt["n"], []).append(verdict)
     return verdicts, objections
+
+
+def _reason(v):
+    """One verdict's failure in words: a reversed reading, a claim against the
+    implied direction, or a claim in the right direction that the values do
+    not support (the fit step)."""
+    if v["insensitive"]:
+        return "reads the same with the values reversed"
+    if v["claimed"] != v["implied"]:
+        return "the statement claims %s where %s implies %s" % (v["claimed"], v["gene"], v["implied"])
+    note = v.get("fit_note") or ""
+    return "the statement does not follow from %s's values%s" % (v["gene"], ": " + note if note else "")
 
 
 def gate(verdicts, dropped):
@@ -201,7 +214,5 @@ def gate(verdicts, dropped):
            "insensitive": insensitive, "dropped": dropped, "why": ""}
     if not out["pass"]:
         bad = [v for v in rows if not v["consistent"] or v["insensitive"]]
-        out["why"] = "; ".join("%s (%s): %s" % (
-            v["gene"], v["pathway"], "reads the same with the values reversed" if v["insensitive"]
-            else "the statement claims %s where %s implies %s" % (v["claimed"], v["gene"], v["implied"])) for v in bad)
+        out["why"] = "; ".join("%s (%s): %s" % (v["gene"], v["pathway"], _reason(v)) for v in bad)
     return out

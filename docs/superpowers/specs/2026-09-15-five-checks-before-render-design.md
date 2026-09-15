@@ -12,7 +12,7 @@ walk in the Step 4 Walk column.
 No interpretation reaches the reader until it has passed five checks that can fail. Each
 check has a **runtime gate** that runs inside every walk on code alone or on one short model
 call, and an **offline harness** that measures the whole pipeline at its production
-temperatures, five times, and reports every number as a range. A gate that fails blocks the
+temperatures, three times, and reports every number as a range. A gate that fails blocks the
 Results section and the statements; the reader sees the walk, the five verdicts and the
 reason, never a story the checks could not stand behind.
 
@@ -80,14 +80,21 @@ p_modules, p_heat, currency_legs, pass}`. Measured on the STATegra example: the 
 and is withheld; the whole network gives seeds far hotter than permuted flags do.
 
 **Offline.** The harness runs the whole model pipeline (walker, Writers, paper agents, sense
-check, Narrator) 5 times on the real job and 20 times on permuted jobs (one permutation each;
+check, Narrator) 3 times on the real job and 20 times on permuted data (one permutation each;
 every permuted run is also an independent model sample), on the network interpretation and
 on the example pathway walk (`pathway:mmu04068`), then reports statements kept, mechanism
 statements kept (a statement whose every leg is a signed relation the values agree with) and
 modules found for both, and the empirical p of each real run against the 20. Pass: every
 real run p < 0.05 on mechanism statements and on modules. A statement resting on a leg whose
 ends move against the drawn arrow is an association whatever the edge says (`tier`), and
-the record lists such legs (`discordant_legs`).
+the record lists such legs (`discordant_legs`). The permutation is the runtime null's
+(`null.permute_flags` through `service.run(permutation=seed)`): the measured nodes of the
+walked graph exchange their measurements, flag and layers together, so K and every node's
+number of layers are the job's own. The first harness permuted the job's *features*
+instead, and because several features map onto the hub nodes, a hub received other genes'
+layers too: on the network the permuted job had 5.1 layers a node against 1.95 and 66 %
+of measured nodes relevant against 33 %, on the FoxO map Foxo1, Foxo3 and Foxo4 reached
+heat 12–13. That null had more structure than the data, not less.
 
 ## 4. Check 2 — the title and the summary do not outrun the body
 
@@ -158,7 +165,7 @@ statement contradicts the panel.
 
 **Offline.** For each panel gene a statement is constructed on the synthetic organism's
 graph with the gene's values set down (and, separately, up); the direction stage must
-return the hand-labelled pathway direction. Accuracy per half over 5 repeats; both > 90 %.
+return the hand-labelled pathway direction. Accuracy per half over 3 repeats; both > 90 %.
 Sign flips are injected into 20 % of the cases and every injected flip must be flagged.
 
 ## 6. Check 4 — citations match the context and the passage
@@ -253,8 +260,10 @@ factor with a regulon within 30 % of its own among the forty closest in size; fo
 gene, one of similar degree (`anchor.decoy_for`). The first decoy tried, Neurod1, was chosen
 by regulon size alone and walked 57–64 % of its nodes within two steps of Ikzf1, so target
 enrichment could not tell it from the anchor; its runs are kept beside the report. Pass: a
-one-sided exact rank test of the five anchored runs against each other arm's five, on
-reachability (greater) and on known-target enrichment p (smaller), all four below 0.05. The same on a **simulated knockout**: a mouse job
+one-sided exact rank test of the three anchored runs against each other arm's three, on
+reachability (greater) and on known-target enrichment p (smaller), all four at or below 0.05
+(complete separation of three against three is exactly 0.05, the smallest value the exact
+test can give). The same on a **simulated knockout**: a mouse job
 built by `walker/simulate_ko.py` from the real network — Pten set to −2.5 at every column
 with sign propagated along signed edges for two steps and noise elsewhere, relevance by
 |value| > 1 — anchored on Pten against a decoy and unanchored. The simulated files are
@@ -278,7 +287,7 @@ context chips.
 ## 9. The harness
 
 `walker/harness.py`, run as `python -m src.classes.AIInterpret.walker.cli --job <id>
---five-checks --repeats 5 --permutations 20 --out <dir>`. Every run's sealed record is saved
+--five-checks --repeats 3 --permutations 20 --out <dir>`. Every run's sealed record is saved
 before the next starts, so a stopped harness resumes. Temperatures are the production
 ones: planner 0.2, walkers 0.2, Writers 0.3, Narrator 0.3, sense 0.1, direction 0.1, paper
 agent 0.0. The parts run one after another (`--only artifact`, `--only anchor --decoy

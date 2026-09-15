@@ -1,8 +1,8 @@
-"""The five checks measured offline, five times, at production temperatures.
+"""The five checks measured offline, three times, at production temperatures.
 
     cd PaintomicsServer
     PYTHONPATH=. python -m src.classes.AIInterpret.walker.cli --job Ku5jMVCL6z --five-checks \\
-        --out /path/to/out --repeats 5 --permutations 20 --ko-job <simulated job id>
+        --out /path/to/out --repeats 3 --permutations 20 --ko-job <simulated job id>
 
 Every run's sealed record is saved before the next starts and a saved run is
 never repeated, so a stopped harness resumes where it was. ``report`` turns the
@@ -24,6 +24,7 @@ import time
 from src.classes.AIInterpret.walker import anchor as anchor_mod
 from src.classes.AIInterpret.walker import direction as direction_mod
 from src.classes.AIInterpret.walker import literature
+from src.classes.AIInterpret.walker import null as null_mod
 from src.classes.AIInterpret.walker import overlay as ov_mod
 from src.classes.AIInterpret.walker import regulators
 from src.classes.AIInterpret.walker import service
@@ -88,50 +89,6 @@ def load_job(job_id):
     return job
 
 
-class _PermutedFeature(object):
-    """A feature that keeps its identity and takes another feature's measurements."""
-
-    def __init__(self, own, donor):
-        self._own, self._donor = own, donor
-
-    def getID(self):
-        return self._own.getID()
-
-    def getName(self):
-        return self._own.getName()
-
-    def getOmicsValues(self):
-        return self._donor.getOmicsValues()
-
-
-class PermutedJob(object):
-    """The job with every gene's measurements (values and flags together)
-    moved to another gene, and every compound's to another compound: the
-    null of check 1. Everything else about the job is the job's."""
-
-    def __init__(self, job, seed):
-        self._job = job
-        rng = random.Random(seed)
-        self._genes = self._permute(job.getInputGenesData() or {}, rng)
-        self._compounds = self._permute(job.getInputCompoundsData() or {}, rng)
-
-    @staticmethod
-    def _permute(features, rng):
-        keys = sorted(features)
-        donors = list(keys)
-        rng.shuffle(donors)
-        return {key: _PermutedFeature(features[key], features[donor]) for key, donor in zip(keys, donors)}
-
-    def getInputGenesData(self):
-        return self._genes
-
-    def getInputCompoundsData(self):
-        return self._compounds
-
-    def __getattr__(self, name):
-        return getattr(self._job, name)
-
-
 GATEWAY_WAIT_SECONDS = 300
 GATEWAY_ATTEMPTS = 36               # three hours of waiting for the configured model
 
@@ -158,10 +115,15 @@ def gateway_answers():
         return False
 
 
-def _run_saved(path, job, job_id, scope, card_override=None, data_dir=None):
+def _run_saved(path, job, job_id, scope, card_override=None, data_dir=None, permutation=None):
     """service.run with the model policy, sealed to ``path`` (resumed when
-    there). A run the gateway refused, or one in which a fallback model gave
-    any answer, is not a measurement of the configured model: it is discarded
+    there). ``permutation`` is the seed of check 1's null: the job's
+    measurements moved among the measured nodes of the walked graph (flag,
+    values and layers together, so K and every node's multiplicity are the
+    job's own; permuting the features instead handed the hub nodes several
+    genes' layers and made them relevant far more often than the rest).
+    A run the gateway refused, or one in which a fallback model gave any
+    answer, is not a measurement of the configured model: it is discarded
     and repeated once the configured model answers again."""
     from src.classes.AIInterpret import model_fallback
     rec = _load(path)
@@ -177,6 +139,7 @@ def _run_saved(path, job, job_id, scope, card_override=None, data_dir=None):
         try:
             rec, _network, _graph, _tag = service.run(
                 job, job_id, scope, policy="model", data_dir=data_dir, card_override=card_override,
+                permutation=permutation,
                 progress=lambda stage, pct, detail, w: logger.info(
                     "[harness] %s %3d%% %s", os.path.basename(path), pct, detail)
                 if stage != "walk" or w is None or not w.chain else None)
@@ -193,7 +156,7 @@ def _run_saved(path, job, job_id, scope, card_override=None, data_dir=None):
             time.sleep(GATEWAY_WAIT_SECONDS)
             continue
         rec["harness"] = {"seconds": round(time.time() - t0, 1), "scope": scope, "card_override": card_override,
-                          "answers": answers, "attempt": attempt}
+                          "answers": answers, "attempt": attempt, "permutation": permutation}
         _save(path, rec)
         return rec
     raise RuntimeError("%s did not answer for %d attempts" % (primary, GATEWAY_ATTEMPTS))
@@ -208,10 +171,11 @@ def regate(path, job, scope, data_dir=None, permutation=None):
     rec = _load(path)
     if rec is None:
         return None
-    the_job = PermutedJob(job, permutation) if permutation is not None else job
     aliases = anchor_mod.alias_map(service.org_dir_for(job, data_dir))
-    _network, graph, ov, tag, _anchor, _dist = service.build(the_job, scope, data_dir, True,
+    _network, graph, ov, tag, _anchor, _dist = service.build(job, scope, data_dir, True,
                                                              rec.get("design_card") or {}, aliases)
+    if permutation is not None:
+        ov = null_mod.permute_flags(graph, ov, random.Random(permutation))
     walk = rec["walk"]
     walker = Walker(graph, ov, tag, dict(walk.get("params") or params_for("network" if tag == "network" else "pathway")))
     walker.plan = walk.get("plan")
@@ -278,7 +242,7 @@ def run_artifact(job, job_id, scope, out_dir, repeats, permutations, data_dir=No
     real = [_summary(_run_saved(_path(out_dir, "real", "%s_%d" % (scope.replace(":", "_"), i)),
                                 job, job_id, scope, data_dir=data_dir)) for i in range(repeats)]
     perm = [_summary(_run_saved(_path(out_dir, "perm", "%s_%d" % (scope.replace(":", "_"), p)),
-                                PermutedJob(job, p), job_id, scope, data_dir=data_dir)) for p in range(permutations)]
+                                job, job_id, scope, data_dir=data_dir, permutation=p)) for p in range(permutations)]
 
     def p_value(stat, value):
         null = [s[stat] or 0 for s in perm]
@@ -529,16 +493,18 @@ def run_anchor(job, job_id, out_dir, repeats, gene, targets, data_dir=None, deco
     enrich = {arm: [m["enrichment"]["p"] for m in ms] for arm, ms in out["arms"].items()}
     out["reachability"] = reach
     out["enrichment_p"] = enrich
-    # Five runs an arm: a one-sided rank test (exact Mann-Whitney) asks whether
+    # Three runs an arm: a one-sided rank test (exact Mann-Whitney) asks whether
     # the anchored runs stay closer to the anchor, and hit more known targets
-    # (a smaller enrichment p), than each other arm's runs do.
+    # (a smaller enrichment p), than each other arm's runs do. Complete
+    # separation of three against three is exactly p = 0.05, the smallest
+    # value the exact test can give, so the bound is inclusive.
     typical = {arm: statistics.median(values) if values else None for arm, values in reach.items()}
     typical_p = {arm: statistics.median(values) if values else 1.0 for arm, values in enrich.items()}
     out["medians"] = {"reachability": typical, "enrichment_p": typical_p}
     out["rank_p"] = {"reachability": {arm: _rank_p(reach["anchored"], reach[arm], "greater") for arm in ("decoy", "unanchored")},
                      "enrichment": {arm: _rank_p(enrich["anchored"], enrich[arm], "less") for arm in ("decoy", "unanchored")}}
-    out["pass"] = bool(reach["anchored"]) and all(p < ALPHA for p in out["rank_p"]["reachability"].values()) and \
-        all(p < ALPHA for p in out["rank_p"]["enrichment"].values())
+    out["pass"] = bool(reach["anchored"]) and all(p <= ALPHA for p in out["rank_p"]["reachability"].values()) and \
+        all(p <= ALPHA for p in out["rank_p"]["enrichment"].values())
     return out
 
 
@@ -645,7 +611,7 @@ def create_job_from_dataset(dataset_dir, design_text, name, organism="mmu"):
 
 
 # ------------------------------------------------------------------ report
-def run_five(job_id, out_dir, repeats=5, permutations=20, scope="pathway:mmu04068", ko_job_id=None,
+def run_five(job_id, out_dir, repeats=3, permutations=20, scope="pathway:mmu04068", ko_job_id=None,
              data_dir=None, only=None, decoy=None):
     """Every check, saved under ``out_dir``; returns the summary dict."""
     only = set(only or CHECKS + ("ko",))

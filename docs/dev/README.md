@@ -20,6 +20,7 @@ experience; not enforced by code)*.
 | [deployment.md](deployment.md) | How a merged change reaches the public instance, and how to confirm it arrived |
 | [ci.md](ci.md) | What each workflow checks, what a green tick proves, and how to reproduce a failure locally |
 | [troubleshooting.md](troubleshooting.md) | The traps, each with the symptom, how it was diagnosed, and what to do |
+| [tellme-five-checks.md](tellme-five-checks.md) | How the five gates on a walk interpretation were measured, what they measured, and how to run the harness again |
 
 ## What this project is
 

@@ -129,6 +129,24 @@ class DirectionTest(unittest.TestCase):
         verdicts, objections = direction.direction_check(StubClient("down"), [stmt], walker)
         self.assertIn("reports the pathway up, not down", objections[1][0])
 
+    def test_a_right_direction_the_values_do_not_support_is_named_as_such(self):
+        # claimed and implied agree (down), but the statement says the gene rose
+        # while its values fell: the fit step fails and the reason must say so,
+        # not "claims down where the gene implies down"
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        stmt = self.statement(symbol, "%s rose to +2.00, so the pathway is less active" % symbol)
+        verdicts, objections = direction.direction_check(StubClient("down"), [stmt], walker)
+        verdict = verdicts[1][0]
+        self.assertEqual((verdict["implied"], verdict["claimed"]), ("down", "down"))
+        self.assertFalse(verdict["consistent"])
+        self.assertFalse(verdict["fits"])
+        self.assertIn("does not follow from %s's values" % symbol, objections[1][0])
+        gate = direction.gate(verdicts, 0)
+        self.assertFalse(gate["pass"])
+        self.assertIn("does not follow from %s's values: rose vs values" % symbol, gate["why"])
+        self.assertNotIn("claims down where", gate["why"])
+
     def test_a_statement_that_fits_any_values_is_flagged(self):
         symbol = self.feedback["symbol"]
         walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
