@@ -392,8 +392,7 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
         result["elapsedMs"] = int((time.monotonic() - started) * 1000)
         return result
 
-    ownLookup = lookup is None and installed is None
-    if ownLookup:
+    if lookup is None and installed is None:
         lookup = openLookup()
         if lookup is None:
             result.update(success=False, elapsedMs=int((time.monotonic() - started) * 1000))
@@ -471,12 +470,15 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
                       method="lookup" if scored else None)
         return result
     finally:
+        # The client is the PROCESS's, not this call's -- never close it here.
+        # Closing it after each request is what this used to do, from when
+        # openLookup() built one per call, and it survived every local test
+        # because the development environment carries pymongo 3.11, where
+        # close() merely disconnects and the next operation reconnects. Both
+        # deployments carry pymongo 4.x, where the second request onwards gets
+        #     InvalidOperation: Cannot use MongoClient after close
+        # so the hint answered success:false for the life of the worker.
         result["elapsedMs"] = int((time.monotonic() - started) * 1000)
-        if ownLookup and lookup is not None:
-            try:
-                lookup.client.close()
-            except Exception:
-                pass
 
 
 # --- Wording shared by the form hint and the failure message ----------------
