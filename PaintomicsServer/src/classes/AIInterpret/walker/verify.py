@@ -57,7 +57,7 @@ RESULTS_WORDS = {"pathway": (150, 450), "network": (300, 900)}
 # microtubule, so bare "seed", "jump" and "walk" are left to the prompts.
 JARGON_RE = re.compile(r"\b(clusters?|the walk(?:er)?|(?:a|an|the|this|our|each) (?:network|graph|pathway) walk(?:er)?s?"
                        r"|via a jump|jump(?:s|ed|ing)? (?:to|from|back)"
-                       r"|seed nodes?|seed mirnas? (?:[a-z]{3}-)?(?:mir|let)-)", re.I)
+                       r"|seed nodes?|seed mirnas? (?:[a-z]{3}-)?(?:mir|let)-)\b", re.I)
 
 
 def chain_nodes(chain):

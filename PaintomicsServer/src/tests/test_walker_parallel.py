@@ -476,7 +476,8 @@ class WordingAndRecordTest(_Fixture):
         # Writer's statement narrated the walk without saying "the walk".
         biology = ("Its seed region pairs with the Prkcz 3' UTR. Seed storage proteins accumulate late. "
                    "Seed miRNAs regulate dormancy. Kinesin-1 walks along the microtubule. "
-                   "Myosin V walked from one actin filament to the next.")
+                   "Myosin V walked from one actin filament to the next. Clusterin (Clu) rose late. "
+                   "Metagene clustering grouped the clustered genes. The walkway protein is unrelated.")
         results = {"title": "Results", "paragraphs": [], "summary": (
             "A network walk from the seed miRNA miR-151-3p reveals a repression module. "
             "The seed miRNA mmu-miR-3074-1-3p falls. " + biology)}
