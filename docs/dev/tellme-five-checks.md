@@ -131,8 +131,11 @@ on the heat rule. Legs through a currency metabolite: 0 in every run.
 ### 2 · The title fits the body — pending
 
 Measured from the first Narrator drafts of the real runs of check 1; reported with it. Of
-the three sealed pathway runs, one first draft outran the body ("Ikaros time course rewires
-FoxO signalling…") and was replaced by the neutral title; the other two passed.
+the three sealed pathway runs, two first drafts outran the body ("drives" and "shut down" said
+of the perturbation with no mechanism statement at the anchor), were sent back once and then
+replaced by the neutral title "FoxO signaling pathway: what changed after Ikzf1
+perturbation"; the third ("Ikaros time course rewires FoxO signalling…") rested on a
+mechanism statement and stood.
 
 ### 3 · Direction logic — pending
 
