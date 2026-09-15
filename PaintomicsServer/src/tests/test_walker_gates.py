@@ -123,6 +123,17 @@ class GatesOnARunTest(unittest.TestCase):
         self.assertIn("currency metabolite", gate["why"])
 
 
+class AnswerCountTest(unittest.TestCase):
+    def test_every_answer_is_counted_per_model(self):
+        from src.classes.AIInterpret import model_fallback
+        before = model_fallback.ANSWERS.get(("http://x", "m"), 0)
+        model_fallback.mark_down("http://x", "m", "boom")
+        model_fallback.mark_up("http://x", "m")
+        model_fallback.mark_up("http://x", "m")
+        self.assertEqual(model_fallback.ANSWERS[("http://x", "m")], before + 2)
+        self.assertFalse(model_fallback.is_down("http://x", "m"))
+
+
 class ContextGateTest(unittest.TestCase):
     def test_the_gate_counts_qualified_and_unqualified_citations(self):
         papers = {1: {"context": {"organism": "mouse", "system": "B-Lymphocytes",

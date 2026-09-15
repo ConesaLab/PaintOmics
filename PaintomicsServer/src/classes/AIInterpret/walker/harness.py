@@ -132,20 +132,71 @@ class PermutedJob(object):
         return getattr(self._job, name)
 
 
+GATEWAY_WAIT_SECONDS = 300
+GATEWAY_ATTEMPTS = 36               # three hours of waiting for the configured model
+
+
+def _primary():
+    provider = service.AI_PROVIDERS[service.AI_LLM_PROVIDER]
+    return provider["api_base"].rstrip("/"), provider["model"], provider.get("api_key", "")
+
+
+def gateway_answers():
+    """Whether the CONFIGURED model answers a one-token request now. The
+    fallback ladder keeps production alive when it does not, but a harness
+    run answered by another model measures another model."""
+    import requests
+    api_base, model, key = _primary()
+    try:
+        reply = requests.post(api_base + "/chat/completions", timeout=60,
+                              headers={"Authorization": "Bearer %s" % key, "Content-Type": "application/json"},
+                              json={"model": model, "messages": [{"role": "user", "content": "Say ok."}],
+                                    "max_tokens": 3})
+        return reply.status_code == 200 and bool((reply.json().get("choices") or [{}])[0].get("message"))
+    except Exception as exc:                                          # noqa: BLE001
+        logger.warning("[harness] gateway probe failed: %s", exc)
+        return False
+
+
 def _run_saved(path, job, job_id, scope, card_override=None, data_dir=None):
-    """service.run with the model policy, sealed to ``path`` (resumed when there)."""
+    """service.run with the model policy, sealed to ``path`` (resumed when
+    there). A run the gateway refused, or one in which a fallback model gave
+    any answer, is not a measurement of the configured model: it is discarded
+    and repeated once the configured model answers again."""
+    from src.classes.AIInterpret import model_fallback
     rec = _load(path)
     if rec is not None:
         return rec
-    t0 = time.time()
-    rec, _network, _graph, _tag = service.run(job, job_id, scope, policy="model", data_dir=data_dir,
-                                              card_override=card_override,
-                                              progress=lambda stage, pct, detail, w: logger.info(
-                                                  "[harness] %s %3d%% %s", os.path.basename(path), pct, detail)
-                                              if stage != "walk" or w is None or not w.chain else None)
-    rec["harness"] = {"seconds": round(time.time() - t0, 1), "scope": scope, "card_override": card_override}
-    _save(path, rec)
-    return rec
+    _api_base, primary, _key = _primary()
+    for attempt in range(1, GATEWAY_ATTEMPTS + 1):
+        while not gateway_answers():
+            logger.warning("[harness] %s is not answering; waiting %d s", primary, GATEWAY_WAIT_SECONDS)
+            time.sleep(GATEWAY_WAIT_SECONDS)
+        before = dict(model_fallback.ANSWERS)
+        t0 = time.time()
+        try:
+            rec, _network, _graph, _tag = service.run(
+                job, job_id, scope, policy="model", data_dir=data_dir, card_override=card_override,
+                progress=lambda stage, pct, detail, w: logger.info(
+                    "[harness] %s %3d%% %s", os.path.basename(path), pct, detail)
+                if stage != "walk" or w is None or not w.chain else None)
+        except service.WalkError as exc:
+            logger.warning("[harness] %s refused (attempt %d): %s", os.path.basename(path), attempt, exc)
+            time.sleep(GATEWAY_WAIT_SECONDS)
+            continue
+        answers = {model: n - before.get((base, model), 0)
+                   for (base, model), n in model_fallback.ANSWERS.items() if n > before.get((base, model), 0)}
+        others = {model: n for model, n in answers.items() if model != primary}
+        if others:
+            logger.warning("[harness] %s discarded: %s answered %s call(s); repeating once %s is back",
+                           os.path.basename(path), ", ".join(others), sum(others.values()), primary)
+            time.sleep(GATEWAY_WAIT_SECONDS)
+            continue
+        rec["harness"] = {"seconds": round(time.time() - t0, 1), "scope": scope, "card_override": card_override,
+                          "answers": answers, "attempt": attempt}
+        _save(path, rec)
+        return rec
+    raise RuntimeError("%s did not answer for %d attempts" % (primary, GATEWAY_ATTEMPTS))
 
 
 def regate(path, job, scope, data_dir=None, permutation=None):
