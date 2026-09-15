@@ -247,9 +247,14 @@ passes when the run is anchored and reachability ≥ the unanchored baseline sto
 job, or when the design names no gene (then `not_applicable: true, pass: true`).
 
 **Offline.** Three network walks 5 times each on the example job: anchored on Ikzf1,
-anchored on a decoy TF with a regulon of similar size and no B-cell role (Hnf4a, or the
-nearest by regulon size), unanchored. Pass: every anchored run beats both others on
-reachability and on target enrichment. The same on a **simulated knockout**: a mouse job
+anchored on a decoy, unanchored. The decoy is a gene of the anchor's kind and size whose
+two-step neighbourhood shares the least with the anchor's: for a transcription factor, a
+factor with a regulon within 30 % of its own among the forty closest in size; for any other
+gene, one of similar degree (`anchor.decoy_for`). The first decoy tried, Neurod1, was chosen
+by regulon size alone and walked 57–64 % of its nodes within two steps of Ikzf1, so target
+enrichment could not tell it from the anchor; its runs are kept beside the report. Pass: a
+one-sided exact rank test of the five anchored runs against each other arm's five, on
+reachability (greater) and on known-target enrichment p (smaller), all four below 0.05. The same on a **simulated knockout**: a mouse job
 built by `walker/simulate_ko.py` from the real network — Pten set to −2.5 at every column
 with sign propagated along signed edges for two steps and noise elsewhere, relevance by
 |value| > 1 — anchored on Pten against a decoy and unanchored. The simulated files are
@@ -279,9 +284,11 @@ ones: planner 0.2, walkers 0.2, Writers 0.3, Narrator 0.3, sense 0.1, direction 
 agent 0.0. The parts run one after another (`--only artifact`, `--only anchor --decoy
 Neurod1`, `--only ko --ko-job <id>`, `--only direction,context`) because the gateway key is
 paced at about sixty requests a minute and one model walk already runs its agents in
-parallel; two harness parts at once produced 429 back-offs inside the stage deadlines. The
-decoy is Neurod1, a neuronal factor with 63 targets in the mouse network against Ikzf1's 50
-and no B-cell role. The simulated knockout is stored as a job by `cli --make-ko-job`. The
+parallel; two harness parts at once produced 429 back-offs inside the stage deadlines. A run
+the gateway refused, or one in which a fallback model answered, is discarded and repeated
+once the configured model answers (`model_fallback.ANSWERS` counts answers per model). The
+decoy is chosen by `anchor.decoy_for` (§7). The simulated knockout is stored as a job by
+`cli --make-ko-job`. The
 report (`docs/dev/tellme-five-checks.md`, generated) shows every metric as min–max over
 the repeats and the pass verdict per check, for the example job and for the simulated
 knockout.
