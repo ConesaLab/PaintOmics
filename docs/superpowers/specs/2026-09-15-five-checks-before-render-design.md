@@ -223,9 +223,16 @@ organism whose pathways never drew it. BFS from the anchor over the universal ne
 `distance` = the least distance of its walked nodes; the plan and the scan show `d=` next to
 each candidate.
 
-**The walk.** The planner's brief names the anchor, its direction and the candidates'
-distances, and says to start at the anchor's neighbourhood; `code_plan` orders candidates
-by (distance, −heat) when anchored. The header of the record (`checks.anchor`) is
+**The walk.** When anchored, the scan fills the seed-candidate slots first from the nodes
+within two steps of the anchor (hottest first, the same separation rule), then by heat for
+whatever slots remain, lists the candidates nearest first, and code refuses a plan whose
+first seed is not among the nearest; every neighbour a walker sees carries its distance.
+The planner's brief names the anchor and its direction and says to start there; `code_plan`
+orders candidates by (distance, −heat) when anchored. Measured on the example: telling the
+planner alone left the anchored walks no closer to Ikzf1 than the decoy's (0.26–0.32 against
+0.19–0.36 of walked nodes within two steps); reserving half the slots raised them to
+0.33–0.59 against the decoy's 0.32–0.42, a trend (rank p 0.08); the neighbourhood-first rule
+is what the harness measures. The header of the record (`checks.anchor`) is
 `{gene, node, direction, in_graph, source}`; the client shows “Perturbation: Ikzf1 induced
 (up) · anchor in the network” above the Results, and each module's distance in the plan and
 the legs list. Unanchored runs show “no perturbed gene named in the design”.

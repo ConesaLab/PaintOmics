@@ -92,12 +92,14 @@ def scan_graph(network, overlay, sep, limit, dist=None):
     r = 1, n >= 1, not a hub, not a currency metabolite, and not within
     ``sep`` edges of a hotter candidate.
 
-    Anchored (``dist`` = node -> steps from the perturbed gene): half the
-    candidate slots are filled first from the anchor's neighbourhood
-    (within ANCHOR_RADIUS steps, hottest first), the rest by heat over the
-    whole graph, and the candidates are listed nearest the anchor first, so
-    the walk starts where the perturbation acts and moves outward. Every row
-    carries its distance."""
+    Anchored (``dist`` = node -> steps from the perturbed gene): the candidate
+    slots are filled first from the anchor's neighbourhood (within
+    ANCHOR_RADIUS steps, hottest first, the same separation rule), then by
+    heat over the whole graph for whatever slots remain, and the candidates
+    are listed nearest the anchor first. A perturbation with a rich
+    neighbourhood is walked from that neighbourhood; one with a poor
+    neighbourhood is walked from it and then from the hottest nodes. Every
+    row carries its distance."""
     rows = []
     for node_id in network.nodes:
         if node_id not in overlay.measured:
@@ -129,7 +131,7 @@ def scan_graph(network, overlay, sep, limit, dist=None):
 
     if dist:
         near = [r for r in rows if r["dist"] is not None and r["dist"] <= ANCHOR_RADIUS]
-        take(near, max(1, limit // 2))
+        take(near, limit)
     take(rows, limit)
     if dist:
         far = 10 ** 6
