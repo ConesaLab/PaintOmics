@@ -42,6 +42,12 @@ minutes, usually in about five.
 
 ## What the result contains
 
+* **The header and the five checks:** the perturbation the design named ("Ikzf1,
+  induced (up) · anchored in the network") and five chips, one per check the walk must
+  pass before anything below is shown -- not a graph artifact, title fits the body,
+  direction logic, citations in context, anchored to the perturbation. Hover a chip for
+  its numbers. When a check fails, its reason is printed, the Results and the statements
+  are withheld, and only the walk itself is shown; see [How the walk works](ai-graph-walk.md).
 * **The Results section:** a title, a one-sentence summary, and one paragraph per
   kept statement in the order the walk found them. Each paragraph ends with chips
   for the legs it rests on. Numbers in brackets such as `[1]` link to the papers
@@ -50,12 +56,14 @@ minutes, usually in about five.
   passage the citation rests on, in the paper's own words, with where it sits:
   the abstract, or the part of the main text (results, discussion, introduction).
   Hover over a `[1]` in the text to read its passage without scrolling.
-* **The statements** that passed the checks. Each one separates what the pathway
+* **The statements** that passed the checks, each marked *mechanism* (it rests on
+  signed, directed relations only) or *association*. Each one separates what the pathway
   already draws (cited as a leg) from what goes beyond it (a paper the writer
   read, or a hypothesis worded as one). Dropped statements are listed with the
   reason.
 * **The walk itself:** every leg, the edge it followed and the database and
-  pathway that draw it, and the reading the agent gave at that stop.
+  pathway that draw it, the reading the agent gave at that stop, and each module's
+  distance from the perturbed gene.
 
 Every quoted value, every leg and every citation is checked before you see it.
 A citation is kept only when an agent reading the paper found the passage that

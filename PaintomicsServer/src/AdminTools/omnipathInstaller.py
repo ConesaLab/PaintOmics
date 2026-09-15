@@ -54,10 +54,35 @@ orthology translations of the human table, so a translated row keeps its
 source literature, and aligning the two tables on that provenance recovers the
 ortholog pairs OmniPath actually used. See ``derive_ortholog_map``.
 
+Transcription-factor targets
+----------------------------
+A second, independent product of this installer is a flat file of signed
+TF -> target edges, ``current/<code>/mapping/tf_targets.tsv``. It is *not* a
+pathway and is not written to MongoDB: it is a regulatory prior keyed on the
+organism's own gene symbols, so a downstream reader can ask "which
+transcription factors are reported to regulate this gene" without a network
+layout or an identifier conversion. Three sources are merged, each row keeping
+the name of the one it came from:
+
+  * ``CollecTRI`` -- OmniPath's ``collectri`` dataset for the organism itself;
+  * ``CollecTRI-human`` -- the human CollecTRI table carried across to a
+    non-human organism by gene-symbol identity, resolved through the KEGG
+    ``kegg2genesymbol.list`` alias table (so ``IKAROS`` finds ``Ikzf1``). A
+    symbol that the organism's table does not know is dropped, not guessed;
+  * ``TRRUST`` -- the raw TRRUST v2 table, published for human and mouse only.
+
+The sources deliberately stay separate rather than being collapsed into one
+consensus edge: a row is deduplicated on ``(tf, target, source)`` and a reader
+that wants "confirmed by two resources" can count sources per pair itself.
+``--tf-targets`` writes only this file; a normal install writes it last and
+treats a failure there as a warning, because the pathway install is complete
+without it.
+
 Usage
 -----
     python src/AdminTools/omnipathInstaller.py --organism mmu
     python src/AdminTools/omnipathInstaller.py --organism hsa --dry-run
+    python src/AdminTools/omnipathInstaller.py --organism mmu --tf-targets
 """
 
 import argparse
@@ -128,6 +153,28 @@ MIN_CANVAS = 640
 _HTTP_TIMEOUT = 300
 _HTTP_RETRIES = 3
 
+#: OmniPath dataset holding the CollecTRI transcriptional regulon collection.
+TF_DATASET = "collectri"
+
+#: TRRUST v2 raw tables, by organism code. The resource is published for exactly
+#: these two organisms; every other code gets no TRRUST rows rather than a 404.
+TRRUST_URLS = {
+    "hsa": "https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv",
+    "mmu": "https://www.grnpedia.org/trrust/data/trrust_rawdata.mouse.tsv",
+}
+#: grnpedia.org is a small academic host: a 220 kB table can take tens of
+#: seconds, but a five-minute wait would only hide an outage.
+_TRRUST_TIMEOUT = 120
+
+#: Column names of the TF-target file, in order.
+TF_TARGET_COLUMNS = ("tf", "target", "sign", "source", "references")
+TF_TARGET_FILENAME = "tf_targets.tsv"
+
+#: The three-way causal sign as the TF-target file stores it: +1 activation,
+#: -1 repression, 0 unknown or contradictory.
+_SIGN_CODES = {"stimulation": 1, "inhibition": -1, "unsigned": 0}
+_TRRUST_SIGNS = {"Activation": 1, "Repression": -1}
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("omnipath")
 
@@ -144,31 +191,39 @@ def _fetch(path, params):
     web page into this project's MongoDB, so status alone is not trusted.
     """
     url = "%s/%s?%s" % (BASE_URL, path, urllib.parse.urlencode(params))
-    last_error = None
+    body = _get(url)
 
+    stripped = body.lstrip()
+    if stripped[:1] == "<":
+        raise RuntimeError(
+            "%s returned markup, not data (first 120 chars: %r)"
+            % (url, stripped[:120]))
+    if stripped.startswith("==>"):
+        # The service reports bad arguments in the body with a 200 status.
+        raise RuntimeError("%s rejected the request: %s" % (url, stripped[:200]))
+    if "\t" not in body.split("\n", 1)[0]:
+        raise RuntimeError(
+            "%s did not return a TSV header (got %r)" % (url, body[:120]))
+    return body
+
+
+def _get(url, timeout=_HTTP_TIMEOUT):
+    """GET ``url`` with retries and return its body decoded as UTF-8.
+
+    Transport errors (DNS, refused connection, timeout) are retried with a
+    growing pause; anything else propagates. Callers validate the body -- what
+    counts as a good answer differs between omnipathdb.org and grnpedia.org.
+    """
+    last_error = None
     for attempt in range(1, _HTTP_RETRIES + 1):
         try:
-            with urllib.request.urlopen(url, timeout=_HTTP_TIMEOUT) as response:
-                body = response.read().decode("utf-8", errors="replace")
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                return response.read().decode("utf-8", errors="replace")
         except (urllib.error.URLError, OSError) as error:      # network/DNS/timeout
             last_error = error
             logger.warning("attempt %d/%d failed for %s: %s",
-                           attempt, _HTTP_RETRIES, path, error)
+                           attempt, _HTTP_RETRIES, url, error)
             time.sleep(2 * attempt)
-            continue
-
-        stripped = body.lstrip()
-        if stripped[:1] == "<":
-            raise RuntimeError(
-                "%s returned markup, not data (first 120 chars: %r)"
-                % (url, stripped[:120]))
-        if stripped.startswith("==>"):
-            # The service reports bad arguments in the body with a 200 status.
-            raise RuntimeError("%s rejected the request: %s" % (url, stripped[:200]))
-        if "\t" not in body.split("\n", 1)[0]:
-            raise RuntimeError(
-                "%s did not return a TSV header (got %r)" % (url, body[:120]))
-        return body
 
     raise RuntimeError("%s unreachable after %d attempts: %s"
                        % (url, _HTTP_RETRIES, last_error))
@@ -645,6 +700,252 @@ def _pathway_id(resource, name):
 
 
 # ---------------------------------------------------------------------------
+# Transcription-factor targets
+# ---------------------------------------------------------------------------
+
+def fetch_tf_targets(taxid):
+    """Return CollecTRI TF -> target rows for one taxid.
+
+    Each row is ``{"tf", "target", "sign", "source", "references"}`` with the
+    gene symbols OmniPath reports for that organism, ``sign`` an int in
+    {+1, -1, 0} and ``source`` the literal ``"CollecTRI"``. Self-loops and rows
+    missing either symbol are dropped: a TF file keyed on symbols cannot
+    represent them.
+    """
+    body = _fetch("interactions", {
+        "datasets": TF_DATASET, "organisms": str(taxid), "genesymbols": "1",
+        "format": "tsv", "fields": "references,sources",
+    })
+    rows = []
+    for row in _rows(body):
+        tf = (row.get("source_genesymbol") or "").strip()
+        target = (row.get("target_genesymbol") or "").strip()
+        if not tf or not target or tf == target:
+            continue
+        rows.append({
+            "tf": tf,
+            "target": target,
+            "sign": _SIGN_CODES[_sign(row)],
+            "source": "CollecTRI",
+            "references": row.get("references") or "",
+        })
+    logger.info("taxid %s: %d CollecTRI TF-target rows", taxid, len(rows))
+    return rows
+
+
+def read_symbol_table(code, kegg_data_dir=None):
+    """Return ``{ALIAS_UPPER: organism symbol}`` from ``kegg2genesymbol.list``.
+
+    The fourth column of that file reads ``Ikzf1, Ikaros, LyF-1; DNA-binding
+    protein Ikaros``: a comma list of the primary symbol followed by its
+    aliases, then ``;`` and a description. Every name in the list, upper-cased,
+    maps to the *first* one -- the symbol KEGG itself uses for the gene -- and
+    the first gene to claim an alias keeps it, so a name shared by two genes is
+    never silently reassigned. Rows without a ``;`` carry a description only
+    and name no symbol at all.
+
+    Returns an empty table (with a warning) when the file is absent, so a
+    caller can still write the sources that need no translation.
+    """
+    directory = _speciesDirectory(code, kegg_data_dir)
+    if directory is None:
+        return {}
+    path = os.path.join(directory, "mapping", "kegg2genesymbol.list")
+    if not os.path.isfile(path):
+        logger.warning("%s missing; symbols cannot be translated for %s", path, code)
+        return {}
+
+    table = {}
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            columns = line.rstrip("\r\n").split("\t")
+            if len(columns) < 4:
+                continue
+            names, separator, _description = columns[3].partition(";")
+            if not separator:
+                continue
+            symbols = [name.strip() for name in names.split(",")]
+            symbols = [name for name in symbols if name]
+            if not symbols:
+                continue
+            primary = symbols[0]
+            for alias in symbols:
+                table.setdefault(alias.upper(), primary)
+    logger.info("%s: %d symbol aliases read from %s", code, len(table), path)
+    return table
+
+
+def _translate_rows(rows, symbol_table, source):
+    """Re-express ``rows`` in the symbols of ``symbol_table``.
+
+    A row survives only when both its TF and its target resolve; a pair whose
+    two ends collapse onto the same organism gene (two human paralogs with one
+    mouse ortholog) is dropped as the self-loop it has become. ``source`` is
+    stamped on every surviving row. Linear in the number of rows.
+    """
+    translated = []
+    for row in rows:
+        tf = symbol_table.get(row["tf"].upper())
+        target = symbol_table.get(row["target"].upper())
+        if not tf or not target or tf == target:
+            continue
+        translated.append({
+            "tf": tf,
+            "target": target,
+            "sign": row["sign"],
+            "source": source,
+            "references": row.get("references", ""),
+        })
+    return translated
+
+
+def map_human_by_symbol(rows, symbol_table):
+    """Carry human CollecTRI rows across to an organism by symbol identity.
+
+    ``symbol_table`` is ``read_symbol_table``'s output for the target
+    organism. Human ``IKZF1`` finds mouse ``Ikzf1`` because the mouse alias
+    list contains ``Ikaros``/``IKZF1``-style names in every casing; a human
+    symbol the organism's table does not know is dropped rather than guessed.
+    Surviving rows are stamped ``source = "CollecTRI-human"`` so a reader can
+    tell an orthology-by-name edge from one curated in the organism itself.
+    """
+    mapped = _translate_rows(rows, symbol_table, "CollecTRI-human")
+    logger.info("human CollecTRI: %d of %d rows mapped by symbol", len(mapped), len(rows))
+    return mapped
+
+
+def fetch_trrust(code):
+    """Return TRRUST v2 rows for ``code``, or ``[]`` where TRRUST has no table.
+
+    The raw table has no header: ``TF<TAB>target<TAB>Activation|Repression|
+    Unknown<TAB>PMID;PMID``. Symbols are as TRRUST prints them (upper-case
+    human, mixed-case mouse); the caller normalises them through the organism's
+    alias table.
+    """
+    url = TRRUST_URLS.get(code)
+    if url is None:
+        logger.info("TRRUST publishes no table for %s", code)
+        return []
+
+    body = _get(url, timeout=_TRRUST_TIMEOUT)
+    if body.lstrip()[:1] == "<":
+        raise RuntimeError("%s returned markup, not data (first 120 chars: %r)"
+                           % (url, body.lstrip()[:120]))
+
+    rows = []
+    for columns in csv.reader(io.StringIO(body), delimiter="\t"):
+        if len(columns) < 3:
+            continue                                  # blank or truncated line
+        tf, target, mode = (column.strip() for column in columns[:3])
+        if not tf or not target or tf == target:
+            continue
+        rows.append({
+            "tf": tf,
+            "target": target,
+            "sign": _TRRUST_SIGNS.get(mode, 0),
+            "source": "TRRUST",
+            "references": columns[3].strip() if len(columns) > 3 else "",
+        })
+    logger.info("%s: %d TRRUST rows", code, len(rows))
+    return rows
+
+
+def write_tf_targets(code, rows, kegg_data_dir=None):
+    """Write the TF-target file and return ``(path, row count)``.
+
+    Rows are deduplicated on ``(tf, target, source)`` keeping the first seen,
+    then sorted by TF, target and source so the file diffs cleanly between
+    installs. Written through a temporary file in the same directory and
+    ``os.replace``d into place, so a reader never sees a half-written table.
+    """
+    directory = _speciesDirectory(code, kegg_data_dir)
+    if directory is None:
+        raise RuntimeError("no species directory for %s; cannot write %s"
+                           % (code, TF_TARGET_FILENAME))
+    mapping = os.path.join(directory, "mapping")
+    os.makedirs(mapping, exist_ok=True)
+    target = os.path.join(mapping, TF_TARGET_FILENAME)
+
+    unique = {}
+    for row in rows:
+        unique.setdefault((row["tf"], row["target"], row["source"]), row)
+    ordered = sorted(unique.values(),
+                     key=lambda row: (row["tf"], row["target"], row["source"]))
+
+    temporary = "%s.%d.tmp" % (target, os.getpid())
+    try:
+        with open(temporary, "w", encoding="utf-8", newline="") as handle:
+            handle.write("\t".join(TF_TARGET_COLUMNS) + "\n")
+            for row in ordered:
+                handle.write("%s\t%s\t%d\t%s\t%s\n" % (
+                    _cell(row["tf"]), _cell(row["target"]), int(row["sign"]),
+                    _cell(row["source"]), _cell(row.get("references", ""))))
+        os.replace(temporary, target)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+        raise
+    logger.info("wrote %s (%d rows)", target, len(ordered))
+    return target, len(ordered)
+
+
+def _cell(value):
+    """A value made safe for one TSV cell: no tabs or line breaks inside it."""
+    return str(value).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+
+
+def install_tf_targets(code, kegg_data_dir=None):
+    """Merge every TF-target source available for ``code`` into one file.
+
+    Sources: the organism's own CollecTRI table (organisms OmniPath serves),
+    the human CollecTRI table mapped by symbol (non-human organisms OmniPath
+    serves) and TRRUST (human and mouse). A source that fails is logged and
+    skipped so one slow host cannot take the others down with it; the install
+    fails only when no source produced anything. Returns the path written.
+    """
+    symbol_table = read_symbol_table(code, kegg_data_dir)
+    rows, counts, failures = [], collections.OrderedDict(), []
+
+    def attempt(name, produce):
+        try:
+            produced = produce()
+        except Exception as error:                  # one source down, not all
+            logger.warning("%s: %s failed and is skipped: %s", code, name, error)
+            failures.append(name)
+            return
+        counts[name] = len(produced)
+        rows.extend(produced)
+
+    if code in SUPPORTED_ORGANISMS:
+        taxid = SUPPORTED_ORGANISMS[code]
+        attempt("CollecTRI", lambda: fetch_tf_targets(taxid))
+        if taxid != HUMAN_TAXID:
+            if symbol_table:
+                attempt("CollecTRI-human",
+                        lambda: map_human_by_symbol(fetch_tf_targets(HUMAN_TAXID), symbol_table))
+            else:
+                logger.warning("%s: no symbol table; human CollecTRI cannot be mapped", code)
+    if code in TRRUST_URLS:
+        def trrust():
+            # TRRUST prints its own casing and the odd alias; the organism's
+            # table settles both onto the symbol KEGG uses. Without a table
+            # the rows are kept as printed rather than thrown away.
+            fetched = fetch_trrust(code)
+            return _translate_rows(fetched, symbol_table, "TRRUST") if symbol_table else fetched
+        attempt("TRRUST", trrust)
+
+    if not counts:
+        raise RuntimeError(
+            "no TF-target source produced rows for %s (failed: %s)"
+            % (code, ", ".join(failures) or "none applicable"))
+
+    path, written = write_tf_targets(code, rows, kegg_data_dir)
+    logger.info("%s TF targets: %s -> %d unique rows in %s", code,
+                ", ".join("%s=%d" % item for item in counts.items()), written, path)
+    return path
+
+
+# ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
 
@@ -711,6 +1012,10 @@ def install(code, mongo_host="localhost", mongo_port=27017, dry_run=False,
     _write(code, documents, networks, mongo_host, mongo_port)
     _write_overview(code, overview, kegg_data_dir)
     _write_gene2pathway(code, documents, kegg_data_dir)
+    try:
+        install_tf_targets(code, kegg_data_dir)
+    except Exception as error:                      # optional: pathways are in
+        logger.warning("%s: TF-target file not written: %s", code, error)
     return documents, networks
 
 
@@ -800,10 +1105,17 @@ def main(argv=None):
     parser.add_argument("--mongo-host", default="localhost")
     parser.add_argument("--mongo-port", type=int, default=27017)
     parser.add_argument("--kegg-data-dir", default=None,
-                        help="override KEGG_DATA_DIR for the overview network file")
+                        help="override KEGG_DATA_DIR for the overview network, gene2pathway and TF-target files")
     parser.add_argument("--dry-run", action="store_true",
                         help="assemble and report without writing to MongoDB")
+    parser.add_argument("--tf-targets", action="store_true",
+                        help="write only current/<organism>/mapping/%s (CollecTRI + TRRUST); "
+                             "touches neither MongoDB nor the pathway files" % TF_TARGET_FILENAME)
     arguments = parser.parse_args(argv)
+
+    if arguments.tf_targets:
+        install_tf_targets(arguments.organism, arguments.kegg_data_dir)
+        return 0
 
     install(arguments.organism, arguments.mongo_host, arguments.mongo_port,
             arguments.dry_run, arguments.kegg_data_dir)

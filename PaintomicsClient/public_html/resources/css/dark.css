@@ -2154,4 +2154,11 @@
   --pa-walk-error-bg: rgba(200, 77, 47, 0.18);
   --pa-walk-focus-bg: rgba(20, 184, 166, 0.12);
   --pa-walk-rule: rgba(255, 255, 255, 0.10);
+  /* The gate and context chips: the light red and grey inks would vanish on
+     a dark surface, so they lift the way the error ink does. */
+  --pa-walk-fail-ink: #F2A08F;
+  --pa-walk-fail-bg: rgba(200, 77, 47, 0.18);
+  --pa-walk-na-ink: #A1B0C0;
+  --pa-walk-na-bg: rgba(255, 255, 255, 0.08);
+  --pa-walk-other-border: #F59E0B;
 }

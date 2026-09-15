@@ -35,11 +35,13 @@ import threading
 import zlib
 from collections import defaultdict
 
+from src.classes.AIInterpret.walker.tiers import CURRENCY
 from src.common.KeggGraph.parser import parse_directory
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 3                  # 2: Reactome complexes and sets expanded; 3: Reactome names
+CACHE_VERSION = 4                  # 2: Reactome complexes and sets expanded; 3: Reactome names;
+                                   # 4: relations drawn through a currency metabolite dropped
 REACTOME_FAN_MAX = 36              # member pairs one reaction may add; larger sets are skipped
 REACTOME_MAX_DEPTH = 8             # nesting of complexes and sets followed
 # KGML relation subtypes -> sign. Anything else (binding, indirect, ...) is 0.
@@ -265,6 +267,10 @@ def _add_kegg(net, org_dir, k2sym):
     if not read:
         return 0
     for edge in edges:
+        if getattr(edge, "via", None) in CURRENCY:
+            # Two enzymes joined by ATP, water or NAD share nothing a walk
+            # could read; the relation is not an edge of this network.
+            continue
         ends = []
         for raw in (edge.a, edge.b):
             kind = types.get(raw)

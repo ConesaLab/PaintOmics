@@ -13,6 +13,8 @@ from collections import deque
 import numpy as np
 from scipy.stats import hypergeom
 
+from src.classes.AIInterpret.walker.tiers import is_currency
+
 
 def compute_heat(network, measured, relevant):
     """{node: {n, x, p, heat, degree}} for every node of the network.
@@ -82,9 +84,22 @@ def _within(network, start, radius, blocked):
     return dist
 
 
-def scan_graph(network, overlay, sep, limit):
+ANCHOR_RADIUS = 2          # a candidate this close to the anchor is "in its neighbourhood"
+
+
+def scan_graph(network, overlay, sep, limit, dist=None):
     """Every measured node ranked by heat, with the seed candidates flagged:
-    r = 1, n >= 1, not a hub, and not within ``sep`` edges of a hotter candidate."""
+    r = 1, n >= 1, not a hub, not a currency metabolite, and not within
+    ``sep`` edges of a hotter candidate.
+
+    Anchored (``dist`` = node -> steps from the perturbed gene): the candidate
+    slots are filled first from the anchor's neighbourhood (within
+    ANCHOR_RADIUS steps, hottest first, the same separation rule), then by
+    heat over the whole graph for whatever slots remain, and the candidates
+    are listed nearest the anchor first. A perturbation with a rich
+    neighbourhood is walked from that neighbourhood; one with a poor
+    neighbourhood is walked from it and then from the hottest nodes. Every
+    row carries its distance."""
     rows = []
     for node_id in network.nodes:
         if node_id not in overlay.measured:
@@ -94,22 +109,36 @@ def scan_graph(network, overlay, sep, limit):
                      "kind": network.nodes[node_id]["kind"],
                      "r": int(bool(overlay.r.get(node_id))), "heat": round(h["heat"], 2),
                      "x": h["x"], "n": h["n"], "degree": h["degree"],
-                     "hub": node_id in overlay.capped, "candidate": False, "skipped": None})
+                     "hub": node_id in overlay.capped, "candidate": False, "skipped": None,
+                     "dist": None if dist is None else dist.get(node_id)})
     rows.sort(key=lambda r: (-r["heat"], -r["degree"], r["label"]))
     blocked = {}
-    chosen = 0
-    for row in rows:
-        if chosen >= limit:
-            break
-        if not row["r"] or row["n"] < 1 or row["hub"]:
-            continue
-        if row["id"] in blocked:
-            row["skipped"] = blocked[row["id"]]
-            continue
-        row["candidate"] = True
-        chosen += 1
-        for w in _within(network, row["id"], sep, overlay.capped):
-            blocked.setdefault(w, row["label"])
+    chosen = {"n": 0}
+
+    def take(pool, quota, separation):
+        for row in pool:
+            if chosen["n"] >= quota:
+                break
+            if row["candidate"] or not row["r"] or row["n"] < 1 or row["hub"] or is_currency(row["id"]):
+                continue
+            if row["id"] in blocked:
+                row["skipped"] = blocked[row["id"]]
+                continue
+            row["candidate"] = True
+            chosen["n"] += 1
+            for w in _within(network, row["id"], separation, overlay.capped):
+                blocked.setdefault(w, row["label"])
+
+    if dist:
+        # The neighbourhood is small and every relevant node in it is worth a
+        # seed, so the separation there is one edge whatever the graph's is.
+        near = [r for r in rows if r["dist"] is not None and r["dist"] <= ANCHOR_RADIUS]
+        take(near, limit, 1)
+    take(rows, limit, sep)
+    if dist:
+        far = 10 ** 6
+        rows.sort(key=lambda r: (not r["candidate"], r["dist"] if r["candidate"] and r["dist"] is not None else far,
+                                 -r["heat"], -r["degree"], r["label"]))
     return rows
 
 

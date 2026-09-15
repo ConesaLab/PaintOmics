@@ -1,0 +1,701 @@
+{
+  "made": "2026-09-15",
+  "labeller": "read from title and abstract",
+  "description": "Hand labels for every paper cited by the two stored example AI walks of job Ku5jMVCL6z (scopes 'network' and 'pathway:mmu04068', 26 + 10 papers, 36 distinct PMIDs) plus the 17 PubMed IDs cited by the TRRUST v2 mouse Ikzf1 rows and the three Ikaros papers used for ikaros_targets.json. Each abstract was fetched with efetch (db=pubmed, retmode=xml) and read; MeSH headings were consulted only as a cross-check. 'unknown' is used where the abstract does not say.",
+  "label_scheme": {
+    "organism": [
+      "mouse",
+      "human",
+      "rat",
+      "other",
+      "mixed",
+      "unknown"
+    ],
+    "scope": [
+      "in vitro",
+      "in vivo",
+      "clinical",
+      "review",
+      "mixed",
+      "unknown"
+    ]
+  },
+  "counts": {
+    "papers": 56
+  },
+  "papers": [
+    {
+      "pmid": "7513017",
+      "title": "Syk activation by the Src-family tyrosine kinase in the B cell receptor signaling.",
+      "year": "1994",
+      "journal": "J Exp Med",
+      "organism": "unknown",
+      "system": "B cell line studying BCR signalling, plus COS transfectants",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "7805847",
+      "title": "ADP ribosyl cyclase activity of a novel bone marrow stromal cell surface molecule, BST-1.",
+      "year": "1994",
+      "journal": "FEBS Lett",
+      "organism": "human",
+      "system": "CHO transfectants secreting recombinant human BST-1 (bone marrow stromal molecule)",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "9464529",
+      "title": "Identification and characterization of the murine Rag1 promoter.",
+      "year": "1997",
+      "journal": "Mol Immunol",
+      "organism": "mouse",
+      "system": "pre-B, pre-T and mature B cell lines; Rag1 promoter",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "11000405",
+      "title": "An essential octamer motif in the mb-1 (Igalpha) promoter.",
+      "year": "2000",
+      "journal": "Mol Immunol",
+      "organism": "mouse",
+      "system": "B cells; mb-1 (Igalpha) promoter reporter and EMSA assays",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "11092879",
+      "title": "An intronic Ikaros-binding element mediates retinoic acid suppression of the kappa opioid receptor gene, accompanied by histone deacetylation on the promoters.",
+      "year": "2001",
+      "journal": "J Biol Chem",
+      "organism": "mouse",
+      "system": "P19 embryonal carcinoma stem cells during retinoic-acid neuronal differentiation",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "11387214",
+      "title": "Binding of Ikaros to the lambda5 promoter silences transcription through a mechanism that does not require heterochromatin formation.",
+      "year": "2001",
+      "journal": "EMBO J",
+      "organism": "mouse",
+      "system": "B cells and transgenic mouse lines carrying lambda5 (Igll1) promoter constructs",
+      "scope": "mixed",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "11823468",
+      "title": "Transcriptional regulation of mouse delta-opioid receptor gene. Role of Ikaros in the stimulated transcription of mouse delta-opioid receptor gene in activated T cells.",
+      "year": "2002",
+      "journal": "J Biol Chem",
+      "organism": "mouse",
+      "system": "EL-4 T lymphoma cells, PHA-activated T cells",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "11981041",
+      "title": "Fibroblast growth factor receptor 4 is a target for the zinc-finger transcription factor Ikaros in the pituitary.",
+      "year": "2002",
+      "journal": "Mol Endocrinol",
+      "organism": "mixed",
+      "system": "pituitary cell lines (GH4, PRL235) and mouse anterior pituitary; human FGFR4 promoter",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "14527951",
+      "title": "FoxO3a transcriptional regulation of Bim controls apoptosis in paclitaxel-treated breast cancer cell lines.",
+      "year": "2003",
+      "journal": "J Biol Chem",
+      "organism": "human",
+      "system": "breast cancer cell lines (MCF-7, MDA-231) treated with paclitaxel",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "15109499",
+      "title": "Foxo transcription factors induce the atrophy-related ubiquitin ligase atrogin-1 and cause skeletal muscle atrophy.",
+      "year": "2004",
+      "journal": "Cell",
+      "organism": "mouse",
+      "system": "skeletal muscle: cultured myotubes and mouse muscle fibres undergoing atrophy",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "15384043",
+      "title": "The development of early and mature B cells is impaired in mice deficient for the Ets-1 transcription factor.",
+      "year": "2004",
+      "journal": "Eur J Immunol",
+      "organism": "mouse",
+      "system": "B cell development in Ets-1-deficient mice and fetal liver chimeras",
+      "scope": "in vivo",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "15509806",
+      "title": "FoxO3a and BCR-ABL regulate cyclin D2 transcription through a STAT5/BCL6-dependent mechanism.",
+      "year": "2004",
+      "journal": "Mol Cell Biol",
+      "organism": "human",
+      "system": "BV173 BCR-ABL-positive leukaemia cell line",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "15944284",
+      "title": "Transcriptional regulation of the mouse IL-7 receptor alpha promoter by glucocorticoid receptor.",
+      "year": "2005",
+      "journal": "J Immunol",
+      "organism": "mouse",
+      "system": "T cells; IL-7Ralpha promoter and glucocorticoid receptor",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "16492140",
+      "title": "The ubiquitin-associated domain of AMPK-related protein kinases allows LKB1-induced phosphorylation and activation.",
+      "year": "2006",
+      "journal": "Biochem J",
+      "organism": "human",
+      "system": "commentary on the human AMPK-related kinase family and LKB1",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "17363301",
+      "title": "Ikaros DNA-binding proteins as integral components of B cell developmental-stage-specific regulatory circuits.",
+      "year": "2007",
+      "journal": "Immunity",
+      "organism": "mouse",
+      "system": "pre-BI and pre-BII cells, Igll1 (lambda5) regulation",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "17980631",
+      "title": "Antagonistic interactions between Ikaros and the chromatin remodeler Mi-2beta determine silencer activity and Cd4 gene expression.",
+      "year": "2007",
+      "journal": "Immunity",
+      "organism": "mouse",
+      "system": "thymocytes (double-negative and double-positive) and the Cd4 silencer",
+      "scope": "in vivo",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "18804520",
+      "title": "Odd-skipped related 1 gene expression is regulated by Runx2 and Ikzf1 transcription factors.",
+      "year": "2008",
+      "journal": "Gene",
+      "organism": "mouse",
+      "system": "cultured cell lines; Osr1 promoter reporter, EMSA and ChIP",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "18818879",
+      "title": "Ikaros negatively regulates inducible nitric oxide synthase expression in macrophages: involvement of Ikaros phosphorylation by casein kinase 2.",
+      "year": "2008",
+      "journal": "Cell Mol Life Sci",
+      "organism": "mouse",
+      "system": "macrophages stimulated with LPS/IFN-gamma",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "18978794",
+      "title": "Distinct functions for the transcription factor Foxo1 at various stages of B cell differentiation.",
+      "year": "2008",
+      "journal": "Nat Immunol",
+      "organism": "mouse",
+      "system": "B cell development (pro-B, pre-B and peripheral B cells), conditional Foxo1 deletion",
+      "scope": "in vivo",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "19461653",
+      "title": "The miR-34 family in cancer and apoptosis.",
+      "year": "2010",
+      "journal": "Cell Death Differ",
+      "organism": "human",
+      "system": "review, miR-34 family in cancer and apoptosis",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "19828627",
+      "title": "Ikaros is a regulator of Il10 expression in CD4+ T cells.",
+      "year": "2009",
+      "journal": "J Immunol",
+      "organism": "mouse",
+      "system": "CD4+ T cells under Th2-skewing conditions",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "20566697",
+      "title": "Ikaros and Aiolos inhibit pre-B-cell proliferation by directly suppressing c-Myc expression.",
+      "year": "2010",
+      "journal": "Mol Cell Biol",
+      "organism": "mouse",
+      "system": "pre-B cells (IL-7R and pre-BCR driven expansion)",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "20688918",
+      "title": "Regulation of the tyrosine kinase Pyk2 by calcium is through production of reactive oxygen species in cytotoxic T lymphocytes.",
+      "year": "2010",
+      "journal": "J Biol Chem",
+      "organism": "mixed",
+      "system": "cytotoxic T lymphocytes (primary CTL and Jurkat T cells)",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "21093322",
+      "title": "Alternative promoter usage at the Notch1 locus supports ligand-independent signaling in T cell development and leukemogenesis.",
+      "year": "2010",
+      "journal": "Immunity",
+      "organism": "mouse",
+      "system": "T cell development and T-cell acute lymphoblastic leukaemia",
+      "scope": "in vivo",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "21569802",
+      "title": "Knockdown of insulin receptor substrate 1 reduces proliferation and downregulates Akt/mTOR and MAPK pathways in K562 cells.",
+      "year": "2011",
+      "journal": "Biochim Biophys Acta",
+      "organism": "human",
+      "system": "K562 chronic myeloid leukaemia cell line",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "22684523",
+      "title": "Silencing of the Il2 gene transcription is regulated by epigenetic changes in anergic T cells.",
+      "year": "2012",
+      "journal": "Eur J Immunol",
+      "organism": "mouse",
+      "system": "anergic CD4+ T cells",
+      "scope": "in vitro",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "23303821",
+      "title": "Genome-wide identification of Ikaros targets elucidates its contribution to mouse B-cell lineage specification and pre-B-cell differentiation.",
+      "year": "2013",
+      "journal": "Blood",
+      "organism": "mouse",
+      "system": "pre-B cells with inducible Ikaros, plus in vivo B cell progenitor expression data",
+      "scope": "mixed",
+      "from": [
+        "ikaros_literature"
+      ]
+    },
+    {
+      "pmid": "24399134",
+      "title": "Overexpression of AIOLOS inhibits cell proliferation and suppresses apoptosis in Nalm-6 cells.",
+      "year": "2014",
+      "journal": "Oncol Rep",
+      "organism": "human",
+      "system": "Nalm-6 B-cell precursor ALL cell line",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "24509509",
+      "title": "Stage-specific control of early B cell development by the transcription factor Ikaros.",
+      "year": "2014",
+      "journal": "Nat Immunol",
+      "organism": "mouse",
+      "system": "pro-B and pre-pro-B cells from conditional Ikzf1-deleted mice",
+      "scope": "mixed",
+      "from": [
+        "ikaros_literature"
+      ]
+    },
+    {
+      "pmid": "25301737",
+      "title": "Inhibitory effects of transcription factor Ikaros on the expression of liver cancer stem cell marker CD133 in hepatocellular carcinoma.",
+      "year": "2014",
+      "journal": "Oncotarget",
+      "organism": "mixed",
+      "system": "hepatocellular carcinoma cells, xenografts and patient survival data",
+      "scope": "mixed",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "25654255",
+      "title": "A conserved regulatory logic controls temporal identity in mouse neural progenitors.",
+      "year": "2015",
+      "journal": "Neuron",
+      "organism": "mouse",
+      "system": "retinal progenitor cells (temporal identity)",
+      "scope": "in vivo",
+      "from": [
+        "trrust_ikzf1"
+      ]
+    },
+    {
+      "pmid": "25857773",
+      "title": "IMP-GMP specific cytosolic 5'-nucleotidase regulates nucleotide pool and prodrug metabolism.",
+      "year": "2015",
+      "journal": "Biochim Biophys Acta",
+      "organism": "human",
+      "system": "HEK293 cells overexpressing cN-II, nucleotide pools and prodrug resistance",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "26724922",
+      "title": "Structure-activity relations of leucine derivatives reveal critical moieties for cellular uptake and activation of mTORC1-mediated signaling.",
+      "year": "2016",
+      "journal": "Amino Acids",
+      "organism": "human",
+      "system": "HeLa S3 cells, leucine uptake and mTORC1 activation",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "27427208",
+      "title": "Interferon-Induced Spermidine-Spermine Acetyltransferase and Polyamine Depletion Restrict Zika and Chikungunya Viruses.",
+      "year": "2016",
+      "journal": "Cell Host Microbe",
+      "organism": "unknown",
+      "system": "cells and animals infected with chikungunya and Zika virus; species not named in the abstract",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "28030830",
+      "title": "Ikaros regulation of the BCL6/BACH2 axis and its clinical relevance in acute lymphoblastic leukemia.",
+      "year": "2017",
+      "journal": "Oncotarget",
+      "organism": "human",
+      "system": "B-cell acute lymphoblastic leukaemia: cell lines plus primary B-ALL patient samples and outcomes",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "28716890",
+      "title": "Negative Regulation of Cytokine Signaling in Immunity.",
+      "year": "2018",
+      "journal": "Cold Spring Harb Perspect Biol",
+      "organism": "mixed",
+      "system": "review, SOCS/CIS in T cells and tumour immunity",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "29158492",
+      "title": "Structural basis for the assembly of the Ragulator-Rag GTPase complex.",
+      "year": "2017",
+      "journal": "Nat Commun",
+      "organism": "human",
+      "system": "crystallography plus cultured human cells (Ragulator-Rag GTPase)",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "29215586",
+      "title": "Investigation of Polyamine Metabolism and Homeostasis in Pancreatic Cancers.",
+      "year": "2017",
+      "journal": "Med Sci (Basel)",
+      "organism": "human",
+      "system": "L3.6pl pancreatic ductal adenocarcinoma cell lines",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "30328953",
+      "title": "Insulin Substrate Receptor (IRS) proteins in normal and malignant hematopoiesis.",
+      "year": "2018",
+      "journal": "Clinics (Sao Paulo)",
+      "organism": "human",
+      "system": "review, IRS proteins in normal and malignant haematopoiesis",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "30367526",
+      "title": "Tumor suppressor miR-139-5p targets Tspan3 and regulates the progression of acute myeloid leukemia through the PI3K/Akt pathway.",
+      "year": "2019",
+      "journal": "J Cell Biochem",
+      "organism": "human",
+      "system": "acute myeloid leukaemia cell lines (HL-60, THP-1, U937) and patient samples",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "30720463",
+      "title": "Follicular lymphoma-associated mutations in vacuolar ATPase ATP6V1B2 activate autophagic flux and mTOR.",
+      "year": "2019",
+      "journal": "J Clin Invest",
+      "organism": "human",
+      "system": "follicular lymphoma B cells and engineered lymphoma cell lines (plus S. cerevisiae)",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "30978178",
+      "title": "Feedforward regulation of Myc coordinates lineage-specific with housekeeping gene expression during B cell progenitor cell differentiation.",
+      "year": "2019",
+      "journal": "PLoS Biol",
+      "organism": "mouse",
+      "system": "B3 pre-B cell line with inducible Ikaros and primary Fr.C/Fr.D B cell progenitors",
+      "scope": "mixed",
+      "from": [
+        "ikaros_literature"
+      ]
+    },
+    {
+      "pmid": "31547393",
+      "title": "Purine-Metabolising Enzymes and Apoptosis in Cancer.",
+      "year": "2019",
+      "journal": "Cancers (Basel)",
+      "organism": "unknown",
+      "system": "review, purine-metabolising enzymes and apoptosis in tumour cells",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "32032680",
+      "title": "The PHGDH enigma: Do cancer cells only need serine or also a redox modulator?",
+      "year": "2020",
+      "journal": "Cancer Lett",
+      "organism": "mixed",
+      "system": "review, serine synthesis and redox balance in cancer cells",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "32350509",
+      "title": "The transcription factor ETS1 is an important regulator of human NK cell development and terminal differentiation.",
+      "year": "2020",
+      "journal": "Blood",
+      "organism": "human",
+      "system": "NK cells from human embryonic stem cells and cord blood progenitors",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "33526781",
+      "title": "Calcium channel ITPR2 and mitochondria-ER contacts promote cellular senescence and aging.",
+      "year": "2021",
+      "journal": "Nat Commun",
+      "organism": "mixed",
+      "system": "Itpr2-knockout mice and mouse embryo-derived cells; human cells for senescence",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "33789162",
+      "title": "Phosphodiesterase 1C integrates store-operated calcium entry and cAMP signaling in leading-edge protrusions of migrating human arterial myocytes.",
+      "year": "2021",
+      "journal": "J Biol Chem",
+      "organism": "human",
+      "system": "human arterial smooth muscle cells, leading-edge protrusions",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "37300687",
+      "title": "MiR-188-5p inhibits cell proliferation and migration in ovarian cancer via competing for CCND2 with ELAVL1.",
+      "year": "2023",
+      "journal": "Cell Mol Biol (Noisy-le-grand)",
+      "organism": "human",
+      "system": "ovarian cancer cell lines",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "38760575",
+      "title": "Decitabine cytotoxicity is promoted by dCMP deaminase DCTD and mitigated by SUMO-dependent E3 ligase TOPORS.",
+      "year": "2024",
+      "journal": "EMBO J",
+      "organism": "human",
+      "system": "human cell lines in genome-scale CRISPR/Cas9 screens (decitabine)",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "38762596",
+      "title": "PPA1 promotes adipogenesis by regulating the stability of C/EBPs.",
+      "year": "2024",
+      "journal": "Cell Death Differ",
+      "organism": "mixed",
+      "system": "adipose tissue: adipose-specific knockout mice, 3T3-L1 cells and human preadipocytes",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "39179932",
+      "title": "Transcriptional function of E2A, Ebf1, Pax5, Ikaros and Aiolos analyzed by in vivo acute protein degradation in early B cell development.",
+      "year": "2024",
+      "journal": "Nat Immunol",
+      "organism": "mouse",
+      "system": "early B cell development (pro-B, small pre-B, immature B cells), in vivo acute protein degradation",
+      "scope": "in vivo",
+      "from": [
+        "example_walk",
+        "ikaros_literature"
+      ]
+    },
+    {
+      "pmid": "39408636",
+      "title": "Exploring the Role and Pathophysiological Significance of Aldehyde Dehydrogenase 1B1 (ALDH1B1) in Human Lung Adenocarcinoma.",
+      "year": "2024",
+      "journal": "Int J Mol Sci",
+      "organism": "human",
+      "system": "A549 lung adenocarcinoma cells overexpressing ALDH1B1",
+      "scope": "in vitro",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "39946233",
+      "title": "Inositol polyphosphate multikinase regulates Th1 and Th17 cell differentiation by controlling Akt-mTOR signaling.",
+      "year": "2025",
+      "journal": "Cell Rep",
+      "organism": "mouse",
+      "system": "CD4+ T cells (Th1/Th17), EAE and Leishmania major models",
+      "scope": "mixed",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "41697956",
+      "title": "IPMK-1 (inositol phosphate multikinase) is required for integrin adhesion complex organization and muscle cell adhesion in Caenorhabditis elegans.",
+      "year": "2026",
+      "journal": "Genetics",
+      "organism": "other",
+      "system": "Caenorhabditis elegans muscle cells and integrin adhesion complexes",
+      "scope": "in vivo",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "42149253",
+      "title": "xCT (Slc7a11) Regulation: Lessons from Cancer Research.",
+      "year": "2026",
+      "journal": "Neurochem Res",
+      "organism": "mixed",
+      "system": "systematic review, xCT/Slc7a11 regulation in brain and cancer",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    },
+    {
+      "pmid": "42676892",
+      "title": "The function of phosphoglycerate mutase 1 (PGAM1) and its role in diseases.",
+      "year": "2026",
+      "journal": "Front Mol Biosci",
+      "organism": "human",
+      "system": "review, PGAM1 in cancer and other diseases",
+      "scope": "review",
+      "from": [
+        "example_walk"
+      ]
+    }
+  ]
+}

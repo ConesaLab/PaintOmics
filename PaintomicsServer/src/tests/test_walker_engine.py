@@ -78,7 +78,7 @@ class WalkerEngineTest(unittest.TestCase):
         self.assertEqual(ov.labels["Gene expression"], ["0h", "2h", "6h"])
         self.assertIsNone(ov.labels["miRNA-seq"])
         self.assertIn("c1 +0.40 · c2 +0.90", ov.layer_text("mir:tst-miR-1"))
-        self.assertEqual(ov_mod.relabel_unlabeled(ov), ["miRNA-seq"])
+        self.assertEqual(sorted(name for name, labels in ov.labels.items() if labels is None), ["miRNA-seq"])
 
     def test_a_header_stored_as_the_string_none_is_no_header(self):
         self.assertIsNone(ov_mod._shorten_labels("None"))

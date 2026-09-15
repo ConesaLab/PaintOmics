@@ -291,6 +291,23 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertEqual(out, {1: {"pmid": "33"}})
         self.assertEqual(dropped[0]["why"], "PMID 77 does not mention Foxo1; [1] is fine; paper [?] was never retrieved")
 
+    def test_a_dropped_claim_is_recognised_by_its_first_eight_words(self):
+        stmt = self.good_statement()
+        stmt["prose"] = "%s moves." % self.walker.label(self.chain[0]["to"])
+        results = {"title": "t", "summary": "",
+                   "paragraphs": [{"from_statement": 1, "legs": [1],
+                                   "text": "%s gene expression surges late in the course, a rise. " % self.walker.label(self.chain[0]["to"])
+                                           * 12}]}
+        gene = self.walker.label(self.chain[0]["to"])
+        # five shared words are how any statement about the gene begins: not a mention
+        dropped = [{"claim": "%s gene expression surges late under the perturbation and drives arrest" % gene}]
+        problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
+        self.assertFalse(any("dropped statement" in p for p in problems), problems)
+        # the first eight words verbatim are
+        dropped = [{"claim": "%s gene expression surges late in the course, a rise" % gene}]
+        problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
+        self.assertTrue(any("dropped statement" in p for p in problems), problems)
+
     def test_a_range_is_not_a_quoted_value(self):
         self.assertEqual(verify.NUMBER_RE.findall("peaks late (18-24h) and 0h-2h"), [])
         self.assertEqual(verify.NUMBER_RE.findall("from -0.35 at 0h to +2.13, within ±0.6"), ["-0.35", "+2.13"])

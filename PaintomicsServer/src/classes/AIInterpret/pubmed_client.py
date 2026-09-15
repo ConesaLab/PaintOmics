@@ -202,7 +202,8 @@ class PubMedClient:
         return _filter_ids(r.json().get("esearchresult", {}).get("idlist", []))
 
     def fetch_abstracts(self, pmids):
-        """EFetch: returns list of {pmid, title, abstract, authors, year, journal}."""
+        """EFetch: returns list of {pmid, title, abstract, year, journal,
+        first_author, mesh, pub_types}."""
         if not pmids:
             return []
         pmids = _filter_ids(pmids)
@@ -243,8 +244,14 @@ class PubMedClient:
                 ln = authors_el[0].findtext("LastName", "")
                 fn = authors_el[0].findtext("ForeName", "")
                 first_author = f"{fn} {ln}".strip()
+            # What the paper studied, as indexed: MeSH descriptor names (no
+            # qualifiers) in document order, and the publication types. Both
+            # lists are empty for a record PubMed has not indexed yet.
+            mesh = _texts(article.findall(".//MeshHeadingList/MeshHeading/DescriptorName"))
+            pub_types = _texts(article.findall(".//PublicationTypeList/PublicationType"))
             papers.append({"pmid": pmid, "title": title, "abstract": abstract or "",
-                          "year": year, "journal": journal, "first_author": first_author})
+                          "year": year, "journal": journal, "first_author": first_author,
+                          "mesh": mesh, "pub_types": pub_types})
         return papers
 
     # ------------------------------------------------------------------
@@ -451,6 +458,16 @@ def _inline_text(element):
     """An element's text with every inline child (<i>, <sub>, <sup>) kept, in
     one line."""
     return re.sub(r"\s+", " ", "".join(element.itertext())).strip()
+
+
+def _texts(elements):
+    """The non-empty, whitespace-normalised text of each element, in order."""
+    out = []
+    for el in elements:
+        text = _inline_text(el)
+        if text:
+            out.append(text)
+    return out
 
 
 def _format_authors_short(first_author):

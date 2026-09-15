@@ -149,8 +149,3 @@ def apply_degree_cap(overlay, percentile=99):
     overlay.cap, overlay.capped = heat_mod.degree_cap(overlay.heat, percentile)
     return overlay
 
-
-def relabel_unlabeled(overlay):
-    """Which omics carry no column labels: the design card marks them and the
-    walker may make no timing claim on them until the user confirms."""
-    return sorted(name for name, labels in overlay.labels.items() if labels is None)

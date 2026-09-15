@@ -16,6 +16,11 @@ from src.classes.AIInterpret.walker.walk import Walker
 
 logger = logging.getLogger(__name__)
 
+# The most tokens one walker or planner turn may produce. A turn is a tool
+# call with a one-sentence reading; one run streamed 1.1 million characters
+# of a single answer for half an hour and took no step.
+TURN_MAX_TOKENS = 1500
+
 
 @dataclass
 class WalkContext:
@@ -75,7 +80,7 @@ PLANNER_INSTRUCTIONS = """You plan an Agentic Graph Walk over a biological graph
 """ + _READING_RULES + """
 
 1. scan(scope="graph").
-2. plan(seeds, steps, reason): choose the seed candidates that tell distinct biological stories, in the order they should be reported, and the total steps. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it.
+2. plan(seeds, steps, reason): choose the seed candidates that tell distinct biological stories, in the order they should be reported, and the total steps. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it. When the brief names an ANCHOR (the gene the experiment perturbed), the scan shows each candidate's distance from it (d=): make the nearest candidates the first seeds, so the walk starts where the perturbation acts and moves outward.
 3. After plan answers "plan set", reply with one sentence and stop calling tools. Several walkers then walk your seeds at the same time, one each."""
 
 SEGMENT_INSTRUCTIONS = """You walk ONE seed's neighbourhood in an Agentic Graph Walk over a biological graph with a user's multi-omics data laid over it. Other walkers walk the other seeds at the same time: an edge they walked shows as closed, a node they read as walked.
@@ -83,11 +88,26 @@ SEGMENT_INSTRUCTIONS = """You walk ONE seed's neighbourhood in an Agentic Graph 
 """ + _READING_RULES + """
 
 1. Move with step (one edge, either direction of the arrow). Before every move give a reading: one sentence stating what the values of the node you go to SHOW, with the numbers -- direction, timing, which layers agree, whether a difference is already there at the baseline. A layer the card lists as unlabeled has columns c1..cN with no time or order: read its direction and size, not its timing. Name the layer and quote its numbers; every answer shows the layers of the relevant neighbours, so read them before you step. "Check whether..." is not a reading.
-2. Read the seed's relevant neighbours first, then follow what the values say. jump back to a node you walked when a branch is exhausted; code refuses a jump while a relevant unvisited neighbour is still open.
+2. Read the seed's relevant neighbours first, then follow what the values say. When the brief names an ANCHOR, every neighbour shows its distance from it (d=): between neighbours of similar heat take the nearer one, and do not wander away from the perturbation for a marginally hotter node. jump back to a node you walked when a branch is exhausted; code refuses a jump while a relevant unvisited neighbour is still open.
 3. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
 4. note what the Writer should not miss. Use your steps; stop when the neighbourhood is read and what is left repeats what you have.
 
 Rules code enforces: only a listed neighbour; an edge closes per direction; the reading must name a layer of the node; budgets are counters, a refusal costs nothing."""
+
+
+def anchor_line(walker):
+    """One line on the perturbed gene for the briefs, or a blank line."""
+    anchor = walker.anchor
+    if not anchor:
+        return ""
+    if not anchor.get("in_graph"):
+        return "\nANCHOR: the design perturbs %s (%s), which has no edges in this graph; read every change as after that perturbation.\n" % (
+            anchor["gene"], anchor.get("direction", "unknown"))
+    here = walker.dist.get(walker.current) if walker.dist and walker.current else None
+    return ("\nANCHOR: the design perturbs %s (%s); it is a node of this graph%s. Distances (d=) count steps from it; "
+            "relate what you read to that perturbation and its direction.\n" % (
+                anchor["gene"], anchor.get("direction", "unknown"),
+                "" if here is None else ", %d step(s) from where you stand" % here))
 
 
 async def _run_loop(agent, walker, prompt, max_turns):
@@ -107,11 +127,12 @@ async def run_plan_async(walker, card_text, max_turns=8, model=None, temperature
     """The planner: scan the graph and fix the seeds and the steps. Leaves
     walker.plan None when the model never planned."""
     agent = Agent[WalkContext](name="Planner", model=model or _model(), instructions=PLANNER_INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature), tools=PLANNER_TOOLS)
-    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. At most %d seeds; at least %d steps per seed; ceiling %d steps.\n"
+                               model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
+                               tools=PLANNER_TOOLS)
+    kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. At most %d seeds; at least %d steps per seed; ceiling %d steps.\n"
                "Begin with scan(scope=\"graph\")." % (
-                   card_text, walker.scope, walker.params["max_seeds"], walker.params.get("steps_per_seed", 1),
-                   walker.params["ceiling"]))
+                   card_text, anchor_line(walker), walker.scope, walker.params["max_seeds"],
+                   walker.params.get("steps_per_seed", 1), walker.params["ceiling"]))
     await _run_loop(agent, walker, kickoff, max_turns)
     return walker
 
@@ -120,9 +141,10 @@ async def run_segment_async(walker, card_text, opening, others, max_turns, model
     """One seed's walker, already standing on its seed (``opening`` is what
     start_at answered). Stopped by code when the model does not stop."""
     agent = Agent[WalkContext](name="Walker", model=model or _model(), instructions=SEGMENT_INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature), tools=SEGMENT_TOOLS)
-    kickoff = ("DESIGN CARD\n%s\n\nGraph: %s. You walk from %s; %s.\nOther walkers, at the same time: %s.\n\n"
-               "WHERE YOU STAND\n%s" % (card_text, walker.scope, walker.label(walker.current),
+                               model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
+                               tools=SEGMENT_TOOLS)
+    kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. You walk from %s; %s.\nOther walkers, at the same time: %s.\n\n"
+               "WHERE YOU STAND\n%s" % (card_text, anchor_line(walker), walker.scope, walker.label(walker.current),
                                          walker._budget_line(), others or "none", opening))
     await _run_loop(agent, walker, kickoff, max_turns)
     if not walker.done:

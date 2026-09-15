@@ -7,7 +7,7 @@ import os
 import re
 import time
 
-SCHEMA = 1
+SCHEMA = 2                    # 2: checks.gates, checks.rendered, checks.anchor, segment distances, tiers
 
 
 def seal(job_id, scope, network, overlay, walker, card, statements, dropped, results,

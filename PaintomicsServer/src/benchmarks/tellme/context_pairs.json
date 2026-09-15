@@ -1,0 +1,354 @@
+{
+  "made": "2026-09-15",
+  "card": {
+    "organism": "mouse",
+    "system": "mouse B3 pre-B cell line, Ikaros induction"
+  },
+  "description": "Constructed pairs for testing context-awareness of citations. Each pair is one biological claim about a mouse B-cell / lymphocyte signalling gene drawn from the two stored example walks of job Ku5jMVCL6z, with two real papers that both support it: one from the card's context (mouse, B cells or lymphocytes) and one from outside it (human patients, a non-lymphoid tissue, or human cells). Every paper was found by esearch, its PMID confirmed by efetch against its title, and its abstract read; the 'why' field quotes the supporting sentence.",
+  "counts": {
+    "pairs": 20,
+    "distinct_pmids": 40
+  },
+  "pairs": [
+    {
+      "claim": "Foxo1/Foxo3-family forkhead factors induce transcription of the pro-apoptotic BH3-only gene Bcl2l11 (Bim).",
+      "in_context": {
+        "pmid": "11050388",
+        "title": "Expression of the pro-apoptotic Bcl-2 family member Bim is regulated by the forkhead transcription factor FKHR-L1.",
+        "year": "2000",
+        "journal": "Curr Biol",
+        "why": "Lymphocytes deprived of cytokine: 'withdrawal of cytokine results in upregulation of Bim expression concomitant with induction of the apoptotic program in lymphocytes. Activation of the forkhead transcription factor FKHR-L1 ... was sufficient to induce Bim expression.' In-context system (lymphocytes); note the abstract does not name the species."
+      },
+      "out_of_context": {
+        "pmid": "14527951",
+        "title": "FoxO3a transcriptional regulation of Bim controls apoptosis in paclitaxel-treated breast cancer cell lines.",
+        "year": "2003",
+        "journal": "J Biol Chem",
+        "why": "Human breast cancer cell lines treated with paclitaxel: 'maximal induction of Bim promoter was dependent on a FoxO binding site ... FoxO3a is responsible for the transcriptional up-regulation of Bim.' Same molecular claim, epithelial tumour context."
+      }
+    },
+    {
+      "claim": "Ikaros (Ikzf1) silences a target gene by binding a site in that gene's own promoter/regulatory region.",
+      "in_context": {
+        "pmid": "11387214",
+        "title": "Binding of Ikaros to the lambda5 promoter silences transcription through a mechanism that does not require heterochromatin formation.",
+        "year": "2001",
+        "journal": "EMBO J",
+        "why": "Mouse B cells: 'a site in the lambda5 promoter that binds Ikaros and Aiolos is required for silencing of lambda5 expression in activated mature B cells ... the Ikaros proteins initiate silencing of lambda5 expression through a direct effect on the promoter.' Igll1/lambda5 is a core pre-BCR gene of the card's system."
+      },
+      "out_of_context": {
+        "pmid": "11092879",
+        "title": "An intronic Ikaros-binding element mediates retinoic acid suppression of the kappa opioid receptor gene, accompanied by histone deacetylation on the promoters.",
+        "year": "2001",
+        "journal": "J Biol Chem",
+        "why": "Mouse P19 embryonal carcinoma stem cells differentiating into neurons: 'Overexpression of Ik-1 in P19 suppresses endogenous KOR gene expression, accompanied by increased binding of Ik-1 to the Ik-binding site.' Same mechanism, non-lymphoid (neuronal) tissue."
+      }
+    },
+    {
+      "claim": "Ikaros binds the promoters of its target genes in B-lineage progenitors and represses their transcription.",
+      "in_context": {
+        "pmid": "20566697",
+        "title": "Ikaros and Aiolos inhibit pre-B-cell proliferation by directly suppressing c-Myc expression.",
+        "year": "2010",
+        "journal": "Mol Cell Biol",
+        "why": "Mouse pre-B cells: 'Aiolos and Ikaros bind to the c-Myc promoter in vivo and directly suppress c-Myc expression in pre-B cells.' Exactly the card's cell type and the Ikaros-Myc axis of the example walk."
+      },
+      "out_of_context": {
+        "pmid": "28030830",
+        "title": "Ikaros regulation of the BCL6/BACH2 axis and its clinical relevance in acute lymphoblastic leukemia.",
+        "year": "2017",
+        "journal": "Oncotarget",
+        "why": "Human B-ALL cell lines and primary patient samples: 'Ikaros, a tumor suppressor encoded by IKZF1, directly binds to both the BCL6 and BACH2 promoters where it suppresses BCL6 ... in B-cell ALL (B-ALL) cells', with patient outcome data. Human leukaemia patients, not mouse pre-B."
+      }
+    },
+    {
+      "claim": "Ikaros represses its targets by recruiting co-repressor/histone-deacetylase complexes.",
+      "in_context": {
+        "pmid": "22684523",
+        "title": "Silencing of the Il2 gene transcription is regulated by epigenetic changes in anergic T cells.",
+        "year": "2012",
+        "journal": "Eur J Immunol",
+        "why": "Mouse anergic CD4+ T cells: 'Ikaros participates in the transcriptional repression of the Il2 gene by recruiting histone deacetylases that cause core histone deacetylation at the Il2 promoter.' Mouse lymphocytes."
+      },
+      "out_of_context": {
+        "pmid": "25301737",
+        "title": "Inhibitory effects of transcription factor Ikaros on the expression of liver cancer stem cell marker CD133 in hepatocellular carcinoma.",
+        "year": "2014",
+        "journal": "Oncotarget",
+        "why": "Human hepatocellular carcinoma: 'Ikaros interacted with CtBP as a transcription repressor complex, which inhibited CD133 expression in HCC', with patient survival analysis. Same repression mechanism, liver tumour context."
+      }
+    },
+    {
+      "claim": "The transcription factor Ets1 is required for normal lymphocyte development.",
+      "in_context": {
+        "pmid": "15384043",
+        "title": "The development of early and mature B cells is impaired in mice deficient for the Ets-1 transcription factor.",
+        "year": "2004",
+        "journal": "Eur J Immunol",
+        "why": "Ets-1-deficient mice: 'the development of B cell precursors, particularly steps requiring pre-B cell receptor function, is defective in Ets-1(-/-) mice.' Mouse B-lineage, pre-BCR - the card's system."
+      },
+      "out_of_context": {
+        "pmid": "32350509",
+        "title": "The transcription factor ETS1 is an important regulator of human NK cell development and terminal differentiation.",
+        "year": "2020",
+        "journal": "Blood",
+        "why": "Human NK cells derived from ETS1-deficient human embryonic stem cells and cord blood progenitors: 'the transcription factor ETS1 is critically required for human NK cell differentiation.' Human cells, NK not B lineage."
+      }
+    },
+    {
+      "claim": "Syk is the tyrosine kinase that transduces signalling from ITAM-coupled surface receptors.",
+      "in_context": {
+        "pmid": "7477352",
+        "title": "Perinatal lethality and blocked B-cell development in mice lacking the tyrosine kinase Syk.",
+        "year": "1995",
+        "journal": "Nature",
+        "why": "Syk-null mice: 'Irradiated mice reconstituted with Syk-deficient fetal liver showed a block in B-cell development at the pro-B to pre-B cell transition, consistent with a key role for Syk in pre-B-cell receptor signalling.' Mouse pre-BCR - the card's system."
+      },
+      "out_of_context": {
+        "pmid": "41170229",
+        "title": "Betulinic Acid Inhibits Collagen-Induced Platelet Adhesion and Activation Through Inhibition of Spleen Tyrosine Kinase (SYK) Phosphorylation.",
+        "year": "2025",
+        "journal": "Cureus",
+        "why": "Mouse platelets stimulated with collagen (GPVI, an ITAM receptor): betulinic acid 'Inhibits Collagen-Induced Platelet Adhesion and Activation Through Inhibition of Spleen Tyrosine Kinase (SYK) Phosphorylation.' Non-lymphoid cell type."
+      }
+    },
+    {
+      "claim": "The surrogate light chain lambda5 (Igll1) is required for B cell development.",
+      "in_context": {
+        "pmid": "1591779",
+        "title": "A critical role of lambda 5 protein in B cell development.",
+        "year": "1992",
+        "journal": "Cell",
+        "why": "Mouse lambda5 knockout: 'We have generated mice in which the lambda 5 gene is inactivated by targeted gene disruption ... In these mice, B cell development in the bone marrow is blocked at the pre-B cell stage.' Igll1 is a direct Ikaros target on the card."
+      },
+      "out_of_context": {
+        "pmid": "39147326",
+        "title": "Variants in IGLL1 cause a broad phenotype from agammaglobulinemia to transient hypogammaglobulinemia.",
+        "year": "2024",
+        "journal": "J Allergy Clin Immunol",
+        "why": "Human patients: 17 individuals with pathogenic IGLL1 variants, 'All had severely reduced CD19+ B cells (< 0.1 x 10^9/L)'. Clinical human cohort, not a mouse experiment."
+      }
+    },
+    {
+      "claim": "Rag1 is required for V(D)J recombination and therefore for producing mature lymphocytes.",
+      "in_context": {
+        "pmid": "1547488",
+        "title": "RAG-1-deficient mice have no mature B and T lymphocytes.",
+        "year": "1992",
+        "journal": "Cell",
+        "why": "Mouse Rag1 knockout: 'RAG-1-deficient mice have small lymphoid organs that do not contain mature B and T lymphocytes. The arrest of B and T cell differentiation ... correlates with the inability to perform V(D)J recombination.' Rag1 is a TRRUST-listed Ikaros target."
+      },
+      "out_of_context": {
+        "pmid": "37724703",
+        "title": "Heterogeneity in RAG1 and RAG2 deficiency: 35 cases from a single-centre.",
+        "year": "2024",
+        "journal": "Clin Exp Immunol",
+        "why": "Human patients: 35 RAG1/RAG2-deficient cases, 'Recombination activating genes (RAG)1 and RAG2 deficiency leads to combined T/B-cell deficiency', presenting as SCID, Omenn syndrome or delayed-onset CID. Clinical cohort."
+      }
+    },
+    {
+      "claim": "Interleukin-7 receptor alpha signalling is essential for early lymphocyte development.",
+      "in_context": {
+        "pmid": "7964471",
+        "title": "Early lymphocyte expansion is severely impaired in interleukin 7 receptor-deficient mice.",
+        "year": "1994",
+        "journal": "J Exp Med",
+        "why": "Il7r-deficient mice: 'Mutant mice display a profound reduction in thymic and peripheral lymphoid cellularity ... reveal a critical role for IL-7R during early lymphoid development.' Il7r is a TRRUST-listed Ikaros target and sits on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "35418989",
+        "title": "Diagnosis and Treatment of a Patient With Severe Combined Immunodeficiency Due to a Novel Homozygous Mutation in the IL-7Rα Chain.",
+        "year": "2022",
+        "journal": "Front Immunol",
+        "why": "Human infant with a homozygous IL7RA mutation: 'Bi-allelic mutations in the IL-7Ralpha chain abolish T cell development and function resulting in severe combined immunodeficiency disease', confirmed by flow cytometry and sequencing. Single human patient, clinical."
+      }
+    },
+    {
+      "claim": "Cyclin D3 (Ccnd3) drives G1/S progression, and losing it arrests proliferation.",
+      "in_context": {
+        "pmid": "16582912",
+        "title": "A unique function for cyclin D3 in early B cell development.",
+        "year": "2006",
+        "journal": "Nat Immunol",
+        "why": "Mouse Ccnd1/Ccnd2/Ccnd3 knockouts: 'cyclin D3 was uniquely required for the development of pre-B cells ... Cyclin D3 has a key function in B cell development by integrating cytokine and pre-B cell receptor-dependent signals.' Ccnd3 is the cyclin Ikaros down-regulates in pre-B cells."
+      },
+      "out_of_context": {
+        "pmid": "22362728",
+        "title": "MiR-138 induces cell cycle arrest by targeting cyclin D3 in hepatocellular carcinoma.",
+        "year": "2012",
+        "journal": "Carcinogenesis",
+        "why": "Human hepatocellular carcinoma: 'Overexpression of miR-138 reduced cell viability and colony formation by induction of cell arrest in HCC cell lines', with CCND3 as the direct target. Non-lymphoid human tumour."
+      }
+    },
+    {
+      "claim": "Activating Notch1 signalling drives T-lineage acute lymphoblastic leukaemia.",
+      "in_context": {
+        "pmid": "21093322",
+        "title": "Alternative promoter usage at the Notch1 locus supports ligand-independent signaling in T cell development and leukemogenesis.",
+        "year": "2010",
+        "journal": "Immunity",
+        "why": "Mouse: 'At early stages of leukemogenesis, increased basal expression from the canonical and 5'-alternative promoters initiated a feedback loop, augmenting Notch1 signaling ... Only ligand-independent Notch1 isoforms were required for Ikaros-mediated leukemogenesis.' Notch1 is a TRRUST-listed Ikaros target."
+      },
+      "out_of_context": {
+        "pmid": "30387229",
+        "title": "NOTCH1 pathway activating mutations and clonal evolution in pediatric T-cell acute lymphoblastic leukemia.",
+        "year": "2019",
+        "journal": "Cancer Sci",
+        "why": "Human paediatric T-ALL: whole-exome sequencing of 30 cases, 'activating NOTCH1 signaling due to NOTCH1/FBXW7 alterations is a major oncogenic driver', detected in 73.3% at diagnosis. Patient cohort."
+      }
+    },
+    {
+      "claim": "Bcl6 is required for the germinal-centre B cell programme.",
+      "in_context": {
+        "pmid": "9236196",
+        "title": "Disruption of the Bcl6 gene results in an impaired germinal center formation.",
+        "year": "1997",
+        "journal": "J Exp Med",
+        "why": "Bcl6-deficient mouse bone marrow chimeras: 'GCs were not found in these mice. This defect was mainly due to the abnormalities of B cells. Therefore, Bcl6 is essential for the differentiation of GC B cells.' Bcl6 is an Ikaros target on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "39815148",
+        "title": "Resveratrol as a BCL6 natural inhibitor suppresses germinal center derived Non-Hodgkin lymphoma cells growth.",
+        "year": "2025",
+        "journal": "J Nat Med",
+        "why": "Human GC-derived non-Hodgkin lymphoma cell lines: 'BCL6 is indispensable for GC formation ...'; the BCL6 inhibitor resveratrol 'disrupted the BCL6/SMRT interaction, reactivated suppressed gene expression, and inhibited the proliferation of GC-derived NHL cells.' Human tumour cell pharmacology."
+      }
+    },
+    {
+      "claim": "CIS (Cish) is a negative checkpoint that restrains IL-15/JAK-STAT signalling in NK cells.",
+      "in_context": {
+        "pmid": "27213690",
+        "title": "CIS is a potent checkpoint in NK cell-mediated tumor immunity.",
+        "year": "2016",
+        "journal": "Nat Immunol",
+        "why": "Cish-knockout mice: 'deletion of Cish rendered NK cells hypersensitive to IL-15 ... This was associated with increased JAK-STAT signaling in NK cells in which Cish was deleted. Cish(-/-) mice were resistant to melanoma, prostate and breast cancer metastasis in vivo.' Mouse lymphocytes; Cish is on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "32531207",
+        "title": "Metabolic Reprograming via Deletion of CISH in Human iPSC-Derived NK Cells Promotes In Vivo Persistence and Enhances Anti-tumor Activity.",
+        "year": "2020",
+        "journal": "Cell Stem Cell",
+        "why": "Human iPSC-derived NK cells: 'CISH-/- iPSC-NK cells demonstrate increased IL-15-mediated JAK-STAT signaling activity' and improved expansion and cytotoxicity. Same claim, human engineered cells."
+      }
+    },
+    {
+      "claim": "SOCS1 is a negative-feedback brake on cytokine signalling, so losing SOCS1 releases proliferation.",
+      "in_context": {
+        "pmid": "34860579",
+        "title": "In vivo genome-wide CRISPR screens identify SOCS1 as intrinsic checkpoint of CD4+ TH1 cell response.",
+        "year": "2021",
+        "journal": "Sci Immunol",
+        "why": "Mouse in vivo CRISPR screens: 'we identified suppressor of cytokine signaling 1 (SOCS1) as a major nonredundant checkpoint imposing a brake on CD4+ T cell proliferation ... SOCS1 is a critical node integrating both IL-2 and IFN-gamma signals.' Mouse lymphocytes; Socs1/3 sit on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "36816357",
+        "title": "LncRNA CASC2 Regulate Cell Proliferation and Invasion by Targeting miR-155/SOCS1 Axis in Hepatocellular Carcinoma.",
+        "year": "2023",
+        "journal": "J Oncol",
+        "why": "Human hepatocellular carcinoma tissue and cell lines: 'SOCS1 inhibition partially inverses the suppression effect of cell proliferation, migration, and invasion regulated by CASC2 in Huh7 and HepG2 cells', with clinical staging data. Non-lymphoid human tumour."
+      }
+    },
+    {
+      "claim": "Pten restrains PI3K-AKT signalling; without Pten, the pathway is constitutively active.",
+      "in_context": {
+        "pmid": "31015337",
+        "title": "Pten controls B-cell responsiveness and germinal center reaction by regulating the expression of IgD BCR.",
+        "year": "2019",
+        "journal": "EMBO J",
+        "why": "Mouse B cells: 'FoxO1 is repressed by phosphoinositide 3-kinase (PI3K) signaling and requires the lipid phosphatase Pten for its activation. Consequently, Pten-deficient B cells ... are unable to upregulate IgD.' Mouse B cells, and the Pten-PI3K-FoxO1 axis is exactly the card's pathway."
+      },
+      "out_of_context": {
+        "pmid": "15782140",
+        "title": "Inhibition of ILK in PTEN-mutant human glioblastomas inhibits PKB/Akt activation, induces apoptosis, and delays tumor growth.",
+        "year": "2005",
+        "journal": "Oncogene",
+        "why": "Human glioblastoma: 'PTEN mutation leads to constitutive activation of protein kinase B (PKB)/Akt with phosphorylation at the PKB/Akt sites Thr-308 and Ser-473', in PTEN-mutant glioblastoma cell lines and xenografts. Non-lymphoid human tumour."
+      }
+    },
+    {
+      "claim": "SLC7A11 (xCT) imports cystine to sustain glutathione, and its loss triggers ferroptosis.",
+      "in_context": {
+        "pmid": "42365184",
+        "title": "SLC7A11 deficiency exacerbates systemic lupus erythematosus by inducing instability and ferroptosis in regulatory T cells.",
+        "year": "2026",
+        "journal": "Commun Biol",
+        "why": "Mouse regulatory T cells: 'Treg-specific SLC7A11 deletion impairs their stability and differentiation ... Severe SLC7A11 inhibition causes excessive lipid peroxidation and ferroptosis', in a mouse lupus model. Mouse lymphocytes; Slc7a11 is on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "42607497",
+        "title": "P4HA3-mediated hydroxylation of SLC7A11 drives tyrosine kinase inhibitor resistance by suppressing ferroptosis in clear cell renal cell carcinoma.",
+        "year": "2026",
+        "journal": "Redox Biol",
+        "why": "Human clear-cell renal cell carcinoma: 'P4HA3 inhibited ferroptosis by stabilizing the cystine transporter SLC7A11, thereby maintaining redox homeostasis and suppressing lipid peroxidation.' Non-lymphoid human tumour."
+      }
+    },
+    {
+      "claim": "HES1 acts downstream of Notch to constrain lymphocyte differentiation.",
+      "in_context": {
+        "pmid": "37193067",
+        "title": "A role for Hes1 in constraining germinal center B cell formation.",
+        "year": "2023",
+        "journal": "Cell Insight",
+        "why": "Mouse B cells: 'B-cell-specific HES1 deletion causes a significant increase in GC formation, leading to increased production of plasma cells. We further provide evidence that HES1 inhibits BCL6 expression.' Mouse B cells."
+      },
+      "out_of_context": {
+        "pmid": "31919081",
+        "title": "HES1 and HES4 have non-redundant roles downstream of Notch during early human T-cell development.",
+        "year": "2021",
+        "journal": "Haematologica",
+        "why": "Human CD34+ haematopoietic progenitors: 'HES1 acts as a repressor of differentiation by maintaining a quiescent stem cell signature in CD34+ hematopoietic progenitor cells', downstream of Notch1. Human cells, T-lineage."
+      }
+    },
+    {
+      "claim": "Bim (Bcl2l11) is a pro-apoptotic effector, so removing it lets cells survive that would otherwise die.",
+      "in_context": {
+        "pmid": "15504823",
+        "title": "Loss of Bim increases T cell production and function in interleukin 7 receptor-deficient mice.",
+        "year": "2004",
+        "journal": "J Exp Med",
+        "why": "Bim/Il7r double-knockout mice: 'loss of Bim significantly increased thymocyte numbers, restored near normal numbers of mature T cells in the blood and spleen ... in IL-7Ralpha-/- mice.' Mouse lymphocytes in vivo; Bcl2l11 is on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "26780985",
+        "title": "Overexpression of FOXO4 induces apoptosis of clear-cell renal carcinoma cells through downregulation of Bim.",
+        "year": "2016",
+        "journal": "Mol Med Rep",
+        "why": "Human clear-cell renal carcinoma lines: 'FOXO4 overexpression significantly increased the apoptotic rate of ccRCC cells in vitro, along with increased protein expression levels of Bim ... the apoptotic effects ... were inhibited by small interfering RNA-mediated knockdown of Bim.' Non-lymphoid human tumour."
+      }
+    },
+    {
+      "claim": "Pyk2 (Ptk2b) is activated downstream of Src-family kinases and drives adhesion/migration signalling.",
+      "in_context": {
+        "pmid": "20688918",
+        "title": "Regulation of the tyrosine kinase Pyk2 by calcium is through production of reactive oxygen species in cytotoxic T lymphocytes.",
+        "year": "2010",
+        "journal": "J Biol Chem",
+        "why": "Cytotoxic T lymphocytes: 'Ca(2+)-stimulated Pyk2 phosphorylation was dependent on Src-family kinase activity, even at the Pyk2 autophosphorylation site.' Lymphocytes (primary CTL alongside Jurkat cells); Ptk2b is on the example walk."
+      },
+      "out_of_context": {
+        "pmid": "35228997",
+        "title": "Puerarin specifically disrupts osteoclast activation via blocking integrin-β3 Pyk2/Src/Cbl signaling pathway.",
+        "year": "2022",
+        "journal": "J Orthop Translat",
+        "why": "Osteoclasts (RAW264.7 and mouse bone-marrow macrophages, plus an ovariectomised rat model): puerarin 'specifically disrupts osteoclast activation via blocking integrin-beta3 Pyk2/Src/Cbl signaling pathway.' Non-lymphoid bone tissue."
+      }
+    },
+    {
+      "claim": "FLT3 signalling drives the expansion of haematopoietic and lymphoid progenitors.",
+      "in_context": {
+        "pmid": "14610045",
+        "title": "Complementary signaling through flt3 and interleukin-7 receptor alpha is indispensable for fetal and adult B cell genesis.",
+        "year": "2003",
+        "journal": "J Exp Med",
+        "why": "Mouse: 'adult mice double deficient in IL-7Ralpha and FL completely lack visible LNs, conventional IgM+ B cells ... All stages of committed B cell progenitors are undetectable in FL-/- x IL-7Ralpha-/- BM.' Mouse B lymphopoiesis; Flt3 is a candidate Ikaros target on the walk."
+      },
+      "out_of_context": {
+        "pmid": "42446166",
+        "title": "Clinical Significance of FLT3-ITD Variation Allele Frequency in Acute Myeloid Leukemia: A Multicenter Study.",
+        "year": "2026",
+        "journal": "Hematol Oncol",
+        "why": "Human AML patients: multicentre study of 190 patients with FLT3-ITD, where 'Patients with high VAF (>= 40%) exhibited significantly higher white blood cell counts, lactate dehydrogenase levels, and bone marrow blast percentages' - constitutive FLT3 signalling driving proliferation. Myeloid, clinical."
+      }
+    }
+  ]
+}

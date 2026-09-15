@@ -1,0 +1,382 @@
+{
+  "gene": "Ikzf1",
+  "organism": "mmu",
+  "made": "2026-09-15",
+  "description": "Known mouse Ikaros (Ikzf1) target genes with per-target evidence. Built from TRRUST v2 mouse (trrust_rawdata.mouse.tsv, all 17 Ikzf1 rows = 16 distinct symbols) plus four primary papers whose text was read directly: Ferreiros-Vidal 2013 Blood (PMID 23303821, abstract only - paywalled), Ferreiros-Vidal 2019 PLoS Biol (PMID 30978178, full text via Europe PMC PMC6481923), Schwickert 2014 Nat Immunol (PMID 24509509, full text via NCBI PMC5790181) and Fedl 2024 Nat Immunol (PMID 39179932, abstract). Every PMID was confirmed by efetch against the paper's title. Genes appear only where the text I read names them as Ikaros targets; the quote is in 'note'.",
+  "sources": {
+    "trrust_v2_mouse": "https://www.grnpedia.org/trrust/data/trrust_rawdata.mouse.tsv",
+    "papers_read_in_full": [
+      "30978178",
+      "24509509"
+    ],
+    "papers_read_as_abstract": [
+      "23303821",
+      "39179932",
+      "20566697"
+    ]
+  },
+  "counts": {
+    "targets": 39,
+    "from_trrust": 16,
+    "from_literature_only": 23
+  },
+  "targets": [
+    {
+      "symbol": "Casz1",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "25654255"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Casz1 Repression 25654255'. Mattar et al. 2015 Neuron (mouse retinal progenitors): 'Just as Drosophila castor lies downstream of the early temporal identity factor hunchback, we find that the hunchback ortholog Ikzf1 represses Casz1.' Non-lymphoid (retina)."
+    },
+    {
+      "symbol": "Cd4",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "17980631"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Cd4 Repression 17980631'. Naito et al. 2007 Immunity: 'In double-negative thymocytes, Ikaros binding to the Cd4 silencer contributed to its repressive activity.' Mouse T-lineage."
+    },
+    {
+      "symbol": "Cd79a",
+      "effect": "unknown",
+      "source": "TRRUST",
+      "pmids": [
+        "11000405"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Cd79a Unknown 11000405'. Malone et al. 2000 Mol Immunol: 'The murine mb-1 promoter has been characterized to depend on the trans-acting transcription factors; Sp1, ets, lkaros, and EBF for full promoter activity.' Direction not resolved by the abstract, so left as unknown."
+    },
+    {
+      "symbol": "Fgfr4",
+      "effect": "activation",
+      "source": "TRRUST",
+      "pmids": [
+        "11981041"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Fgfr4 Activation 11981041'. Yu et al. 2002 Mol Endocrinol: 'Transcriptional regulation of FGFR4 by Ik was demonstrated by cotransfection of Ik1 ... mutation of the Ik-binding site completely eliminated the Ik1 effect.' Pituitary cells, not lymphoid."
+    },
+    {
+      "symbol": "Igll1",
+      "effect": "repression",
+      "source": "TRRUST|literature",
+      "pmids": [
+        "11387214",
+        "17363301",
+        "30978178",
+        "39179932"
+      ],
+      "note": "Two TRRUST v2 mouse rows ('Repression 11387214', 'Unknown 17363301'). Sabbattini et al. 2001 EMBO J: 'a site in the lambda5 promoter that binds Ikaros and Aiolos is required for silencing of lambda5 expression in activated mature B cells.' Thompson et al. 2007 Immunity: 'This required Ikaros binding to the Igll1 (lambda5) promoter.' Ferreiros-Vidal 2019 (PMID 30978178) full text: 'restoration of BLNK activity induced Ikzf3 and repressed Igll1, a known target of Ikzf1 and Ikzf3 during the Fr.C to Fr.D transition'. Fedl et al. 2024 (PMID 39179932): 'The surrogate light-chain genes Igll1 and Vpreb1 are ... directly repressed by Ikaros and Aiolos in small pre-B cells.'"
+    },
+    {
+      "symbol": "Il10",
+      "effect": "unknown",
+      "source": "TRRUST",
+      "pmids": [
+        "19828627"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Il10 Unknown 19828627'. Umetsu & Winandy 2009 J Immunol read as activation: 'T cells deficient in Ikaros express significantly lower levels of IL-10 compared with wild-type T cells' and 'Ikaros binds to conserved regulatory regions of the Il10 gene locus in Th2 cells'. TRRUST mode kept as unknown; the abstract supports activation in mouse CD4+ T cells."
+    },
+    {
+      "symbol": "Il2",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "22684523"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Il2 Repression 22684523'. Bandyopadhyay et al. 2012 Eur J Immunol: 'in anergic CD4(+) T cells, Ikaros participates in the transcriptional repression of the Il2 gene by recruiting histone deacetylases that cause core histone deacetylation at the Il2 promoter.' Mouse T cells."
+    },
+    {
+      "symbol": "Il7r",
+      "effect": "unknown",
+      "source": "TRRUST",
+      "pmids": [
+        "15944284"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Il7r Unknown 15944284'. Lee et al. 2005 J Immunol: 'Mouse IL-7Ralpha promoter ... containing consensus motifs of Ikaros, PU.1, and Runx1 transcription factors.' Binding-site evidence only; the paper's functional focus is the glucocorticoid receptor, so the Ikaros direction is unresolved."
+    },
+    {
+      "symbol": "Myc",
+      "effect": "repression",
+      "source": "TRRUST|literature",
+      "pmids": [
+        "20566697",
+        "30978178"
+      ],
+      "note": "TRRUST v2 mouse row is 'Ikzf1 Myc Activation 20566697', but the cited paper reports the opposite and I followed the paper. Ma et al. 2010 Mol Cell Biol: 'Aiolos and Ikaros bind to the c-Myc promoter in vivo and directly suppress c-Myc expression in pre-B cells.' Ferreiros-Vidal 2019 full text: 'direct binding of Ikaros to the Foxo1 and Myc promoters in B cell progenitors (Fig 3F)' and 'Ikaros and Aiolos directly bind to the Myc promoter and repress Myc at the transcriptional level'. Effect recorded as repression; the TRRUST mode for this row is wrong."
+    },
+    {
+      "symbol": "Nos2",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "18818879"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Nos2 Repression 18818879'. Cho et al. 2008 Cell Mol Life Sci: 'a mutation of the Ikaros-binding site on the iNOS promoter resulted in an increase in LPS/IFN-gamma-induced iNOS expression ... Ikaros acts as a negative regulator on iNOS expression.' Mouse macrophages, not B-lineage."
+    },
+    {
+      "symbol": "Notch1",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "21093322"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Notch1 Unknown 21093322'; the abstract supports repression, so recorded as such. Gomez-del Arco et al. 2010 Immunity: 'Ikaros bound to both canonical and alternative Notch1 promoters and its loss increased permissive chromatin' and 'Ikaros also repressed intragenic promoters for ligand-independent Notch1 proteins'. Mouse T-lineage / T-ALL."
+    },
+    {
+      "symbol": "Oprd1",
+      "effect": "activation",
+      "source": "TRRUST",
+      "pmids": [
+        "11823468"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Oprd1 Unknown 11823468'; the abstract supports activation. Sun & Loh 2002 JBC: 'increased binding activity of Ikaros at the Ikaros-binding site (-378 to -374) in the DOR promoter is required for the stimulated transcription of DOR gene in phytohemagglutinin-activated T cells.' Mouse EL-4 T lymphoma."
+    },
+    {
+      "symbol": "Oprk1",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "11092879"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Oprk1 Repression 11092879'. Hu et al. 2001 JBC: 'Overexpression of Ik-1 in P19 suppresses endogenous KOR gene expression, accompanied by increased binding of Ik-1 to the Ik-binding site and chromatin histone deacetylation on KOR promoters.' Mouse P19 embryonal carcinoma, non-lymphoid."
+    },
+    {
+      "symbol": "Osr1",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "18804520"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Osr1 Unknown 18804520'; the abstract supports repression. Yamauchi et al. 2008 Gene: 'Osr1 promoter activity was suppressed by cotransfection with Runx2- and Ikzf1-expressing vectors in a dose-dependent manner' and Ikzf1 bound the proximal (-1652/-1644) motif by EMSA and ChIP."
+    },
+    {
+      "symbol": "Prom1",
+      "effect": "repression",
+      "source": "TRRUST",
+      "pmids": [
+        "25301737"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Prom1 Repression 25301737'. Zhang et al. 2014 Oncotarget: 'Ikaros inhibited the expression of CD133 via direct binding to the CD133 P1 promoter'. Note the experiments are human hepatocellular carcinoma (with mouse xenografts), so the mouse assignment in TRRUST is an orthology call, not a mouse experiment."
+    },
+    {
+      "symbol": "Rag1",
+      "effect": "unknown",
+      "source": "TRRUST",
+      "pmids": [
+        "9464529"
+      ],
+      "note": "TRRUST v2 mouse row 'Ikzf1 Rag1 Unknown 9464529'. Fuller & Storb 1997 Mol Immunol: 'Methylation interference and mutation analysis reveal that the Rag1 promoter contains binding sites for E-box binding proteins, NF-Y proteins, and Ikaros proteins.' Binding-site evidence only, direction not established."
+    },
+    {
+      "symbol": "Foxo1",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "30978178"
+      ],
+      "note": "Ferreiros-Vidal et al. 2019 PLoS Biol, Results: 'The relevance of FOXO1 and Myc for primary B cell progenitor differentiation is supported by the up-regulation of Foxo1 mRNA and the down-regulation of Myc mRNA during in vivo B cell progenitor differentiation (Fig 3E) and direct binding of Ikaros to the Foxo1 and Myc promoters in B cell progenitors (Fig 3F).' Discussion: 'In B cell progenitors, both Myc and Foxo1 are direct targets of Ikaros'."
+    },
+    {
+      "symbol": "Slc2a1",
+      "effect": "unknown",
+      "source": "literature",
+      "pmids": [
+        "30978178"
+      ],
+      "note": "Ferreiros-Vidal et al. 2019 PLoS Biol: 'The regulatory relationship between Ikaros and Myc is illustrated by the target genes Igll1 (dominated by Ikaros), Ccnd2 (dominated by Myc), and Slc2a1 (coregulated by Ikaros and Myc; S4D Fig).' Co-regulated with Myc, so the Ikaros-only direction is not clean."
+    },
+    {
+      "symbol": "Ccnd2",
+      "effect": "unknown",
+      "source": "literature",
+      "pmids": [
+        "30978178"
+      ],
+      "note": "Same sentence as Slc2a1: Ccnd2 is listed among the Ikaros/Myc target genes but is described as 'dominated by Myc'. Included with effect unknown because the paper attributes its control mainly to Myc, not Ikaros."
+    },
+    {
+      "symbol": "Ccnd3",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "20566697",
+        "30978178"
+      ],
+      "note": "Indirect: requires Myc down-regulation. Ma et al. 2010: 'Ikaros and Aiolos also induce expression of p27 and downregulate cyclin D3 in pre-B cells ... downregulation of c-Myc by Ikaros and Aiolos is necessary for the induction of p27 and downregulation of cyclin D3.' Ferreiros-Vidal 2019 restates it: 'Myc can override the down-regulation of Ccnd3 (cyclin D3) and the up-regulation of the cell-cycle inhibitor Cdkn1b (p27) by Ikaros and Aiolos'."
+    },
+    {
+      "symbol": "Cdkn1b",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "20566697",
+        "30978178"
+      ],
+      "note": "Indirect, same evidence as Ccnd3 but opposite sign. Ma et al. 2010: 'Ikaros and Aiolos also induce expression of p27 ... and the growth-inhibitory effect of Ikaros and Aiolos is compromised in the absence of p27.'"
+    },
+    {
+      "symbol": "Vpreb1",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "39179932"
+      ],
+      "note": "Fedl et al. 2024 Nat Immunol: 'The surrogate light-chain genes Igll1 and Vpreb1 are directly activated by Ebf1 and Pax5 in pro-B cells and directly repressed by Ikaros and Aiolos in small pre-B cells.' In vivo acute protein degradation in mouse B cell progenitors."
+    },
+    {
+      "symbol": "Ikzf3",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert et al. 2014 Nat Immunol, Results: 'One of the repressed target gene, Ikzf3, codes for the transcription factor Aiolos ... Ikzf3 expression was derepressed in cultured and ex vivo c-Kithi pro-B cells of Cd79a-Cre Ikzf1fl/- mice.' Mouse pro-B cells."
+    },
+    {
+      "symbol": "Icam1",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: 'By flow cytometric analysis of Ikzf1 mutant and control pro-B cells, we could verify the activation of Icam1 and Bst1 as well as the repression of Cd22 and Cd72 at the protein level (Fig. 4b).'"
+    },
+    {
+      "symbol": "Bst1",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Icam1: activation verified at the protein level in mouse pro-B cells."
+    },
+    {
+      "symbol": "Cd22",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: repression verified at the protein level (Fig. 4b); also listed among 'genes coding for negative regulators of (pre-)BCR signaling including inhibitory receptors (Cd22, Cd72, Fcgr2b [FcgammaRIIb], Pdcd1)'."
+    },
+    {
+      "symbol": "Cd72",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: repression verified at the protein level (Fig. 4b), listed with the inhibitory (pre-)BCR receptors repressed by Ikaros."
+    },
+    {
+      "symbol": "Fcgr2b",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: 'Ikaros represses genes coding for negative regulators of (pre-)BCR signaling including inhibitory receptors (Cd22, Cd72, Fcgr2b [FcgammaRIIb], Pdcd1 [PD1]) and phosphatases (Ptpn6 [SHP1], Inppl1 [SHIP2])'."
+    },
+    {
+      "symbol": "Pdcd1",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Fcgr2b."
+    },
+    {
+      "symbol": "Ptpn6",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Fcgr2b: SHP1 is among the phosphatases repressed by Ikaros in pro-B cells."
+    },
+    {
+      "symbol": "Inppl1",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Fcgr2b: SHIP2 is among the phosphatases repressed by Ikaros in pro-B cells."
+    },
+    {
+      "symbol": "Lcp2",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: 'several Ikaros-activated genes code for positive regulators of (pre-)BCR signaling such as a costimulatory receptor (Slamf6), adaptor proteins (Lcp2 [SLP76], Lat, Grap2), kinases (Blk, PI3K subunit Pik3r5) and the phosphatase calcineurin (subunit Ppp3cc)'."
+    },
+    {
+      "symbol": "Lat",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Lcp2."
+    },
+    {
+      "symbol": "Blk",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Lcp2."
+    },
+    {
+      "symbol": "Slamf6",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Lcp2."
+    },
+    {
+      "symbol": "Pik3r5",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014, same sentence as Lcp2."
+    },
+    {
+      "symbol": "Ptk2",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: 'Ikaros primarily represses target genes coding for adhesion (Cdh22, Itga9, Plxnb2, Cd82), a chemokine receptor (Ccr2), kinases (Wnk2, Pkn3, Ptk2 [FAK1]) ...'. Note this is Ptk2/FAK1, not the Ptk2b/Pyk2 that appears on the example walks."
+    },
+    {
+      "symbol": "Cplx2",
+      "effect": "activation",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: 'RNA transcripts of the activated Ikaros target gene Cplx2 were more strongly reduced in cultured Ikzf1(delta/-) pro-B cells compared to ex vivo sorted Ikzf1(delta/-) pro-B cells (Fig. 3e).'"
+    },
+    {
+      "symbol": "Ramp1",
+      "effect": "repression",
+      "source": "literature",
+      "pmids": [
+        "24509509"
+      ],
+      "note": "Schwickert 2014: 'Ramp1 was identified as a repressed Ikaros target gene, as its expression was induced in cultured and ex vivo sorted Ikzf1(delta/-) pro-B cells (Fig. 3e).'"
+    }
+  ]
+}

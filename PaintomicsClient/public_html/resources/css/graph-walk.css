@@ -14,6 +14,14 @@
 	--pa-walk-error-bg: #FBEDEA;
 	--pa-walk-focus-bg: #EEF7F5;
 	--pa-walk-rule: rgba(24, 24, 27, 0.10);
+	/* The gate chips: a passed check is the leg teal, a failed one red, one
+	   with nothing to judge grey. A paper from another system is amber, the
+	   seed hue, so it does not read as a failure. */
+	--pa-walk-fail-ink: #B42318;
+	--pa-walk-fail-bg: #FDECEA;
+	--pa-walk-na-ink: #52525B;
+	--pa-walk-na-bg: #F1F1F3;
+	--pa-walk-other-border: #D97706;
 }
 
 .pa-walk-panel .lateralOptionsPanel-header h2 {
@@ -140,6 +148,73 @@
 	font-size: 12.5px;
 }
 
+/* The perturbation line above the Results. */
+.pa-walk-header {
+	margin: 0 0 6px;
+	font-size: 12.5px;
+	color: var(--pa-ink-body, #27272A);
+}
+
+/* The five gates, as chips, then why each failed one failed. */
+.pa-walk-gates {
+	margin: 0 0 10px;
+}
+.pa-walk-gate-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 0 0 4px;
+}
+.pa-walk-gate {
+	display: inline-block;
+	padding: 1px 7px;
+	border-radius: 9px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+	cursor: help;
+}
+/* The mark is drawn, not written: the state must not rest on colour alone. */
+.pa-walk-gate::before {
+	margin-right: 3px;
+}
+.pa-walk-gate.is-pass {
+	background: var(--pa-walk-chip-bg);
+	color: var(--pa-walk-accent-ink);
+}
+.pa-walk-gate.is-pass::before {
+	content: "\2713";
+}
+.pa-walk-gate.is-fail {
+	background: var(--pa-walk-fail-bg);
+	color: var(--pa-walk-fail-ink);
+}
+.pa-walk-gate.is-fail::before {
+	content: "\2715";
+}
+.pa-walk-gate.is-na {
+	background: var(--pa-walk-na-bg);
+	color: var(--pa-walk-na-ink);
+}
+.pa-walk-gate.is-na::before {
+	content: "\2013";
+}
+.pa-walk-gate-why {
+	margin: 2px 0;
+	font-size: 12px;
+	color: var(--pa-walk-fail-ink);
+}
+
+/* What stands in for the Results when the gates held the text back. */
+.pa-walk-blocked {
+	padding: 8px 10px;
+	border-radius: var(--pa-radius-sm, 6px);
+	border-left: 3px solid var(--pa-walk-fail-ink);
+	background: var(--pa-walk-fail-bg);
+	color: var(--pa-ink-body, #27272A);
+}
+
 /* The Results section. */
 .pa-walk-results-title {
 	margin-top: 4px;
@@ -179,6 +254,33 @@
 }
 .pa-walk-chip-layer {
 	white-space: normal;
+}
+/* A statement's tier leads its claim. Hung 4px into the statement's padding
+   so the claim's first glyph stays on the rail the other lines start on. */
+.pa-walk-chip-tier {
+	margin: 0 2px 0 -4px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+.pa-walk-chip-tier.is-mechanism {
+	background: var(--pa-walk-chip-bg);
+	color: var(--pa-walk-accent-ink);
+}
+.pa-walk-chip-tier.is-association {
+	background: var(--pa-walk-na-bg);
+	color: var(--pa-walk-na-ink);
+}
+/* A paper's context: organism, system, scope. Neutral, and bordered amber
+   when the design card does not share the organism or system. */
+.pa-walk-chip-ctx {
+	background: var(--pa-walk-na-bg);
+	color: var(--pa-walk-na-ink);
+	border: 1px solid transparent;
+	line-height: 1.35;
+}
+.pa-walk-chip-ctx.is-other {
+	border-color: var(--pa-walk-other-border);
+	cursor: help;
 }
 a.pa-walk-cite,
 a.pa-walk-pathway-link {
@@ -264,6 +366,16 @@ a.pa-walk-pathway-link:hover {
 }
 .pa-walk-leg.is-focused {
 	background: var(--pa-walk-focus-bg);
+}
+/* The first leg of a module carries the module's distance from the anchor.
+   Seed amber: a module starts at a seed, and the ring on the map is amber. */
+.pa-walk-module {
+	display: block;
+	margin: 0 0 2px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--pa-walk-seed);
 }
 .pa-walk-leg-head {
 	display: flex;

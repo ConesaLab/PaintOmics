@@ -81,6 +81,11 @@ def candidates(provider_config, provider_name="csic"):
     return [provider_config.get("model", "")] + fallback_models(provider_config, provider_name)
 
 
+# (api_base, model) -> answers received in this process, for the harness
+# and anyone else who must know whether a fallback model spoke.
+ANSWERS = {}
+
+
 def is_down(api_base, model):
     with _lock:
         until = _down.get((api_base, model))
@@ -99,9 +104,11 @@ def mark_down(api_base, model, reason=""):
 
 
 def mark_up(api_base, model):
-    """An answer arrived: the model is served again."""
+    """An answer arrived: the model is served again. Every answer is counted
+    per model in ANSWERS, so a caller can tell afterwards which model spoke."""
     with _lock:
         was_down = _down.pop((api_base, model), None) is not None
+        ANSWERS[(api_base, model)] = ANSWERS.get((api_base, model), 0) + 1
     if was_down:
         logger.info("LLM model %s at %s answered; back in use", model, api_base)
 

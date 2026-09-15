@@ -15,6 +15,8 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from src.classes.AIInterpret.walker import heat as heat_mod
+from src.classes.AIInterpret.walker.heat import ANCHOR_RADIUS
+from src.classes.AIInterpret.walker.tiers import edge_tier, is_currency
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,8 @@ class Walker:
     steps_here: int = 0                          # steps taken since the last plan or jump
     segments: list = field(default_factory=list)  # one per seed walked by its own walker: seed, legs
     on_turn: object = None                       # called with the walker after every logged turn
+    dist: dict | None = None                     # node -> steps from the anchor, when the run is anchored
+    anchor: dict | None = None                   # {gene, node, direction, ...} or None
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -128,7 +132,7 @@ class Walker:
         node_id = node_id or self.current
         rows = []
         for w in self.network.neighbours(node_id):
-            if w in self.overlay.capped:
+            if w in self.overlay.capped or is_currency(w):
                 continue
             edge, direction = self.network.edge_between(node_id, w)
             h = self.overlay.heat.get(w, {})
@@ -136,7 +140,8 @@ class Walker:
                          "r": int(bool(self.overlay.r.get(w))) if w in self.overlay.measured else None,
                          "heat": round(h.get("heat", 0.0), 2), "sign": edge["sign"],
                          "dir": direction, "open": (node_id, w) not in self.closed,
-                         "visited": w in self.visited})
+                         "visited": w in self.visited,
+                         "dist": self.dist.get(w) if self.dist else None})
         rows.sort(key=lambda r: (-(r["r"] or 0), -r["heat"], r["label"]))
         return rows
 
@@ -144,9 +149,11 @@ class Walker:
         edge, direction = self.network.edge_between(src, dst)
         tag = edge["tags"][0] if edge["tags"] else "?"
         db, _, pathway = tag.partition(":")
-        return {"db": db, "pathway": pathway, "name": self.network.pathway_name(tag),
-                "subtype": edge["subtype"], "sign": edge["sign"], "dir": direction,
-                "tags": len(edge["tags"])}
+        record = {"db": db, "pathway": pathway, "name": self.network.pathway_name(tag),
+                  "subtype": edge["subtype"], "sign": edge["sign"], "dir": direction,
+                  "tags": len(edge["tags"])}
+        record["tier"] = edge_tier(record)
+        return record
 
     def _budget_line(self):
         return "budget · %d steps · %d jumps · %d notes left" % (
@@ -166,8 +173,9 @@ class Walker:
         for row in rows:
             self.seen.setdefault(row["id"], []).append(after)
         shown = rows[:self.params["names_shown"]]
-        names = " · ".join("%s r=%s %.2f [%s%s%s]" % (
+        names = " · ".join("%s r=%s %.2f%s [%s%s%s]" % (
             row["label"], "—" if row["r"] is None else row["r"], row["heat"],
+            "" if row.get("dist") is None else " d=%d" % row["dist"],
             sign_glyph(row["sign"]), "" if row["open"] else ", closed",
             ", walked" if row["visited"] else "") for row in shown)
         more = "" if len(rows) <= len(shown) else " · %d more" % (len(rows) - len(shown))
@@ -193,15 +201,17 @@ class Walker:
             return self._refuse("scan", args, "The walk is over.")
         if scope == "graph":
             self.ranked = heat_mod.scan_graph(self.network, self.overlay,
-                                              self.params["sep"], self.params["candidates"])
+                                              self.params["sep"], self.params["candidates"], self.dist)
             self.scans += 1
             cands = [r for r in self.ranked if r["candidate"]]
             lines = ["%d measured nodes ranked by heat; %d seed candidates (relevant, not "
                      "within %d edge(s) of a hotter candidate); ceiling %d steps" % (
                          len(self.ranked), len(cands), self.params["sep"], self.params["ceiling"])]
             for i, row in enumerate(cands, 1):
-                lines.append("  candidate %d  %s · r=1 · heat %.2f (%d of %d) · degree %d" % (
-                    i, row["label"], row["heat"], row["x"], row["n"], row["degree"]))
+                lines.append("  candidate %d  %s · r=1 · heat %.2f (%d of %d) · degree %d%s" % (
+                    i, row["label"], row["heat"], row["x"], row["n"], row["degree"],
+                    "" if row.get("dist") is None else " · d=%d from %s" % (
+                        row["dist"], (self.anchor or {}).get("gene", "the anchor"))))
             hot = [r for r in self.ranked if not r["candidate"]][:8]
             if hot:
                 lines.append("  not candidates, hottest: " + " · ".join(
@@ -254,6 +264,16 @@ class Walker:
             return self._refuse("plan", args, "Choose at least one seed.")
         if len(chosen) > self.params["max_seeds"]:
             return self._refuse("plan", args, "At most %d seeds here." % self.params["max_seeds"])
+        if self.dist:
+            # anchored: the walk starts in the perturbed gene's neighbourhood
+            distances = {c: candidates[c].get("dist") for c in candidates if candidates[c].get("dist") is not None}
+            if distances:
+                nearest = min(distances.values())
+                first = distances.get(chosen[0])
+                if first is None or first > nearest:
+                    return self._refuse("plan", args, "The first seed must be a candidate nearest %s (d=%d): %s." % (
+                        (self.anchor or {}).get("gene", "the anchor"), nearest,
+                        ", ".join(candidates[c]["label"] for c, d in distances.items() if d == nearest)))
         try:
             steps = int(steps)
         except (TypeError, ValueError):
@@ -324,6 +344,16 @@ class Walker:
         if (self.current, target) in self.closed:
             return self._refuse("step", args, "The edge %s → %s was already walked that way." % (
                 self.label(self.current), self.label(target)))
+        if self.dist and (self.dist.get(target) is None or self.dist[target] > ANCHOR_RADIUS):
+            # anchored: the perturbation's neighbourhood is read before the walk
+            # leaves it -- a step outward is refused while a relevant neighbour
+            # inside it is still unread
+            near = [r for r in rows if r["r"] == 1 and r["open"] and not r["visited"]
+                    and r.get("dist") is not None and r["dist"] <= ANCHOR_RADIUS]
+            if near:
+                return self._refuse("step", args, "Stay within %d steps of %s while a relevant neighbour there is "
+                                    "unread: %s." % (ANCHOR_RADIUS, (self.anchor or {}).get("gene", "the anchor"),
+                                                     ", ".join(r["label"] for r in near[:8])))
         if not self._reading_ok(target, reading):
             return self._refuse("step", args, "The reading must name a layer or member of %s: %s"
                                 % (self.label(target), ", ".join(sorted({

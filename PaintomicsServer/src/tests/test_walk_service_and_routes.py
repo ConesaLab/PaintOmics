@@ -186,6 +186,29 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("AI service failed", doc["detail"])
         self.assertIn("Malformed API Key", doc["detail"])
 
+    def test_a_walk_that_took_no_step_is_an_error_the_user_can_retry(self):
+        """A model that answers but never steps (a runaway answer spent the
+        walk's budget) leaves an empty chain: a refusal with Retry, not a
+        finished walk with nothing in it."""
+        from src.classes.AIInterpret.walker import sdk
+
+        class _SilentClient(object):
+            def complete_json(self, *args, **kwargs):
+                return None
+
+        async def _never_steps(*args, **kwargs):
+            return None
+
+        saved = (sdk.Runner.run, service.llm_client)
+        sdk.Runner.run = staticmethod(_never_steps)
+        service.llm_client = lambda: _SilentClient()
+        try:
+            doc = self._run_job("pathway:tst00001", _job_with_id(), policy="model")
+        finally:
+            sdk.Runner.run, service.llm_client = saved
+        self.assertEqual(doc["status"], "error", doc.get("detail"))
+        self.assertIn("before the walk took a step", doc["detail"])
+
     def test_a_walk_whose_document_is_gone_writes_nothing(self):
         self.assertIsNone(self._run_job("pathway:tst00001", _job_with_id(), filed=False),
                           "the worker re-created a walk document nobody filed")
