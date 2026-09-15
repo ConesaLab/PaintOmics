@@ -279,7 +279,7 @@ def decoy_for(anchor, rows, network, rng, aliases=None, tolerance=0.3, pool_size
     if mine:
         pool = {_node_for(tf, network, aliases): (tf, targets) for tf, targets in regulons.items()
                 if tf != anchor["gene"].upper() and abs(len(targets) - len(mine)) <= tolerance * len(mine)}
-        pool.pop(None, None)
+        pool = {cand: value for cand, value in pool.items() if cand is not None and cand in network.nodes}
         size_of = {cand: len(pool[cand][1]) for cand in pool}
         extra_of = {cand: pool[cand][1] for cand in pool}
         target_size = len(mine)
