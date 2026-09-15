@@ -16,6 +16,11 @@ from src.classes.AIInterpret.walker.walk import Walker
 
 logger = logging.getLogger(__name__)
 
+# The most tokens one walker or planner turn may produce. A turn is a tool
+# call with a one-sentence reading; one run streamed 1.1 million characters
+# of a single answer for half an hour and took no step.
+TURN_MAX_TOKENS = 1500
+
 
 @dataclass
 class WalkContext:
@@ -122,7 +127,8 @@ async def run_plan_async(walker, card_text, max_turns=8, model=None, temperature
     """The planner: scan the graph and fix the seeds and the steps. Leaves
     walker.plan None when the model never planned."""
     agent = Agent[WalkContext](name="Planner", model=model or _model(), instructions=PLANNER_INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature), tools=PLANNER_TOOLS)
+                               model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
+                               tools=PLANNER_TOOLS)
     kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. At most %d seeds; at least %d steps per seed; ceiling %d steps.\n"
                "Begin with scan(scope=\"graph\")." % (
                    card_text, anchor_line(walker), walker.scope, walker.params["max_seeds"],
@@ -135,7 +141,8 @@ async def run_segment_async(walker, card_text, opening, others, max_turns, model
     """One seed's walker, already standing on its seed (``opening`` is what
     start_at answered). Stopped by code when the model does not stop."""
     agent = Agent[WalkContext](name="Walker", model=model or _model(), instructions=SEGMENT_INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature), tools=SEGMENT_TOOLS)
+                               model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
+                               tools=SEGMENT_TOOLS)
     kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. You walk from %s; %s.\nOther walkers, at the same time: %s.\n\n"
                "WHERE YOU STAND\n%s" % (card_text, anchor_line(walker), walker.scope, walker.label(walker.current),
                                          walker._budget_line(), others or "none", opening))

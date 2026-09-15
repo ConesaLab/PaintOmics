@@ -400,12 +400,13 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         merged = await parallel.walk_in_parallel(walker, card_text, plan, started + plan["walk_seconds"],
                                                  cancelled, preview)
         timings["walk"] = round(time.time() - started, 1)
-        if merged.loop_error and not merged.chain:
-            # A gateway that failed is not a walk that found nothing: stored as
-            # done, the empty walk was final -- no Retry, and initiate answered
+        if not merged.chain:
+            # A gateway that failed, or a walk whose time budget went before its
+            # first step, is not a walk that found nothing: stored as done, the
+            # empty walk was final -- no Retry, and initiate answered
             # already_finished for ever.
             raise WalkError("The AI service failed before the walk took a step (%s). Start it again."
-                            % merged.loop_error)
+                            % (merged.loop_error or merged.stop_reason or "the time budget was spent"))
         halt_if_cancelled()
         t0 = time.time()
         report("walk", "Checking the walk against permuted data", merged)

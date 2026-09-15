@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 SEARCH_HITS = 8
 MAX_SUBMITS = 3
 READ_CHARS = 6000
+# The most tokens one Writer turn may produce: five statements as JSON fit in
+# well under this; a runaway answer is cut instead of running for minutes.
+TURN_MAX_TOKENS = 4000
 
 
 @dataclass
@@ -286,7 +289,7 @@ async def run_writer_async(c, others="", max_turns=30, model=None, temperature=0
     returns the context, whose kept/last_passing say what survived."""
     agent = Agent[WriterContext](name="Writer", model=model or _model(),
                                  instructions=INSTRUCTIONS + "\n" + regulators.reading_rule(),
-                                 model_settings=ModelSettings(temperature=temperature),
+                                 model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
                                  tools=WRITER_TOOLS)
     try:
         await Runner.run(agent, writer_prompt(c, others), context=c, max_turns=max_turns)
