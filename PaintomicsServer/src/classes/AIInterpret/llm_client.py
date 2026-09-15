@@ -410,7 +410,7 @@ class LLMClient:
         return "".join(parts)
 
     def complete_json(self, messages, schema_name, schema, fallback_parser,
-                      max_tokens=4096, temperature=0.3, timeout=None):
+                      max_tokens=4096, temperature=0.3, timeout=None, budget_seconds=None):
         """Schema-enforced JSON with the hand-rolled parser as a safety net.
 
         Returns the parsed dict. The schema does the work wherever the gateway
@@ -418,11 +418,13 @@ class LLMClient:
         residual case of a model emitting valid-but-unexpected JSON.
 
         This is deliberately additive: every caller keeps its parser, so the
-        worst case is exactly today's behaviour.
+        worst case is exactly today's behaviour. ``budget_seconds`` is
+        ``complete``'s wall clock over the whole call, backoffs included.
         """
         text = self.complete(
             messages, max_tokens=max_tokens, temperature=temperature,
-            response_format=json_schema_format(schema_name, schema), timeout=timeout)
+            response_format=json_schema_format(schema_name, schema), timeout=timeout,
+            budget_seconds=budget_seconds)
         try:
             parsed = json.loads(text)
             if isinstance(parsed, dict):
