@@ -116,6 +116,9 @@ class TierRulesTest(unittest.TestCase):
         self.assertEqual(tiers.mechanistic_verbs("Foxo1 rises to +2.13 while Ccnd2 falls; both are higher at 24h"), [])
         self.assertEqual(tiers.mechanistic_verbs("Cish suppression derepresses JAK-STAT signalling"), ["derepresses"])
         self.assertEqual(tiers.mechanistic_verbs("the induction of Il2rg accompanies a fall in Cish"), [])
+        # nouns of the trade are not verbs
+        self.assertEqual(tiers.mechanistic_verbs("Ikaros over control; calcium release coupled with a fall in Ccnd2"), [])
+        self.assertEqual(tiers.mechanistic_verbs("Foxo1 controls Ccnd2 and releases the brake"), ["controls", "releases"])
         self.assertIn("inhibits", tiers.mechanistic_verbs("Pten inhibits PI3K signalling"))
         self.assertEqual(tiers.mechanistic_verbs("Ikaros perturbation engages a PI3K/FoxO axis and recruits Smad3"),
                          ["engages", "recruits"])
@@ -130,10 +133,18 @@ class TierRulesTest(unittest.TestCase):
 
     def test_neutral_title(self):
         card = {"perturbation": "Ikaros induced by tamoxifen in mouse B3 pre-B cells, six time points"}
+        # the card's clause is cut before its own verb
         self.assertEqual(tiers.neutral_title("FoxO signaling pathway", card),
-                         "FoxO signaling pathway: what changed after Ikaros induced by tamoxifen in mouse B3 pre-B cells")
+                         "FoxO signaling pathway: what changed after Ikaros")
+        self.assertEqual(tiers.neutral_title("FoxO signaling pathway", {"perturbation": "Ikaros perturbation over control in mouse"}),
+                         "FoxO signaling pathway: what changed after Ikaros perturbation over control in mouse")
+        self.assertEqual(tiers.neutral_title("The whole network", card, {"gene": "Ikzf1", "direction": "up"}),
+                         "The whole network: what changed after Ikzf1 induction")
+        self.assertEqual(tiers.neutral_title("x", card, {"gene": "Pten", "direction": "down"}), "x: what changed after Pten loss")
         self.assertTrue(tiers.neutral_title("network", {}).endswith("after the perturbation"))
         self.assertLessEqual(len(tiers.neutral_title("x", {"perturbation": "a" * 200}).split(": ")[1]), 80)
+        for title in (tiers.neutral_title("x", card), tiers.neutral_title("x", card, {"gene": "Ikzf1", "direction": "up"})):
+            self.assertEqual(tiers.mechanistic_verbs(title), [])
 
 
 class TitleGateTest(unittest.TestCase):

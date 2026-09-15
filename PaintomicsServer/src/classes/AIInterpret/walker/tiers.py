@@ -127,7 +127,7 @@ _MECH_STEMS = [
     r"switch(?:es|ed|ing)? (?:on|off)", r"turn(?:s|ed|ing)? (?:on|off)", r"activat(?:e|es|ed|ing)",
     r"inhibit(?:s|ed|ing)?", r"induc(?:e|es|ed|ing)", r"repress(?:es|ed|ing)?", r"suppress(?:es|ed|ing)?",
     r"trigger(?:s|ed|ing)?", r"block(?:s|ed|ing)?", r"abolish(?:es|ed|ing)?", r"silenc(?:e|es|ed|ing)",
-    r"control(?:s|led|ling)?", r"regulat(?:e|es|ed|ing)", r"promot(?:e|es|ed|ing)", r"caus(?:e|es|ed|ing)",
+    r"controls", r"regulat(?:e|es|ed|ing)", r"promot(?:e|es|ed|ing)", r"caus(?:e|es|ed|ing)",
     r"phosphorylat(?:e|es|ed|ing)", r"degrad(?:e|es|ed|ing)", r"derepress(?:es|ed|ing)?",
     r"reprogram(?:s|med|ming)?", r"remodel(?:s|led|ling)?", r"mediat(?:e|es|ed|ing)", r"depend(?:s|ed|ing)? on",
     r"signal(?:s|led|ling)? through", r"up-?regulat(?:e|es|ed|ing)", r"down-?regulat(?:e|es|ed|ing)",
@@ -137,10 +137,10 @@ _MECH_STEMS = [
     r"engag(?:e|es|ed|ing)", r"recruit(?:s|ed|ing)?", r"mobili[sz](?:e|es|ed|ing)", r"elicit(?:s|ed|ing)?",
     r"evok(?:e|es|ed|ing)", r"initiat(?:e|es|ed|ing)", r"launch(?:es|ed|ing)?", r"unleash(?:es|ed|ing)?",
     r"potentiat(?:e|es|ed|ing)", r"amplif(?:y|ies|ied|ying)", r"dampen(?:s|ed|ing)?", r"attenuat(?:e|es|ed|ing)",
-    r"coordinat(?:e|es|ed|ing)", r"coupl(?:e|es|ed|ing)", r"sets? in motion", r"switch(?:es|ed|ing)? to",
+    r"coordinat(?:e|es|ed|ing)", r"sets? in motion", r"switch(?:es|ed|ing)? to",
     r"redirect(?:s|ed|ing)?", r"reroute(?:s|d)?", r"reprogramm?(?:e|es|ed|ing)?", r"steer(?:s|ed|ing)?",
     r"instruct(?:s|ed|ing)?", r"deploy(?:s|ed|ing)?", r"impair(?:s|ed|ing)?", r"disrupt(?:s|ed|ing)?",
-    r"restrain(?:s|ed|ing)?", r"releas(?:e|es|ed|ing)", r"lift(?:s|ed|ing)?", r"enabl(?:e|es|ed|ing)",
+    r"restrain(?:s|ed|ing)?", r"releases", r"lift(?:s|ed|ing)?", r"enabl(?:e|es|ed|ing)",
 ]
 MECHANISTIC_RE = re.compile(r"\b(?:%s)\b" % "|".join(_MECH_STEMS), re.I)
 # A passive mechanistic verb is a mechanism only with an agent: "is induced by
@@ -276,11 +276,20 @@ def title_outruns_body(results, kept, walker, anchor=None):
     return problems
 
 
-def neutral_title(scope_name, card):
+def neutral_title(scope_name, card, anchor=None):
     """The title code writes when the Narrator's could not be made to fit the
-    body: what changed, after what, with no verb of mechanism."""
+    body: what changed, after what, with no verb of mechanism. The anchor
+    names the perturbation when the run has one; else the card's first clause,
+    cut before any mechanistic verb it happens to carry ("Ikaros induced by
+    tamoxifen" -> "Ikaros")."""
+    if anchor and anchor.get("gene"):
+        word = {"up": "induction", "down": "loss"}.get(str(anchor.get("direction") or ""), "perturbation")
+        return "%s: what changed after %s %s" % (scope_name, anchor["gene"], word)
     perturbation = str((card or {}).get("perturbation") or "the perturbation").strip()
     first = re.split(r"[,.;:(]", perturbation, maxsplit=1)[0].strip()
+    verb = MECHANISTIC_RE.search(first) or _PASSIVE_RE.search(first)
+    if verb:
+        first = first[:verb.start()].strip()
     if len(first) > 60:
         first = first[:57].rstrip() + "..."
     return "%s: what changed after %s" % (scope_name, first or "the perturbation")

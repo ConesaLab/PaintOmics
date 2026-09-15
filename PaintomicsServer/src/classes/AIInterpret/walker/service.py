@@ -682,17 +682,22 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     if title_problems and results is not None and not problems:
         # Check 2's last word: the title code writes, and the summary without
         # the sentences that still outran the body.
-        results["title"] = tiers.neutral_title(scope_name, card or {})
-        removed = tiers.drop_mechanistic_sentences(results)
-        title_gate.update({"fallback": True, "sentences_dropped": removed,
-                           "why": "; ".join(title_problems)})
+        title_gate.update({"fallback": True, "objections": list(title_problems)})
+        results["title"] = tiers.neutral_title(scope_name, card or {}, anchor)
+        title_gate["sentences_dropped"] = tiers.drop_mechanistic_sentences(results)
         title_problems = tiers.title_outruns_body(results, statements, walker, anchor)
+        if title_problems:
+            # the card's own words carried a verb: the bare scope name cannot
+            results["title"], results["summary"] = scope_name, ""
+            title_gate["fallback"] = "scope"
+            title_problems = tiers.title_outruns_body(results, statements, walker, anchor)
         problems = verify.verify_results(results, statements, dropped, walker, kind, words)
     checks["results"] = problems
     if results is None or problems:
         checks["gates"]["title"] = {"pass": True, "not_applicable": True, "why": "no Results section to check"}
     else:
         title_gate["pass"] = not title_problems
+        title_gate["why"] = "; ".join(title_problems)
         checks["gates"]["title"] = title_gate
     if problems:
         checks["results_dropped"] = results
@@ -768,7 +773,8 @@ def view(rec):
         "checks": {"results": (rec.get("checks") or {}).get("results"),
                    "sense": (rec.get("checks") or {}).get("sense"),
                    "gates": (rec.get("checks") or {}).get("gates") or {},
-                   "rendered": bool((rec.get("checks") or {}).get("rendered")),
+                   # a record sealed before the gates existed has nothing to withhold
+                   "rendered": bool((rec.get("checks") or {}).get("rendered", True)),
                    "anchor": (rec.get("checks") or {}).get("anchor")},
         "model_used": rec.get("model_used"), "timings": rec.get("timings"),
     }

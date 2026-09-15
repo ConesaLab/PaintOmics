@@ -1,4 +1,4 @@
-/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, paWalkEl, paWalkResultsNode, paWalkReferencesNode, paWalkStatementsNode, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway */
+/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, paWalkEl, paWalkResultsNode, paWalkReferencesNode, paWalkStatementsNode, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway, paWalkHeaderNode, paWalkGatesNode, paWalkTextShown, paWalkBlockedNode, paWalkModuleSegments, paWalkAnchorGene */
 
 if (typeof marked !== "undefined" && marked.use) {
     marked.use({
@@ -734,16 +734,30 @@ function PA_AIInterpretView() {
             "values on its nodes. They started from " + starts + " node" + (starts === 1 ? "" : "s") +
             " whose neighbourhoods hold surprisingly many relevant features and took " + (counts.steps || 0) +
             " steps."));
-        bubble.appendChild(paWalkResultsNode(view, {onLeg: focusLeg}));
-        var references = paWalkReferencesNode(view);
-        if (references) { bubble.appendChild(references); }
-        if ((view.statements || []).length || (view.dropped || []).length) {
-            bubble.appendChild(paWalkStatementsNode(view, {onLeg: focusLeg}));
+        /* The perturbation line and the five gates first; the text they judged
+           only when every gate passed (or the walk predates them). A walk they
+           held back shows a note in its place and opens its legs. */
+        var header = paWalkHeaderNode(view);
+        if (header) { bubble.appendChild(header); }
+        var gates = paWalkGatesNode(view);
+        if (gates) { bubble.appendChild(gates); }
+        var shown = paWalkTextShown(view);
+        if (shown) {
+            bubble.appendChild(paWalkResultsNode(view, {onLeg: focusLeg}));
+            var references = paWalkReferencesNode(view);
+            if (references) { bubble.appendChild(references); }
+            if ((view.statements || []).length || (view.dropped || []).length) {
+                bubble.appendChild(paWalkStatementsNode(view, {onLeg: focusLeg}));
+            }
+        } else {
+            bubble.appendChild(paWalkBlockedNode(view));
         }
         var chain = paWalkEl("details", "pa-walk-chain");
+        chain.open = !shown;
         chain.appendChild(paWalkEl("summary", null, "The walk: " + (counts.steps || 0) + " steps, " +
             (counts.jumps || 0) + " jumps"));
-        chain.appendChild(paWalkLegsNode(view.chain, {onLeg: focusLeg, pathwayLink: paWalkPathwayLink}));
+        chain.appendChild(paWalkLegsNode(view.chain, {onLeg: focusLeg, pathwayLink: paWalkPathwayLink,
+            segments: paWalkModuleSegments(view), anchorGene: paWalkAnchorGene(view)}));
         bubble.appendChild(chain);
         bubble.appendChild(paWalkEl("p", "pa-walk-meta", "A leg is an interaction a database draws, not a " +
             "finding of this experiment; the values at its ends are yours. Open a pathway to walk it on its " +
