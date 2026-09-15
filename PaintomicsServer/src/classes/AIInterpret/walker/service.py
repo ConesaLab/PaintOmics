@@ -605,7 +605,6 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
     for s in statements:
         s["direction"] = verdicts.get(s["n"])
     failing = [s for s in statements if objections.get(s["n"])]
-    dropped_here = 0
     if failing:
         problems = _rewrite_and_recheck(client, card_text, chain, failing,
                                         {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
@@ -617,7 +616,6 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
                 verdicts[s["n"]] = again[s["n"]]
             if problems[s["n"]] or again_objections.get(s["n"]):
                 statements.remove(s)
-                dropped_here += 1
                 dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
                                 "why": "; ".join(problems[s["n"]] + again_objections.get(s["n"], [])),
                                 "by": "direction check"})
