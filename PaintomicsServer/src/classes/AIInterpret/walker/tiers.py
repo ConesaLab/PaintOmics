@@ -94,9 +94,10 @@ def edge_tier(edge):
     return 2
 
 
-def statement_tier(stmt, chain):
-    """The tier of a statement: mechanism when it cites at least one step leg
-    and every step leg it cites is tier 1; association otherwise."""
+def statement_tier(stmt, chain, discordant=()):
+    """The tier of a statement: mechanism when it cites at least one step leg,
+    every step leg it cites is tier 1, and none of them is in ``discordant``
+    (legs whose ends move against the drawn arrow); association otherwise."""
     by_n = {leg["n"]: leg for leg in chain}
     steps = []
     for leg in stmt.get("legs") or []:
@@ -112,7 +113,7 @@ def statement_tier(stmt, chain):
         tier = edge.get("tier")
         if tier is None:
             tier = edge_tier(edge)
-        if int(tier) != 1:
+        if int(tier) != 1 or leg["n"] in discordant:
             return ASSOCIATION
     return MECHANISM
 

@@ -118,12 +118,16 @@ Results section with its numbers on hover and its reason when it failed; a walk 
 any of them shows the checks, the reason and the walk itself (the legs are database
 relations and your values, not findings), and no Results section or statements.
 
-1. **Not a graph artifact.** After the walk, code permutes the relevant flag over the
-   measured nodes fifty times (twenty on the whole network), reruns the scripted walker on
-   each permutation and counts how many *modules* it finds -- a seed's neighbourhood holding
-   at least three relevant walked nodes -- and how hot its seeds are. The real walk must
-   find more modules than the permuted data does (empirical p below 0.05), or, when the
-   graph holds only one or two modules, seeds far hotter than chance. Every edge is also
+1. **Not a graph artifact.** After the walk, code runs a permutation test of the data: the
+   scripted walker walks the real relevant flags once and flags permuted over the measured
+   nodes fifty times, and counts how many *modules* it finds -- a stretch of the chain
+   between jumps holding at least three relevant nodes whose signed arrows agree with the
+   values at least half the time -- and how hot its seeds are. The real flags must give more
+   modules than the permuted ones do (empirical p below 0.05), or, when the graph holds only
+   one or two modules, seeds far hotter than chance. A pathway whose relevant genes are
+   spread as the job's genes are at large fails here, and its walk is withheld: on the
+   STATegra example the FoxO pathway does, the whole network does not. A statement resting on
+   an arrow the values move against is an association whatever the arrow says. Every edge is also
    *tiered*: a signed, directed relation (activation, inhibition, expression, a reaction, a
    transcription-factor target) is a **mechanism**; a binding, an indirect effect, a shared
    metabolite or the job's own miRNA pairing is an **association**. Currency metabolites --

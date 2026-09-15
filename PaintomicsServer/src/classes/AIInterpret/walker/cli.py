@@ -99,6 +99,8 @@ def main(argv=None):
     ap.add_argument("--ko-job", default=None, help="the simulated knockout job for the anchor test")
     ap.add_argument("--only", default=None, help="comma list of checks to run: artifact,direction,context,anchor")
     ap.add_argument("--decoy", default=None, help="the decoy transcription factor for the anchor test")
+    ap.add_argument("--regate", default=None,
+                    help="recompute the code-only artifact gate of every sealed record under this harness directory")
     ap.add_argument("--make-ko-job", action="store_true",
                     help="store the simulated knockout dataset as a job and print its id")
     ap.add_argument("--plants", type=int, default=100)
@@ -115,6 +117,14 @@ def main(argv=None):
 
 
 def _main(args):
+    if args.regate:
+        from src.classes.AIInterpret.walker import harness
+        for path, rec in harness.regate_directory(args.regate, args.job, args.ko_job, args.data_dir):
+            gate = rec["checks"]["gates"]["artifact"]
+            print("%s  modules %d (walk %d)  p_modules %.3f  p_heat %.3f  %s" % (
+                os.path.relpath(path, args.regate), gate["real"]["modules"], gate["walk"]["modules"],
+                gate["p_modules"], gate["p_heat"], "pass" if gate["pass"] else "FAIL"))
+        return 0
     if args.make_ko_job:
         from src.classes.AIInterpret.walker import harness
         dataset = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "examplefiles",

@@ -64,6 +64,7 @@ class GatesOnARunTest(unittest.TestCase):
         # the artifact gate ran on this walk
         artifact = checks["gates"]["artifact"]
         self.assertEqual(artifact["k"], service.NULL_K)
+        self.assertIn("walk", artifact)
         self.assertEqual(artifact["currency_legs"], 0)
         self.assertIn("p_modules", artifact)
         # the anchor gate compares the walk with the measured nodes at large

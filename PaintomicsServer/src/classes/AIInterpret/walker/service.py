@@ -57,9 +57,9 @@ HEARTBEAT_SECONDS = 60
 # Seconds the direction check needs after the Writers stop (three short
 # calls per regulator a statement cites; usually none or a few).
 DIRECTION_MIN_SECONDS = 30
-# Permutations of the structure null: fewer on a graph where each costs a
-# heat pass over thousands of nodes.
-NULL_K, NULL_K_LARGE, LARGE_GRAPH_NODES = 50, 20, 5000
+# Permutations of the structure null. Fifty on every graph: with twenty the
+# smallest attainable p is 1/21, right at the threshold.
+NULL_K = 50
 GATES = ("artifact", "title", "direction", "context", "anchor")
 
 _MONGO = {"client": None}
@@ -357,8 +357,7 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
 def artifact_gate(walker):
     """Check 1 at request time: the structure null on the walk's own graph and
     parameters, and no leg through a currency metabolite."""
-    k = NULL_K if len(walker.network.nodes) <= LARGE_GRAPH_NODES else NULL_K_LARGE
-    gate = null_mod.structure_null(walker.network, walker.overlay, walker.params, walker, k=k)
+    gate = null_mod.structure_null(walker.network, walker.overlay, walker.params, walker, k=NULL_K)
     currency = sum(1 for leg in walker.chain if leg.kind == "step"
                    and (tiers.is_currency(leg.src) or tiers.is_currency(leg.dst)))
     gate["currency_legs"] = currency
@@ -442,8 +441,14 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
     for c in contexts:
         read |= c.read
     chain_record = walker.record()["chain"]
+    # A leg whose ends move against the drawn arrow supports no mechanism: the
+    # statement that rests on it is an association whatever the edge says.
+    discordant = {leg["n"] for leg in chain_record
+                  if leg["kind"] == "step" and null_mod.leg_concordance(leg, walker.overlay) is False}
+    checks["discordant_legs"] = sorted(discordant)
     for s in statements:
-        s["tier"] = tiers.statement_tier(s, chain_record)
+        s["tier"] = tiers.statement_tier(s, chain_record, discordant)
+        s["discordant_legs"] = sorted(n for n in (s.get("legs") or []) if n in discordant)
     results = None
     if statements and run_deadline - time.time() >= SENSE_MIN_SECONDS + DIRECTION_MIN_SECONDS:
         report("sense", "Checking the direction of every regulator the statements lean on", walker)
@@ -574,7 +579,11 @@ def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store
             else:
                 problems[s["n"]].append("the rewrite cites [%d] for a claim no paper agent confirmed" % ref)
         s["evidence"] = evidence
-        s["tier"] = tiers.statement_tier(s, walker.record()["chain"])
+        chain_record = walker.record()["chain"]
+        discordant = {leg["n"] for leg in chain_record
+                      if leg["kind"] == "step" and null_mod.leg_concordance(leg, walker.overlay) is False}
+        s["tier"] = tiers.statement_tier(s, chain_record, discordant)
+        s["discordant_legs"] = sorted(n for n in (s.get("legs") or []) if n in discordant)
     return problems
 
 
@@ -765,7 +774,8 @@ def view(rec):
                             "heat": n.get("heat"), "text": n.get("text")} for node_id, n in nodes.items()},
         "segments": [dict(s) for s in walk.get("segments") or []],
         "statements": [{k: s.get(k) for k in ("n", "claim", "prose", "cites", "legs", "grounded_in", "beyond",
-                                               "papers", "evidence", "sense", "rewritten", "tier", "direction")}
+                                               "papers", "evidence", "sense", "rewritten", "tier", "direction",
+                                               "discordant_legs")}
                        for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
         "results": rec.get("results"),

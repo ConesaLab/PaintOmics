@@ -62,22 +62,32 @@ never flags one as a candidate, and the sealed chain is checked: a leg whose end
 currency compound fails the gate. The network cache version goes to 4.
 
 **Structure null (code, every walk).** After the walk, before the Writers, `walker/null.py`
-permutes the relevant flag over the measured nodes of the walked graph K = 50 times (a
+runs a permutation test of the *data*: the scripted greedy walker walks the real relevant
+flags once and flags permuted over the measured nodes of the walked graph K = 50 times (a
 permutation moves a node's *values* with its flag, so a permuted job is a job whose
-measurements landed on other genes), recomputes heat, runs the scripted greedy walker with
-the run's own parameters, and records two statistics per permutation: modules found and
-the mean heat of the chosen seeds. The real run's statistics come from the model walk. The
-empirical p is `(1 + #{null ≥ real}) / (K + 1)`. The gate passes when `p_modules < 0.05` or
-the real walk found ≥ 2 modules with `p_heat < 0.05` — a small pathway can hold one module
-that is nonetheless far hotter than chance. Greedy on permuted data is a stronger walker than
-the model on real data, so the null is conservative. The gate stores `{K, real: {modules,
-seed_heat}, null_mean, p_modules, p_heat, pass}`.
+measurements landed on other genes; heat is recomputed each time), with the run's own
+parameters, and records two statistics per run: modules found and the mean heat of the
+chosen seeds. A *module* is a stretch of the chain between jumps holding at least three
+relevant walked nodes whose signed legs agree with the values at least half the time (an
+activation joins two nodes moving the same way, an inhibition two moving apart). The same
+walker reads both sides, so a difference is the data's and not a policy's. The empirical p is
+`(1 + #{null ≥ real}) / (K + 1)`; the gate passes when `p_modules < 0.05` or the real flags
+give ≥ 2 modules with `p_heat < 0.05`. A graph whose real flags give the walker no more than
+permuted flags do makes every walk on it an artifact of the graph, and the gate withholds it.
+The gate stores `{k, real: {modules, seed_heat}, walk: {modules, seed_heat}, null_mean,
+p_modules, p_heat, currency_legs, pass}`. Measured on the STATegra example: the FoxO pathway
+(105 relevant of 310 measured, spread as the job's genes are at large) gives `p_heat ≈ 0.12`
+and is withheld; the whole network gives seeds far hotter than permuted flags do.
 
 **Offline.** The harness runs the whole model pipeline (walker, Writers, paper agents, sense
-check, Narrator) on the example pathway walk (`pathway:mmu04068`) 5 times on the real job
-and 20 times on permuted jobs (one permutation each; every permuted run is also an
-independent model sample), then reports statements kept and modules found for both, and
-the empirical p of each real run against the 20. Pass: every real run p < 0.05 on both.
+check, Narrator) 5 times on the real job and 20 times on permuted jobs (one permutation each;
+every permuted run is also an independent model sample), on the network interpretation and
+on the example pathway walk (`pathway:mmu04068`), then reports statements kept, mechanism
+statements kept (a statement whose every leg is a signed relation the values agree with) and
+modules found for both, and the empirical p of each real run against the 20. Pass: every
+real run p < 0.05 on mechanism statements and on modules. A statement resting on a leg whose
+ends move against the drawn arrow is an association whatever the edge says (`tier`), and
+the record lists such legs (`discordant_legs`).
 
 ## 4. Check 2 — the title and the summary do not outrun the body
 

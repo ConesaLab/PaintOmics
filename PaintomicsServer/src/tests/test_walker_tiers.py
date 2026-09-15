@@ -107,6 +107,7 @@ class TierRulesTest(unittest.TestCase):
         self.assertEqual(tiers.statement_tier({"legs": [2]}, chain), "association")
         self.assertEqual(tiers.statement_tier({"legs": []}, chain), "association")
         self.assertEqual(tiers.statement_tier({"legs": [1, True, "x"]}, chain), "mechanism")
+        self.assertEqual(tiers.statement_tier({"legs": [1]}, chain, discordant={1}), "association")
 
     def test_verbs(self):
         self.assertEqual(tiers.mechanistic_verbs("Ikaros perturbation drives a BCR programme and shuts down IRS1"),

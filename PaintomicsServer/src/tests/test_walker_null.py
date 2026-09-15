@@ -39,6 +39,32 @@ class StructureNullTest(unittest.TestCase):
         self.assertIsNot(ov.heat, self.ov.heat)
         self.assertEqual(self.ov.r, ov_mod.overlay_job(self.graph, fx.make_job()).r)   # the original is untouched
 
+    def test_segments_concordance_and_modules(self):
+        chain = [{"n": 1, "kind": "step", "from": "g:1", "to": "g:2", "edge": {"sign": 1}},
+                 {"n": 2, "kind": "step", "from": "g:2", "to": "g:3", "edge": {"sign": -1}},
+                 {"n": 3, "kind": "jump", "from": "g:3", "to": "g:4", "edge": None},
+                 {"n": 4, "kind": "step", "from": "g:4", "to": "g:5", "edge": {"sign": 0}}]
+        self.assertEqual([[l["n"] for l in s] for s in null_mod.segments(chain)], [[1, 2], [4]])
+        # A up, B down, D down (relevant); C not relevant, E relevant by proteomics up
+        self.assertEqual(null_mod.node_direction(self.ov, "g:1"), 1)
+        self.assertEqual(null_mod.node_direction(self.ov, "g:2"), -1)
+        self.assertEqual(null_mod.node_direction(self.ov, "g:3"), 0)          # no relevant layer
+        self.assertFalse(null_mod.leg_concordance(chain[0], self.ov))        # activation, A up while B down
+        self.assertIsNone(null_mod.leg_concordance(chain[1], self.ov))       # C has no direction
+        self.assertIsNone(null_mod.leg_concordance(chain[3], self.ov))       # unsigned
+        self.assertTrue(null_mod.leg_concordance({"kind": "step", "from": "g:1", "to": "g:4", "edge": {"sign": -1}}, self.ov))
+        # a module needs three relevant nodes and concordant signed legs
+        good = [{"n": 1, "kind": "step", "from": "g:1", "to": "g:4", "edge": {"sign": -1}},
+                {"n": 2, "kind": "step", "from": "g:4", "to": "g:2", "edge": {"sign": 1}}]
+        self.assertTrue(null_mod.is_module(good, self.ov))
+        self.assertFalse(null_mod.is_module(good[:1], self.ov))                # two relevant nodes only
+        bad = [{"n": 1, "kind": "step", "from": "g:1", "to": "g:2", "edge": {"sign": 1}},
+               {"n": 2, "kind": "step", "from": "g:2", "to": "g:4", "edge": {"sign": -1}}]
+        self.assertFalse(null_mod.is_module(bad, self.ov))                     # both legs against the arrows
+        unsigned = [{"n": 1, "kind": "step", "from": "g:1", "to": "g:2", "edge": {"sign": 0}},
+                    {"n": 2, "kind": "step", "from": "g:2", "to": "g:4", "edge": {"sign": 0}}]
+        self.assertFalse(null_mod.is_module(unsigned, self.ov))                # no signed leg to judge
+
     def test_modules_and_seed_heat(self):
         walker = policies.greedy(Walker(self.graph, self.ov, "KEGG:tst00001", params_for("pathway")))
         modules = null_mod.modules_found(walker, self.ov)
@@ -69,7 +95,7 @@ class StructureNullTest(unittest.TestCase):
         self.assertEqual(gate["p_modules"], 1.0)
         self.assertEqual(gate["p_heat"], 1.0)
         self.assertFalse(gate["pass"])
-        self.assertIn("not distinguishable", gate["why"])
+        self.assertIn("no structure a walk could find", gate["why"])
         self.assertEqual(gate["real"]["modules"], null_mod.modules_found(walker, planted))
 
 

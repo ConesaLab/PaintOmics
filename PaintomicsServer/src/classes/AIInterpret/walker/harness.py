@@ -148,9 +148,65 @@ def _run_saved(path, job, job_id, scope, card_override=None, data_dir=None):
     return rec
 
 
+def regate(path, job, scope, data_dir=None, permutation=None):
+    """Recompute a sealed record's code-only artifact gate (and its rendered
+    flag) with the current null, on the graph and overlay the run had:
+    the walk, the statements and the model gates are left as sealed. Used
+    when the null's definition of a module changes after runs were saved."""
+    from src.classes.AIInterpret.walker.walk import Leg
+    rec = _load(path)
+    if rec is None:
+        return None
+    the_job = PermutedJob(job, permutation) if permutation is not None else job
+    aliases = anchor_mod.alias_map(service.org_dir_for(job, data_dir))
+    _network, graph, ov, tag, _anchor, _dist = service.build(the_job, scope, data_dir, True,
+                                                             rec.get("design_card") or {}, aliases)
+    walk = rec["walk"]
+    walker = Walker(graph, ov, tag, dict(walk.get("params") or params_for("network" if tag == "network" else "pathway")))
+    walker.plan = walk.get("plan")
+    walker.chain = [Leg(l["n"], l["kind"], l["from"], l["to"], l.get("reading", ""), l.get("reason", ""), l.get("edge"))
+                    for l in walk["chain"]]
+    walker.segments = list(walk.get("segments") or [])
+    gates = rec["checks"]["gates"]
+    gates["artifact"] = service.artifact_gate(walker)
+    rec["checks"]["rendered"] = all(bool(gates[name].get("pass")) for name in service.GATES)
+    rec.setdefault("harness", {})["regated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    _save(path, rec)
+    return rec
+
+
+def regate_directory(out_dir, job_id, ko_job_id=None, data_dir=None):
+    """regate every sealed record under a harness directory: real/ and perm/
+    (the scope in the file name, the permutation index in perm/), anchor_example/
+    on the network, anchor_ko/ on the knockout job. Yields (path, record)."""
+    job = load_job(job_id)
+    ko_job = load_job(ko_job_id) if ko_job_id else None
+    for part in sorted(os.listdir(out_dir)):
+        folder = os.path.join(out_dir, part)
+        if not os.path.isdir(folder):
+            continue
+        for name in sorted(os.listdir(folder)):
+            if not name.endswith(".json"):
+                continue
+            path = os.path.join(folder, name)
+            stem, index = name[:-5].rsplit("_", 1)
+            if part in ("real", "perm"):
+                scope = stem.replace("pathway_", "pathway:") if stem.startswith("pathway_") else stem
+                rec = regate(path, job, scope, data_dir, int(index) if part == "perm" else None)
+            elif part == "anchor_ko" and ko_job is not None:
+                rec = regate(path, ko_job, "network", data_dir)
+            elif part.startswith("anchor_"):
+                rec = regate(path, job, "network", data_dir)
+            else:
+                continue
+            if rec is not None:
+                yield path, rec
+
+
 def _summary(rec):
     gates = (rec.get("checks") or {}).get("gates") or {}
     return {"statements": len(rec.get("statements") or []), "dropped": len(rec.get("dropped") or []),
+            "mechanism": sum(1 for s in rec.get("statements") or [] if s.get("tier") == "mechanism"),
             "modules": ((gates.get("artifact") or {}).get("real") or {}).get("modules"),
             "legs": len((rec.get("walk") or {}).get("chain") or []),
             "rendered": bool((rec.get("checks") or {}).get("rendered")),
@@ -176,9 +232,12 @@ def run_artifact(job, job_id, scope, out_dir, repeats, permutations, data_dir=No
 
     for s in real:
         s["p_statements"] = round(p_value("statements", s["statements"]), 3)
+        s["p_mechanism"] = round(p_value("mechanism", s["mechanism"]), 3)
         s["p_modules"] = round(p_value("modules", s["modules"]), 3)
+    # "far fewer statements": the statements that assert a mechanism are the
+    # ones that can be a graph artifact; associations only report values
     out = {"real": real, "perm": perm, "permutations": len(perm),
-           "pass": all(s["p_statements"] < ALPHA and s["p_modules"] < ALPHA for s in real) and bool(real)}
+           "pass": all(s["p_mechanism"] < ALPHA and s["p_modules"] < ALPHA for s in real) and bool(real)}
     out["currency_legs"] = sum((s["artifact"].get("currency_legs") or 0) for s in real + perm)
     out["pass"] = out["pass"] and out["currency_legs"] == 0
     return out
@@ -563,9 +622,11 @@ def report(summary):
         lines += ["## 1 · Not a graph artifact — %s" % ("PASS" if art["pass"] else "FAIL"), "",
                   "| | real runs (%d) | permuted runs (%d) |" % (len(real), len(perm)), "|---|---|---|",
                   "| statements kept | %s | %s |" % (_range([s["statements"] for s in real]), _range([s["statements"] for s in perm])),
+                  "| mechanism statements kept | %s | %s |" % (_range([s["mechanism"] for s in real]), _range([s["mechanism"] for s in perm])),
                   "| modules found | %s | %s |" % (_range([s["modules"] for s in real]), _range([s["modules"] for s in perm])),
                   "| legs | %s | %s |" % (_range([s["legs"] for s in real]), _range([s["legs"] for s in perm])),
                   "| empirical p, statements | %s | |" % _range([s["p_statements"] for s in real]),
+                  "| empirical p, mechanism statements | %s | |" % _range([s["p_mechanism"] for s in real]),
                   "| empirical p, modules | %s | |" % _range([s["p_modules"] for s in real]),
                   "| request-time null p (modules) | %s | %s |" % (
                       _range([s["artifact"].get("p_modules") for s in real]), _range([s["artifact"].get("p_modules") for s in perm])),
