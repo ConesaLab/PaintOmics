@@ -171,7 +171,7 @@ def hasDataRows(path):
 _ENSEMBL_VERSIONED = re.compile(r"^ENS[A-Z]*[GTP]\d{5,}\.\d+$")
 
 
-def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor):
+def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor, detect=None):
     """Why step 2 has nothing to work on, or None.
 
     An omic whose identifiers matched nothing passed step 1 as a success
@@ -208,7 +208,40 @@ def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor):
         lines.append("Check the organism you chose and the kind of identifier "
                      "in the first column: the mapping summary on this page "
                      "says which identifiers PaintOmics recognised.")
+    # Which organism the identifiers DO fit, when that can be said. The
+    # message above told three users in one fortnight to "check the organism"
+    # and none of them could tell which one to check; the detector answers
+    # from the same xref index the mapping used (common/OrganismDetector.py).
+    # Optional and fail-safe: no detector, or a detector that raises, leaves
+    # the message exactly as it was.
+    if detect is not None:
+        probe = []
+        for omic in geneOmics:
+            name = omic.get("omicName") or "omic"
+            try:
+                probe.extend(sampleUnmatchedFor(name, ORGANISM_PROBE_SIZE) or [])
+            except TypeError:           # a sampler that takes the name alone
+                probe.extend(sampleUnmatchedFor(name) or [])
+        try:
+            hint = detect(probe, organism) if probe else None
+        except Exception as ex:
+            logging.warning("explainEmptyMapping: organism hint failed (%s: %s)",
+                            type(ex).__name__, ex)
+            hint = None
+        if hint:
+            lines.append(hint)
     return " ".join(lines)
+
+
+# Identifiers handed to the organism hint per omic: enough to tell mouse from
+# rat on gene symbols (five cannot), few enough for one indexed lookup.
+ORGANISM_PROBE_SIZE = 150
+
+
+def organismHint(identifiers, organism):
+    """The detector's one-sentence verdict for a step 2 failure, or None."""
+    from src.common.OrganismDetector import detectOrganism, describeHint
+    return describeHint(detectOrganism(identifiers, selected=organism))
 
 
 def _runMetagenesScripts(omicNames, databases, commands):
@@ -443,7 +476,7 @@ class PathwayAcquisitionJob(Job):
         if selectedCompounds:
             return None
         return explainEmptyMapping(self.getOrganism(), self.getGeneBasedInputOmics(),
-                                   self.sampleUnmatched)
+                                   self.sampleUnmatched, detect=organismHint)
 
     def getMappedRatios(self):
         # Calculate the mapped/unmapped ratio of each omic

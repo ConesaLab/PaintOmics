@@ -86,11 +86,11 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-reader.js": (
         "0.1", "0e455d115c4fc2ffe478c941ab49a757e9270a170382fd07c6896f42e8e477f1"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-validator.js": (
-        "0.2", "10700289348a691f3efa5743dff60de793adc97095372250ec7d179e229567d5"),
+        "0.3", "1ffc008d6636025b8e6216ef4de528abce65a0d7485bbfc641f281768ee4761f"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "3.7", "10b80dd305fb72695651b841a71ebf6dda28e80c1d365727673930a6790a9ccf"),
+        "4.1", "1e1bd0533e1f2d98fd843b0ad331d1f326e7f2242df39849ce3c33fd81c5a90f"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
