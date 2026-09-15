@@ -1043,6 +1043,126 @@ function PA_Step4KeggDiagramView() {
 	};
 
 	/**
+	* Measures the drawing surface the diagram actually gets: the card, minus its
+	* header, minus the body's own padding and border. The card is a fixed-height
+	* box (it shares an hbox row with the Pathway information panel), so this is
+	* the space the <svg> may occupy without making the body scroll.
+	*
+	* Read while the body is still empty, so `outerHeight(true) - height()` is
+	* padding + border and nothing else.
+	*
+	* Reported as measured, with no floor under it. The fit above is budgeted
+	* against `viewportHeight`, which is the centre panel less a flat 90px and so
+	* runs ~57px longer than the body really has; flooring the surface at the
+	* fitted image height would hand back more than the card can show, scroll the
+	* body, and cost the width a scrollbar the view box had already been built
+	* against. `fitViewBox` grows its box until the map fits whatever surface it
+	* is given, so a smaller surface only draws the map smaller - never clips it.
+	*
+	* @param {jQuery} panelEl        the .lateralOptionsPanel element of this card
+	* @param {Number} viewportHeight the caller's height budget, used as a fallback
+	* @param {Number} imageWidth     fitted image width, used as a fallback
+	* @returns {{width: Number, height: Number}} surface size in CSS pixels
+	*/
+	this.measureSurface = function(panelEl, viewportHeight, imageWidth) {
+		var headerHeight = panelEl.find(".lateralOptionsPanel-header").outerHeight(true);
+		var bodyEl = panelEl.find(".lateralOptionsPanel-body");
+		var bodyChrome = bodyEl.outerHeight(true) - bodyEl.height();
+
+		var height = panelEl.height() - headerHeight - bodyChrome;
+		/* boxready can fire before the flex layout has settled on a height; fall
+		   back to the same budget the fit itself was computed against. */
+		if (!isFinite(height) || height <= 0) {
+			height = viewportHeight;
+		}
+
+		var width = bodyEl.width();
+		if (!isFinite(width) || width <= 0) {
+			width = imageWidth;
+		}
+
+		return {width: width, height: height};
+	};
+
+	/**
+	* Grows a view box around the fitted diagram until it has the same aspect
+	* ratio as the surface it will be painted on, keeping the diagram centred in
+	* it. svgPanZoom forces `preserveAspectRatio="xMidYMid meet"` on the element,
+	* so a matched aspect maps the box 1:1 onto the surface: the whole map is
+	* visible at rest, the leftover space is split evenly above/below (or
+	* left/right) instead of piling up on one side, and every zoom step scales
+	* the map *into* that space rather than past the edge of a box that cannot
+	* use it.
+	*
+	* @param {Number} imageWidth    fitted image width  (user units)
+	* @param {Number} imageHeight   fitted image height (user units)
+	* @param {Number} surfaceWidth  surface width  in CSS pixels
+	* @param {Number} surfaceHeight surface height in CSS pixels
+	* @returns {{x: Number, y: Number, width: Number, height: Number}}
+	*/
+	this.fitViewBox = function(imageWidth, imageHeight, surfaceWidth, surfaceHeight) {
+		var surfaceRatio = surfaceWidth / surfaceHeight;
+
+		/* A zero or NaN surface would poison the initial box and every zoom step
+		   taken from it, so fall back to the image's own box. */
+		if (!isFinite(surfaceRatio) || surfaceRatio <= 0) {
+			return {x: 0, y: 0, width: imageWidth, height: imageHeight};
+		}
+
+		var width = Math.max(imageWidth, imageHeight * surfaceRatio);
+		var height = width / surfaceRatio;
+
+		return {
+			x: (imageWidth - width) / 2,
+			y: (imageHeight - height) / 2,
+			width: width,
+			height: height
+		};
+	};
+
+	/**
+	* jquery.svg.pan.zoom derives the zoomed box's *y* from its new **width**
+	* (`n.y - i/2` in the minified source, where `i` is the width and `r` the
+	* height), which walks the view box off centre by (width - height)/2 on every
+	* step. It went unnoticed while the box was the image's own - the pan limits,
+	* only 15% taller than a short map, clamped the drift away on the first step.
+	* On a box as tall as the card that drift is hundreds of user units per
+	* click, and it scrolls the map out of the surface as you zoom in.
+	*
+	* Reimplemented on the object's own public getViewBox/setViewBox rather than
+	* patched into the vendored bundle. `zoomIn` delegates to `zoomOut(-factor)`
+	* and the wheel handler is bound to the same object, so both routes pick this
+	* up.
+	*
+	* @param {Object} panZoom the SvgPanZoom instance returned by the plugin
+	*/
+	this.fixZoomCentering = function(panZoom) {
+		if (!panZoom || typeof panZoom.getViewBox !== "function") {
+			return panZoom;
+		}
+
+		panZoom.zoomOut = function(factor, animationTime) {
+			if (factor == null) { factor = this.zoomFactor; }
+			if (animationTime == null) { animationTime = this.animationTime; }
+			if (factor === 0) { return; }
+
+			var box = this.getViewBox();
+			/* Negative factor means zoom *in*, as the plugin's zoomIn does. */
+			var scale = (factor < 0) ? 1 / (1 + Math.abs(factor)) : (1 + factor);
+			var width = box.width * scale;
+			var height = box.height * scale;
+
+			this.setViewBox(
+				box.x + (box.width - width) / 2,
+				box.y + (box.height - height) / 2,
+				width, height, animationTime
+			);
+		};
+
+		return panZoom;
+	};
+
+	/**
 	* Wire the panel's own toolbar. Shared by the raster and network views: the
 	* header exists either way, and without this its buttons are inert on an
 	* OmniPath pathway.
@@ -1127,15 +1247,20 @@ function PA_Step4KeggDiagramView() {
 					me.getParent().setVisualOptions("adjustFactor", adjustFactor);
 					me.getParent().setHeight(imageHeight + 200);
 
+					/* The <svg> used to be sized to the *fitted image*, which left the
+					   rest of a fixed-height card as dead white - 550px of it under a
+					   6:1 Reactome map such as "Signaling by VEGF" - and, worse, capped
+					   what zooming could ever show: the element never grew, so zoom-in
+					   pushed the map out of a 169px slot instead of filling the card.
+					   The drawing surface is now the whole card and the view box is
+					   grown to the card's aspect, which centres the map in it. */
+					var surface = me.measureSurface($(this.el.dom), viewportHeight, imageWidth);
+					var initialViewBox = me.fitViewBox(imageWidth, imageHeight, surface.width, surface.height);
+
 					//USING SVG.JS library
 					canvas = SVG($(this.el.dom).find(".keggPathwaySVG")[0]);
-					canvas.size("100%", imageHeight);
-					canvas.viewbox({
-						x: 0,
-						y: 0,
-						width: imageWidth,
-						height: imageHeight
-					});
+					canvas.size("100%", surface.height);
+					canvas.viewbox(initialViewBox);
 
 					// Background image
 					// For KEGG we only need to pass the digit code, but for MapMan
@@ -1265,7 +1390,36 @@ function PA_Step4KeggDiagramView() {
 						me.download();
 					});
 					//START PAN/ZOOM
-					me.zoomTool = $(this.el.dom).find(".keggPathwaySVG").svgPanZoom({zoomFactor: 0.10, "initialViewBox" : {width:imageWidth, height:imageHeight}});
+					/* initialViewBox is the same box the canvas opened with, so the
+					   plugin's own pan limits (initialViewBox +/-15%) and its reset()
+					   both agree with what is on screen.
+
+					   animationTime 0 is not a style choice. The plugin's eased path
+					   paints the view box from a detached <div> it animates, and the
+					   height it reads back lands a whole zoom step behind the other
+					   three numbers - measured on mmu00220, one zoom-in left the
+					   element showing "953.27 x 672.80" where 953.27 x 611.64 was
+					   asked for. That skews the box's aspect by the zoom factor on
+					   every click, and `meet` then scales to the wrong axis, which is
+					   most of why zooming used to barely move. Writing the box
+					   directly is exact; the drag handler already passes 0.
+
+					   maxZoom caps the wheel (not the +/- buttons) and the plugin
+					   defaults it to 3. A Reactome map like this one is a 7190px raster
+					   shown across ~1040px, so 3x stops less than half way to its own
+					   pixels and the labels stay unreadable however long you scroll.
+					   1/adjustFactor is exactly the magnification that puts the raster
+					   back at 1:1; the plugin's 3 stays as a floor, because a map that
+					   was never scaled down has adjustFactor 1 and would otherwise be
+					   pinned at its fit view. */
+					me.zoomTool = me.fixZoomCentering(
+						$(this.el.dom).find(".keggPathwaySVG").svgPanZoom({
+							zoomFactor: 0.10,
+							animationTime: 0,
+							maxZoom: Math.max(3, 1 / (adjustFactor || 1)),
+							"initialViewBox": initialViewBox
+						})
+					);
 					$(this.el.dom).append(
 						'<div class="zoomTool">' +
 						'  <a href="javascript:void(0)" class="zoomIn" title="Zoom-in (110%)"><i class="fa fa-plus"></i></a>' +
