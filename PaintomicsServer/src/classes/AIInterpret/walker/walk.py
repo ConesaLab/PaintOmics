@@ -15,6 +15,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from src.classes.AIInterpret.walker import heat as heat_mod
+from src.classes.AIInterpret.walker.heat import ANCHOR_RADIUS
 from src.classes.AIInterpret.walker.tiers import edge_tier, is_currency
 
 logger = logging.getLogger(__name__)
@@ -343,6 +344,16 @@ class Walker:
         if (self.current, target) in self.closed:
             return self._refuse("step", args, "The edge %s → %s was already walked that way." % (
                 self.label(self.current), self.label(target)))
+        if self.dist and (self.dist.get(target) is None or self.dist[target] > ANCHOR_RADIUS):
+            # anchored: the perturbation's neighbourhood is read before the walk
+            # leaves it -- a step outward is refused while a relevant neighbour
+            # inside it is still unread
+            near = [r for r in rows if r["r"] == 1 and r["open"] and not r["visited"]
+                    and r.get("dist") is not None and r["dist"] <= ANCHOR_RADIUS]
+            if near:
+                return self._refuse("step", args, "Stay within %d steps of %s while a relevant neighbour there is "
+                                    "unread: %s." % (ANCHOR_RADIUS, (self.anchor or {}).get("gene", "the anchor"),
+                                                     ", ".join(r["label"] for r in near[:8])))
         if not self._reading_ok(target, reading):
             return self._refuse("step", args, "The reading must name a layer or member of %s: %s"
                                 % (self.label(target), ", ".join(sorted({

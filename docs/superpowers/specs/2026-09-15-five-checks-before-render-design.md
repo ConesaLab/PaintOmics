@@ -225,8 +225,10 @@ each candidate.
 
 **The walk.** When anchored, the scan fills the seed-candidate slots first from the nodes
 within two steps of the anchor (hottest first, the same separation rule), then by heat for
-whatever slots remain, lists the candidates nearest first, and code refuses a plan whose
-first seed is not among the nearest; every neighbour a walker sees carries its distance.
+whatever slots remain (the separation inside the neighbourhood is one edge), lists the
+candidates nearest first, refuses a plan whose first seed is not among the nearest, and
+refuses a step that leaves the two-step neighbourhood while a relevant neighbour inside it
+is unread; every neighbour a walker sees carries its distance.
 The planner's brief names the anchor and its direction and says to start there; `code_plan`
 orders candidates by (distance, −heat) when anchored. Measured on the example: telling the
 planner alone left the anchored walks no closer to Ikzf1 than the decoy's (0.26–0.32 against

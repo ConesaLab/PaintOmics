@@ -156,6 +156,22 @@ class AnchorTest(unittest.TestCase):
         self.assertTrue(answer.startswith("plan set"))
         self.assertIn("d=", walker.turns[-1]["answer"])                    # neighbours show their distance
 
+    def test_an_anchored_walk_reads_the_neighbourhood_before_it_leaves(self):
+        network, _graph = self.fresh()
+        ov = ov_mod.overlay_job(network, fx.make_job())             # the whole network: A -> F lies in pathway two
+        dist = anchor_mod.distances(network, "g:5")               # anchor E: C, D at 1; A, B at 2; F at 3
+        self.assertEqual((dist["g:4"], dist["g:1"], dist["g:6"]), (1, 2, 3))
+        walker = Walker(network, ov, "network", params_for("pathway"))
+        walker.dist, walker.anchor = dist, {"gene": "Eee", "node": "g:5", "direction": "up", "in_graph": True}
+        walker.start_at("g:1", 4, "test")                          # standing on A, two steps from E
+        # F is three steps out while D (one step from E, relevant) is unread: refused
+        answer = walker.step("Fff", "Fff Gene expression +0.10", "out")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("Stay within 2 steps of Eee", answer)
+        self.assertIn("Ddd", answer)
+        answer = walker.step("Ddd", "Ddd Gene expression −2.00", "in")
+        self.assertTrue(answer.startswith("e1"), answer)
+
     def test_a_decoy_has_a_regulon_of_similar_size(self):
         network, _graph = self.fresh()
         rows = anchor_mod.load_tf_targets(self.org_dir)

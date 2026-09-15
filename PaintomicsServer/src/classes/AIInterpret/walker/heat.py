@@ -115,7 +115,7 @@ def scan_graph(network, overlay, sep, limit, dist=None):
     blocked = {}
     chosen = {"n": 0}
 
-    def take(pool, quota):
+    def take(pool, quota, separation):
         for row in pool:
             if chosen["n"] >= quota:
                 break
@@ -126,13 +126,15 @@ def scan_graph(network, overlay, sep, limit, dist=None):
                 continue
             row["candidate"] = True
             chosen["n"] += 1
-            for w in _within(network, row["id"], sep, overlay.capped):
+            for w in _within(network, row["id"], separation, overlay.capped):
                 blocked.setdefault(w, row["label"])
 
     if dist:
+        # The neighbourhood is small and every relevant node in it is worth a
+        # seed, so the separation there is one edge whatever the graph's is.
         near = [r for r in rows if r["dist"] is not None and r["dist"] <= ANCHOR_RADIUS]
-        take(near, limit)
-    take(rows, limit)
+        take(near, limit, 1)
+    take(rows, limit, sep)
     if dist:
         far = 10 ** 6
         rows.sort(key=lambda r: (not r["candidate"], r["dist"] if r["candidate"] and r["dist"] is not None else far,

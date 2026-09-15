@@ -162,7 +162,8 @@ relations and your values, not findings), and no Results section or statements.
    targets as edges for this run, so a factor the pathway maps never drew -- Ikaros in the
    example -- still has a neighbourhood to start from. The seed candidates are drawn first
    from that neighbourhood (within two steps, hottest first) and listed nearest first, the
-   first seed must be among the nearest, and every neighbour a walker sees carries its
+   first seed must be among the nearest, a step out of the neighbourhood is refused while a
+   relevant neighbour inside it is unread, and every neighbour a walker sees carries its
    distance. Every module is labelled by its distance from the anchor and the header states
    the perturbation and its direction. The check passes when the walked nodes lie within two
    steps of the anchor more often than the measured nodes at large do.
