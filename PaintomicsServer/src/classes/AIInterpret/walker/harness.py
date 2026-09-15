@@ -249,6 +249,23 @@ def direction_cases(rows=None):
     return cases
 
 
+def _direction_case(client, case):
+    """One constructed statement through the direction check, and the same
+    statement over reversed values (the injected flip)."""
+    walker, _ov = _panel_walker(case["gene"], case["values"])
+    stmt = {"n": 1, "claim": case["statement"], "prose": case["statement"],
+            "cites": [[case["gene"], "Gene expression"]], "legs": [1]}
+    verdicts, objections = direction_mod.direction_check(client, [stmt], walker)
+    verdict = (verdicts.get(1) or [{}])[0]
+    flip_flagged = None
+    if case["expected_consistent"]:
+        flipped_walker, _ = _panel_walker(case["gene"], [-v for v in case["values"]])
+        _fv, flipped_objections = direction_mod.direction_check(client, [stmt], flipped_walker)
+        flip_flagged = bool(flipped_objections.get(1))
+    return dict(case, consistent=verdict.get("consistent"), claimed_read=verdict.get("claimed"),
+                insensitive=verdict.get("insensitive"), objected=bool(objections.get(1)), flip_flagged=flip_flagged)
+
+
 def run_direction(client, out_dir, repeats, rows=None):
     """Accuracy of the direction check on the constructed panel, per class,
     over ``repeats`` model samples; injected sign flips must be flagged."""
@@ -258,19 +275,11 @@ def run_direction(client, out_dir, repeats, rows=None):
         path = _path(out_dir, "direction", "panel_%d" % i)
         saved = _load(path)
         if saved is None:
-            saved = []
-            for case in cases:
-                walker, _ov = _panel_walker(case["gene"], case["values"])
-                stmt = {"n": 1, "claim": case["statement"], "prose": case["statement"],
-                        "cites": [[case["gene"], "Gene expression"]], "legs": [1]}
-                verdicts, objections = direction_mod.direction_check(client, [stmt], walker)
-                verdict = (verdicts.get(1) or [{}])[0]
-                # the injected flip: the same statement over reversed values
-                flipped_walker, _ = _panel_walker(case["gene"], [-v for v in case["values"]])
-                _fv, flipped_objections = direction_mod.direction_check(client, [stmt], flipped_walker)
-                saved.append(dict(case, consistent=verdict.get("consistent"), claimed_read=verdict.get("claimed"),
-                                  insensitive=verdict.get("insensitive"), objected=bool(objections.get(1)),
-                                  flip_flagged=bool(flipped_objections.get(1)) if case["expected_consistent"] else None))
+            # Six cases at a time: each is three short calls, and the gateway
+            # is paced per minute, so a serial pass took over half an hour.
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                saved = list(pool.map(lambda case: _direction_case(client, case), cases))
             _save(path, saved)
         results.append(saved)
 
