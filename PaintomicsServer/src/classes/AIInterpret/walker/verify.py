@@ -326,6 +326,10 @@ def citing_sentences(stmt, ref):
     return out or [str(stmt.get("claim") or "")]
 
 
+_GENERIC_SYSTEM_WORDS = {"cells", "cell", "line", "lines", "tissue", "tissues", "culture", "cultured", "primary",
+                         "precursor", "precursors", "human", "mouse", "adult", "stem"}
+
+
 def context_named(sentence, context):
     """Whether a sentence names the organism or the system of the paper it
     cites: "in human T cells [3]". True when the context is unknown."""
@@ -335,8 +339,16 @@ def context_named(sentence, context):
     if match.get("organism") == "other" and context.get("organism") not in (None, "", "unknown"):
         words.append(str(context["organism"]))
     if match.get("system") == "other" and context.get("system") not in (None, "", "unknown"):
-        words.extend(w for w in re.split(r"[\s,/-]+", str(context["system"])) if len(w) >= 4)
+        # the words that name the system, not the ones any sentence about cells has
+        # a heading's tokens and their hyphen parts ("T-Lymphocytes" -> "T-Lymphocytes", "Lymphocytes";
+        # "HL-60 Cells" -> "HL-60" only, since "HL", "60" and "Cells" name nothing)
+        for token in re.split(r"[\s,/]+", str(context["system"])):
+            for word in [token] + token.split("-"):
+                if len(word) >= 4 and word.lower() not in _GENERIC_SYSTEM_WORDS and word not in words:
+                    words.append(word)
     if not words:
+        # an organism word alone, or a system whose only names are generic:
+        # nothing specific the sentence could be asked to say
         return True
     text = str(sentence or "").lower()
     return any(word.lower().rstrip("s") in text for word in words)

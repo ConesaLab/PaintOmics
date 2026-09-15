@@ -84,7 +84,7 @@ def run_evaluation(job_id, scope, out_dir=None, data_dir=None, plants=100, seed=
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--job", required=True)
+    ap.add_argument("--job", default=None, help="the stored job (required except with --make-ko-job)")
     ap.add_argument("--scope", default="network", help='"network" or "pathway:<id>"')
     ap.add_argument("--policy", default="greedy", choices=("greedy", "random", "model"))
     ap.add_argument("--out", default=None)
@@ -99,9 +99,13 @@ def main(argv=None):
     ap.add_argument("--ko-job", default=None, help="the simulated knockout job for the anchor test")
     ap.add_argument("--only", default=None, help="comma list of checks to run: artifact,direction,context,anchor")
     ap.add_argument("--decoy", default=None, help="the decoy transcription factor for the anchor test")
+    ap.add_argument("--make-ko-job", action="store_true",
+                    help="store the simulated knockout dataset as a job and print its id")
     ap.add_argument("--plants", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args(argv)
+    if not args.job and not args.make_ko_job:
+        ap.error("--job is required")
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         return _main(args)
@@ -111,6 +115,13 @@ def main(argv=None):
 
 
 def _main(args):
+    if args.make_ko_job:
+        from src.classes.AIInterpret.walker import harness
+        dataset = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "examplefiles",
+                               "datasets", harness.KO_DATASET)
+        print(harness.create_job_from_dataset(os.path.normpath(dataset), harness.KO_DESIGN,
+                                              "Simulated Pten knockout (five-check harness)"))
+        return 0
     if args.five_checks:
         from src.classes.AIInterpret.walker import harness
         out_dir = args.out or os.path.join(CLIENT_TMP_DIR, "walks", "five-checks")

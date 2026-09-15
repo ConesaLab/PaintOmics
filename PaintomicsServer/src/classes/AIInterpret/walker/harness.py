@@ -428,11 +428,93 @@ def ko_targets(job, data_dir=None):
     return [network.nodes[v]["label"] for v in planted if v != node and v in network.nodes]
 
 
+# ------------------------------------------------------ the knockout job
+KO_DATASET = "13-simulated-pten-knockout"
+KO_DESIGN = ("Pten knockout in mouse: KO over wild type, log2 fold change at six time points after the "
+             "knockout (0h, 2h, 6h, 12h, 18h, 24h). Simulated from the mouse interaction network: the "
+             "knocked-out gene is set to -2.5 and its sign propagates two steps along signed edges.")
+
+
+def create_job_from_dataset(dataset_dir, design_text, name, organism="mmu"):
+    """A stored pathway-acquisition job built from an unlisted dataset
+    directory, the way the benchmark runner builds one from the manifest --
+    steps 1 to 3 through the job's own methods -- except that the job is kept
+    and its AI consent is on, so the walk (and the browser) can open it.
+    Returns the job id."""
+    import multiprocessing
+    import shutil
+    import tempfile
+    import uuid
+
+    from src.common import DatabaseAvailability, ExampleDatasets
+    from src.common.JobInformationManager import JobInformationManager
+    from src.common.KeggInformationManager import KeggInformationManager
+    from src.conf.serverconf import CLIENT_TMP_DIR, KEGG_DATA_DIR
+    from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+
+    try:
+        multiprocessing.set_start_method("fork")          # the mappers fork, as on the server
+    except RuntimeError:
+        pass
+    KeggInformationManager(KEGG_DATA_DIR)
+    # the server's src/ root, as the servlets pass it to the metagene step
+    src_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")) + os.sep
+    # ExampleDatasets refuses files outside its root: copy the dataset under a
+    # temporary root with a one-scenario manifest.
+    root = tempfile.mkdtemp(prefix="ko_job_")
+    try:
+        folder = os.path.join(root, "datasets", KO_DATASET)
+        shutil.copytree(os.path.join(dataset_dir, "data"), os.path.join(folder, "data"))
+        scenario = {"id": "ko", "organism": organism, "pipeline": "pathway-acquisition",
+                    "databases": DatabaseAvailability.resolveDatabases(organism), "omics": [
+                        {"omicName": "Gene expression", "omicType": "gene", "enrichment": "genes",
+                         "dataFile": "datasets/%s/data/gene_expression_values.tab" % KO_DATASET,
+                         "relevantFile": "datasets/%s/data/gene_expression_relevant.tab" % KO_DATASET}]}
+        with open(os.path.join(root, "datasets", "manifest.json"), "w", encoding="utf-8") as handle:
+            json.dump({"version": ExampleDatasets.SUPPORTED_VERSION, "defaultScenario": "ko",
+                       "scenarios": [scenario]}, handle)
+        job_id = "KO" + uuid.uuid4().hex[:8]
+        job = PathwayAcquisitionJob(job_id, None, CLIENT_TMP_DIR)
+        job.initializeDirectories()
+        ExampleDatasets.applyScenario(job, root + os.sep, "ko")
+        job.setDatabases(DatabaseAvailability.resolveDatabases(organism))
+        job.setName(name[:100])
+        job.setAIConsent("true")
+        job.setExperimentDesign(design_text)
+        job.validateInput()
+        job.processFilesContent()
+        job.setLastStep(2)
+        job.getJobDescription(True, True)
+        JobInformationManager().storeJobInstance(job, 1)
+        job.cleanDirectories()
+        job2 = JobInformationManager().loadJobInstance(job_id)
+        job2.setDirectories(CLIENT_TMP_DIR)
+        job2.initializeDirectories()
+        job2.updateSubmitedCompoundsList([])
+        job2.generatePathwaysList()
+        job2.getGlobalExpressionData()
+        job2.parseRegulationPerCondition()
+        try:
+            job2.generateMetagenesList(src_root, {})
+        except Exception as exc:                                       # noqa: BLE001
+            logger.warning("[harness] metagenes skipped for the knockout job: %s", exc)
+        job2.setLastStep(3)
+        JobInformationManager().storeJobInstance(job2, 2)
+        selected = sorted((job2.getMatchedPathways() or {}).keys())
+        job2.generateSelectedPathwaysInformation(selected, [], True)
+        JobInformationManager().storeJobInstance(job2, 3)
+        job2.cleanDirectories()
+        logger.info("[harness] job %s stored: %d pathways matched", job_id, len(selected))
+        return job_id
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 # ------------------------------------------------------------------ report
 def run_five(job_id, out_dir, repeats=5, permutations=20, scope="pathway:mmu04068", ko_job_id=None,
              data_dir=None, only=None, decoy=None):
     """Every check, saved under ``out_dir``; returns the summary dict."""
-    only = set(only or CHECKS)
+    only = set(only or CHECKS + ("ko",))
     job = load_job(job_id)
     client = service.llm_client()
     summary = {"job": job_id, "scope": scope, "repeats": repeats, "permutations": permutations,
@@ -455,11 +537,11 @@ def run_five(job_id, out_dir, repeats=5, permutations=20, scope="pathway:mmu0406
         targets = [t["symbol"] for t in _bench("ikaros_targets.json").get("targets") or []]
         summary["anchor"] = run_anchor(job, job_id, out_dir, repeats, "Ikzf1", targets, data_dir, decoy)
         _save(spath, summary)
-        if ko_job_id:
-            ko_job = load_job(ko_job_id)
-            summary["ko"] = run_anchor(ko_job, ko_job_id, out_dir, repeats, KO_GENE,
-                                       ko_targets(ko_job, data_dir), data_dir, decoy=None, label="ko")
-            _save(spath, summary)
+    if ("ko" in only or "anchor" in only) and ko_job_id:
+        ko_job = load_job(ko_job_id)
+        summary["ko"] = run_anchor(ko_job, ko_job_id, out_dir, repeats, KO_GENE,
+                                   ko_targets(ko_job, data_dir), data_dir, decoy=None, label="ko")
+        _save(spath, summary)
     summary["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     _save(spath, summary)
     with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as handle:

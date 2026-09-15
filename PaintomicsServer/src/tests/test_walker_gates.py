@@ -158,6 +158,12 @@ class ContextGateTest(unittest.TestCase):
         self.assertTrue(verify.context_named("as shown in human T cells [3]", ctx))
         self.assertTrue(verify.context_named("in patients' lymphocytes [3]", ctx))
         self.assertFalse(verify.context_named("Cish is a SOCS protein [3]", ctx))
+        # a system named only by generic words ("HL-60 Cells" -> "HL-60") is not satisfied by "cells"
+        hl60 = {"organism": "human", "system": "HL-60 Cells", "match": {"organism": "same", "system": "other"}}
+        self.assertFalse(verify.context_named("in these cells Tspan3 falls [2]", hl60))
+        self.assertTrue(verify.context_named("in HL-60 cells Tspan3 falls [2]", hl60))
+        generic = {"organism": "mouse", "system": "Cells, Cultured", "match": {"organism": "same", "system": "other"}}
+        self.assertTrue(verify.context_named("anything", generic))
         self.assertTrue(verify.context_named("anything", {"match": {"organism": "same"}}))
         self.assertTrue(verify.context_named("anything", None))
 

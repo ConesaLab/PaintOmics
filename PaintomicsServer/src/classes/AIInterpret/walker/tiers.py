@@ -133,6 +133,14 @@ _MECH_STEMS = [
     r"signal(?:s|led|ling)? through", r"up-?regulat(?:e|es|ed|ing)", r"down-?regulat(?:e|es|ed|ing)",
     r"orchestrat(?:e|es|ed|ing)", r"dictat(?:e|es|ed|ing)", r"govern(?:s|ed|ing)?", r"licens(?:e|es|ed|ing)",
     r"enforc(?:e|es|ed|ing)", r"impos(?:e|es|ed|ing)", r"commit(?:s|ted|ting)?",
+    # the verbs a first draft reached for once "drives" was refused
+    r"engag(?:e|es|ed|ing)", r"recruit(?:s|ed|ing)?", r"mobili[sz](?:e|es|ed|ing)", r"elicit(?:s|ed|ing)?",
+    r"evok(?:e|es|ed|ing)", r"initiat(?:e|es|ed|ing)", r"launch(?:es|ed|ing)?", r"unleash(?:es|ed|ing)?",
+    r"potentiat(?:e|es|ed|ing)", r"amplif(?:y|ies|ied|ying)", r"dampen(?:s|ed|ing)?", r"attenuat(?:e|es|ed|ing)",
+    r"coordinat(?:e|es|ed|ing)", r"coupl(?:e|es|ed|ing)", r"sets? in motion", r"switch(?:es|ed|ing)? to",
+    r"redirect(?:s|ed|ing)?", r"reroute(?:s|d)?", r"reprogramm?(?:e|es|ed|ing)?", r"steer(?:s|ed|ing)?",
+    r"instruct(?:s|ed|ing)?", r"deploy(?:s|ed|ing)?", r"impair(?:s|ed|ing)?", r"disrupt(?:s|ed|ing)?",
+    r"restrain(?:s|ed|ing)?", r"releas(?:e|es|ed|ing)", r"lift(?:s|ed|ing)?", r"enabl(?:e|es|ed|ing)",
 ]
 MECHANISTIC_RE = re.compile(r"\b(?:%s)\b" % "|".join(_MECH_STEMS), re.I)
 # A passive mechanistic verb is a mechanism only with an agent: "is induced by
@@ -142,7 +150,9 @@ _PASSIVE_RE = re.compile(r"\b(?:is|are|was|were|be|been|being|gets?|got|became|b
 _PASSIVE_STEMS = re.compile(r"^(?:driv|rewir|activat|inhibit|induc|repress|suppress|trigger|block|abolish|"
                             r"silenc|controll|regulat|promot|caus|phosphorylat|degrad|derepress|reprogramm|"
                             r"remodell?|mediat|up-?regulat|down-?regulat|orchestrat|dictat|govern|licens|enforc|"
-                            r"impos|committ|shut|switch|turn)", re.I)
+                            r"impos|committ|shut|switch|turn|engag|recruit|mobili[sz]|elicit|evok|initiat|launch|"
+                            r"unleash|potentiat|amplif|dampen|attenuat|coordinat|coupl|redirect|rerout|steer|"
+                            r"instruct|deploy|impair|disrupt|restrain|releas|lift|enabl)", re.I)
 
 
 def mechanistic_verbs(text):

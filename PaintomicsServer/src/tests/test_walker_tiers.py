@@ -117,6 +117,9 @@ class TierRulesTest(unittest.TestCase):
         self.assertEqual(tiers.mechanistic_verbs("Cish suppression derepresses JAK-STAT signalling"), ["derepresses"])
         self.assertEqual(tiers.mechanistic_verbs("the induction of Il2rg accompanies a fall in Cish"), [])
         self.assertIn("inhibits", tiers.mechanistic_verbs("Pten inhibits PI3K signalling"))
+        self.assertEqual(tiers.mechanistic_verbs("Ikaros perturbation engages a PI3K/FoxO axis and recruits Smad3"),
+                         ["engages", "recruits"])
+        self.assertEqual(tiers.mechanistic_verbs("Foxo1 was engaged by Ikaros; Ccnd2 was released"), ["engaged"])
 
     def test_currency_ids(self):
         self.assertTrue(tiers.is_currency("c:C00002"))
