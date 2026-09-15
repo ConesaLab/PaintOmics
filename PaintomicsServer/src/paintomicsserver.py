@@ -569,6 +569,26 @@ class Application(object):
                 "known": list(DatabaseAvailability.KNOWN_DATABASES),
                 "mandatory": DatabaseAvailability.MANDATORY_DATABASE,
             }).getResponse()
+
+        # Which installed organism a column of identifiers fits: the step 1
+        # hint (InputFormat/format-panel.js) asks this the moment a data file
+        # is picked, and the step 2 "nothing matched" message asks it again.
+        # POST because the sample is a couple of hundred identifiers; the same
+        # audience as /organism_databases -- unauthenticated, read-only, about
+        # what this deployment installed and nothing about anyone using it.
+        # A failure is success:false with a 200, never an error status: this
+        # hangs off a form field and must not be able to interrupt an upload.
+        @self.app.route(SERVER_SUBDOMAIN + '/detect_organism', methods=['OPTIONS', 'POST'])
+        def detectOrganismHandler():
+            from src.common import OrganismDetector
+            try:
+                body = request.get_json(force=True, silent=True) or {}
+                result = OrganismDetector.detectOrganism(
+                    body.get("identifiers"), selected=body.get("selected"))
+            except Exception as ex:
+                logging.warning("detect_organism failed (%s: %s)", type(ex).__name__, ex)
+                result = {"success": False}
+            return Response().setContent(result).getResponse()
         #*******************************************************************************************
         ##* DATA MANIPULATION SERVLETS HANDLERS - END
         #*******************************************************************************************

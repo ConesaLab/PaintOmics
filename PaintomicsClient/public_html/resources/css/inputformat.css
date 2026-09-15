@@ -431,3 +431,9 @@ input[type="text"].pa-field-err {
     color: var(--pa-accent-orange, #AD5022);
 }
 .pa-format-width .pa-format-actions { margin-top: 8px; }
+
+/* The organism clause under the file line (format-panel.js, "Which organism
+   the identifiers fit"). Part of the same sentence as the verdict, so it
+   keeps the note colour; the card's amber comes from .pa-state-warn, not
+   from here, and the links are the strip's own .pa-format-linkbtn. */
+.pa-format-organism { margin-top: 4px; }

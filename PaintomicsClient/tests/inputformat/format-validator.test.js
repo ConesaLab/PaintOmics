@@ -136,3 +136,22 @@ test("a region matrix with a repeated chromosome is not flagged as duplicate ids
   };
   assert.ok(gradeOutputs(outputs, fullapi, { answers: {}, instructions: [] }).ok);
 });
+
+test("keeps a distinct identifier probe for the organism hint, header excluded", () => {
+  const { ID_PROBE_SIZE } =
+    require("../../public_html/app/view/PathwayAcquisitionViews/InputFormat/format-validator.js");
+  const rows = [["id", "log expr"]];
+  for (let i = 0; i < 2 * ID_PROBE_SIZE; i++) rows.push(["G" + (i % (ID_PROBE_SIZE + 20)), "0.5"]);
+  const r = validateValues(rows);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.summary.idProbe.length, ID_PROBE_SIZE, "capped at the probe size");
+  assert.strictEqual(new Set(r.summary.idProbe).size, ID_PROBE_SIZE, "distinct");
+  assert.ok(!r.summary.idProbe.includes("id"), "the header is not an identifier");
+  assert.deepStrictEqual(r.summary.idSample, ["G0", "G1", "G2", "G3", "G4"], "idSample unchanged");
+});
+
+test("the probe skips blank identifiers rather than counting them", () => {
+  const rows = [["id", "v"], ["A", "1"], ["", "2"], ["  ", "3"], ["B", "4"]];
+  const r = validateValues(rows);
+  assert.deepStrictEqual(r.summary.idProbe, ["A", "B"]);
+});
