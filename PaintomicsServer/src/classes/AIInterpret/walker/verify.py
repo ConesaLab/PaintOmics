@@ -604,8 +604,13 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
     for n in kept_ids - covered:
         problems.append("statement %d is not covered" % n)
     for stmt in dropped:
-        head = " ".join(str(stmt.get("claim", "")).split()[:5]).lower()
-        if head and any(head in str(p.get("text", "")).lower() for p in paragraphs if isinstance(p, dict)):
+        # The first eight words of a dropped claim, not five: "Syk gene
+        # expression surges late" is how any kept statement about Syk begins,
+        # and the direction check now drops statements about the same genes
+        # the kept ones name.
+        head = " ".join(str(stmt.get("claim", "")).split()[:8]).lower()
+        if len(head.split()) >= 8 and any(head in str(p.get("text", "")).lower()
+                                          for p in paragraphs if isinstance(p, dict)):
             problems.append("a dropped statement is mentioned: %r" % head)
     lo, hi = words_range or RESULTS_WORDS["network" if scope == "network" else "pathway"]
     if not (lo <= words <= hi):

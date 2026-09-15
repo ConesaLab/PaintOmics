@@ -52,6 +52,9 @@ STAGE_PERCENT = {"network": 5, "card": 10, "walk": 15, "writer": 60, "sense": 80
 # Seconds the sense check and the Narrator need after the Writers stop.
 SENSE_MIN_SECONDS = 70
 NARRATE_MIN_SECONDS = 45
+# The least a Results section must say per kept statement when the scope's
+# own floor would ask for more than the statements hold.
+WORDS_PER_STATEMENT = 50
 
 HEARTBEAT_SECONDS = 60
 # Seconds the direction check needs after the Writers stop (three short
@@ -653,6 +656,10 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
 def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None,
              anchor=None, card=None, scope_name="Results"):
     kind = "network" if tag == "network" else "pathway"
+    # The floor of the word range follows the statements: a Results section
+    # retelling six statements cannot honestly reach 800 words, and one that
+    # was dropped for being short left the reader with nothing.
+    words = (min(words[0], WORDS_PER_STATEMENT * len(statements)), words[1])
     # Only the papers the kept statements cite, each with the claim a paper
     # agent confirmed in it: the Narrator retells statements, and a retrieved
     # paper no statement cites was never checked for the claim.
