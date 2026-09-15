@@ -102,4 +102,68 @@ another day of walks.
 
 ## Measured
 
-<!-- REPORTS: pasted from the harness's report.md files -->
+*State on 2026-09-15 at 17:30. The harness (`chain12`) is still walking: the knockout arms of
+check 5, the direction and context panels of checks 3 and 4, and the twenty permuted runs of
+check 1 on the pathway and on the network land in a follow-up to this page as their stages
+finish. What is sealed and regated with the corrected null is below; every number is the
+range over three runs.*
+
+Job `Ku5jMVCL6z`, 3 repeats at production temperatures (planner 0.2, walker 0.2, writer 0.3,
+narrator 0.3, sense 0.1, direction 0.1, paper agent 0.0), model
+`deepseek-ai/DeepSeek-V4-Flash-0731`.
+
+### 1 · Not a graph artifact — pending (request-time gate measured)
+
+The whole-pipeline permutation runs are in progress. The request-time gate, recomputed on
+the sealed real runs with the corrected null (`--regate`):
+
+| scope | runs | scripted modules, real | null mean | p modules | seed heat, real | null mean | p heat | gate |
+|---|---|---|---|---|---|---|---|---|
+| FoxO signalling pathway (mmu04068) | 3 | 3 | 1.82 | 0.196 | 1.41 | 1.02 | 0.118 | withheld |
+| network, anchored on Ikzf1 | 3 | 5 | 4.58 | 0.588 | 3.35 | 2.23 | 0.020 | rendered |
+| network, unanchored | 3 | 5 | 4.52 | 0.471 | 3.36 | 2.17 | 0.020 | rendered |
+
+On the pathway the real data gives the scripted walker no more modules and no hotter seeds
+than its permutations do, so the FoxO walk is withheld; on the network the seeds are far
+hotter than chance (p = 1/51) while the module count is not, so the network walk is rendered
+on the heat rule. Legs through a currency metabolite: 0 in every run.
+
+### 2 · The title fits the body — pending
+
+Measured from the first Narrator drafts of the real runs of check 1; reported with it. Of
+the three sealed pathway runs, one first draft outran the body ("Ikaros time course rewires
+FoxO signalling…") and was replaced by the neutral title; the other two passed.
+
+### 3 · Direction logic — pending
+
+The 164 constructed panel cases run after the knockout arms.
+
+### 4 · Citations in context — pending
+
+The 56 hand-labelled papers and 20 constructed pairs run with check 3.
+
+### 5 · Anchored to the perturbation, the example (Ikzf1) — FAIL on one of four comparisons
+
+| arm | reachability (≤ 2 steps of Ikzf1) | known-target enrichment p | statements | modules |
+|---|---|---|---|---|
+| anchored | 1.000 | 0.0000–0.0000 | 13–16 | 5 |
+| decoy (Nr0b1) | 0.604–0.659 | 0.0000–0.0074 | 5–20 | 5 |
+| unanchored | 0.200–0.269 | 0.0003–0.0102 | 9–19 | 5 |
+
+One-sided rank test, anchored against each arm: reachability p = 0.05 (decoy), 0.05 (unanchored); enrichment p = 0.1 (decoy), 0.05 (unanchored); 39 known targets.
+
+Reachability separates the arms completely: every anchored run walks its whole set of nodes
+within two steps of Ikzf1 (1.000), the decoy runs 0.60–0.66, the unanchored 0.20–0.27, so
+both rank tests give p = 0.05, the smallest value three against three can give. Known-target
+enrichment separates anchored from unanchored (p = 0.05) but not from the decoy (p = 0.1):
+one anchored run hit 4 of 30 targets among 45 walked nodes and one decoy run hit 4 among 40.
+In this dataset the perturbation *is* Ikaros, so the relevant genes a hot walk reaches are
+Ikaros targets wherever it starts; target enrichment measures the data more than the
+anchoring, and the anchoring's own signature is reachability. The check is reported as
+failed on that comparison rather than re-scored. Five-run arms measured before the decoy rule
+changed (Neurod1 as decoy) gave the same picture: reachability p = 0.004 against both arms,
+enrichment p = 0.27 against the decoy.
+
+### 5 · Anchored to the perturbation, the simulated knockout (Pten) — pending
+
+The anchored arm is sealed (3 runs), the decoy (Cyp2c39) and unanchored arms are walking.
