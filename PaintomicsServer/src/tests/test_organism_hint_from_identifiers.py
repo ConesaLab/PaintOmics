@@ -285,6 +285,80 @@ class DetectOrganismTest(unittest.TestCase):
         self.assertEqual(lookup.asked, ["mmu"])            # hsa and zzz are not installed
 
 
+class SharedClientSurvivesTest(unittest.TestCase):
+    """The second request must work as well as the first.
+
+    Deployed 2026-09-15 and the hint answered success:false for every request
+    after the first: openLookup() had become a process-wide client while
+    detectOrganism still closed it in its `finally`, left from when the client
+    was built per call. pymongo 4.x then raises
+
+        InvalidOperation: Cannot use MongoClient after close
+
+    on the next operation, and the worker never recovers. Nothing caught it,
+    because the development environment carries pymongo 3.11, where close()
+    disconnects and the next operation reconnects -- so the bug is invisible
+    exactly where it is cheapest to find. This fakes 4.x's behaviour instead of
+    trusting the installed driver.
+    """
+
+    class ClosableClient(object):
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+        def use(self):
+            if self.closed:
+                raise RuntimeError("Cannot use MongoClient after close")
+
+    def test_three_requests_in_a_row_all_answer(self):
+        """The production path: no lookup passed, so detectOrganism opens its own.
+
+        This has to go through openLookup(), because that is the only branch
+        the old `finally` closed -- a test that injects a lookup takes the
+        other branch and would have passed against the bug.
+        """
+        client = self.ClosableClient()
+        table = {"mmu": MOUSE_SYMBOLS, "hsa": HUMAN_SYMBOLS}
+
+        class Lookup(FakeLookup):
+            def installed(inner):
+                client.use()
+                return FakeLookup.installed(inner)
+
+            def hits(inner, code, identifiers):
+                client.use()
+                return FakeLookup.hits(inner, code, identifiers)
+
+        shared = Lookup(table)
+        shared.client = client
+        original = od.openLookup
+        od.openLookup = lambda: shared            # one client for the process
+        try:
+            for attempt in range(3):
+                result = od.detectOrganism(MOUSE_SYMBOLS, selected=None, names=NAMES,
+                                           shortlistCodes=["hsa", "mmu"])
+                self.assertTrue(result["success"], "request %d answered success:false" % (attempt + 1))
+                self.assertEqual(result["confident"]["code"], "mmu",
+                                 "request %d lost the answer" % (attempt + 1))
+        finally:
+            od.openLookup = original
+        self.assertFalse(client.closed, "the process-wide client must never be closed per request")
+
+    def test_the_module_never_closes_a_client(self):
+        """Belt and braces, and it names the line instead of printing the module."""
+        import inspect
+        offenders = [(number, line.strip())
+                     for number, line in enumerate(inspect.getsource(od).splitlines(), 1)
+                     if ".close()" in line and not line.lstrip().startswith("#")]
+        self.assertEqual(offenders, [],
+                         "OrganismDetector must never close the process-wide MongoClient -- "
+                         "on pymongo 4 every later request then fails with InvalidOperation. "
+                         "Offending line(s): %s" % offenders)
+
+
 class HintWordingTest(unittest.TestCase):
 
     def test_the_failure_sentence_for_each_outcome(self):
