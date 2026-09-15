@@ -102,7 +102,7 @@ another day of walks.
 
 ## Measured
 
-*State on 2026-09-15 at 17:30. The harness (`chain12`) is still walking: the knockout arms of
+*State on 2026-09-15 at 18:10. The harness (`chain12`) is still walking: the knockout arms of
 check 5, the direction and context panels of checks 3 and 4, and the twenty permuted runs of
 check 1 on the pathway and on the network land in a follow-up to this page as their stages
 finish. What is sealed and regated with the corrected null is below; every number is the
@@ -167,6 +167,28 @@ failed on that comparison rather than re-scored. Five-run arms measured before t
 changed (Neurod1 as decoy) gave the same picture: reachability p = 0.004 against both arms,
 enrichment p = 0.27 against the decoy.
 
-### 5 · Anchored to the perturbation, the simulated knockout (Pten) — pending
+### 5 · Anchored to the perturbation, the simulated knockout (Pten) — the arms do not separate
 
-The anchored arm is sealed (3 runs), the decoy (Cyp2c39) and unanchored arms are walking.
+| arm | reachability (≤ 2 steps of Pten) | known-target enrichment p | statements | the run's own anchor gate |
+|---|---|---|---|---|
+| anchored on Pten | 0.972–1.000 | 0.0000 | 8–14 | passes (3 of 3) |
+| decoy (Cyp2c39) | 1.000 | 0.0000 | 8–13 | **fails** (3 of 3), withheld |
+| unanchored | 1.000 | 0.0000 | 3–13 | passes (not applicable) |
+
+One-sided rank test: reachability p = 0.95 against both arms, enrichment p = 0.65; 860 planted
+targets.
+
+The check as specified fails here, and the reason is the design, not the walk.
+`simulate_ko.py` plants the knockout's signal by propagating Pten's sign two steps along signed
+edges, so every relevant node of the simulated job lies inside the anchor's two-step
+neighbourhood by construction: any walk that follows the values is "near Pten" whatever it was
+anchored on (base rate 0.227 against 0.086 for the real example), and the planted set is 860
+genes, so target enrichment saturates at p = 0 in all three arms. Both harness statistics are
+therefore blind on this design, and the comparison is reported as failed rather than re-scored
+after the fact.
+
+What does separate, and is the part the reader depends on, is the per-run gate. A run anchored
+on the decoy walks nowhere near Cyp2c39 (reachability 0.000 against a base rate of 0.042), so
+its own check 5 fails and all three decoy interpretations are withheld. The gate caught the
+mis-anchored run in every repeat; the harness's arm comparison could not, because on this
+simulation there is nowhere else for a value-following walk to go.
