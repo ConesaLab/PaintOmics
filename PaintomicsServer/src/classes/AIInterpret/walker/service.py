@@ -887,8 +887,17 @@ def stored_walk_text(doc, limit_legs=40):
     except ValueError:
         return "The stored universal walk could not be read."
     lines = []
+    checks = v.get("checks") or {}
+    gates = checks.get("gates") or {}
+    if gates:
+        failed = [name for name in GATES if not (gates.get(name) or {}).get("pass")]
+        anchor = checks.get("anchor") or {}
+        lines.append("CHECKS: %s%s" % (
+            "all five passed" if not failed else "FAILED %s -- the Results and statements are not shown to the user; "
+            "only the walk is" % ", ".join(failed),
+            "; perturbation %s (%s)" % (anchor.get("gene"), anchor.get("direction")) if anchor else "; no perturbed gene named"))
     results = v.get("results") or {}
-    if results.get("paragraphs"):
+    if results.get("paragraphs") and checks.get("rendered", True):
         lines.append("RESULTS (checked): %s" % results.get("summary", ""))
         for p in results["paragraphs"]:
             lines.append("- %s" % p.get("text", ""))

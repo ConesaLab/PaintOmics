@@ -257,9 +257,15 @@ context chips.
 --five-checks --repeats 5 --permutations 20 --out <dir>`. Every run's sealed record is saved
 before the next starts, so a stopped harness resumes. Temperatures are the production
 ones: planner 0.2, walkers 0.2, Writers 0.3, Narrator 0.3, sense 0.1, direction 0.1, paper
-agent 0.0. The report (`docs/dev/tellme-five-checks.md`, generated) shows every metric as
-min–max over the repeats and the pass verdict per check, for the example job and for the
-simulated knockout.
+agent 0.0. The parts run one after another (`--only artifact`, `--only anchor --decoy
+Neurod1`, `--only ko --ko-job <id>`, `--only direction,context`) because the gateway key is
+paced at about sixty requests a minute and one model walk already runs its agents in
+parallel; two harness parts at once produced 429 back-offs inside the stage deadlines. The
+decoy is Neurod1, a neuronal factor with 63 targets in the mouse network against Ikzf1's 50
+and no B-cell role. The simulated knockout is stored as a job by `cli --make-ko-job`. The
+report (`docs/dev/tellme-five-checks.md`, generated) shows every metric as min–max over
+the repeats and the pass verdict per check, for the example job and for the simulated
+knockout.
 
 ## 10. Files
 
@@ -284,7 +290,10 @@ writer.py` (context tags, rules, sentence-level pairs), `walker/verify.py`
 `examplefiles/datasets/manifest.json`.
 
 Deploy: after the code, `omnipathInstaller.py --organism mmu --tf-targets` (and hsa) on
-both hosts; the network cache rebuilds itself from its signature.
+both hosts -- on paintomics.org inside the app container (`docker compose exec -T app python
+/app/PaintomicsServer/src/AdminTools/omnipathInstaller.py --organism mmu --tf-targets`), on
+paintomics.uv.es with the tree's venv and `--kegg-data-dir ~/database/KEGG_DATA`; the network
+cache (now v4) rebuilds itself from its signature on the first walk.
 
 ## 11. Decisions taken
 
