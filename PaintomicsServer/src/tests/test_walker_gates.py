@@ -6,6 +6,7 @@ context gate and the title gate are exercised on hand-built statements and
 Results. Offline, no model."""
 import os
 import shutil
+import tempfile
 import sys
 import unittest
 
@@ -161,6 +162,22 @@ class ContextGateTest(unittest.TestCase):
         self.assertEqual(set(verdicts), {5, 6})
         # and the gate over the kept statements passes
         self.assertTrue(service.direction_gate(failing, [])["pass"])
+
+    def test_the_five_check_cli_passes_the_scope_it_was_given(self):
+        """--scope network used to be rewritten to the example pathway, so the
+        network interpretation could not be measured at all. The harness is
+        imported inside main(), so the patch goes on the module it imports."""
+        from unittest import mock
+        from src.classes.AIInterpret.walker import cli, harness
+        out = tempfile.mkdtemp()
+        try:
+            for asked, expected in (("network", "network"), ("pathway:mmu04068", "pathway:mmu04068")):
+                with mock.patch.object(harness, "run_five", return_value={}) as run_five, \
+                        mock.patch.object(harness, "report", return_value=""):
+                    cli.main(["--job", "J", "--scope", asked, "--five-checks", "--only", "artifact", "--out", out])
+                self.assertEqual(run_five.call_args.kwargs["scope"], expected)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
 
     def test_the_harness_reads_only_run_files_and_reports_without_a_decoy(self):
         from src.classes.AIInterpret.walker import harness

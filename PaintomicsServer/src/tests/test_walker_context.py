@@ -102,7 +102,8 @@ class PubMedMeshParsingTest(unittest.TestCase):
 class PaperContextTest(unittest.TestCase):
     def test_mouse_b_cell_line(self):
         ctx = lit.paper_context({"mesh": list(MOUSE_B_CELL), "pub_types": ["Journal Article"]})
-        self.assertEqual(ctx, {"organism": "mouse", "system": "B-Lymphocytes", "scope": "in vitro"})
+        self.assertEqual(ctx, {"organism": "mouse", "organisms": ["mouse"], "system": "B-Lymphocytes",
+                               "scope": "in vitro"})
 
     def test_strain_heading_counts_as_the_species(self):
         ctx = lit.paper_context({"mesh": ["Animals", "Mice, Inbred C57BL", "Liver"], "pub_types": []})
@@ -120,17 +121,31 @@ class PaperContextTest(unittest.TestCase):
 
     def test_human_without_a_study_type_has_unknown_scope(self):
         ctx = lit.paper_context({"mesh": ["Humans", "Hepatocytes"], "pub_types": ["Journal Article"]})
-        self.assertEqual(ctx, {"organism": "human", "system": "Hepatocytes", "scope": "unknown"})
+        self.assertEqual(ctx, {"organism": "human", "organisms": ["human"], "system": "Hepatocytes",
+                               "scope": "unknown"})
 
     def test_review_wins_over_everything(self):
         ctx = lit.paper_context({"mesh": list(MOUSE_B_CELL), "pub_types": ["Journal Article", "Review"]})
         self.assertEqual(ctx["scope"], "review")
         self.assertEqual(lit.paper_context({"mesh": [], "pub_types": ["Systematic Review"]})["scope"], "review")
 
-    def test_first_organism_in_document_order_wins(self):
+    def test_a_paper_indexed_for_two_species_is_mixed(self):
+        # PubMed prints MeSH alphabetically, so "the first heading" made every
+        # mouse paper that also cites human work read as human
         ctx = lit.paper_context({"mesh": ["Humans", "Animals", "Mice", "HEK293 Cells"], "pub_types": []})
-        self.assertEqual(ctx["organism"], "human")
+        self.assertEqual(ctx["organism"], "mixed")
+        self.assertEqual(ctx["organisms"], ["human", "mouse"])
         self.assertEqual(ctx["system"], "HEK293 Cells")
+        self.assertEqual(ctx["scope"], "in vitro")           # a cell line is where the work was done
+        # and the design's own organism among them is in context, not "other"
+        self.assertEqual(lit.context_match({"organism": "mouse", "system": ""}, ctx)["organism"], "same")
+        self.assertEqual(lit.context_match({"organism": "rat", "system": ""}, ctx)["organism"], "other")
+
+    def test_an_animal_study_without_a_species_heading_is_in_vivo(self):
+        ctx = lit.paper_context({"mesh": ["Animals", "Disease Models, Animal", "Liver"], "pub_types": []})
+        self.assertEqual((ctx["organism"], ctx["scope"]), ("unknown", "in vivo"))
+        # a cell-line heading outranks the animal one
+        ctx = lit.paper_context({"mesh": ["Animals", "Mice", "Cells, Cultured", "B-Lymphocytes"], "pub_types": []})
         self.assertEqual(ctx["scope"], "in vitro")
 
     def test_system_headings(self):
@@ -143,7 +158,7 @@ class PaperContextTest(unittest.TestCase):
         self.assertEqual(ctx["system"], "unknown")
 
     def test_no_mesh_is_all_unknown(self):
-        expected = {"organism": "unknown", "system": "unknown", "scope": "unknown"}
+        expected = {"organism": "unknown", "organisms": [], "system": "unknown", "scope": "unknown"}
         self.assertEqual(lit.paper_context({"mesh": [], "pub_types": []}), expected)
         self.assertEqual(lit.paper_context({"pmid": "1", "title": "old record"}), expected)
         self.assertEqual(lit.paper_context(None), expected)
@@ -209,8 +224,8 @@ class RankByContextTest(unittest.TestCase):
         # their original order (1, 4).
         self.assertEqual([p["pmid"] for p in ranked], ["5", "3", "6", "2", "1", "4"])
         self.assertEqual(ranked[0]["context"],
-                         {"organism": "mouse", "system": "B-Lymphocytes", "scope": "in vitro",
-                          "match": {"organism": "same", "system": "same"}})
+                         {"organism": "mouse", "organisms": ["mouse"], "system": "B-Lymphocytes",
+                          "scope": "in vitro", "match": {"organism": "same", "system": "same"}})
         self.assertEqual(ranked[2]["context"]["scope"], "review")
         self.assertEqual(ranked[-1]["context"]["match"], {"organism": "unknown", "system": "unknown"})
         # The input dicts themselves carry the annotation, so the Writer's

@@ -199,6 +199,16 @@ step lands in or next to the module in at least 93 percent of plants; the script
 recall of a 12-node module at a 0.33 background rate is about 0.4, which is the baseline the
 model policy is measured against.
 
+Measured on the STATegra example (`docs/dev/tellme-five-checks.md`): the five gates together
+render all three real network interpretations and withhold 18 of 20 built on permuted data
+(one-sided Fisher p = 0.006), the direction panel is read correctly in more than 97 percent of
+164 constructed statements, and an Ikaros-anchored walk stays within two steps of Ikaros in
+every run where a decoy-anchored one reaches about three fifths and an unanchored one a
+quarter. Two of the checks do not meet their own bar: the context read from MeSH agrees with a
+careful reader on the organism four times in five but on the cell type and the study type
+about three times in five, and known-target enrichment does not separate an anchored walk from
+a decoy-anchored one.
+
 The five checks are measured offline as well, three times at the production temperatures
 so the guarantees hold across the model's own variation, and every number is reported as
 a range: twenty whole-pipeline runs on permuted data (the measured nodes of the walked

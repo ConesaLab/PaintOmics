@@ -70,6 +70,25 @@ forced, in the order they were found:
   now permutes the way the request-time null does: the measured nodes of the walked graph
   exchange their measurements, flag and layers together. The eight feature-level runs are
   kept beside the report (`perm-featurelevel/`) and are not in the tables.
+* **A review pass found nine defects, and they split the measurement in two.** The fixes
+  (commit `020cfb93`: the design-text reading taking English words for genes, an unanchorable
+  gene withholding every interpretation, a rewritten statement keeping its old direction
+  verdict, the scope name's own verbs failing the title gate, a same-organism citation that
+  could not be qualified, and four more) landed after the anchor and knockout arms were
+  walked. Only one of them changes what a walk keeps: a citation to a paper of the design's
+  organism and another system is no longer refused for want of a qualifier, so a post-fix run
+  keeps marginally more statements. The real runs of check 1 were therefore walked again
+  against the permuted ones under the fixed code, since both arms of that comparison must be
+  the same program; the five pre-fix runs are kept aside (`stale-prefix-real/`). The anchor
+  and knockout arms measure where a walk went, not what it kept, so their pre-fix records
+  stand, and their statement counts are the pre-fix ones.
+* **`--scope network` never reached the harness.** The command line rewrote the scope to the
+  example pathway whenever it read "network", which is that flag's own default, so
+  `--five-checks --scope network` measured the pathway a second time and the network
+  interpretation could not be measured at all. Found when the network stage wrote its records
+  under pathway names. The scope passes through now, with a test; the twenty-three runs that
+  measurement produced are a second, independent pathway sample and are kept as
+  `second-pathway-sample/`.
 * **Three repeats, not five.** Repeats were cut from five to three, so the exact rank tests
   of check 5 are read at p ≤ 0.05: complete separation of three runs against three is
   exactly 0.05, the smallest value the test can give. Check 1 needs twenty permutations for
@@ -102,50 +121,120 @@ another day of walks.
 
 ## Measured
 
-*State on 2026-09-15 at 18:10. The harness (`chain12`) is still walking: the knockout arms of
-check 5, the direction and context panels of checks 3 and 4, and the twenty permuted runs of
-check 1 on the pathway and on the network land in a follow-up to this page as their stages
-finish. What is sealed and regated with the corrected null is below; every number is the
-range over three runs.*
+*Measured 2026-09-15 and 2026-09-16 on commit `e8409677` plus the fixes this page names.
+Three repeats at the production temperatures (planner 0.2, walker 0.2, writer 0.3, narrator
+0.3, sense 0.1, direction 0.1, paper agent 0.0), model `deepseek-ai/DeepSeek-V4-Flash-0731`
+through the CSIC gateway. Every number is the range over the repeats.*
 
-Job `Ku5jMVCL6z`, 3 repeats at production temperatures (planner 0.2, walker 0.2, writer 0.3,
-narrator 0.3, sense 0.1, direction 0.1, paper agent 0.0), model
-`deepseek-ai/DeepSeek-V4-Flash-0731`.
+### The short answer
 
-### 1 · Not a graph artifact — pending (request-time gate measured)
+Two of the five checks pass as specified, two fail, and one passes on its main comparison
+and fails on a second. The result that matters most is the one the raw statistic misses: **the gates together withhold permuted data.** On
+the network interpretation all three real runs were rendered and 18 of 20 runs on permuted
+data were withheld, every one of them by check 1's own gate (one-sided Fisher p = 0.006).
+On the FoxO pathway the gate is stricter still and withholds everything, real runs included.
 
-The whole-pipeline permutation runs are in progress. The request-time gate, recomputed on
-the sealed real runs with the corrected null (`--regate`):
+| check | verdict |
+|---|---|
+| 1 · not a graph artifact | **fails** as a count of statements and modules; **holds** as a rendering rate (3 of 3 real against 2 of 20 permuted, p = 0.006). No leg through a currency metabolite in 46 runs. |
+| 2 · title fits the body | **passes**: no first draft outran the body in the six real runs, so no rewrite and no code-written title were needed. |
+| 3 · direction logic | **passes**: both halves of the panel above 0.97 in every repeat, injected sign flips flagged 0.976–1.000. |
+| 4 · citations in context | **fails**: organism 0.804, cell type 0.589, scope 0.571 against the 0.85 asked for; the in-context paper chosen in 18 of 20 pairs, one short. |
+| 5 · anchored to the perturbation | **passes on reachability** for the Ikaros example (p = 0.05 against both arms, the floor of an exact test at three against three) and **fails on target enrichment against the decoy** (p = 0.1). On the simulated knockout the per-run gate withholds every decoy-anchored run, while the arm comparison cannot separate the arms at all. |
 
-| scope | runs | scripted modules, real | null mean | p modules | seed heat, real | null mean | p heat | gate |
-|---|---|---|---|---|---|---|---|---|
-| FoxO signalling pathway (mmu04068) | 3 | 3 | 1.82 | 0.196 | 1.41 | 1.02 | 0.118 | withheld |
-| network, anchored on Ikzf1 | 3 | 5 | 4.58 | 0.588 | 3.35 | 2.23 | 0.020 | rendered |
-| network, unanchored | 3 | 5 | 4.52 | 0.471 | 3.36 | 2.17 | 0.020 | rendered |
+### 1 · Not a graph artifact
 
-On the pathway the real data gives the scripted walker no more modules and no hotter seeds
-than its permutations do, so the FoxO walk is withheld; on the network the seeds are far
-hotter than chance (p = 1/51) while the module count is not, so the network walk is rendered
-on the heat rule. Legs through a currency metabolite: 0 in every run.
+Three real runs against twenty on permuted data, the measured nodes of the walked graph
+exchanging their measurements, both arms walked by the same code:
 
-### 2 · The title fits the body — pending
+| | real (3) | permuted (20) | empirical p per real run |
+|---|---|---|---|
+| **network** statements kept | 12–22 | 0–22 | 0.095–0.381 |
+| mechanism statements | 5–8 | 0–10 | 0.190–0.238 |
+| modules found | 5 | 1–7 | 0.619 |
+| **rendered** | 3 of 3 | 2 of 20 | Fisher 0.006 |
+| **FoxO pathway** statements kept | 10–11 | 0–12 | 0.095 |
+| mechanism statements | 2–5 | 0–6 | 0.143–0.429 |
+| modules found | 3 | 0–3 | 0.333 |
+| **rendered** | 0 of 3 | 0 of 20 | — |
 
-Measured from the first Narrator drafts of the real runs of check 1; reported with it. Of
-the three sealed pathway runs, two first drafts outran the body ("drives" and "shut down" said
-of the perturbation with no mechanism statement at the anchor), were sent back once and then
-replaced by the neutral title "FoxO signaling pathway: what changed after Ikzf1
-perturbation"; the third ("Ikaros time course rewires FoxO signalling…") rested on a
-mechanism statement and stood.
+Legs through a currency metabolite: 0 in all 46 runs, on both scopes.
 
-### 3 · Direction logic — pending
+What the counts say is that a large language model writes about as many sentences whatever
+the values are: given a permuted job it still walks, still finds legs, still writes. Counting
+its output therefore does not separate real data from noise, and the check as the goal words
+it fails. What does separate them is the gate: on the network, permuted data passed check 1's
+request-time null twice in twenty attempts, and those two runs are the false-positive rate a
+reader is exposed to. On the FoxO map the same gate withholds every walk, real included; that
+pathway's relevant genes are spread as the job's genes are at large, so no walk on it can be
+told from a walk on permuted values, and the interpretation is not shown.
 
-The 164 constructed panel cases run after the knockout arms.
+### 2 · The title fits the body — PASS
 
-### 4 · Citations in context — pending
+Measured from the first Narrator drafts of the six real runs of check 1, three on the network
+and three on the pathway:
 
-The 56 hand-labelled papers and 20 constructed pairs run with check 3.
+| | network | pathway |
+|---|---|---|
+| first drafts that outran the body | 0 of 3 | 0 of 3 |
+| sent back to the Narrator | 0 | 0 |
+| title replaced by code | 0 | 0 |
 
-### 5 · Anchored to the perturbation, the example (Ikzf1) — FAIL on one of four comparisons
+The verbs the Narrator used, each resting on a mechanism statement about the genes its
+sentence names: activates, coordinated, drives, induces, represses, rewires. The rule is not
+vacuous: the same gate rejected two of three first drafts in the pre-fix runs of the morning
+("drives" and "shut down" said of the perturbation with no mechanism statement at the anchor),
+sent them back once and then replaced the title with "FoxO signaling pathway: what changed
+after Ikzf1 perturbation". What it never had to do in these six runs is drop a summary
+sentence.
+
+### 3 · Direction logic — PASS
+
+164 constructed statements, one per panel row in each direction plus an injected sign flip in
+a fifth of them, three repeats:
+
+| | feedback reporters (23 rows) | true inhibitors (18 rows) | injected flips flagged |
+|---|---|---|---|
+| accuracy | 0.978–1.000 | 1.000 | 0.976–1.000 |
+
+Both halves stay above the 90 percent the check demands in every repeat, and the
+counter-hypothesis step flagged all but one or two of the injected flips per run.
+
+### 4 · Citations in context — FAIL
+
+| axis | agreement with the hand labels (56 papers) | the check asks for |
+|---|---|---|
+| organism | 0.804 | > 0.85 |
+| system (cell type or tissue) | 0.589 | > 0.85 |
+| scope (in vitro, in vivo, clinical, review) | 0.571 | > 0.85 |
+
+In-context paper chosen in 18 of 20 constructed pairs, 0.90 in each of the three repeats,
+against a threshold of more than 0.90: short by one paper.
+
+Two defects the measurement exposed are fixed, and the numbers above are the fixed reading
+(the first run gave organism 0.732, system 0.375, scope 0.571):
+
+* PubMed prints MeSH headings alphabetically, and the reading took the first organism heading,
+  so "Animals, Humans, Mice" read as human for every mouse paper that also cites human work.
+  Every organism heading is read now; a paper indexed for several species reads as "mixed", and
+  the design's own organism among them counts as in context rather than as another organism.
+* The scope followed from that single organism: any non-human paper with no in-vitro heading
+  was called "in vivo". An animal heading says "in vivo" now, and an in-vitro heading outranks
+  it, because a cell line is where the work was done whatever the species.
+* The benchmark's own scoring compared a reader's sentence ("B cells; mb-1 promoter reporter
+  assays") with a MeSH heading ("B-Lymphocytes") by word overlap alone; it consults the same
+  synonym table the runtime uses.
+
+What is left is not a bug. MeSH indexes what a paper is about, not how the work was done: 20 of
+the 56 papers carry no cell-type heading at all, 13 no study-type heading, and where the reader
+wrote "mixed" for a paper doing both in vitro and in vivo work MeSH names one or neither. The
+reading agrees with a careful reader on the organism four times in five and on the other two
+axes about three times in five, so the runtime gate that rests on it is weaker than the check
+specifies. It is reported as failing rather than re-scored, and the qualifier rule is what
+still protects the reader: a citation whose organism or system differs from the design must say
+so in the sentence, and an unknown context demands nothing.
+
+### 5 · Anchored to the perturbation, the example (Ikzf1) — one of four comparisons fails
 
 | arm | reachability (≤ 2 steps of Ikzf1) | known-target enrichment p | statements | modules |
 |---|---|---|---|---|

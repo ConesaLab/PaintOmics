@@ -387,13 +387,25 @@ def run_direction(client, out_dir, repeats, rows=None):
 
 # ------------------------------------------------ check 4: context labels
 def _agree(axis, label, found):
+    """Whether the MeSH reading agrees with a hand label. The organism and the
+    scope are a closed vocabulary and compare as words. The system labels are
+    free text a reader wrote ("B cells; mb-1 promoter reporter assays") while
+    the reading is a MeSH heading ("B-Lymphocytes"), so they agree when a word
+    of one appears in the other or when the heading's own synonyms
+    (literature.SYNONYMS, what a sentence would call it) do."""
     label, found = str(label or "unknown").lower(), str(found or "unknown").lower()
-    if axis == "system":
-        if label in ("unknown", "") and found in ("unknown", ""):
-            return True
-        words = [w for w in re.split(r"[\s,/()-]+", label) if len(w) >= 4]
-        return any(w in found or found.rstrip("s") in label for w in words)
-    return label == found
+    if axis != "system":
+        return label == found
+    if label in ("unknown", "") and found in ("unknown", ""):
+        return True
+    if label in ("unknown", "") or found in ("unknown", ""):
+        return False
+    label_text = re.sub(r"[\s,/()-]+", " ", label)
+    words = [w for w in label_text.split() if len(w) >= 4]
+    if any(w in found or found.rstrip("s") in label for w in words):
+        return True
+    return any(phrase in label_text or phrase.replace("-", " ") in label_text
+               for phrase in literature.SYNONYMS.get(found.strip(), ()))
 
 
 def run_context(client, out_dir, repeats):
