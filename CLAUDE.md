@@ -101,12 +101,19 @@ An agent that stops "waiting for CI" has abandoned the PR (that is exactly how t
    * The `PR` workflow's **`Gate`** job. It is the only required check on the `master`
      ruleset (no bypass actors) and it `needs:` lint, unit-tests, fixtures,
      secret-scan and docs, so wait for Gate itself, not for the individual jobs.
-   * The **`Code Review`** workflow ("Claude review"). It posts inline review comments
-     as `claude[bot]`. Read them with
+   * The **`Code Review`** workflow. It has two jobs: `Claude review` on the
+     subscription token, and `Claude review (gateway)` on the CSIC LiteLLM gateway,
+     which runs only when the first one FAILS (weekly limit, dead token, a session
+     that ended without reviewing) or when the PR carries the `review:gateway`
+     label. Both post inline review comments as `claude[bot]`. Read them with
      `gh api repos/{owner}/{repo}/pulls/<n>/comments` -- `gh pr view --comments`
      lists issue comments only and will show an empty review as "no findings".
-     A green review run with zero comments is a reason to check the run log, not
-     a pass.
+     Each job ends with a "Did a review actually happen" step that fails the job
+     when no comments and no summary were produced, so a red review means "not
+     reviewed", never "found bugs". A PR that edits `code-review.yml` is always
+     red there: the action refuses to run a workflow that differs from master.
+     A green review with zero comments is still a reason to read the summary in
+     the run log.
 4. **Resolve every review finding** before merging: fix it (edit, re-verify in
    Chrome per §5, push) or reply on the thread with the concrete reason it is not a
    bug. Every push re-runs Gate and a **full** review (about $7 of the owner's own
