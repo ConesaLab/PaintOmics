@@ -172,10 +172,15 @@ class OutcomeScriptTest(unittest.TestCase):
             assistant(tool_use("Read")),
             tool_result("ok"),
             result("Reviewed.", permission_denials=[
-                {"tool_name": "Bash", "tool_input": {"command": "gh api ..."}}]),
+                {"tool_name": "Bash", "tool_input": {"command": SENTINEL}},
+                {"tool_name": "WebFetch", "tool_input": {"url": SENTINEL}},
+                {"tool_name": "Bash", "tool_input": {"command": SENTINEL}}]),
         ])
         self.assertEqual(code, 0, out)
-        self.assertIn("::warning::1 permission denial", out)
+        # Names the tools, once each, so the allowlist can be widened without
+        # reading the transcript -- and never the inputs, which carry the diff.
+        self.assertIn("::warning::3 permission denial(s) on Bash, WebFetch", out)
+        self.assertNotIn(SENTINEL, out)
 
     def test_the_last_result_record_is_the_verdict(self):
         # The CLI can write more than one result record (a subagent's before

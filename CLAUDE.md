@@ -105,7 +105,9 @@ An agent that stops "waiting for CI" has abandoned the PR (that is exactly how t
      subscription token, and `Claude review (gateway)` on the CSIC LiteLLM gateway,
      which runs only when the first one FAILS (weekly limit, dead token, a session
      that ended without reviewing) or when the PR carries the `review:gateway`
-     label. Both post inline review comments as `claude[bot]`. Read them with
+     label (add the label BEFORE the push that should use it; `gh pr create
+     --label` is too late for the opening run). Both post inline review comments
+     as `claude[bot]`. Read them with
      `gh api repos/{owner}/{repo}/pulls/<n>/comments` -- `gh pr view --comments`
      lists issue comments only and will show an empty review as "no findings".
      Each job ends with a "Did a review actually happen" step that fails the job

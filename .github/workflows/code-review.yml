@@ -117,8 +117,12 @@ jobs:
     # below and skips the subscription. It is an opt-in override with two uses:
     # exercising the fallback on demand (nothing else makes it fire short of
     # breaking the OAuth token), and a week whose limit is already known to be
-    # spent. Labels are read when the `opened`/`synchronize` event fires, so
-    # label first, then push (or open the pull request with `--label`).
+    # spent. Labels are read from the event payload, so the label must be on
+    # the pull request BEFORE the push that should run on the gateway. `gh pr
+    # create --label` is too late for the opening run: it adds the label in a
+    # second request after the `opened` payload is built (#179: created
+    # 20:46:25, labelled 20:46:29, and that run went to the subscription).
+    # Open the pull request, label it, then push.
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'review:gateway') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25

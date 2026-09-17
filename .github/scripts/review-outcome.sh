@@ -55,6 +55,10 @@ summary=$(jq -r '(map(select(.type == "result")) | last // {}) | (.result // "")
 failed=$(jq -r '(map(select(.type == "result")) | last // {})
                 | if has("is_error") then (.is_error | tostring) else "true" end' "${FILE}")
 denied=$(jq -r '(map(select(.type == "result")) | last // {}) | (.permission_denials // []) | length' "${FILE}")
+# Tool NAMES only. A denial record also carries the tool's input, which is
+# never printed here for the same reason tool results are not.
+denied_tools=$(jq -r '(map(select(.type == "result")) | last // {})
+                      | (.permission_denials // []) | map(.tool_name // "?") | unique | join(", ")' "${FILE}")
 
 echo "---"
 echo "inline comments posted: ${posted}"
@@ -76,7 +80,7 @@ fi
 
 # Not fatal: the reviewer worked, but its allowlist is too narrow to work well.
 if [ "${denied}" -gt 0 ]; then
-  echo "::warning::${denied} permission denial(s) -- the tool allowlist may be missing something the plugin needs"
+  echo "::warning::${denied} permission denial(s) on ${denied_tools} -- the tool allowlist may be missing something the plugin needs"
 fi
 
 echo "a review happened"
