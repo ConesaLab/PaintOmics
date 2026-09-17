@@ -100,6 +100,12 @@ concurrency:
   group: code-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# Both jobs below run the SAME review with the SAME tools; only the credential
+# and the model differ. Actions has no YAML anchors, so the allowlist lives here
+# rather than being copy-pasted and drifting apart.
+env:
+  REVIEW_TOOLS: "mcp__github_inline_comment__create_inline_comment,Task,TodoWrite,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Read,Grep,Glob"
+
 jobs:
   review:
     name: Claude review
@@ -190,31 +196,106 @@ jobs:
           # timeout-minutes below is the real bound: wall clock, which is what
           # the budget is actually about.
           claude_args: >-
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Task,TodoWrite,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Read,Grep,Glob"
+            --allowedTools "${{ env.REVIEW_TOOLS }}"
 
-      # See the header: the action's own log never carries the reason.
+      # See the header: the action's own log never carries the reason, and a
+      # green tick has never meant a review happened. This step is the only
+      # thing that separates "reviewed, found nothing" from "died quietly".
+      # It runs on success too, and FAILS the job when no review took place --
+      # which is also what makes the gateway fallback below trigger.
+      #
       # `execution_file` is set on the failure path too (base-action calls
       # setExecutionFileOutputIfPresent before setFailed); the format()
       # fallback is the path it always uses, for the case where the composite
-      # did not surface the output. An empty file means Claude never started:
-      # the token, the plugin install or the checkout failed, and that is in
-      # the action log above.
-      - name: Why the review failed
-        if: failure()
+      # did not surface the output.
+      - name: Did a review actually happen
+        if: always()
         env:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file || format('{0}/claude-execution-output.json', runner.temp) }}
-        run: |
-          if [ ! -s "$EXECUTION_FILE" ]; then
-            echo "no transcript at $EXECUTION_FILE: Claude never started; the reason is in the action step above"
-            exit 0
-          fi
-          jq -r '
-            (map(select(.type == "result")) | last // {}) as $r
-            | (map(select(.type == "assistant")) | last // {}) as $a
-            | def text: if type == "array" then map(.text // "") | join(" ") else tostring end;
-              "result: subtype=\($r.subtype // "none") is_error=\($r.is_error // "none") num_turns=\($r.num_turns // "none")",
-              "result text: \(($r.result // "") | tostring | .[0:2000])",
-              "result errors: \(($r.errors // []) | map(tostring) | join(" | "))",
-              "last assistant error: \($a.error // "none")",
-              "last assistant text: \(($a.message.content // "") | text | .[0:2000])"
-          ' "$EXECUTION_FILE"
+        run: bash .github/scripts/review-outcome.sh
+
+  # The same review, the same tools, the same inline comments -- on the CSIC
+  # LiteLLM gateway instead of the subscription. It exists because the
+  # subscription runs out: the weekly limit took six consecutive pull requests
+  # on 15-16 September 2026, every one of them merged unreviewed, and the run
+  # log said only
+  #
+  #   result: subtype=success is_error=true num_turns=1
+  #   result text: You've hit your weekly limit - resets Sep 17, 5pm (UTC)
+  #   last assistant error: rate_limit
+  #
+  # `needs.review.result == 'failure'` is deliberately narrower than
+  # `!= 'success'`: `cancel-in-progress` produces `cancelled` on every
+  # force-push mid-review (nine of them in the last sixty runs), and a fallback
+  # that fired on those would double-review the same diff while the replacement
+  # run is still going.
+  #
+  # Gateway facts this configuration depends on, all measured on 2026-09-17
+  # against https://llm.iiia.es (LiteLLM 1.100.1 in front of vLLM 0.26.0):
+  #
+  #   * /v1/messages is a real Anthropic passthrough: tool_use blocks, forced
+  #     tool_choice, full tool_result round trips and correct SSE streaming.
+  #   * `x-api-key` alone authenticates (200), which matters because the action
+  #     forwards ANTHROPIC_API_KEY and NOT ANTHROPIC_AUTH_TOKEN -- so the key
+  #     goes in via the anthropic_api_key input, not an env var.
+  #   * ANTHROPIC_BASE_URL and ANTHROPIC_DEFAULT_{HAIKU,SONNET,OPUS}_MODEL are
+  #     forwarded from `env` (action.yml:342, :370-372). The three model
+  #     aliases are NOT optional: the review plugin launches a haiku agent and
+  #     opus bug agents by name, and the gateway serves no such models -- left
+  #     unset they resolve to Anthropic model ids the gateway answers 400 for.
+  #   * /v1/messages/count_tokens returns 503 ("Token counting is disabled").
+  #     Nothing here depends on it, but a context-management path that does
+  #     will degrade rather than error, so watch for truncated reviews.
+  #   * 60 requests/minute per key, with NO retry-after header on any response
+  #     including 429s. A single-threaded agent loop runs at roughly 5-10s per
+  #     turn and stays well under it; this is only a risk if the plugin's
+  #     parallel subagents ever fan out wider than they do today.
+  #   * 262144 tokens of context, shared between input and output.
+  #
+  # The model is weaker than the subscription's and behaves like it: driving it
+  # through the CLI on 2026-09-17, one run emitted a malformed tool call the
+  # loop had to recover from, and another ended with an empty result after a
+  # single failed Read. The outcome script is what stops that reading as a
+  # clean diff.
+  review-fallback:
+    name: Claude review (gateway)
+    needs: review
+    if: always() && needs.review.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        id: review
+        env:
+          ANTHROPIC_BASE_URL: https://llm.iiia.es
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: deepseek-ai/DeepSeek-V4-Flash-0731
+          ANTHROPIC_DEFAULT_SONNET_MODEL: deepseek-ai/DeepSeek-V4-Flash-0731
+          ANTHROPIC_DEFAULT_OPUS_MODEL: deepseek-ai/DeepSeek-V4-Flash-0731
+          # Same reason as the primary job: a subagent launched into the
+          # background dies with the non-interactive session that spawned it.
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          # No telemetry or background chatter against a gateway that neither
+          # expects it nor has budget for it.
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+        with:
+          anthropic_api_key: ${{ secrets.AI_CSIC_API_KEY }}
+          allowed_bots: "dependabot"
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          plugins: "code-review@claude-code-plugins"
+          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          claude_args: >-
+            --model deepseek-ai/DeepSeek-V4-Flash-0731
+            --allowedTools "${{ env.REVIEW_TOOLS }}"
+
+      - name: Did a review actually happen
+        if: always()
+        env:
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file || format('{0}/claude-execution-output.json', runner.temp) }}
+        run: bash .github/scripts/review-outcome.sh
