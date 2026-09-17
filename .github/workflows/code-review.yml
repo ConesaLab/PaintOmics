@@ -45,9 +45,13 @@
 #   Exiting due to workflow validation skip
 #
 # It never reached Anthropic, so that run proved nothing about the token. Two
-# consequences to remember: this workflow cannot review the pull request that
-# introduces or edits it, and a green tick beside zero comments is the signal
-# to read the log rather than to conclude the diff was clean.
+# consequences to remember. First, this workflow cannot review the pull request
+# that introduces or edits it: both jobs below skip the same way, the outcome
+# step then fails each of them with "no transcript", and such a pull request
+# shows two RED review checks and merges unreviewed (Gate is unaffected).
+# Second, a green tick means only what the outcome step checked -- a transcript
+# that posted comments or wrote a summary -- so zero comments beside a green
+# tick is still a reason to read the summary the log prints.
 #
 # The token WAS tested, separately, because this workflow could not do it. Run
 # 33540488683 installed the CLI on a runner and spent one inference turn on
@@ -109,6 +113,13 @@ env:
 jobs:
   review:
     name: Claude review
+    # The `review:gateway` label sends the review straight to the gateway job
+    # below and skips the subscription. It is an opt-in override with two uses:
+    # exercising the fallback on demand (nothing else makes it fire short of
+    # breaking the OAuth token), and a week whose limit is already known to be
+    # spent. Labels are read when the `opened`/`synchronize` event fires, so
+    # label first, then push (or open the pull request with `--label`).
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'review:gateway') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -228,7 +239,9 @@ jobs:
   # `!= 'success'`: `cancel-in-progress` produces `cancelled` on every
   # force-push mid-review (nine of them in the last sixty runs), and a fallback
   # that fired on those would double-review the same diff while the replacement
-  # run is still going.
+  # run is still going. The label clause is the on-demand path described on the
+  # primary job: with the label the primary is `skipped`, which the first
+  # clause ignores, and the second clause runs this job in its place.
   #
   # Gateway facts this configuration depends on, all measured on 2026-09-17
   # against https://llm.iiia.es (LiteLLM 1.100.1 in front of vLLM 0.26.0):
@@ -260,13 +273,26 @@ jobs:
   review-fallback:
     name: Claude review (gateway)
     needs: review
-    if: always() && needs.review.result == 'failure'
+    if: >-
+      always() && (
+        needs.review.result == 'failure'
+        || contains(github.event.pull_request.labels.*.name, 'review:gateway')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
       contents: read
       pull-requests: write
       issues: read
+      # The action mints its GitHub identity -- the claude[bot] that posts the
+      # comments -- by exchanging this job's OIDC token for an app token, and
+      # it does so before it looks at any model credential: prepare.ts calls
+      # setupGitHubToken() unconditionally, and without `id-token: write` that
+      # dies with "Could not fetch an OIDC token" before the gateway is ever
+      # contacted. The first cut of this job omitted it. Same identity and the
+      # same workflow-validation rule as the primary job, on purpose: one
+      # reviewer, two credentials.
+      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:

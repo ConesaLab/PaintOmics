@@ -37,7 +37,7 @@ jq -r '
   (map(select(.type == "result")) | last // {}) as $r
   | (map(select(.type == "assistant")) | last // {}) as $a
   | def text: if type == "array" then map(.text // "") | join(" ") else tostring end;
-    "result: subtype=\($r.subtype // "none") is_error=\($r.is_error // "none") num_turns=\($r.num_turns // "none")",
+    "result: subtype=\($r.subtype // "none") is_error=\(if $r | has("is_error") then ($r.is_error | tostring) else "none" end) num_turns=\($r.num_turns // "none")",
     "result text: \(($r.result // "") | tostring | .[0:2000])",
     "result errors: \(($r.errors // []) | map(tostring) | join(" | "))",
     "last assistant error: \($a.error // "none")",
