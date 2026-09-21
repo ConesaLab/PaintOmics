@@ -334,7 +334,7 @@ class StageBudgetTest(unittest.TestCase):
         def length_rule(n, words):
             client = Brief()
             statements = [{"n": i + 1, "claim": "c%d" % i} for i in range(n)]
-            service._narrate(client, "card", "chain", statements, [], None, {}, "pathway:x", {}, words)
+            service._narrate(client, "card", "chain", statements, [], None, {}, "pathway:x", {"gates": {}}, words)
             return [line for line in client.briefs[0].splitlines() if line.startswith("- Length")][0]
 
         self.assertEqual(length_rule(6, (400, 1200)), "- Length 300 to 1200 words.")
@@ -356,7 +356,7 @@ class StageBudgetTest(unittest.TestCase):
         self.assertTrue(30 < client.budgets[0] <= 40, client.budgets)
 
         client = _Budgets()
-        checks = {}
+        checks = {"gates": {}}
         service._narrate(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, {}, "pathway:x", checks,
                          (100, 200), deadline=time.time() + 30)
         self.assertTrue(client.budgets and all(b is not None and 20 < b <= 30 for b in client.budgets),
@@ -383,7 +383,7 @@ class StageBudgetTest(unittest.TestCase):
                 raise self.exc
 
         def reason(exc, deadline):
-            checks = {}
+            checks = {"gates": {}}
             out = service._narrate(Failing(exc), "card", "chain", [{"n": 1, "claim": "c"}], [], None, {},
                                    "pathway:x", checks, (100, 200), deadline=deadline)
             self.assertIsNone(out)
