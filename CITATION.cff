@@ -42,7 +42,7 @@ authors:
     family-names: Conesa
     orcid: https://orcid.org/0000-0001-9597-311X
 repository-code: https://github.com/ConesaLab/PaintOmics
-url: https://paintomics.uv.es/
+url: https://paintomics.org/
 license: GPL-3.0-or-later
 contact:
   - email: paintomicsai@gmail.com

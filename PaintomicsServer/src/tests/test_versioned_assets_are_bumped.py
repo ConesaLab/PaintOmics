@@ -207,8 +207,12 @@ PUBLISHED = {
     # v=1.5 adds SERVER_URL_PA_HUB_NAMES; same failure mode again.
     # v=1.4 adds SERVER_URL_PA_HUB_FEATURE. Same failure mode as v=0.9 above:
     # a browser keeping the old copy POSTs every node click to `undefined`.
+    # v=1.9 turns PAINTOMICS_EMAIL_DOMAIN from "paintomics.uv.es" into the
+    # fallback "paintomics.org": UserController now shows the guest address
+    # the server returns, and a browser keeping the old copy would show a
+    # guest the old host's address only on a server that omits the field.
     "resources/ServerConfiguration.js": (
-        "1.8", "9a001b089d0f95e82536e99a58e797c6624429eb803f6d49e346207a558d750b"),
+        "1.9", "f7ae9ce0c73aff53d0a16490449eea02da51e7dc3b3cbda784e82cf3d5503c12"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     # v=2.8 draws regulators the map does not print, colours them from the

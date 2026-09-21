@@ -287,14 +287,18 @@ function MainView() {
 				// both serve PaintOmics 4 -- and the PaintOmics 3 paper is already
 				// linked under Publications. Restore this with a real URL if the
 				// old release gets hosted again.
-				// This server's own examples, not paintomics.uv.es's copy of a
+				// This server's own examples, not another instance's copy of a
 				// 2017 archive: a deployment with its own datasets installed was
 				// sending people elsewhere for data it does not use.
 				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i class='fa fa-download'></i>PaintOmics example data</a></li>" +
-				"	  <li class='menuOption externalOption'><a href='https://paintomics.uv.es/resources/rgmatch_example_data.zip' target='_blank' rel='noopener'><i class='fa fa-download'></i>RGmatch example data</a></li>" +
-				// RGmatch above stays an external link: it is a separate tool with
-				// its own example data, not something this server's manifest
-				// describes. miRNA2Genes is ours, so it comes from the manifest.
+				// "RGmatch example data" stood here, linking
+				// paintomics.uv.es/resources/rgmatch_example_data.zip. The archive
+				// left the repository in #170 and neither paintomics.org nor
+				// paintomics.uv.es serves it (both 404, checked 2026-09-21), so the
+				// entry was a dead download. Removed rather than repointed, like the
+				// PaintOmics 3 entry above; RGmatch's own repository is linked from
+				// the Regions-to-Genes tool. miRNA2Genes is ours, so it comes from
+				// the manifest.
 				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i class='fa fa-download'></i>miRNA2Genes example data</a></li>" +
 				"  </ul></div>" +
 				/* The four entries used to be full citations set at `font-size:

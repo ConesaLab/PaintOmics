@@ -1,5 +1,5 @@
 {
- "_comment": "GET https://paintomics.uv.es/kegg_data/species.json as served on 2026-08-21: the organisms installed on the production server, the list the Step 1 organism picker searches. A fixture for test_organism_search; refresh it from the same URL, not by hand.",
+ "_comment": "GET https://paintomics.uv.es/kegg_data/species.json as served on 2026-08-21: the organisms installed on the production server, the list the Step 1 organism picker searches. A fixture for test_organism_search; refresh it from https://paintomics.org/kegg_data/species.json (the public instance since the 2026-09-07 cutover), not by hand.",
  "success": true,
  "species": [
   {

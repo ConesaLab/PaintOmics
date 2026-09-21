@@ -37,6 +37,7 @@ merged them where one exists.
 
 ### Changed
 
+- Everything that sent people to paintomics.uv.es now sends them to paintomics.org, the public instance since the 2026-09-07 cutover: the README badge and link, the security policy, the citation file, the bug-report and organism-request issue templates, the terms and conditions page and the maintainer docs. A guest session shows the address the server stored, returned with the credentials, instead of one the client assembled from a hard-coded domain, so a deployment can name its guests under its own host without splitting the stored address from the displayed one. The "RGmatch example data" entry in the Help menu is gone: it linked an archive that left the repository in #170 and that neither instance serves.
 - The application is renamed PaintOmics AI, the successor to PaintOmics 4.
 - Navigation moved into the header and the left rail was removed.
 - The interface runs on one token-based design system for surfaces, shapes and type, with a single typeface and WCAG AA contrast throughout; the landing page, the application mark and the account dialogs were redrawn, and the ExtJS dialogs, tables and upload controls modernized.
