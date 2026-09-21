@@ -178,6 +178,8 @@ PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'Print
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'ReactomeRelationGraph' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'RegulationTableToleratesLoadedNone' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'TranslatedSource' (60% confidence)
+PaintomicsServer/src/tests/test_public_instance_is_paintomics_org.py: unused class 'GuestAddressContract' (60% confidence)
+PaintomicsServer/src/tests/test_public_instance_is_paintomics_org.py: unused class 'PublicInstancePointers' (60% confidence)
 PaintomicsServer/src/tests/test_reactome_matches_get_symbol_names.py: unused class 'ReactomeMatchesGetSymbolNames' (60% confidence)
 PaintomicsServer/src/tests/test_species_json_is_written_by_name.py: unused class 'CustomInstallerWriter' (60% confidence)
 PaintomicsServer/src/tests/test_species_json_is_written_by_name.py: unused class 'DBManagerWriter' (60% confidence)
