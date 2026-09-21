@@ -56,6 +56,9 @@ NARRATE_MIN_SECONDS = 45
 # The least a Results section must say per kept statement when the scope's
 # own floor would ask for more than the statements hold.
 WORDS_PER_STATEMENT = 50
+# checks["results"] when there was no time for a Results section; the page
+# tells this apart from a section that failed its checks by "time budget".
+RESULTS_OUT_OF_TIME = "no Results section: the time budget was spent"
 
 HEARTBEAT_SECONDS = 60
 # Seconds the direction check needs after the Writers stop (three short
@@ -193,7 +196,7 @@ REWRITE_SCHEMA = {
 }
 
 
-def rewrite_once(client, card_text, chain, failing, verdicts):
+def rewrite_once(client, card_text, chain, failing, verdicts, budget_seconds=None):
     """One rewrite of the statements the sense check objected to."""
     objections = []
     for s in failing:
@@ -209,7 +212,8 @@ def rewrite_once(client, card_text, chain, failing, verdicts):
     try:
         out = client.complete_json([{"role": "system", "content": "You revise interpretation statements to answer specific objections."},
                                     {"role": "user", "content": prompt}], "rewrite", REWRITE_SCHEMA,
-                                   lambda text: None, max_tokens=max(2500, 700 * len(failing) + 500), temperature=0.2)
+                                   lambda text: None, max_tokens=max(2500, 700 * len(failing) + 500), temperature=0.2,
+                                   budget_seconds=budget_seconds)
     except Exception:                                                 # noqa: BLE001
         return {}
     if not isinstance(out, dict):
@@ -383,8 +387,6 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
     """The model walk (walker/parallel.py), then the checks and the Narrator,
     inside the scope's time budget. Returns (walker, statements, dropped,
     results, papers)."""
-    import asyncio
-
     from src.classes.AIInterpret.agent import set_run_deadline
     from src.classes.AIInterpret.pubmed_client import PubMedClient
     from src.classes.AIInterpret.walker import parallel
@@ -394,7 +396,7 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
     started = time.time()
     run_deadline = started + plan["run_seconds"]
     # Bounds the transport's retries: without it a gateway outage retries every
-    # call for its full budget. Armed before asyncio.run, whose tasks copy it.
+    # call for its full budget. Armed before run_pipeline, whose tasks copy it.
     set_run_deadline(run_deadline)
     walker.params.update({"max_seeds": plan["max_seeds"], "steps_per_seed": plan["seed_steps"][0],
                           "ceiling": plan["max_seeds"] * plan["seed_steps"][1]})
@@ -435,7 +437,7 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         timings["writer"] = round(time.time() - t0, 1)
         return merged, written
 
-    walker, written = asyncio.run(pipeline())
+    walker, written = parallel.run_pipeline(pipeline())
     halt_if_cancelled()
     if written is None:
         return walker, statements, dropped, None, papers
@@ -466,7 +468,8 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         report("sense", "Checking the direction of every regulator the statements lean on", walker)
         t0 = time.time()
         try:
-            _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks)
+            _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks,
+                            deadline=run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS)
         except Exception:                                             # noqa: BLE001
             logger.warning("[walker] the direction check failed", exc_info=True)
             gates["direction"] = {"pass": True, "not_applicable": True, "why": "the direction check could not run"}
@@ -479,7 +482,8 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         report("sense", "Checking each statement against the design and the values", walker)
         t0 = time.time()
         try:
-            _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks)
+            _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks,
+                        deadline=run_deadline - NARRATE_MIN_SECONDS)
         except Exception:                                             # noqa: BLE001
             # A malformed model answer drops this stage, not the walk: the
             # statements it rewrote are set aside, the rest stay as the Writers
@@ -507,7 +511,7 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
             results = None
         timings["narrate"] = round(time.time() - t0, 1)
     elif statements:
-        checks["results"] = ["no Results section: the time budget was spent"]
+        checks["results"] = [RESULTS_OUT_OF_TIME]
     if results is None:
         gates.setdefault("title", {"pass": True, "not_applicable": True, "why": "no Results section to check"})
     timings["total"] = round(time.time() - started, 1)
@@ -572,13 +576,19 @@ def attach_evidence(statements, papers):
         paper["evidence"] = evidence
 
 
-def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store, read):
+def _left(deadline):
+    """Seconds until `deadline` (at least 1), or None when there is none."""
+    return None if deadline is None else max(1.0, deadline - time.time())
+
+
+def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store, read, deadline=None):
     """One rewrite of the failing statements, re-verified by code and with
     every citation checked against the paper agents' verdicts. ``notes`` is
-    {n: {field: note}}; returns {n: [problems]} for the rewritten statements."""
+    {n: {field: note}}; returns {n: [problems]} for the rewritten statements.
+    The rewrite gives up by ``deadline``."""
     verdicts = {n: {field: {"ok": False, "note": note} for field, note in fields.items()}
                 for n, fields in notes.items()}
-    rewritten = rewrite_once(client, card_text, chain, failing, verdicts)
+    rewritten = rewrite_once(client, card_text, chain, failing, verdicts, budget_seconds=_left(deadline))
     for s in failing:
         new = rewritten.get(s["n"])
         if new:
@@ -606,7 +616,7 @@ def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store
     return problems
 
 
-def _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
+def _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks, deadline=None):
     """Check 3 on the kept statements: objections go back to the Writer once,
     then the statement drops. Fills checks["gates"]["direction"]."""
     verdicts, objections = direction_mod.direction_check(client, statements, walker)
@@ -616,7 +626,7 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
     if failing:
         problems = _rewrite_and_recheck(client, card_text, chain, failing,
                                         {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
-                                        walker, store, read)
+                                        walker, store, read, deadline=deadline)
         again, again_objections = direction_mod.direction_check(client, failing, walker)
         _refresh_direction(failing, again, verdicts)
         for s in failing:
@@ -642,8 +652,10 @@ def _refresh_direction(failing, again, verdicts):
             verdicts.pop(s["n"], None)
 
 
-def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks):
-    verdicts = sense_mod.sense_check(client, card_text, statements, chain)
+def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks, deadline=None):
+    # Each call gives up by `deadline`: a rate-limited sense check that slept
+    # through its retries used to take the time the Narrator was promised.
+    verdicts = sense_mod.sense_check(client, card_text, statements, chain, budget_seconds=_left(deadline))
     if verdicts is None:
         for s in statements:
             s["sense"] = None
@@ -657,8 +669,8 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
     problems = _rewrite_and_recheck(
         client, card_text, chain, failing,
         {s["n"]: {k: verdicts[s["n"]][k]["note"] for k in sense_mod.failed_fields(s["sense"])} for s in failing},
-        walker, store, read)
-    again = sense_mod.sense_check(client, card_text, failing, chain) or {}
+        walker, store, read, deadline=deadline)
+    again = sense_mod.sense_check(client, card_text, failing, chain, budget_seconds=_left(deadline)) or {}
     for s in failing:
         s["sense"] = again.get(s["n"], s["sense"])
         if problems[s["n"]] or sense_mod.failed_fields(s.get("sense")):
@@ -709,7 +721,13 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         title = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         return verify.verify_results(results, statements, dropped, walker, kind, words), title
 
-    results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words)
+    try:
+        results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, deadline=deadline)
+    except narrate_mod.OutOfTime:
+        # Not "no results": the page would say the section failed its checks.
+        checks["results"] = [RESULTS_OUT_OF_TIME]
+        checks["gates"]["title"] = {"pass": True, "not_applicable": True, "why": "no Results section to check"}
+        return None
     problems, title_problems = checked(results)
     title_gate["first_objections"] = list(title_problems)
     if results is not None:
@@ -717,10 +735,16 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             " ".join([str(results.get("title") or ""), str(results.get("summary") or "")]))))
     if (problems or title_problems) and results is not None and (
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
-        results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
-                                      objections=problems + title_problems)
-        problems, title_problems = checked(results)
-        title_gate["rewritten"] = True
+        try:
+            results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
+                                          objections=problems + title_problems, deadline=deadline)
+            problems, title_problems = checked(results)
+            title_gate["rewritten"] = True
+        except narrate_mod.OutOfTime:
+            # The draft failed its checks; the time to repair it ran out. A
+            # title that outran the body is still repaired in code below.
+            if problems:
+                problems = problems + ["no time was left to repair it"]
     if title_problems and results is not None and not problems:
         # Check 2's last word: the title code writes, and the summary without
         # the sentences that still outran the body.

@@ -225,7 +225,7 @@ PUBLISHED = {
         "2.8", "b56c3ce3224ba610e1268b85339eaed7dbfea1eab8d70b6284895cfbade81f86"),
     # The Step 4 Walk column and the renderers the AI panel shares with it.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.3", "b7f079f55d6288862c42d9f22cd9a0e65100039b12d6c7e168b0582f1f50c5a6"),
+        "1.4", "d6f68f22a684eb1e0f4ada96ded886e70ecae6a26aeb4a481a3462951b506329"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

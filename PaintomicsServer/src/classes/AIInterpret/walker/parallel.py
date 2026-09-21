@@ -22,6 +22,7 @@ sense check and the Narrator run after this module returns (service.run).
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import math
 import time
@@ -175,6 +176,37 @@ def writer_parts(segments, n_legs, parts, min_legs=MIN_PART_LEGS):
         i = min(range(len(out) - 1), key=lambda k: out[k + 1][1] - out[k][0])
         out[i:i + 2] = [(out[i][0], out[i + 1][1])]
     return out
+
+
+def run_pipeline(coro):
+    """asyncio.run, except that it does not wait for worker threads.
+
+    The paper agents and the PubMed fetches run on threads (asyncio.to_thread).
+    A stage past its deadline cancels the coroutines waiting on them, but a
+    thread cannot be cancelled, and asyncio.run's cleanup waits for every one
+    to finish: on 2026-09-15 a gateway retry sleeping on one of them returned
+    the pipeline 54 s after the Writers' deadline, and the Narrator's time was
+    gone. Here the loop gets its own executor, which is shut down without
+    waiting; a leftover thread ends on its own and its answer goes nowhere.
+    """
+    loop = asyncio.new_event_loop()
+    executor = concurrent.futures.ThreadPoolExecutor(thread_name_prefix="walk")
+    loop.set_default_executor(executor)
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            left = [task for task in asyncio.all_tasks(loop) if not task.done()]
+            for task in left:
+                task.cancel()
+            if left:
+                loop.run_until_complete(asyncio.gather(*left, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            executor.shutdown(wait=False)
+            asyncio.set_event_loop(None)
+            loop.close()
 
 
 async def _wait(tasks, deadline, cancelled):

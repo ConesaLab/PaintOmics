@@ -241,10 +241,16 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
     started = time.time()
     try:
         async with slots:
+            # The call runs on a thread, which neither the Writers' deadline
+            # nor asyncio.run's cleanup can stop: asyncio.run waits for it. On
+            # 2026-09-15 a 429 asked for an 84 s wait just before that deadline,
+            # the pipeline returned 54 s late, and the walk sealed with no
+            # Results section. The budget makes the call give up in time.
+            budget = None if deadline is None else max(1.0, deadline - time.time())
             out = await asyncio.to_thread(
                 client.complete_json,
                 [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],
-                "citation_check", QUOTE_SCHEMA, _embedded_json, 900, 0.0)
+                "citation_check", QUOTE_SCHEMA, _embedded_json, 900, 0.0, budget_seconds=budget)
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[literature] paper agent for [%s] failed: %s", ref, exc)
         return {"supported": False, "why": "the paper could not be checked (%s)" % type(exc).__name__,
