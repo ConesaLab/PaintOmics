@@ -126,7 +126,7 @@ body:
     attributes:
       label: Which instance
       options:
-        - https://paintomics.uv.es/
+        - https://paintomics.org/
         - A self-hosted instance
     validations:
       required: true
@@ -137,7 +137,7 @@ body:
       label: Version, if self-hosted
       description: >-
         The commit you deployed - `git rev-parse --short HEAD` in your checkout - or the image
-        tag you built. Leave blank if you used paintomics.uv.es.
+        tag you built. Leave blank if you used paintomics.org.
       placeholder: e.g. 97260ce1
 
   - type: input

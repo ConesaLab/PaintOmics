@@ -86,11 +86,11 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-reader.js": (
         "0.1", "0e455d115c4fc2ffe478c941ab49a757e9270a170382fd07c6896f42e8e477f1"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-validator.js": (
-        "0.2", "10700289348a691f3efa5743dff60de793adc97095372250ec7d179e229567d5"),
+        "0.3", "1ffc008d6636025b8e6216ef4de528abce65a0d7485bbfc641f281768ee4761f"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "3.7", "10b80dd305fb72695651b841a71ebf6dda28e80c1d365727673930a6790a9ccf"),
+        "4.1", "1e1bd0533e1f2d98fd843b0ad331d1f326e7f2242df39849ce3c33fd81c5a90f"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
@@ -151,7 +151,7 @@ PUBLISHED = {
     # longer exists is named as such rather than reported as "still in
     # progress".
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.6", "d70a8d09b213ef078aea279ff999fe6cd741084a41808326665991c7f1d5bb9f"),
+        "1.7", "4a896f5ddaeab31b57a9afceea7d7f6fb5fd6c712e8769c150f21f5b61c5f47c"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -207,8 +207,12 @@ PUBLISHED = {
     # v=1.5 adds SERVER_URL_PA_HUB_NAMES; same failure mode again.
     # v=1.4 adds SERVER_URL_PA_HUB_FEATURE. Same failure mode as v=0.9 above:
     # a browser keeping the old copy POSTs every node click to `undefined`.
+    # v=1.9 turns PAINTOMICS_EMAIL_DOMAIN from "paintomics.uv.es" into the
+    # fallback "paintomics.org": UserController now shows the guest address
+    # the server returns, and a browser keeping the old copy would show a
+    # guest the old host's address only on a server that omits the field.
     "resources/ServerConfiguration.js": (
-        "1.8", "9a001b089d0f95e82536e99a58e797c6624429eb803f6d49e346207a558d750b"),
+        "1.9", "f7ae9ce0c73aff53d0a16490449eea02da51e7dc3b3cbda784e82cf3d5503c12"),
     # The evidence layer itself: MORE relationships drawn on the diagram and
     # classified against KEGG, Reactome and OmniPath.
     # v=2.8 draws regulators the map does not print, colours them from the
@@ -221,7 +225,7 @@ PUBLISHED = {
         "2.8", "b56c3ce3224ba610e1268b85339eaed7dbfea1eab8d70b6284895cfbade81f86"),
     # The Step 4 Walk column and the renderers the AI panel shares with it.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.3", "b24e395bf7aa8f64b0958a6f8e4dc2acf28f6d4af32c9300687c38739f7daa1b"),
+        "1.4", "d6f68f22a684eb1e0f4ada96ded886e70ecae6a26aeb4a481a3462951b506329"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

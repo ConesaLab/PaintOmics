@@ -645,7 +645,7 @@
             if (!strip.classList.contains("pa-format-ok")) return;
             var body = strip.querySelector(".pa-format-body");
             if (disagree.length && body) body.appendChild(widthNote(e, disagree));
-            setCardState(e.input, disagree.length ? "warn" : "ok", { field: false });
+            setCardState(e.input, (disagree.length || strip.__organismWarn) ? "warn" : "ok", { field: false });
             syncCardHeight(e.input);
         });
     }
@@ -735,6 +735,7 @@
         }
         strip.appendChild(body);
         if (input) { appendCardReminder(body, input); setCardState(input, "ok"); syncCardHeight(input); }
+        requestOrganismHint(strip, summary, input);
     }
 
     /* "Still blocked in this card: Conditions file (design.csv)" -- so a green
@@ -1645,6 +1646,257 @@
         });
         observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
         primeCardsIn(document.body);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Which organism the identifiers fit
+     * ------------------------------------------------------------------ */
+
+    /*
+     * Every zero-match failure in the 2026-09 production logs was the same
+     * mistake -- identifiers from one organism run against another: yeast ORF
+     * names (YAL001C) against Fusarium, mouse-cased symbols (Aste1, Ackr1)
+     * against Citrus and then against human, UniProt accessions against
+     * maize. Each job passed step 1 with 0 matched and stopped at step 2 with
+     * "check the organism you chose", and none of the three could tell WHICH
+     * organism to check. The server can: step 1 recognises an identifier by an
+     * indexed xref lookup, and /detect_organism asks that same lookup of a
+     * short list of organisms (src/common/OrganismDetector.py).
+     *
+     * Where the answer shows is the line already on screen for the file. No
+     * panel, no button:
+     *   - no organism chosen yet, one clear fit    -> the combo is filled, and
+     *     the line says so in one clause;
+     *   - a chosen organism the file contradicts   -> the card goes amber, the
+     *     line names the organism the identifiers look like, one click uses it;
+     *   - two organisms fit equally (mouse and rat) -> both are named and
+     *     nothing is chosen for the user;
+     *   - the chosen organism recognises the file  -> nothing at all.
+     * It never changes an organism the user picked. It only offers.
+     */
+    var organismHintSeq = 0;
+    var ORGANISM_PROBE_MIN = 5;
+    var ORGANISM_PROBE_MAX = 200;
+
+    function organismCombo() {
+        if (!window.Ext || !Ext.ComponentQuery) return null;
+        return Ext.ComponentQuery.query("#speciesCombobox")[0] || null;
+    }
+
+    function organismName(code) {
+        var combo = organismCombo();
+        var store = combo && combo.getStore && combo.getStore();
+        var record = store && store.findRecord("value", code, 0, false, true, true);
+        return record ? record.get("name") : code;
+    }
+
+    function currentOrganism() {
+        var combo = organismCombo();
+        var value = combo && combo.getValue && combo.getValue();
+        return value ? String(value) : null;
+    }
+
+    /* Metabolomics maps to compounds, whose identifiers say nothing about the
+       organism; region, miRNA and MORE cards feed other pipelines. Only a
+       gene-based card's values file is worth asking about. */
+    function isGeneBasedValues(input) {
+        if (!input || roleForInput(input) !== "values") return false;
+        var card = cardFor(input);
+        if (!card) return false;
+        if (/regionBasedOmic|miRNABasedOmic|moreBasedOmic/.test(card.className || "")) return false;
+        var component = cardComponentFor(input);
+        var mapTo = component && component.down && component.down("[itemId=mapToSelector]");
+        var value = mapTo && mapTo.getValue && mapTo.getValue();
+        return String(value || "").toLowerCase() !== "compound";
+    }
+
+    function requestOrganismHint(strip, summary, input) {
+        // A re-render cleared the clause; the amber it justified goes with it
+        // until the new answer arrives (syncWidthNotes reads this flag).
+        strip.__organismWarn = false;
+        var probe = summary && summary.idProbe;
+        if (!probe || probe.length < ORGANISM_PROBE_MIN || !isGeneBasedValues(input)) {
+            /* Forget the PREVIOUS file's identifiers. Leaving them on the strip
+               let the combo listener re-ask about file A and render the answer
+               -- amber card included -- under file B's verdict line. */
+            strip.__organismProbe = null;
+            strip.__organismInput = null;
+            strip.__organismKey = null;
+            strip.__organismHint = null;
+            strip.__organismFilledFor = null;
+            return;
+        }
+        if (typeof window.fetch !== "function") return;
+        strip.__organismProbe = probe;
+        strip.__organismInput = input;
+        watchOrganismCombo();
+        var file = strip.__file;
+        /* The module re-renders a strip several times per pick (measured: four
+           identical requests in 12 ms), and a re-render wipes the clause. Same
+           file and same organism means the same answer: show the one already
+           held, or let the request already in flight land, and ask nothing. */
+        var key = (file ? file.name + ":" + file.size + ":" + file.lastModified : "") +
+                  "|" + (currentOrganism() || "") + "|" + probe.length;
+        if (strip.__organismKey === key) {
+            if (strip.__organismHint) renderOrganismHint(strip, input, strip.__organismHint);
+            return;
+        }
+        strip.__organismKey = key;
+        strip.__organismHint = null;
+        var seq = ++organismHintSeq;
+        strip.__organismSeq = seq;
+        fetch("detect_organism", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ identifiers: probe.slice(0, ORGANISM_PROBE_MAX),
+                                   selected: currentOrganism() })
+        }).then(function (res) { return res.ok ? res.json() : null; })
+          .then(function (hint) {
+              // A later pick, a re-render or a later request supersedes this one.
+              if (strip.__organismSeq !== seq || strip.__file !== file) return;
+              if (!document.body.contains(strip)) return;
+              strip.__organismHint = hint;
+              renderOrganismHint(strip, input, hint);
+          })
+          .catch(function () { /* no hint is the failure mode, by design */ });
+    }
+
+    function organismLink(strip, code, name) {
+        var use = el("button", "pa-format-linkbtn", "use " + name);
+        use.type = "button";
+        use.title = "Set the organism to " + name + " (" + code + ")";
+        use.addEventListener("click", function () {
+            var combo = organismCombo();
+            if (!combo || !combo.setValue) return;
+            strip.__organismAutoSet = code;      // confirmed in the clause, like the auto-fill
+            combo.setValue(code);
+        });
+        return use;
+    }
+
+    function renderOrganismHint(strip, input, hint) {
+        var body = strip.querySelector(".pa-format-body");
+        var old = strip.querySelector(".pa-format-organism");
+        if (old) old.remove();
+        strip.__organismWarn = false;
+        if (!body || !hint || !hint.success) { refreshOrganismState(strip, input); return; }
+
+        var selected = currentOrganism();
+        var combo = organismCombo();
+        var note = el("div", "pa-format-organism");
+        var text = el("span", "pa-format-note");
+        var confident = hint.confident;
+        var candidates = hint.candidates || [];
+        var named = confident ? [confident] : (candidates.length >= 2 ? candidates : []);
+
+        if (hint.selectedOk) {
+            /* The field holds the value this module put there: keep saying so,
+               so a filled combo is never a mystery. Anything else the user
+               chose that fits the file needs no comment. */
+            if (strip.__organismAutoSet && strip.__organismAutoSet === selected) {
+                text.appendChild(document.createTextNode("Organism set to "));
+                text.appendChild(el("b", null, organismName(selected)));
+                text.appendChild(document.createTextNode(" from these identifiers."));
+                note.appendChild(text);
+                body.appendChild(note);
+            }
+            refreshOrganismState(strip, input);
+            return;
+        }
+
+        var fileKey = strip.__file
+            ? strip.__file.name + ":" + strip.__file.size + ":" + strip.__file.lastModified
+            : "";
+        if (confident && !selected && combo && combo.setValue && !combo.readOnly &&
+                strip.__organismFilledFor !== fileKey) {
+            /* The quiet case: an empty field and identifiers that name one
+               organism. Filling it fires the combo's change, which would ask
+               the server again about a value it just supplied; the flag makes
+               that round trip a no-op.
+               Once per file, and no more. Clearing the field to choose by hand
+               re-enters here with the same cached answer, and without this the
+               combo snapped straight back to the detected organism -- which is
+               exactly the "never change what the user picked" rule, seen from
+               the other side. */
+            strip.__organismFilledFor = fileKey;
+            strip.__organismAutoSet = confident.code;
+            combo.__paOrganismSilent = true;
+            try { combo.setValue(confident.code); } finally { combo.__paOrganismSilent = false; }
+            text.appendChild(document.createTextNode("Organism set to "));
+            text.appendChild(el("b", null, confident.name));
+            text.appendChild(document.createTextNode(" from these identifiers."));
+            note.appendChild(text);
+            body.appendChild(note);
+            refreshOrganismState(strip, input);
+            return;
+        }
+
+        if (named.length && selected && named.some(function (c) { return c.code === selected; })) {
+            refreshOrganismState(strip, input);        // the chosen organism is a fit
+            return;
+        }
+
+        if (named.length) {
+            text.appendChild(document.createTextNode("These look like "));
+            named.forEach(function (c, i) {
+                if (i) text.appendChild(document.createTextNode(i === named.length - 1 ? " or " : ", "));
+                text.appendChild(el("b", null, c.name));
+            });
+            text.appendChild(document.createTextNode(" identifiers"));
+            if (selected) {
+                text.appendChild(document.createTextNode(", not "));
+                text.appendChild(el("i", null, organismName(selected)));
+            }
+            text.appendChild(document.createTextNode(" — "));
+            named.forEach(function (c, i) {
+                if (i) text.appendChild(document.createTextNode(" · "));
+                text.appendChild(organismLink(strip, c.code, c.name));
+            });
+            strip.__organismWarn = !!selected;
+        } else if (hint.uninstalled) {
+            text.appendChild(document.createTextNode("These look like "));
+            text.appendChild(el("b", null, hint.uninstalled.name));
+            text.appendChild(document.createTextNode(" identifiers, which this server does not have installed" +
+                (selected ? " \u2014 not " + organismName(selected) : "") + "."));
+            strip.__organismWarn = !!selected;
+        } else {
+            refreshOrganismState(strip, input);
+            return;
+        }
+        note.appendChild(text);
+        body.appendChild(note);
+        refreshOrganismState(strip, input);
+    }
+
+    /* Amber while the chosen organism contradicts the file; otherwise back to
+       whatever the width verdict says, or plain green. Only a green strip is
+       touched: a strip with a fault of its own keeps that fault's state. */
+    function refreshOrganismState(strip, input) {
+        if (!input) return;
+        if (strip.classList.contains("pa-format-ok")) {
+            var widthWarn = !!strip.querySelector(".pa-format-width");
+            setCardState(input, (strip.__organismWarn || widthWarn) ? "warn" : "ok", { field: false });
+        }
+        syncCardHeight(input);
+    }
+
+    /* One listener on the combo: a new organism re-asks every strip that has a
+       probe, with the new selection, so the clause disappears the moment the
+       right organism is chosen and appears if a wrong one is. */
+    function watchOrganismCombo() {
+        var combo = organismCombo();
+        if (!combo || combo.__paOrganismHint || !combo.on) return;
+        combo.__paOrganismHint = true;
+        combo.on("change", function () {
+            if (combo.__paOrganismSilent) return;
+            var strips = document.querySelectorAll(".pa-format-strip.pa-format-ok");
+            for (var i = 0; i < strips.length; i++) {
+                var strip = strips[i];
+                if (strip.__organismProbe && strip.__organismInput) {
+                    requestOrganismHint(strip, { idProbe: strip.__organismProbe }, strip.__organismInput);
+                }
+            }
+        });
     }
 
     document.addEventListener("change", function (event) {

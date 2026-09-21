@@ -5,8 +5,8 @@ timings plus the step-1/2/3 responses in the same artifact layout as
 bench_runner, so two servers (or one server before and after a deploy) can
 be compared with bench_compare.
 
-    python -m src.benchmarks.bench_http --server https://paintomics.uv.es \
-        --out /tmp/uv-before --scenarios stategra-multiomics gene-single-condition
+    python -m src.benchmarks.bench_http --server https://paintomics.org \
+        --out /tmp/org-before --scenarios stategra-multiomics gene-single-condition
 
 Only what the client would see is captured: the final /check_job_status
 payloads of step 1 and step 2 and the /pa_step3 response for every matched

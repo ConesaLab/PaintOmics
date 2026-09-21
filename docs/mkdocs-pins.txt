@@ -33,4 +33,4 @@ mkdocs-material==9.7.7
 # arrives as a mkdocs-material dependency, but unpinned it floats, and a
 # markdown extension changing its parse is exactly the kind of drift that
 # would silently alter the rendered guide. Pin it with the rest.
-pymdown-extensions==11.0.2
+pymdown-extensions==12.0.1

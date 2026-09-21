@@ -45,8 +45,9 @@ QUOTE_SCHEMA = {
         "section": {"type": "string"},
         "quote": {"type": "string"},
         "note": {"type": "string"},
+        "beyond_passage": {"type": "boolean"},
     },
-    "required": ["supported", "section", "quote", "note"],
+    "required": ["supported", "section", "quote", "note", "beyond_passage"],
     "additionalProperties": False,
 }
 
@@ -59,7 +60,11 @@ PAPER_AGENT_BRIEF = (
     "or states something weaker or different, is not support; say what the paper does say in the note.\n"
     "- section is the label the passage sits under, in lower case (abstract, introduction, results, "
     "discussion or other).\n"
-    "- note: one line on why the passage supports the claim, or why nothing does."
+    "- note: one line on why the passage supports the claim, or why nothing does.\n"
+    "- beyond_passage: when a SENTENCE is given, true if the sentence attributes to the paper anything the passage "
+    "does not state -- a stronger mechanism, another cell type or organism, a direction, a generalisation. The "
+    "sentence may also report the user's own measurements (numbers with signs, time points); those are not the "
+    "paper's and do not count. False when no sentence is given."
 )
 
 # NFKC already turns no-break and thin spaces into spaces; quotes and dashes
@@ -138,8 +143,8 @@ def paper_text(sections):
     return "\n\n".join(out)
 
 
-def _claim_key(ref, claim):
-    return int(ref), normalise(claim)[:400]
+def _claim_key(ref, claim, sentence=None):
+    return int(ref), normalise(claim)[:400], normalise(sentence or "")[:400]
 
 
 def _embedded_json(text):
@@ -197,8 +202,8 @@ class LiteratureStore:
                 self.full[pmid] = sections
         return self.full[pmid]
 
-    def verdict(self, ref, claim):
-        return self.verdicts.get(_claim_key(ref, claim))
+    def verdict(self, ref, claim, sentence=None):
+        return self.verdicts.get(_claim_key(ref, claim, sentence))
 
     def evidence(self):
         """Every confirmed passage, by paper number."""
@@ -209,13 +214,15 @@ class LiteratureStore:
         return out
 
 
-async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None):
-    """Confirm that paper ``ref`` states ``claim``. Returns the verdict:
-    {supported, quote, section, full_text, claim} when a passage was found in
-    the paper, else {supported: False, why}. Verdicts are cached per (paper,
-    claim); a check that could not run (the gateway, the deadline) is not, so
-    a resubmission asks again."""
-    cached = store.verdict(ref, claim)
+async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None, sentence=None):
+    """Confirm that paper ``ref`` states ``claim``, and that ``sentence`` (the
+    prose the reader sees citing it, when given) attributes nothing to the
+    paper beyond that passage. Returns the verdict: {supported, quote,
+    section, full_text, claim} when a passage was found in the paper, else
+    {supported: False, why}. Verdicts are cached per (paper, claim,
+    sentence); a check that could not run (the gateway, the deadline) is not,
+    so a resubmission asks again."""
+    cached = store.verdict(ref, claim, sentence)
     if cached is not None:
         return cached
     if int(ref) not in store.papers:
@@ -225,10 +232,12 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
     sections = await store.full_text(pubmed, int(ref))
     if not sections:
         verdict = {"supported": False, "why": "the paper has no text to check"}
-        store.verdicts[_claim_key(ref, claim)] = verdict
+        store.verdicts[_claim_key(ref, claim, sentence)] = verdict
         return verdict
     paper = store.papers[int(ref)]
-    prompt = "CLAIM\n%s\n\nPAPER\n%s\n%s" % (claim, paper.get("title", ""), paper_text(sections))
+    prompt = "CLAIM\n%s\n%s\nPAPER\n%s\n%s" % (
+        claim, ("\nSENTENCE (as the reader sees it)\n%s\n" % sentence) if sentence else "",
+        paper.get("title", ""), paper_text(sections))
     started = time.time()
     try:
         async with slots:
@@ -251,7 +260,11 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
     quote = re.sub(r"\s+", " ", str(out.get("quote") or "")).strip().strip("\"'\u201c\u201d")
     found = find_passage(quote, sections, str(out.get("section") or "").lower().strip("[] ")) \
         if out.get("supported") and QUOTE_MIN_CHARS <= len(quote) <= QUOTE_MAX_CHARS else None
-    if found:
+    if found and sentence and out.get("beyond_passage") is True:
+        verdict = {"supported": False, "why": "the sentence says more than the passage: %s"
+                   % str(out.get("note") or "it attributes to the paper what the paper does not state")[:200],
+                   "beyond_passage": True}
+    elif found:
         section, passage = found
         verdict = {"supported": True, "quote": passage, "section": section, "claim": str(claim),
                    "full_text": any(name != "abstract" for name, _ in sections)}
@@ -262,8 +275,187 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
             "the passage the paper agent returned is not in the paper")}
     else:
         verdict = {"supported": False, "why": str(out.get("note") or "no passage in the paper states it")[:300]}
-    store.verdicts[_claim_key(ref, claim)] = verdict
+    store.verdicts[_claim_key(ref, claim, sentence)] = verdict
     store.trace.append({"ref": int(ref), "supported": verdict["supported"], "section": verdict.get("section"),
+                        "beyond_passage": bool(verdict.get("beyond_passage")),
                         "full_text": any(name != "abstract" for name, _ in sections),
                         "seconds": round(time.time() - started, 1)})
     return verdict
+
+
+# ---------------------------------------------------------------------------
+# Paper context: what a paper studied, read off its MeSH indexing
+# ---------------------------------------------------------------------------
+# A paper on human hepatoma cells is not the same evidence for a mouse pre-B
+# cell experiment as a paper on mouse pre-B cells. PubMed's indexers already
+# recorded organism, material and study type as MeSH headings and publication
+# types, so the Writer can be told -- without a model call -- which of its
+# papers were done in the same organism and system as the design card, and
+# rank them accordingly. The record's ``mesh`` and ``pub_types`` lists come
+# from pubmed_client._parse_xml, in document order.
+
+ORGANISM_HEADINGS = {"Mice": "mouse", "Humans": "human", "Rats": "rat", "Zebrafish": "zebrafish",
+                     "Drosophila melanogaster": "fly", "Caenorhabditis elegans": "worm",
+                     "Saccharomyces cerevisiae": "yeast", "Arabidopsis": "arabidopsis", "Danio rerio": "zebrafish"}
+IN_VITRO_HEADINGS = ("Cell Line", "Cells, Cultured", "Cell Line, Tumor", "Cell Culture Techniques", "HEK293 Cells",
+                     "HeLa Cells", "Jurkat Cells")
+# What says the work was done in a living animal, when no in-vitro heading
+# says otherwise.
+ANIMAL_HEADINGS = ("Animals", "Mice, Inbred C57BL", "Mice, Knockout", "Mice, Transgenic",
+                   "Disease Models, Animal", "Animals, Genetically Modified")
+CLINICAL_HEADINGS = ("Cohort Studies", "Case-Control Studies", "Prospective Studies", "Retrospective Studies",
+                     "Clinical Trials as Topic", "Biomarkers, Tumor", "Prognosis", "Treatment Outcome", "Patients")
+# Headings that name an organism, a demographic or a generic material, not the
+# cell type or tissue the paper is about.
+SYSTEM_SKIP = {"Animals", "Humans", "Mice", "Rats", "Male", "Female", "Adult", "Aged", "Middle Aged", "Child",
+               "Mice, Inbred C57BL", "Mice, Knockout", "Mice, Transgenic", "Cell Line", "Cells, Cultured",
+               "Cell Line, Tumor"}
+TISSUE_HEADINGS = frozenset({"Liver", "Brain", "Bone Marrow", "Spleen", "Thymus", "Kidney", "Heart", "Lung", "Skin",
+                             "Pancreas", "Muscle, Skeletal", "Adipose Tissue", "Blood", "Intestines", "Colon",
+                             "Breast", "Prostate"})
+_CELL_HEADING_RE = re.compile(r"^(B|T|NK|Dendritic|Mast|Precursor|Stem|Hematopoietic|Germinal Center|Plasma) ")
+# MeSH names most cell types by a Greek suffix rather than the word "Cells":
+# Hepatocytes, Monocytes, Fibroblasts, Osteoblasts; Macrophages and their
+# subheadings ("Macrophages, Alveolar") lead with the word.
+_CELL_TYPE_RE = re.compile(r"(cytes|blasts)$|^Macrophages\b")
+_SYSTEM_SUFFIXES = ("Cells", "Lymphocytes", "Cell Line")
+# Words of a system heading that say nothing about which system it is.
+_SYSTEM_STOPWORDS = {"cells", "cell", "line", "lymphocytes", "precursor"}
+# MeSH heading (lower-cased) -> phrases a design card uses for the same system.
+SYNONYMS = {"b-lymphocytes": ["b cell", "b-cell", "b cells", "pre-b", "pro-b"],
+            "precursor cells, b-lymphoid": ["pre-b", "pro-b", "b cell precursor"],
+            "t-lymphocytes": ["t cell", "t-cell"],
+            "hepatocytes": ["liver", "hepat"],
+            "macrophages": ["macrophage"],
+            "fibroblasts": ["fibroblast"]}
+UNKNOWN = "unknown"
+
+
+def _heading_list(paper, key):
+    """The paper's ``key`` list as clean strings; [] for a record without it."""
+    values = paper.get(key) if isinstance(paper, dict) else None
+    if isinstance(values, str):
+        values = [values]
+    return [str(v).strip() for v in (values or []) if str(v or "").strip()]
+
+
+def _organism_of(heading):
+    """The species word a MeSH heading names, or None for a heading that is
+    not an organism. Strain headings ("Mice, Inbred C57BL") count as the
+    species they qualify."""
+    if heading in ORGANISM_HEADINGS:
+        return ORGANISM_HEADINGS[heading]
+    if heading.startswith("Mice,"):
+        return "mouse"
+    if heading.startswith("Rats,"):
+        return "rat"
+    return None
+
+
+def _names_system(heading):
+    """Whether a MeSH heading names a cell type, tissue or organ."""
+    if heading in SYSTEM_SKIP:
+        return False
+    return (heading.endswith(_SYSTEM_SUFFIXES) or heading in TISSUE_HEADINGS
+            or _CELL_HEADING_RE.match(heading) is not None
+            or _CELL_TYPE_RE.search(heading) is not None)
+
+
+def paper_context(paper) -> dict:
+    """{"organism", "organisms", "system", "scope"} read from the paper's MeSH
+    headings and publication types; "unknown" where MeSH says nothing. No model
+    call.
+
+    PubMed prints MeSH headings alphabetically, so "the first organism heading"
+    was reading "Animals, Humans, Mice" as human for every mouse paper that
+    also cites human work: 15 of the 56 hand-labelled papers. Every organism
+    heading is read instead, ``organisms`` holds them all and ``organism`` is
+    the one name when there is one and "mixed" when there are several.
+
+    Scope followed from that single organism: a non-human paper with no
+    in-vitro heading was called "in vivo" even when it was a cell-line study,
+    and a human one with no clinical heading fell to "unknown". An animal
+    heading is now what says "in vivo", and the in-vitro headings win over it,
+    since a cell line is where the work was done whatever the species is."""
+    mesh = _heading_list(paper, "mesh")
+    pub_types = _heading_list(paper, "pub_types")
+    organisms = []
+    for org in map(_organism_of, mesh):
+        if org and org not in organisms:
+            organisms.append(org)
+    organism = organisms[0] if len(organisms) == 1 else ("mixed" if organisms else UNKNOWN)
+    system = next((h for h in mesh if _names_system(h)), UNKNOWN)
+    if any("review" in pt.lower() for pt in pub_types):
+        scope = "review"
+    elif any(h in IN_VITRO_HEADINGS for h in mesh):
+        scope = "in vitro"
+    elif "human" in organisms and any(h in CLINICAL_HEADINGS for h in mesh):
+        scope = "clinical"
+    elif any(h in ANIMAL_HEADINGS for h in mesh) or [o for o in organisms if o != "human"]:
+        scope = "in vivo"
+    else:
+        scope = UNKNOWN
+    return {"organism": organism, "organisms": organisms, "system": system, "scope": scope}
+
+
+def _known(value):
+    """The value as a lower-cased string, or "" when it says nothing."""
+    text = str(value or "").strip().lower()
+    return "" if text == UNKNOWN else text
+
+
+def _words(text):
+    """The whole words of a heading or a card's text: lower case, hyphens as
+    spaces, punctuation dropped."""
+    return set(re.findall(r"[a-z0-9]+", str(text or "").lower().replace("-", " ")))
+
+
+def context_match(card, ctx) -> dict:
+    """{"organism": "same"|"other"|"unknown", "system": "same"|"other"|"unknown"} of a paper's context against the design card. card["organism"] is a species word ("mouse"); card["system"] is free text ("mouse B3 pre-B cell line")."""
+    card = card if isinstance(card, dict) else {}
+    ctx = ctx if isinstance(ctx, dict) else {}
+    card_organism, paper_organism = _known(card.get("organism")), _known(ctx.get("organism"))
+    # A paper indexed for several species is in context when the design's is
+    # among them: "mixed" against a mouse design is not another organism.
+    paper_organisms = [str(o).lower() for o in (ctx.get("organisms") or ([paper_organism] if paper_organism else []))]
+    if not card_organism or not paper_organisms:
+        organism = UNKNOWN
+    else:
+        organism = "same" if card_organism in paper_organisms else "other"
+    card_system, paper_system = _known(card.get("system")), _known(ctx.get("system"))
+    if not card_system or not paper_system:
+        system = UNKNOWN
+    else:
+        # A whole word of the heading in the card's text ("marrow" in "bone
+        # marrow macrophages"), or a phrase the card would use for it.
+        card_words = _words(card_system)
+        words = _words(paper_system) - _SYSTEM_STOPWORDS
+        card_text = card_system.replace("-", " ")
+        matched = bool(words & card_words) or any(
+            phrase in card_system or phrase.replace("-", " ") in card_text
+            for phrase in SYNONYMS.get(paper_system, ()))
+        system = "same" if matched else "other"
+    return {"organism": organism, "system": system}
+
+
+def context_line(ctx) -> str:
+    """One line for the page: "mouse · B-Lymphocytes · in vitro", the unknown
+    parts left out; "" when nothing is known."""
+    ctx = ctx if isinstance(ctx, dict) else {}
+    parts = [str(ctx.get(key) or "").strip() for key in ("organism", "system", "scope")]
+    return " · ".join(p for p in parts if p and p.lower() != UNKNOWN)
+
+
+def rank_by_context(papers, card) -> list:
+    """The papers, stably sorted so those from the card's organism come first,
+    then those from its system, then the rest. Each paper gains
+    paper["context"] = {organism, system, scope, match} on the way."""
+    ranked = []
+    for paper in papers or []:
+        if not isinstance(paper, dict):
+            continue
+        ctx = paper_context(paper)
+        paper["context"] = dict(ctx, match=context_match(card, ctx))
+        ranked.append(paper)
+    return sorted(ranked, key=lambda p: (p["context"]["match"]["organism"] != "same",
+                                         p["context"]["match"]["system"] != "same"))

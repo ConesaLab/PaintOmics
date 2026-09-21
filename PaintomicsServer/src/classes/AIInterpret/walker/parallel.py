@@ -66,7 +66,11 @@ def code_plan(walker, plan, why):
     hottest candidates, the most steps the plan allows."""
     if walker.ranked is None:
         walker.scan("graph")
-    candidates = [r["id"] for r in walker.ranked if r["candidate"]][:walker.params["max_seeds"]]
+    rows = [r for r in walker.ranked if r["candidate"]]
+    if walker.dist:
+        # anchored: the candidates nearest the perturbation first, hottest within a distance
+        rows.sort(key=lambda r: (r.get("dist") if r.get("dist") is not None else 10 ** 6, -r["heat"]))
+    candidates = [r["id"] for r in rows][:walker.params["max_seeds"]]
     if not candidates:
         return None
     steps = min(walker.params["ceiling"], plan["seed_steps"][1] * len(candidates))
@@ -81,6 +85,7 @@ def merge_segments(planner, segments):
     step leg is one a segment walker's tools accepted, and the segments shared
     the closed edges, so no edge appears twice in one direction."""
     merged = Walker(planner.network, planner.overlay, planner.scope, dict(planner.params))
+    merged.dist, merged.anchor = planner.dist, planner.anchor
     merged.ranked, merged.plan = planner.ranked, planner.plan
     merged.turns = [dict(t) for t in planner.turns]
     merged.scans, merged.refusals = planner.scans, planner.refusals
@@ -241,6 +246,7 @@ async def walk_in_parallel(planner, card_text, plan, deadline, cancelled=None, o
     segments = []
     for _seed in seeds:
         sub = Walker(planner.network, planner.overlay, planner.scope, dict(planner.params))
+        sub.dist, sub.anchor = planner.dist, planner.anchor
         sub.closed, sub.visited = closed, visited
         segments.append(sub)
     slots = asyncio.Semaphore(plan["walkers"])
@@ -290,7 +296,7 @@ class _ModelRunner:
 
 
 async def write_in_parallel(walker, card_text, pubmed, client, plan, deadline, cancelled=None,
-                            on_progress=None, write_one=None):
+                            on_progress=None, write_one=None, card_ctx=None):
     """Stage 4. Returns (kept, dropped, store, contexts): the statements of
     every part in walk order, numbered 1..n across the walk. ``write_one``
     replaces the model Writer in tests: a coroutine taking a WriterContext."""
@@ -305,7 +311,8 @@ async def write_in_parallel(walker, card_text, pubmed, client, plan, deadline, c
     per_part = max(1, int(math.ceil(plan["citations"] / float(max(1, len(parts))))))
     contexts = [writer_mod.WriterContext(walker=walker, card=card_text, pubmed=pubmed, store=store,
                                          client=client, legs=part, count=plan["statements"],
-                                         citations=per_part, paper_slots=paper_slots, deadline=deadline)
+                                         citations=per_part, paper_slots=paper_slots, deadline=deadline,
+                                         card_ctx=card_ctx)
                 for part in parts]
     finished = {"n": 0}
 

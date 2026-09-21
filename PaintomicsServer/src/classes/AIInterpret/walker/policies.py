@@ -9,9 +9,9 @@ from __future__ import annotations
 import random
 
 
-def _pick_greedy(rows):
+def _pick_greedy(rows, exclude=()):
     for row in rows:
-        if row["r"] == 1 and row["open"] and not row["visited"]:
+        if row["r"] == 1 and row["open"] and not row["visited"] and row["id"] not in exclude:
             return row
     return None
 
@@ -40,13 +40,17 @@ def greedy(walker, seeds=None, steps=None, per_seed=None):
         return walker
     seeds, steps = planned
     per_seed = per_seed or max(1, steps // len(seeds))
-    here = 0
+    here, refused = 0, set()
     while not walker.done:
-        pick = _pick_greedy(walker.neighbour_rows()) if here < per_seed else None
+        pick = _pick_greedy(walker.neighbour_rows(), refused) if here < per_seed else None
         if pick and walker.budget["steps"] > 0:
-            walker.step(pick["id"], "greedy policy: %s" % walker.overlay.layer_text(pick["id"]).split("\n")[0],
-                        "the hottest relevant unvisited neighbour (heat %.2f)" % pick["heat"])
+            answer = walker.step(pick["id"], "greedy policy: %s" % walker.overlay.layer_text(pick["id"]).split("\n")[0],
+                                 "the hottest relevant unvisited neighbour (heat %.2f)" % pick["heat"])
+            if str(answer).startswith("REFUSED"):
+                refused.add(pick["id"])          # an anchored walk's locality rule: try the next neighbour
+                continue
             here += 1
+            refused = set()
             continue
         unvisited = [s for s in seeds if s not in walker.visited]
         if walker.budget["steps"] <= 0 or not unvisited or walker.budget["jumps"] <= 0:
@@ -55,7 +59,7 @@ def greedy(walker, seeds=None, steps=None, per_seed=None):
             break
         walker.jump(unvisited[0], "next seed", "greedy policy: %d steps spent from this seed"
                     % here if here >= per_seed else "no relevant unvisited neighbour here")
-        here = 0
+        here, refused = 0, set()
     return walker
 
 

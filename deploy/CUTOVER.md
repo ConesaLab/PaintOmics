@@ -35,6 +35,10 @@ site answers within the 300 s TTL. The VM keeps serving on its own IP.
   Job files (19 GB in `/data/CLIENT_TMP`) are covered by the snapshot, not by the dump.
 - **Plan the redirect.** Since this is a transition, decide when `.uv.es` starts redirecting and
   do a final user/job merge at that point.
+- **Drop the `PAINTOMICS_EMAIL_DOMAIN=paintomics.uv.es` pin from `deploy/.env`** once the client
+  that shows the guest address the server returns is deployed (branch
+  `fix/point-at-paintomics-org`): new guests are then named under paintomics.org, and guests
+  created before keep signing in with the address they were shown.
 - **Announce**, and update `deploy/README.md` and the VM's `CLAUDE.md`, which still describe this
   machine as the staging copy.
 

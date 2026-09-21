@@ -116,6 +116,18 @@ MAX_NUMBER_FEATURES       = 1000000
 # network. MongoDB is never published to the host.
 MONGODB_HOST      = os.getenv("MONGODB_HOST", "localhost")
 MONGODB_PORT      = int(os.getenv("MONGODB_PORT", "27017"))
+
+# Organisms the step 1 identifier hint tries, most-used first, when a column of
+# identifiers fits none of the species-specific conventions (Entrez ids, UniProt
+# accessions, gene symbols). One indexed xref lookup per organism, 10-130 ms
+# each, so keep it short; organisms not installed here are skipped. Override
+# with a comma-separated PAINTOMICS_ORGANISM_SHORTLIST. See
+# src/common/OrganismDetector.py for the rule that decides when it speaks.
+ORGANISM_DETECTION_SHORTLIST = [
+    code.strip() for code in os.getenv(
+        "PAINTOMICS_ORGANISM_SHORTLIST",
+        "hsa,mmu,rno,ath,sce,dre,dme,cel,eco,bta,ssc,gga,cfa,osa,dosa,zma,sly,gmx,spo,bsu,"
+        "pae,mtu,chx,oas,ecb,ocu,ptr,mcc,xtr,pfa").split(",") if code.strip()]
 MONGODB_DATABASE  = os.getenv("MONGODB_DATABASE", "PaintomicsDB")
 
 # ========== MULTI-THREADING OPTIONS ==========

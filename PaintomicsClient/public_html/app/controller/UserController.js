@@ -374,15 +374,21 @@ function UserController() {
                 type: "POST",
                 url: SERVER_URL_UM_NEWGUESTSESSION,
                 success: function (response) {
+                    /* The address the server stored, so what the dialog shows is
+                       what sign-in will look up: the server names guests under
+                       its own PAINTOMICS_EMAIL_DOMAIN, and a client constant can
+                       only agree with it by coincidence. The constant remains the
+                       fallback for a server that predates the field. */
+                    var guestEmail = response.email || (response.userName + "@" + PAINTOMICS_EMAIL_DOMAIN);
                     /*1. Set the cookies*/
-                    Ext.util.Cookies.set("lastEmail", response.userName + "@" + PAINTOMICS_EMAIL_DOMAIN, null, location.pathname);
+                    Ext.util.Cookies.set("lastEmail", guestEmail, null, location.pathname);
                     Ext.util.Cookies.set("sessionToken", response.sessionToken, null, location.pathname);
                     Ext.util.Cookies.set("userID", response.userID, null, location.pathname);
                     Ext.util.Cookies.set("userName", response.userName, null, location.pathname);
                     Ext.util.Cookies.clear("nologin", location.pathname);
 
                     /*2. Show Credentials dialog*/
-                    me.showGuestSessionDialog(response.userName + "@" + PAINTOMICS_EMAIL_DOMAIN, response.p);
+                    me.showGuestSessionDialog(guestEmail, response.p);
                 },
                 error: ajaxErrorHandler
             });

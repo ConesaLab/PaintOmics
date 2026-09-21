@@ -44,6 +44,25 @@ var PA_WALK_SECTION_WORDS = {
 	other: "Main text"
 };
 
+/* The five checks a walk passes before its text is shown, in the order the
+   chips take, each with its label. The keys are the server's (service.GATES). */
+var PA_WALK_GATES = [
+	["artifact", "Not a graph artifact"],
+	["title", "Title fits the body"],
+	["direction", "Direction logic"],
+	["context", "Citations in context"],
+	["anchor", "Anchored to the perturbation"]
+];
+
+/* How far from the anchor a walked node counts as near (anchor.REACH_RADIUS). */
+var PA_WALK_REACH_RADIUS = 2;
+
+/* The perturbation's direction, as the design card read it, in plain words. */
+var PA_WALK_DIRECTION_WORDS = {up: "induced (up)", down: "knocked out or inhibited (down)"};
+
+/* A panel regulator's class in the direction check, in words. */
+var PA_WALK_REGULATOR_WORDS = {feedback: "feedback reporter", inhibitor: "upstream inhibitor"};
+
 function paWalkEl(tag, className, text) {
 	var el = document.createElement(tag);
 	if (className) { el.className = className; }
@@ -155,6 +174,187 @@ function paWalkEvidenceNodes(paper) {
 	return nodes;
 }
 
+/*
+ * The five gates the server filed with a walk, or null for a walk sealed
+ * before the gates existed. The server's view writes `checks.gates` as an
+ * empty map for those, so "absent" here means missing or empty: an old walk
+ * must render exactly as it did, not as a walk that failed every check.
+ */
+function paWalkGates(view) {
+	var gates = view && view.checks && view.checks.gates;
+	if (!gates || typeof gates !== "object") { return null; }
+	for (var name in gates) {
+		if (Object.prototype.hasOwnProperty.call(gates, name)) { return gates; }
+	}
+	return null;
+}
+
+/* Whether the walk's text (Results, references, statements) may be shown:
+   every gate passed, or the walk predates the gates. */
+function paWalkTextShown(view) {
+	return !paWalkGates(view) || (view.checks.rendered === true);
+}
+
+/* The perturbed gene the design named, or null. */
+function paWalkAnchorGene(view) {
+	var anchor = view && view.checks && view.checks.anchor;
+	return (anchor && anchor.gene) ? String(anchor.gene) : null;
+}
+
+/* A count with its noun: "3 modules", "1 leg". */
+function paWalkCount(n, noun) {
+	n = Number(n) || 0;
+	return n + " " + noun + (n === 1 ? "" : "s");
+}
+
+/* A number as the server rounded it, or a dash when it never computed one. */
+function paWalkNumber(value) {
+	return (value === null || value === undefined || !isFinite(Number(value))) ? "–" : String(Number(value));
+}
+
+/* A fraction in whole percent: 0.62 → "62%". */
+function paWalkPercent(value) {
+	return (value === null || value === undefined || !isFinite(Number(value))) ? "–" : Math.round(100 * Number(value)) + "%";
+}
+
+/*
+ * The line above the Results: which gene the experiment perturbed, in which
+ * direction, and whether the walk is anchored to it in this organism's
+ * network. Null for a walk that predates the gates.
+ */
+function paWalkHeaderNode(view) {
+	if (!paWalkGates(view)) { return null; }
+	var anchor = view.checks.anchor;
+	var text;
+	if (anchor && anchor.gene) {
+		text = "Perturbation: " + String(anchor.gene) + ", " +
+			(PA_WALK_DIRECTION_WORDS[anchor.direction] || "direction not stated") + " · ";
+		if (anchor.in_graph) {
+			var edges = Number(anchor.edges_added) || 0;
+			var sources = String(anchor.source || "").split(",")
+				.map(function (s) { return s.trim(); }).filter(Boolean).join(", ");
+			text += "anchored in the network (" + (edges
+				? paWalkCount(edges, "target edge") + (sources ? " from " + sources : "")
+				: "its own edges, no regulator targets added") + ")";
+		} else {
+			text += "not connected in this organism's network, so the walk is unanchored";
+		}
+	} else {
+		text = "Perturbation: no perturbed gene named in the design · unanchored walk";
+	}
+	return paWalkEl("p", "pa-walk-header", text);
+}
+
+/* A gate's numbers in words, for the chip's hover text. */
+function paWalkGateTitle(name, gate, state) {
+	gate = gate || {};
+	if (state === "na") {
+		return "Not applicable: " + (gate.why || "nothing to check");
+	}
+	switch (name) {
+	case "artifact": {
+		var real = gate.real || {}, nul = gate.null_mean || {};
+		return paWalkCount(real.modules, "module") + " found; permuted data gives " + paWalkNumber(nul.modules) +
+			" on average (p = " + paWalkNumber(gate.p_modules) + "); seeds " +
+			(Number(gate.p_heat) < 0.05 ? "hotter than chance" : "no hotter than chance") +
+			" (p = " + paWalkNumber(gate.p_heat) + "); " + paWalkCount(gate.currency_legs, "leg") +
+			" through currency metabolites; " + paWalkCount(gate.k, "permutation");
+	}
+	case "title": {
+		var verbs = gate.verbs_found || [];
+		var parts = [verbs.length ? "verbs: " + verbs.map(String).join(", ") : "no mechanistic verb"];
+		if (gate.rewritten) { parts.push("rewritten once"); }
+		if (gate.fallback) { parts.push("title replaced by code"); }
+		return parts.join("; ");
+	}
+	case "direction":
+		return paWalkCount(gate.checked, "regulator claim") + " checked, " + paWalkNumber(gate.consistent) +
+			" consistent, " + paWalkNumber(gate.insensitive) + " insensitive, " + paWalkNumber(gate.dropped) + " dropped";
+	case "context":
+		return paWalkCount(gate.cited, "citation") + ", " + paWalkNumber(gate.in_context) + " in context, " +
+			paWalkNumber(gate.qualified) + " qualified as from another system, " +
+			paWalkNumber(gate.unqualified_other) + " unqualified, " + paWalkNumber(gate.unconfirmed) + " unconfirmed";
+	case "anchor":
+		if (!gate.in_graph) {
+			return String(gate.gene || "The perturbed gene") + " is not connected in this organism's network";
+		}
+		return paWalkPercent(gate.reachability) + " of walked nodes within " + PA_WALK_REACH_RADIUS + " steps of " +
+			String(gate.gene || "the perturbed gene") + " vs " + paWalkPercent(gate.base_rate) + " of all measured nodes";
+	default:
+		return gate.why || "";
+	}
+}
+
+/* The labels of the gates that failed, in chip order. */
+function paWalkFailedGates(view) {
+	var gates = paWalkGates(view) || {};
+	return PA_WALK_GATES.filter(function (entry) {
+		var gate = gates[entry[0]];
+		return gate && !gate.not_applicable && !gate.pass;
+	}).map(function (entry) { return entry[1]; });
+}
+
+/*
+ * The five checks as a row of chips, then one line per failed check saying
+ * why. Null for a walk that predates the gates.
+ */
+function paWalkGatesNode(view) {
+	var gates = paWalkGates(view);
+	if (!gates) { return null; }
+	var box = paWalkEl("div", "pa-walk-gates");
+	var row = paWalkEl("div", "pa-walk-gate-row");
+	var failed = [];
+	PA_WALK_GATES.forEach(function (entry) {
+		var name = entry[0], label = entry[1], gate = gates[name];
+		var state = (!gate || gate.not_applicable) ? "na" : (gate.pass ? "pass" : "fail");
+		var chip = paWalkEl("span", "pa-walk-gate is-" + state, label);
+		chip.title = paWalkGateTitle(name, gate, state);
+		row.appendChild(chip);
+		if (state === "fail") { failed.push(label + ": " + String(gate.why || "failed")); }
+	});
+	box.appendChild(row);
+	failed.forEach(function (line) { box.appendChild(paWalkEl("p", "pa-walk-gate-why", line)); });
+	return box;
+}
+
+/* What stands where the Results would, when the gates held the text back. */
+function paWalkBlockedNode(view) {
+	var failed = paWalkFailedGates(view);
+	return paWalkEl("p", "pa-walk-note pa-walk-blocked", (failed.length
+		? "Not shown: this interpretation failed " + failed.length + " of the five checks (" + failed.join(", ") + ")."
+		: "Not shown: this interpretation did not clear the five checks.") +
+		" The walk itself is below; its legs are database relations and your values, not findings.");
+}
+
+/*
+ * The walk's modules (one per seed) when they carry their distance from the
+ * anchor, else null: a walk sealed before the anchor existed has segments
+ * without a distance and lists its legs as it always did.
+ */
+function paWalkModuleSegments(view) {
+	var segments = (view && view.segments) || [];
+	var labelled = segments.filter(function (s) { return s && s.seed && Object.prototype.hasOwnProperty.call(s, "distance"); });
+	return labelled.length ? labelled : null;
+}
+
+/* seed id → distance from the anchor, from the labelled modules. */
+function paWalkSegmentDistances(segments) {
+	var out = {};
+	(segments || []).forEach(function (s) {
+		if (s && s.seed && Object.prototype.hasOwnProperty.call(s, "distance")) { out[s.seed] = s.distance; }
+	});
+	return out;
+}
+
+/* The label on a module's first leg: how far its seed sits from the anchor. */
+function paWalkModuleText(segment, anchorGene) {
+	if (!anchorGene) { return "module"; }
+	var d = segment.distance;
+	return (d === null || d === undefined || !isFinite(Number(d)))
+		? "module · unreachable from " + anchorGene
+		: "module · d=" + Number(d) + " from " + anchorGene;
+}
+
 /* The checked Results section: title, summary, paragraphs in walk order. */
 function paWalkResultsNode(view, options) {
 	var results = view && view.results;
@@ -202,6 +402,28 @@ function paWalkResultsNode(view, options) {
 	return box;
 }
 
+/*
+ * A paper's context as its MeSH headings give it - organism, system, scope -
+ * as chips. A chip whose organism or system the design card does not share
+ * is marked, so a reader sees which citations come from another system.
+ * Null when the paper carries no context (a walk sealed before it was read).
+ */
+function paWalkContextNode(context) {
+	if (!context || typeof context !== "object") { return null; }
+	var match = context.match || {};
+	var holder = paWalkEl("span", "pa-walk-ctx");
+	["organism", "system", "scope"].forEach(function (key) {
+		var value = String(context[key] || "").trim();
+		if (!value || value.toLowerCase() === "unknown") { return; }
+		var other = match[key] === "other";
+		var chip = paWalkEl("span", "pa-walk-chip pa-walk-chip-ctx" + (other ? " is-other" : ""), value);
+		if (other) { chip.title = "from another organism or system than this experiment"; }
+		holder.appendChild(document.createTextNode(" "));
+		holder.appendChild(chip);
+	});
+	return holder.childNodes.length ? holder : null;
+}
+
 /* The cited papers, numbered as the text cites them (the server renumbers them
    1..n in order of first citation). Empty when nothing is cited. */
 function paWalkReferencesNode(view) {
@@ -228,6 +450,8 @@ function paWalkReferencesNode(view) {
 		}
 		item.appendChild(paWalkEl("span", "pa-walk-meta", " " + [paper.journal, paper.year].filter(Boolean).join(", ") +
 			(paper.pmid ? " · PMID " + paper.pmid : "")));
+		var context = paWalkContextNode(paper.context);
+		if (context) { item.appendChild(context); }
 		paWalkEvidenceNodes(paper).forEach(function (node) { item.appendChild(node); });
 		list.appendChild(item);
 	});
@@ -245,12 +469,34 @@ function paWalkStatementsNode(view, options) {
 	kept.forEach(function (statement) {
 		var item = paWalkEl("div", "pa-walk-statement");
 		var claim = paWalkEl("p", "pa-walk-claim");
+		/* The statement's tier leads its claim: "mechanism" when every leg it
+		   rests on is a directed relation, "association" otherwise. */
+		if (statement.tier) {
+			var tier = String(statement.tier);
+			claim.appendChild(paWalkEl("span", "pa-walk-chip pa-walk-chip-tier is-" +
+				(tier === "mechanism" ? "mechanism" : "association"), tier));
+			claim.appendChild(document.createTextNode(" "));
+		}
 		claim.appendChild(paWalkChipText(statement.claim, view.papers, options));
 		item.appendChild(claim);
 		var grounded = (statement.grounded_in || []).map(function (g) { return "e" + g.leg + " " + (g.db || ""); });
 		if (grounded.length) {
 			item.appendChild(paWalkEl("p", "pa-walk-meta", "Drawn in the pathway: " + grounded.join(", ")));
 		}
+		/* The direction check's verdicts: for each panel regulator the
+		   statement cites, what the values imply and what the statement claims. */
+		(Array.isArray(statement.direction) ? statement.direction : []).forEach(function (verdict) {
+			if (!verdict || !verdict.gene) { return; }
+			var role = PA_WALK_REGULATOR_WORDS[verdict["class"]] || String(verdict["class"] || "regulator");
+			var claimed = (verdict.claimed === null || verdict.claimed === undefined) ? "no claim read"
+				: (verdict.claimed === "none" ? "the statement claims no direction"
+				: "the statement claims " + String(verdict.claimed));
+			var note = verdict.insensitive ? " · reads the same with the values reversed"
+				: (verdict.consistent === false ? " · inconsistent" : "");
+			item.appendChild(paWalkEl("p", "pa-walk-meta", "Direction check: " + String(verdict.gene) + " (" +
+				(verdict.pathway ? String(verdict.pathway) + ", " : "") + role + "): the values imply " +
+				String(verdict.implied || "no direction") + ", " + claimed + note));
+		});
 		(statement.beyond || []).forEach(function (beyond) {
 			var line = paWalkEl("p", "pa-walk-meta");
 			line.appendChild(document.createTextNode(beyond.hypothesis ? "Hypothesis: " : "Beyond the pathway: "));
@@ -272,15 +518,24 @@ function paWalkStatementsNode(view, options) {
 
 /*
  * The legs as a list. options.onLeg(n) focuses a leg; options.pathwayLink(edge)
- * returns an element linking the leg's pathway, or null.
+ * returns an element linking the leg's pathway, or null. options.segments
+ * (the walk's modules, with their distance from the anchor) labels the first
+ * leg of each module; options.anchorGene names the anchor in that label.
  */
 function paWalkLegsNode(chain, options) {
 	options = options || {};
 	var list = paWalkEl("ol", "pa-walk-legs");
+	var moduleStarts = {};
+	(options.segments || []).forEach(function (segment) {
+		if (segment && isFinite(Number(segment.first))) { moduleStarts[Number(segment.first)] = segment; }
+	});
 	(chain || []).forEach(function (leg) {
 		var row = paWalkEl("li", "pa-walk-leg" + (leg.kind === "jump" ? " is-jump" : "") +
 			(options.focused !== null && options.focused !== undefined && options.focused === leg.n ? " is-focused" : ""));
 		row.setAttribute("data-leg", leg.n);
+		if (moduleStarts[leg.n]) {
+			row.appendChild(paWalkEl("span", "pa-walk-module", paWalkModuleText(moduleStarts[leg.n], options.anchorGene)));
+		}
 		var head = paWalkEl("div", "pa-walk-leg-head");
 		head.appendChild(paWalkEl("span", "pa-walk-leg-n", (leg.kind === "jump" ? "J" : "e") + leg.n));
 		head.appendChild(paWalkEl("span", "pa-walk-leg-path",
@@ -601,11 +856,18 @@ function PA_Step4WalkView() {
 		return box;
 	};
 
-	this.planNode = function (plan) {
+	/* The plan: the seeds and the step budget. With the walk's labelled modules
+	   (segments carrying a distance) each seed shows how far it sits from the
+	   anchor, "Foxo1 (d=1)"; a seed no path reaches shows nothing, the module
+	   label on its first leg says so. */
+	this.planNode = function (plan, segments) {
 		var box = paWalkEl("div", "pa-walk-plan");
+		var distances = paWalkSegmentDistances(segments);
 		box.appendChild(paWalkEl("span", "pa-walk-label", "Plan"));
-		box.appendChild(document.createTextNode(" " + (plan.seeds || []).map(function (s) { return s.label; }).join(", ") +
-			" · " + plan.steps + " steps"));
+		box.appendChild(document.createTextNode(" " + (plan.seeds || []).map(function (s) {
+			var d = distances[s.id];
+			return String(s.label) + ((d === null || d === undefined || !isFinite(Number(d))) ? "" : " (d=" + Number(d) + ")");
+		}).join(", ") + " · " + plan.steps + " steps"));
 		if (plan.reason) { box.appendChild(paWalkEl("div", "pa-walk-meta", plan.reason)); }
 		return box;
 	};
@@ -642,19 +904,33 @@ function PA_Step4WalkView() {
 		if (!body) { return; }
 		var root = body[0];
 		var onLeg = function (n) { me.focus(n); };
-		root.appendChild(paWalkResultsNode(view, {onLeg: onLeg}));
-		var references = paWalkReferencesNode(view);
-		if (references) { root.appendChild(references); }
-		if ((view.statements || []).length || (view.dropped || []).length) {
-			root.appendChild(paWalkStatementsNode(view, {onLeg: onLeg}));
+		/* The perturbation line and the five gates come first; the text they
+		   judged follows only when every gate passed (or the walk predates
+		   them). A walk they held back keeps its legs, opened, with a note. */
+		var header = paWalkHeaderNode(view);
+		if (header) { root.appendChild(header); }
+		var gates = paWalkGatesNode(view);
+		if (gates) { root.appendChild(gates); }
+		var shown = paWalkTextShown(view);
+		if (shown) {
+			root.appendChild(paWalkResultsNode(view, {onLeg: onLeg}));
+			var references = paWalkReferencesNode(view);
+			if (references) { root.appendChild(references); }
+			if ((view.statements || []).length || (view.dropped || []).length) {
+				root.appendChild(paWalkStatementsNode(view, {onLeg: onLeg}));
+			}
+		} else {
+			root.appendChild(paWalkBlockedNode(view));
 		}
 		var legs = paWalkEl("details", "pa-walk-chain");
-		legs.open = !(view.results && view.results.paragraphs && view.results.paragraphs.length);
+		legs.open = !shown || !(view.results && view.results.paragraphs && view.results.paragraphs.length);
 		var counts = view.counts || {};
 		legs.appendChild(paWalkEl("summary", null, "The walk: " + (counts.steps || 0) + " steps, " +
 			(counts.jumps || 0) + " jumps"));
-		if (view.plan) { legs.appendChild(this.planNode(view.plan)); }
-		legs.appendChild(paWalkLegsNode(view.chain, {onLeg: onLeg, focused: this.focusLeg}));
+		var segments = paWalkModuleSegments(view);
+		if (view.plan) { legs.appendChild(this.planNode(view.plan, segments)); }
+		legs.appendChild(paWalkLegsNode(view.chain, {onLeg: onLeg, focused: this.focusLeg,
+			segments: segments, anchorGene: paWalkAnchorGene(view)}));
 		if (view.stop_reason) {
 			legs.appendChild(paWalkEl("p", "pa-walk-meta", "Stopped: " + view.stop_reason));
 		}

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 
+from src.classes.AIInterpret.walker import regulators
+
 VERDICT = {"type": "object",
            "properties": {"ok": {"type": "boolean"}, "note": {"type": "string"}},
            "required": ["ok", "note"], "additionalProperties": False}
@@ -42,7 +44,7 @@ BRIEF = (
     "and does it call a series that changes sign at every point noise rather than a disagreement?\n"
     "literature: every claim beyond what the drawn edge says carries a paper or is worded as a hypothesis; "
     "a claim the pathway itself supports needs no paper.\n"
-    "Be strict and specific. Judge only what is written."
+    "Be strict and specific. Judge only what is written.\n"
 )
 
 
@@ -58,7 +60,7 @@ def sense_check(client, card_text, statements, chain_text, temperature=0.1, budg
         card_text, chain_text, body)
     try:
         out = client.complete_json(
-            [{"role": "system", "content": BRIEF}, {"role": "user", "content": prompt}],
+            [{"role": "system", "content": BRIEF + regulators.reading_rule()}, {"role": "user", "content": prompt}],
             # Five verdicts with a note each: about 350 tokens a statement. A
             # fixed 2,500 cut a twelve-statement answer off and the whole check
             # read as unavailable.

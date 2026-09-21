@@ -13,6 +13,10 @@
     "use strict";
 
     var MAX_NUMBER_FEATURES = 1000000;          // src/conf/serverconf.py:16
+    // Distinct first-column identifiers kept for the organism hint
+    // (format-panel.js): five cannot tell mouse from rat on gene
+    // symbols, a hundred and fifty can, and it bounds the lookup.
+    var ID_PROBE_SIZE = 150;
 
     // Columns are sampled rather than scanned in full when classifying them:
     // a 500k-row file would otherwise freeze the tab, and 200 rows is ample to
@@ -74,7 +78,7 @@
         var problems = [];
         var summary = {
             nRows: 0, nCols: 0, hasHeader: false,
-            columnNames: [], idSample: [], numericColumns: [], textColumns: []
+            columnNames: [], idSample: [], idProbe: [], numericColumns: [], textColumns: []
         };
 
         if (!rows || !rows.length) {
@@ -84,6 +88,7 @@
 
         var nConditions = -1;
         var dataLines = 0;
+        var probeSeen = {};
         var erroneousCount = 0;
         var truncated = false;
 
@@ -136,6 +141,13 @@
 
             dataLines++;
             if (summary.idSample.length < 5) summary.idSample.push(line[0]);
+            if (summary.idProbe.length < ID_PROBE_SIZE) {
+                var probeId = String(line[0]).trim();
+                if (probeId && !probeSeen[probeId]) {
+                    probeSeen[probeId] = true;
+                    summary.idProbe.push(probeId);
+                }
+            }
 
             // An empty first cell is a feature with no identifier. It maps to
             // nothing and pollutes the enrichment background, and it is the
@@ -200,6 +212,7 @@
     return {
         validateValues: validateValues,
         isPythonFloat: isPythonFloat,
-        MAX_NUMBER_FEATURES: MAX_NUMBER_FEATURES
+        MAX_NUMBER_FEATURES: MAX_NUMBER_FEATURES,
+        ID_PROBE_SIZE: ID_PROBE_SIZE
     };
 });
