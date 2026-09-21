@@ -2,7 +2,7 @@
 
 PaintOmics accepts uploaded omics data, runs analyses on it, and stores the
 results per user. It is also self-hostable, so a bug here can affect the public
-instance at <https://paintomics.uv.es/> and every deployment somebody else runs.
+instance at <https://paintomics.org/> and every deployment somebody else runs.
 Reports are welcome.
 
 ## Reporting a vulnerability
@@ -49,7 +49,7 @@ There is no bug bounty. Nothing in this policy is a legal undertaking.
 | Version | Security fixes |
 |---|---|
 | `master` branch of this repository | Yes |
-| The public instance, <https://paintomics.uv.es/> | Yes |
+| The public instance, <https://paintomics.org/> | Yes |
 | PaintOmics 4 (*Nucleic Acids Research*, 2022) | No |
 | PaintOmics 3 and earlier | No |
 
@@ -70,7 +70,7 @@ In scope:
   `PaintomicsServer/`, the JavaScript client under `PaintomicsClient/`, the
   admin and installer tooling under `PaintomicsServer/src/AdminTools/`, and the
   container stack under `deploy/`.
-- The deployed public instance at <https://paintomics.uv.es/>.
+- The deployed public instance at <https://paintomics.org/>.
 - Anything that lets one user reach another user's jobs, uploaded files,
   results or account; anything that escapes a job's directory through a file or
   job name; anything that turns an uploaded data matrix into code execution;
@@ -106,7 +106,7 @@ Out of scope:
 ### Testing
 
 Please test against your own deployment wherever you can. If you must test
-against <https://paintomics.uv.es/>, do not run automated scanners or load
+against <https://paintomics.org/>, do not run automated scanners or load
 generators against it — it is a shared research instance — and do not access,
 modify or delete data belonging to anyone else. If you discover that you *can*
 reach another user's data, stop there and report it; you do not need to prove it

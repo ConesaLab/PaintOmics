@@ -4,7 +4,13 @@
 APP_VERSION = "v1.0.0";
 SERVER_URL = "";
 //SERVER_PORT = ":8080";
-PAINTOMICS_EMAIL_DOMAIN = "paintomics.uv.es";
+/* The domain a guest's address is shown under when the server's guest-session
+   response carries no address. The server names guests "guest<n>@" + its own
+   PAINTOMICS_EMAIL_DOMAIN and returns that address with the credentials, and
+   UserController shows what it returns; this constant is only the fallback
+   for a server that predates the field. It was "paintomics.uv.es", which
+   pinned the displayed guest address of every deployment to the old host. */
+PAINTOMICS_EMAIL_DOMAIN = "paintomics.org";
 /*********************************************************************
  * LOCAL INSTANCE DEFAULTS   *****************************************
  **********************************************************************/

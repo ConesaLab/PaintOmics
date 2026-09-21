@@ -31,7 +31,7 @@ developed by the Genomics of Gene Expression Lab
 ([conesalab.org](http://conesalab.org/)), and distributed under GPLv3.
 
 - Source: `https://github.com/ConesaLab/PaintOmics`, default branch `master`.
-- Public instance: <https://paintomics.uv.es/>.
+- Public instance: <https://paintomics.org/>.
 - Contact for questions, bug reports and organism requests:
   <paintomicsai@gmail.com>.
 

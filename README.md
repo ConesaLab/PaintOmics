@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://paintomics.uv.es/"><img alt="Live instance" src="https://img.shields.io/badge/try%20it-paintomics.uv.es-2E7D9A"></a>
+  <a href="https://paintomics.org/"><img alt="Live instance" src="https://img.shields.io/badge/try%20it-paintomics.org-2E7D9A"></a>
   <a href="https://conesalab.github.io/PaintOmics/"><img alt="Documentation" src="https://img.shields.io/badge/docs-user%20guide-8CA1AF"></a>
   <a href="https://doi.org/10.1093/nar/gkac352"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.1093%2Fnar%2Fgkac352-B31B1B"></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11-3776AB">
@@ -39,7 +39,7 @@ MORE regulatory model, multi-condition designs, and a rebuilt interface — see
 [What's new](#whats-new-in-paintomics-ai). The public instance runs on
 [Supercomputador Drago](https://aic.csic.es/supercomputador-drago/) (CSIC).
 
-**Try it without installing anything:** [https://paintomics.uv.es](https://paintomics.uv.es/)
+**Try it without installing anything:** [https://paintomics.org](https://paintomics.org/)
 
 ## What's new in PaintOmics AI
 

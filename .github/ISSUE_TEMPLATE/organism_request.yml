@@ -61,7 +61,7 @@ body:
     attributes:
       label: Where you will run the analysis
       options:
-        - https://paintomics.uv.es/
+        - https://paintomics.org/
         - A self-hosted instance
         - Both
     validations:

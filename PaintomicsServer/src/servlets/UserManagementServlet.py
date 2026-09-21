@@ -257,7 +257,13 @@ def userManagementNewGuestSession(request, response):
         logging.info("STEP4 - GETTING A NEW SESSION TOKEN..." )
         sessionToken = UserSessionManager().registerNewUser("" + str(userID))
 
-        response.setContent({"success": True, "userID":userID, "userName":userInstance.getUserName(), "sessionToken" : sessionToken, "p":password})
+        # The stored address goes back with the credentials: the client shows
+        # it and sign-in looks it up, so it has to be the server's spelling
+        # (its own PAINTOMICS_EMAIL_DOMAIN), not one the client assembles.
+        response.setContent({"success": True, "userID": userID,
+                             "userName": userInstance.getUserName(),
+                             "email": userInstance.getEmail(),
+                             "sessionToken": sessionToken, "p": password})
 
     except Exception as ex:
         handleException(response, ex, __file__ , "userManagementNewGuestSession")
