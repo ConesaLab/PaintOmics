@@ -7,28 +7,40 @@
 
 	app.controller('SystemInfoController', function($rootScope, $scope, $http, $dialogs, $state, $interval, APP_EVENTS) {
 
+		/* True from a failed poll until the next good one: an outage shows one
+		   error, not a new one every 3 s, and polling carries on so the charts
+		   recover on their own once the server answers again. */
+		var failing = false;
+
 		this.retrieveSystemInfo = function(){
 			$http($rootScope.getHttpRequestConfig("GET", "system-info", {})).
 			then(
 				function successCallback(response){
+					failing = false;
 					$scope.cpu_load = [response.data.cpu_use, 100 - response.data.cpu_use];
 					$scope.mem_load = [response.data.mem_use, 100 - response.data.mem_use];
 					$scope.swap_use = [response.data.swap_use, 100 - response.data.swap_use];
 					$scope.disk_use = response.data.disk_use;
 				},
 				function errorCallback(response){
-					/* Stop polling first: every 3 s failure closed the error and
-					   opened a new one, so it could never be dismissed. Name the
-					   usual cause (no admin session) rather than a generic line. */
-					$rootScope.interval.forEach(function(i){ $interval.cancel(i); });
-					$rootScope.interval = [];
-					$dialogs.closeDialog();
+					console.error(response.data);
 					var denied = response.data && /CredentialException/.test(response.data.message || "");
-					var message = denied ? "Sign in to PaintOmics with an administrator account, then reload this page." : "Failed while retrieving the system information.";
+					/* No admin session will not fix itself between polls, so stop
+					   polling and say how to fix it. Anything else may be a blip. */
+					if (denied) {
+						$rootScope.interval.forEach(function(i){ $interval.cancel(i); });
+						$rootScope.interval = [];
+					} else if (failing) {
+						return;
+					}
+					failing = true;
+					$dialogs.closeDialog();
+					var message = denied
+						? "Sign in to PaintOmics with an administrator account, then reload this page."
+						: "Failed while retrieving the system information. The charts will update again once the server responds.";
 					$dialogs.showErrorDialog(message, {
 						logMessage : message + " at SystemInfoController:retrieveSystemInfo."
 					});
-					console.error(response.data);
 				}
 			);
 		};
