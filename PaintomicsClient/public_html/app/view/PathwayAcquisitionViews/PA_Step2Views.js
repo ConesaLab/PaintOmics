@@ -165,7 +165,7 @@ function PA_Step2JobView() {
 			html: '<div id="about">' +
 			// Was title=" ": the icon rendered, invited a hover, and showed an
 			// empty tooltip.
-			'  <h2 >Data distribution summary <span class="helpTip" title="How each omic\'s values are spread across your samples. The box is the interquartile range, the red line the median, and the whiskers reach the 10th and 90th percentiles - the same two percentiles the heatmap colour scale uses by default."></h2>' +
+			'  <h2 >Data distribution summary <span class="helpTip" title="How each omic\'s values are spread across your samples. The box is the interquartile range, the red line the median, the whiskers reach the lowest and highest values within 1.5 × IQR of the box, and the two vertical lines mark the 10th and 90th percentiles - the same two the heatmap colour scale uses by default."></h2>' +
 			'  <p>' +
 			'    By default, percentiles 10 and 90 set the reference range for the heatmap colours. You can change this in the pathway view: open <b>Settings</b> in the toolbar and edit <b>Reference values</b>.<br>' +
 			// This figure replaces settingsbutton.png, a 2022 screenshot of the
@@ -2204,7 +2204,9 @@ function mappingSummaryCaption(mappedFeatures, unmappedFeatures) {
 */
 function renderMappingDonut(divName, omicName, mapped, unmapped, note) {
 	$('#' + divName + 'mapping_summary_plot').highcharts({
-		chart: {type: 'pie', height: 195},
+		// Highcharts defaults to Lucida Grande, a wider face than the card
+		// title and the HTML caption directly around the chart.
+		chart: {type: 'pie', height: 195, style: {fontFamily: 'inherit'}},
 		title: {
 			text: "Mapped/Unmapped features",
 			style: {"fontSize": "13px"}
@@ -2343,7 +2345,8 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 						chart: {
 							type: 'boxplot',
 							height: 195,
-							inverted: true
+							inverted: true,
+							style: {fontFamily: 'inherit'}
 						},
 						credits: {enabled: false},
 						title: {
@@ -2368,13 +2371,13 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							formatter: function() {
 								var text = '<span style="font-size:9px; text-align: right;"><em>' + me.omicName + '</em><br/>';
 								text += "<b>Min (outliers inc.): </b>" + (me.dataDistribution[2]).toFixed(4) + '<br/>';
-								text += "<b>Min value    : </b>" + (this.point.low / 10).toFixed(4) + '<br/>';
+								text += "<b>Lower whisker: </b>" + (this.point.low / 10).toFixed(4) + '<br/>';
 								text += "<b>Percentile 10: </b>" + (me.dataDistribution[3]).toFixed(4) + '<br/>';
 								text += "<b>Q1           : </b>" + (this.point.q1 / 10).toFixed(4) + '<br/>';
 								text += "<b>Median       : </b>" + (this.point.median / 10).toFixed(4) + '<br/>';
 								text += "<b>Q3           : </b>" + (this.point.q3 / 10).toFixed(4) + '<br/>';
 								text += "<b>Percentile 90: </b>" + (me.dataDistribution[7]).toFixed(4) + '<br/>';
-								text += "<b>Max value    : </b>" + (this.point.high / 10).toFixed(4) + '<br/>';
+								text += "<b>Upper whisker: </b>" + (this.point.high / 10).toFixed(4) + '<br/>';
 								text += "<b>Max (outliers inc.): </b>" + (me.dataDistribution[8]).toFixed(4) + '<br/></span>';
 
 								return text;
@@ -2392,19 +2395,30 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 								color: '#001dff',
 								width: 1,
 								dashstyle: "DashDot",
+								// Level and beside the line rather than the default
+								// rotated along it; #595959 is 7:1 on white, where
+								// 'gray' was 3.95:1. dark.css restates the ink.
 								label: {
 									text: 'p10',
-									align: 'center',
-									style: {
-										color: 'gray'
-									}
+									rotation: 0,
+									textAlign: 'right',
+									x: -4,
+									y: 12,
+									style: {color: '#595959', fontSize: '11px'}
 								}
 							}, {
 								value: me.dataDistribution[7] * 10,
 								color: '#001dff',
 								width: 1,
 								dashstyle: "DashDot",
-								label: {text: 'p90',align: 'center', style: {color: 'gray'}}
+								label: {
+									text: 'p90',
+									rotation: 0,
+									textAlign: 'left',
+									x: 4,
+									y: 12,
+									style: {color: '#595959', fontSize: '11px'}
+								}
 							}]
 						},
 						//   0        1       2    3    4    5     6,   7   8      9        10
@@ -2418,7 +2432,18 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 						}],
 					});
 
-
+					// Both charts were sized before the card reached its final
+					// flex width, and Highcharts only reflows on window resize,
+					// so each SVG ran 20-45 px past its overflow:hidden column
+					// and clipped the right-hand axis labels.
+					setTimeout(function() {
+						['mapping_summary_plot', 'data_dstribution_plot'].forEach(function(s) {
+							var c = $('#' + divName + s).highcharts();
+							if (c) {
+								c.reflow();
+							}
+						});
+					}, 0);
 				}
 			}
 		});

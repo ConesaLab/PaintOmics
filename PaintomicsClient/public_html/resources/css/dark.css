@@ -1389,7 +1389,11 @@
 /* The box plot's box is drawn white so the median line and whiskers read
    through it; on a dark chart the equivalent is the chart ground, not white. */
 [data-theme="dark"] .highcharts-boxplot-box { fill: var(--pa-surface-quiet); }
-[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft); }
+/* !important because Highcharts writes the label colour inline (style="fill:
+   ..."), so without it this rule never applied. The p10/p90 lines keep a
+   #001dff attribute, 2.05:1 on the chart ground; CSS outranks it. */
+[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft) !important; }
+[data-theme="dark"] .omicSummaryBox .highcharts-plot-line { stroke: #6E8BFF; }
 [data-theme="dark"] .highcharts-tooltip > span {
 	background: var(--pa-surface-quiet) !important;
 	color: var(--pa-ink-body) !important;
