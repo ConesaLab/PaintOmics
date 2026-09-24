@@ -16,6 +16,8 @@ function PA_AIInterpretView() {
     this.REPORT_RETRIES = 2;
     this.$root = null;
     this.isExpanded = false;
+    // A message arrived while the panel was collapsed (see expand).
+    this.hasUnseen = false;
     this.chatHistory = [];
     this.isWaitingResponse = false;
     this.jobID = null;
@@ -137,7 +139,13 @@ function PA_AIInterpretView() {
         this.$root.find(".ai-widget-panel").addClass("is-expanded");
         this.$root.find(".ai-widget-fab").attr("aria-expanded", "true");
         this.isExpanded = true;
-        this._scrollToLatest();
+        // Only bring in what arrived while it was collapsed. Otherwise the
+        // hidden panel kept its scrollTop, and a reader who minimised to look
+        // at a pathway comes back to the same place in the report.
+        if (this.hasUnseen) {
+            this.hasUnseen = false;
+            this._scrollToLatest();
+        }
         // Auto-load report if done and not loaded
         if (!this.reportLoaded && this._lastStatus === "done") {
             this.loadReport();
@@ -798,6 +806,7 @@ function PA_AIInterpretView() {
         provenance.appendChild(model);
         bubble.appendChild(provenance);
         this.$root.find(".ai-widget-messages").append($bubble);
+        if (!this.isExpanded) { this.hasUnseen = true; }
         if (typeof withAIProviderInfo === "function") {
             withAIProviderInfo(function(info) {
                 var text = "Generated at " + info.host;
@@ -833,6 +842,7 @@ function PA_AIInterpretView() {
                       '  <div class="ai-msg-bubble">' + bubbleContent + '</div>' +
                       '</div>';
         $container.append(msgHtml);
+        if (!this.isExpanded) { this.hasUnseen = true; }
         this._scrollToLatest();
     };
 
@@ -937,6 +947,7 @@ function PA_AIInterpretView() {
             this.$root = null;
         }
         this.isExpanded = false;
+        this.hasUnseen = false;
         this.reportLoaded = false;
         this.chatHistory = [];
     };
