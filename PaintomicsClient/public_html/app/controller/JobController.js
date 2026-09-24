@@ -254,14 +254,17 @@ function JobController() {
 			: "";
 
 		console.info("Checking status for Job " + jobID);
-		$.ajax({
+		ajaxWithStallTimeout({
 			type: "POST",
 			headers: {"Content-Encoding": "gzip"},
 			url: SERVER_URL_JOB_STATUS + "/" + jobID,
 			// Longer than the proxy's 60 s, so a stalled poll is ended by the
 			// proxy's 504 -- which the error branch retries -- and never by the
 			// browser abandoning a request the server thread is still working
-			// on. See ServerConfiguration.js for the numbers.
+			// on. See ServerConfiguration.js for the numbers. Counted from the
+			// last byte received, not from the start: a finished job's answer
+			// is large, and on a slow connection it is still arriving at 65 s
+			// (see ajaxWithStallTimeout in Util.js).
 			timeout: JOB_STATUS_REQUEST_TIMEOUT,
 			success: function (response, textStatus, jqXHR) {
 				other.statusOutage = null;   // the server answered: any outage is over
