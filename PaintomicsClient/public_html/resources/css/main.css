@@ -4310,10 +4310,12 @@ div[id ^= "pathwayClassificationContainer"] {overflow-y: auto; overflow-x: hidde
 .step3ClassificationsOptions{display: none; margin-left: 10px;font-size: 11px;}
 .step3ClassificationsTitle:hover > .step3ClassificationsOptions{display: inline-block;}
 .step3ClassificationsOptions a {margin: 0px 2px;}
-.step3ClassificationsOptions a {color: #A7A7A7;margin: 0px 2px; display: inline-block;}
-.step3ClassificationsOptions a.hideOption.selected, .step3ClassificationsOptions a.hideOption:hover{color: #E3643D;}
-.step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #23AE89;}
-.step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #BD7E39;}
+/* 11px text: the old #A7A7A7 / #E3643D / #23AE89 / #BD7E39 were 2.4-3.4:1 on
+   white. Same hues, darkened past 4.5:1; dark.css restates the bright ones. */
+.step3ClassificationsOptions a {color: #6B6B66;margin: 0px 2px; display: inline-block;}
+.step3ClassificationsOptions a.hideOption.selected, .step3ClassificationsOptions a.hideOption:hover{color: #B8431F;}
+.step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #1B7F63;}
+.step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #93602A;}
 .step3ClassificationsOptions a.selected{float: left;font-weight: bold;}
 /* The pathways network toolbar ------------------------------------------------
    The band itself, its status line and the shape of its controls are now
@@ -8881,7 +8883,7 @@ div.repDetectionCard h3 {
 	transition: background-color var(--pa-transition), border-color var(--pa-transition);
 }
 .paGridBar a.downloadXLS:hover,
-.paGridBar #configureButton:not(.x-item-disabled):hover {
+.paGridBar #configureButton:not(.x-item-disabled):not(.x-masked):hover {
 	background-color: #F4F4F5;
 	border-color: var(--pa-border);
 }
@@ -8889,9 +8891,19 @@ div.repDetectionCard h3 {
 	background-color: #FCEEEC;
 	border-color: #E0BFBC;
 }
+/* The anchor itself carries `fa fa-cog`, so its label inherited FontAwesome,
+   which has no Latin glyphs: "Configure" fell back to a serif. Only the cog
+   (the ::before) is set in the icon font. */
+.paGridBar #configureButton { font-family: var(--pa-font-sans); }
+.paGridBar #configureButton::before { font-family: FontAwesome; margin-right: 3px; }
 /* Disabled Configure - the method is not Stouffer - should read as unavailable
-   rather than as a link that ignores you. */
-.paGridBar #configureButton.x-item-disabled {
+   rather than as a link that ignores you. ExtJS disables this component by
+   masking it (x-masked) rather than with x-item-disabled, so both are matched,
+   and the mask, which boxed the word in a scrim, is hidden: the click handler
+   checks isDisabled() itself. */
+.paGridBar #configureButton > .x-mask { display: none; }
+.paGridBar #configureButton.x-item-disabled,
+.paGridBar #configureButton.x-masked {
 	opacity: 1;
 	color: #9A9AA0;
 	cursor: default;

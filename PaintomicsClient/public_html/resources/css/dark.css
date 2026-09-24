@@ -1430,6 +1430,11 @@
 	border-color: var(--pa-border);
 }
 [data-theme="dark"] .paGridBar-filters { background: var(--pa-surface-subtle); }
+/* main.css inks these labels #52525B, 2.1:1 on this bar. They are toolbar
+   text, not .x-form-cb-label, so the dark checkbox-label rule never reached
+   them; the group-label spans carry an inline weight but no inline colour. */
+[data-theme="dark"] .paGridBar .x-toolbar-text,
+[data-theme="dark"] .paGridBar .x-toolbar-text span[style] { color: var(--pa-ink-label); }
 /* Checkboxes, radios and sliders --------------------------------------------
    main.css draws all four of these in CSS now rather than from sprites, so the
    dark theme has real properties to move instead of an image it could only
@@ -1481,9 +1486,11 @@
    file, which is later and therefore wins; it is left as the one place that
    describes a jQuery UI thumb. */
 [data-theme="dark"] .paGridBar a.downloadXLS:hover,
-[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):hover {
+[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):not(.x-masked):hover {
 	background-color: var(--pa-surface-quiet);
 }
+[data-theme="dark"] .paGridBar #configureButton.x-item-disabled,
+[data-theme="dark"] .paGridBar #configureButton.x-masked { color: var(--pa-ink-muted); }
 [data-theme="dark"] .paGridBar a.multiDelete:hover { background-color: var(--pa-btn-ghost-danger-bg-hover); }
 [data-theme="dark"] .paWeightsTip { background-color: var(--pa-surface); }
 [data-theme="dark"] .paWeightsTip .x-tip-header,
@@ -1519,6 +1526,26 @@
 [data-theme="dark"] div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"] {
 	background: var(--pa-surface) !important;
 }
+/* The node hover card floats on <body>, outside every container that answers
+   main.css's bare `h4 { color: #27272A }`, so its pathway title was 1.1:1.
+   Its Paint button keeps the inline var(--pa-link) fill, which is a light blue
+   in this theme: the neutral button ink on it was 1.75:1, so it takes the same
+   dark ink as .pa-convert-composer-send on the accent blue (8:1). */
+[data-theme="dark"] #sigmaTooltip h4 { color: var(--pa-ink-title); }
+/* The per-omic headings keep their orange accent (main.css #B14C2D, ~3:1
+   here), lifted to this theme's orange; the ID keeps it above the rule above. */
+[data-theme="dark"] .pathwayPlotwrappers h4,
+[data-theme="dark"] #sigmaTooltip .pathwayPlotwrappers h4 { color: var(--pa-accent-orange); }
+[data-theme="dark"] #step3TooltipPaintButton { color: #0F1A2B; }
+/* Category tree Hide/Show/Custom: main.css darkens these for white, too dark
+   here, and the bare `a` rule would otherwise paint the idle ones link blue. */
+[data-theme="dark"] .step3ClassificationsOptions a { color: var(--pa-ink-muted); }
+[data-theme="dark"] .step3ClassificationsOptions a.hideOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.hideOption:hover { color: #E3643D; }
+[data-theme="dark"] .step3ClassificationsOptions a.showOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.showOption:hover { color: #23AE89; }
+[data-theme="dark"] .step3ClassificationsOptions a.customOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.customOption:hover { color: #BD7E39; }
 
 /* ---------------------------------------------------------------------------
    12. Step 4

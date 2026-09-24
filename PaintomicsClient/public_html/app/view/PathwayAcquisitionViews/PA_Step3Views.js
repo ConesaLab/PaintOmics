@@ -1698,7 +1698,13 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		var mainClassifications = [], secondClassifications = [], mainClassificationInstance, secClassificationInstance, drilldownAux;
 		var classificationID, secondClassificationID;
 
-		for (classificationID in classificationData){
+		/* Sorted, like the selector panel in STEP 3. Both hand out fallback
+		   colours from OTHER_COLORS with shift(), so they must visit the
+		   classifications in the same order: in insertion order 5 of the 8
+		   OmniPath wedges drew in a different colour from their own chip. */
+		var pieClassificationIDs = Object.keys(classificationData).sort();
+		for (var pieIndex = 0; pieIndex < pieClassificationIDs.length; pieIndex++){
+			classificationID = pieClassificationIDs[pieIndex];
 			mainClassificationInstance = classificationData[classificationID];
 
 			mainClassifications.push({
@@ -1960,9 +1966,14 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 
 		// Avoid this when no pathways are visible.
 		if (pathwaysVisibility.length) {
-			Object.keys(classificationData).forEach(function(classificationID) {
+			/* Sorted, and the colour taken before the visibility test: the
+			   selector panel gives every classification a fallback colour, shown
+			   or not, so a hidden one must still use up its OTHER_COLORS slot here
+			   or every wedge after it shifts one colour along. */
+			Object.keys(classificationData).sort().forEach(function(classificationID) {
 				var mainClassificationInstance = classificationData[classificationID];
 				var mainVisiblePathways = 0;
+				var color = me.getParent().getClassificationColor(classificationID, otherColors);
 
 				drilldownAux = {
 					name: mainClassificationInstance.name,
@@ -1987,7 +1998,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 					mainClassifications.push({
 						name: mainClassificationInstance.name,
 						y: (mainVisiblePathways/pathwaysVisibility.length) * 100,
-						color: me.getParent().getClassificationColor(classificationID, otherColors),
+						color: color,
 						drilldown: classificationID
 					});
 				}
@@ -2780,9 +2791,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 
 		if(visualOptions.colorBy === "classification"){
 			var color, classification;
-			for (var classificationID in me.getParent().classificationData[me.database]){
+			// Sorted, so the legend reads in the same order as the category tree.
+			var legendClassificationIDs = Object.keys(me.getParent().classificationData[me.database]).sort();
+			for (var legendIndex = 0; legendIndex < legendClassificationIDs.length; legendIndex++){
+				var classificationID = legendClassificationIDs[legendIndex];
 				classification = me.getParent().classificationData[me.database][classificationID];
-				color = color = this.getParent().getClassificationColor(classificationID, []);
+				color = this.getParent().getClassificationColor(classificationID, []);
 				htmlCode += '<div style="text-align:left;"><i class="classificationNameBox" style="' + classificationBadgeStyle(color) + '">' + classification.name.charAt(0).toUpperCase() + '</i>' +  classification.name + "</div>";
 			}
 			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
