@@ -1390,6 +1390,8 @@
    through it; on a dark chart the equivalent is the chart ground, not white. */
 [data-theme="dark"] .highcharts-boxplot-box { fill: var(--pa-surface-quiet); }
 [data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft); }
+/* The clipped-scale band label is written inline (#71717A, for white). */
+[data-theme="dark"] .highcharts-plot-band-label { fill: var(--pa-chart-ink-soft) !important; }
 [data-theme="dark"] .highcharts-tooltip > span {
 	background: var(--pa-surface-quiet) !important;
 	color: var(--pa-ink-body) !important;

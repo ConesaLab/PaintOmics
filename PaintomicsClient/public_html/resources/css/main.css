@@ -3882,6 +3882,17 @@ div[id ^= "pathwayClassificationPlot2Box_"] {
 	font-size: 15px;
 	padding-top: 24px;
 }
+/* The pie's percentage labels: Highcharts writes its drilldown default inline
+   (navy, always underlined). Keep the link colour - clicking is the pie's
+   interaction - but underline on hover only, like every other link here.
+   dark.css supplies the dark link colour. */
+div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label > span {
+	color: var(--pa-link) !important;
+	text-decoration: none !important;
+}
+div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label:hover > span {
+	text-decoration: underline !important;
+}
 
 
 
@@ -9710,6 +9721,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    and (24px + border) the ladder's first column. */
 .paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; padding: 0 26px; }
 .paLadderBar .paClassMapControlLabel { margin-right: 2px; }
+.paLadderField { display: inline-flex; align-items: center; gap: 10px; }
 /* Three equal cells on one line, the height of the select beside them: a
    segmented control reads as one control only when its parts match. */
 .paLadderSeg { display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #B5C1CE;

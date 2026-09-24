@@ -1732,7 +1732,8 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		}
 
 		me.highcharts = Highcharts.chart('pathwayDistributionsContainer_' + me.dbid, {
-			chart: {type: 'pie'},
+			// inherit: the labels were Highcharts' Lucida Grande, the only such face on the card.
+			chart: {type: 'pie', style: {fontFamily: 'inherit'}},
 			title: null, credits: {enabled: false},
 			plotOptions: {
 				series: {
@@ -2634,6 +2635,8 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				minNodeSize: visualOptions.minNodeSize,
 				maxNodeSize: visualOptions.maxNodeSize,
 				defaultLabelSize: visualOptions.fontSize,
+				// sigma's default is "arial", the only Arial on the card and wider than the UI face.
+				font: "SourceSansPro, 'Source Sans Pro', sans-serif",
 				defaultLabelColor: paNetworkLabelInk()
 			}
 		});
@@ -4454,6 +4457,15 @@ function PA_Step3PathwayDetailsView() {
 					pathwayPlotwrappers.append(
 						"<h4 style='color: #D16949;font-size: 13px;margin: 0;'>" + omicDataType[i] + "</h4>"+
 						"<b>No data for this pathway.</b>"
+					);
+				}else if (metagenes.length === 0){
+					/* An omic with no trend here: say so, rather than drawing a
+					   Heatmap/Line chart toggle over two empty charts. */
+					pathwayPlotwrappers.append(
+						"<div>" +
+						"  <h4>" + omicDataType[i] + "</h4>" +
+						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> No major trends in this pathway.</span>" +
+						"</div>"
 					);
 				}else{
 					/****************************************************************/
@@ -7115,22 +7127,25 @@ function PA_Step3MetaboliteView() {
 		}).join("");
 		var condSel = "";
 		if (!perm && (classActivity.nConditions || 1) > 1) {
-			condSel = '<label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
+			condSel = '<span class="paLadderField"><label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
 				+ '<select id="classLadderCondition" class="paClassMapSelect">'
 				+ (classActivity.conditions || []).map(function (name, i) {
 					return '<option value="' + i + '"' + (i === ladderState.condition ? " selected" : "") + '>' + classMapEscape(name) + '</option>';
-				}).join("") + '</select>';
+				}).join("") + '</select></span>';
 		}
 		controls.innerHTML = '<div class="paLadderBar">'
-			+ '<span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div>'
+			/* Each label and its control share a paLadderField, so a wrapping
+			   bar never leaves "Order by" at the end of one row and its select
+			   at the start of the next. */
+			+ '<span class="paLadderField"><span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div></span>'
 			/* data-guides="ignore" on the mid-row labels: their rail is the
 			   select they name, not the card's. */
-			+ '<label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
+			+ '<span class="paLadderField"><label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
 			+ '<select id="classLadderSort" class="paClassMapSelect">'
 			+ '<option value="effect"' + (ladderState.sort === "effect" ? " selected" : "") + '>' + (perm ? "Effect (mean F)" : "Share in relevant list") + '</option>'
 			+ '<option value="p"' + (ladderState.sort === "p" ? " selected" : "") + '>p-value</option>'
 			+ '<option value="n"' + (ladderState.sort === "n" ? " selected" : "") + '>Class size</option>'
-			+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select>'
+			+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select></span>'
 			+ condSel
 			+ '<label class="paLadderSwitch" data-guides="ignore"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
 			+ '> Hide classes with fewer than 3 members</label></div>';
@@ -8814,8 +8829,9 @@ var paPlotYAxis = function (limits, dataMin, dataMax, options) {
 
 	if (hasClip) {
 		var bandColor = "rgba(120, 135, 154, 0.09)";
+		// #71717A/10px: the old #A1A1AA at 9px was 2.6:1 on white. dark.css restates it.
 		var bandLabel = {text: "beyond colour scale", align: "right", x: -4,
-			style: {color: "#A1A1AA", fontSize: "9px"}};
+			style: {color: "#71717A", fontSize: "10px"}};
 		if (dataMax > limits.max) {
 			axis.plotBands.push({from: limits.max, to: axis.max, color: bandColor, zIndex: 0,
 				label: Ext.apply({y: 12}, bandLabel)});
