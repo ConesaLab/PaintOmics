@@ -936,9 +936,9 @@
    "Data Uploading" headings were the worst, at 2.2 and 1.0.
    --------------------------------------------------------------------------- */
 
-[data-theme="dark"] .po-hero,
-[data-theme="dark"] .po-hero-section,
-[data-theme="dark"] .po-about-section { background: var(--pa-surface-page); }
+/* No background on the hero or the About section: both sit in (or are) a
+   .contentbox, which already takes --pa-surface. Painting them the page colour
+   made the first two cards read as holes, and the About card two-toned. */
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
 

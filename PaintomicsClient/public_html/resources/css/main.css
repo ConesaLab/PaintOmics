@@ -6673,12 +6673,9 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
      part; sharing the token is, because it is what keeps the hero on the rail
      when the token moves. */
   padding: 40px var(--pa-card-inset);
-  /* Was `2px solid #e0e0e0`: a hardcoded light grey at twice the weight of any
-     other rule in the application, and one dark.css never restated - so on the
-     dark theme a bright 2px bar ran the full width under the hero. --pa-border
-     is an alpha of the ink and is redefined per theme, so the one declaration
-     is right on both. */
-  border-bottom: 1px solid var(--pa-border);
+  /* No border-bottom. The hero is its own .contentbox now, so a rule here sat
+     directly on the card's own 1px edge and drew the bottom twice as heavy as
+     every other card edge on the page. */
   /* Anchors the diagram's plate below. */
   position: relative;
 }
@@ -6898,7 +6895,10 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-hero-actions .po-btn-outline {
   background: transparent;
-  border: 1px solid var(--pa-border);
+  /* The toolbar ghosts' #878787 (3.59:1, see .mainTopToolbar .button), not
+     --pa-border: that alpha rendered 1.23:1 on white, so the outline step
+     between the filled button and the quiet links was invisible. */
+  border: 1px solid #878787;
   color: var(--pa-ink-body, #555);
 }
 
@@ -6930,6 +6930,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   flex: 0 1 460px;
   min-width: 0;
   position: relative;
+  /* Full row height, diagram centred inside. `.po-hero` centres its items, so
+     this box was shorter than the text column and the plate's -40px offsets
+     below stopped short of the card's top and bottom edges. */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
 }
 
 /* The diagram's plate ---------------------------------------------------------
@@ -8290,6 +8296,13 @@ div.contentbox h2.po-omics-col-title {
   .po-hero {
     gap: 24px;
   }
+  /* The plate reaches back by the gap, so with the gap at 24px its -24px edge
+     met the AI callout's border with no air between them (the wide layout
+     keeps 20px). Half the gap leaves 12px. Must stay in this block: the 900px
+     tier's -14px below still has to win once the row stacks. */
+  .po-hero-visual::before {
+    left: -12px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -8299,6 +8312,9 @@ div.contentbox h2.po-omics-col-title {
   .po-hero-visual {
     flex: 0 0 auto;
     max-width: 460px;
+    /* Undoes the wide layout's stretch, which in a column would pin the
+       diagram to the left instead of centring it under the text. */
+    align-self: center;
   }
   /* The plate stops bleeding once the row stacks. Its offsets are the hero's
      own padding, which is right when the diagram is the right-hand column and
@@ -9037,6 +9053,10 @@ div.repDetectionCard h3 {
 .po-hero-viz .po-viz-cite {
   --po-viz-on-opacity: 1;
   transform: scaleX(0);
+  /* fill-box for the same reason as the agent rings above: these are plain
+     <rect>s with their own x, and without it scaleX grows each line out of
+     the SVG's x=0, across the network, instead of from the line's own edge. */
+  transform-box: fill-box;
   transform-origin: left center;
   opacity: 0;
   animation-duration: 9s;
