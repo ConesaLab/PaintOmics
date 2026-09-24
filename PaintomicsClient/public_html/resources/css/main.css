@@ -956,6 +956,19 @@ ul.submenu {
 .lateralMenu-body.is-iconly > .menuOption > .menuLabel {
 	display: none;
 }
+/* The third stage, on the step actions themselves (see fitHeaderNav). font-size
+   0 hides the words without touching the markup, so a label that a handler
+   rewrites still toggles; the icon, and the AI mark sized at 1em, get their
+   size back explicitly. */
+.secondTopToolbar.is-iconly .button {
+	font-size: 0;
+	gap: 0;
+	padding: 0 9px;
+}
+.secondTopToolbar.is-iconly .button > i.fa,
+.secondTopToolbar.is-iconly .button > svg.po-ai-mark {
+	font-size: 13px;
+}
 /* The icon sat above the label in the rail and has to sit beside it here. */
 .lateralMenu-body > .menuOption > i.fa {
 	display: inline-block;
@@ -964,15 +977,17 @@ ul.submenu {
 	transition: color var(--pa-transition);
 }
 /* The per-section accents survive the move: they were on the rail's left border,
-   then on the icon, and stay on the icon here. */
+   then on the icon, and stay on the icon here. Read through --pa-nav-accent-N,
+   which only dark.css defines: these light inks sit at 1.7-2.5:1 on the dark
+   pill, so the icon under the cursor went dark instead of lighting up. */
 .lateralMenu-body > .menuOption:hover > i.fa,
-.lateralMenu-body > .menuOption.selected > i.fa { color: #B02A5B; }
+.lateralMenu-body > .menuOption.selected > i.fa { color: var(--pa-nav-accent-1, #B02A5B); }
 .lateralMenu-body > .menuOption:nth-child(2):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(2).selected > i.fa { color: #8A7A18; }
+.lateralMenu-body > .menuOption:nth-child(2).selected > i.fa { color: var(--pa-nav-accent-2, #8A7A18); }
 .lateralMenu-body > .menuOption:nth-child(3):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(3).selected > i.fa { color: #2F6FA8; }
+.lateralMenu-body > .menuOption:nth-child(3).selected > i.fa { color: var(--pa-nav-accent-3, #2F6FA8); }
 .lateralMenu-body > .menuOption:nth-child(4):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(4).selected > i.fa { color: #2E7D3A; }
+.lateralMenu-body > .menuOption:nth-child(4).selected > i.fa { color: var(--pa-nav-accent-4, #2E7D3A); }
 
 /* Dropdowns. The rail flew these out sideways at `left: 65px` with a negative
    top margin; from a header they drop underneath the item that owns them.
@@ -1044,6 +1059,16 @@ ul.submenu li.menuOption {
 ul.submenu li.menuOption:hover {
 	background-color: var(--pa-surface-quiet);
 }
+/* The guest's Storage row is a note, not an option: it has no handler, so it
+   takes no hover fill and no hand cursor. The extra .lateralMenu-body is what
+   outranks dark.css's `ul.submenu li.menuOption` ink and hover fill. */
+.lateralMenu-body ul.submenu li.menuOption.menuNote {
+	cursor: default;
+	color: var(--pa-ink-muted);
+}
+.lateralMenu-body ul.submenu li.menuOption.menuNote:hover {
+	background-color: transparent;
+}
 ul.submenu a {
 	color: var(--pa-link);
 }
@@ -1103,11 +1128,12 @@ ul.submenu i.fa {
 /* 11px and tracked out: these name the columns, they are not read as content,
    and at body size two of them would compete with the links underneath.
 
-   No left margin: the 10px it carried parked each title between its list's
-   icon edge and its text start - on neither. The list items hang their icons
-   at the column's own edge, and that edge is the one rail the column has. */
+   10px each side because the list items carry 10px of side padding (ul.submenu
+   li.menuOption), so the resource icons and the citation names start 10px
+   inside the column. At 0 the title hung 10px left of everything under it; at
+   10px it shares the edge the reader actually sees. */
 .navPanel-title {
-	margin: 0 0 6px;
+	margin: 0 10px 6px;
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.06em;

@@ -243,21 +243,21 @@ function MainView() {
 		};
 
 		var navHTML = "<ul class='lateralMenu-body'>" +
-				" <li class='menuOption' id='homeButton' title='Job view'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" +
-				" <li class='menuOption loggedOption' title='Personal storage'><i class='fa fa-cloud'></i><span class='menuLabel'>Storage</span>" +
+				" <li class='menuOption' id='homeButton' title='Job view' tabindex='0' role='button'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" +
+				" <li class='menuOption loggedOption' title='Personal storage' tabindex='0' role='button' aria-haspopup='true'><i class='fa fa-cloud'></i><span class='menuLabel'>Storage</span>" +
 				"  <ul class='submenu loggedOption'>" +
 				(noLogin != true ?
-					"     <li class='menuOption' data-name='DM_MyDataListView'><i class='fa fa-file-text'></i>  My files and Jobs</li>" +
-					"     <li class='menuOption' data-name='DM_MyDataUploadFilesPanel'><i class='fa fa-cloud-upload'></i>   Upload new files</li>"
+					"     <li class='menuOption' data-name='DM_MyDataListView' tabindex='0' role='button'><i class='fa fa-file-text'></i>  My files and Jobs</li>" +
+					"     <li class='menuOption' data-name='DM_MyDataUploadFilesPanel' tabindex='0' role='button'><i class='fa fa-cloud-upload'></i>   Upload new files</li>"
 					:
-					"     <li class='menuOption externalOption'><i class='fa fa-file-text'></i>  Only available for registered accounts.</li>"
+					"     <li class='menuOption externalOption menuNote'><i class='fa fa-file-text'></i>  Only available for registered accounts.</li>"
 				) +
 				// "     <li class='menuOption' data-name='fileEdition'><i class='fa fa-cloud-upload'></i>   File edition</li>"+
 				" </ul></li>" +
-				" <li class='menuOption loggedOption' title='Supporting tools'><i class='fa fa-rocket'></i><span class='menuLabel'>Tools</span>" +
+				" <li class='menuOption loggedOption' title='Supporting tools' tabindex='0' role='button' aria-haspopup='true'><i class='fa fa-rocket'></i><span class='menuLabel'>Tools</span>" +
 				" <ul class='submenu loggedOption'>" +
-				"     <li class='menuOption' data-name='fromBEDtoGenes'><i class='fa fa-align-center'></i>   From Regions to Genes</li>" +
-				"     <li class='menuOption' data-name='fromMiRNAtoGenes'><i class='fa fa-link'></i>   From miRNA to Genes</li>"+
+				"     <li class='menuOption' data-name='fromBEDtoGenes' tabindex='0' role='button'><i class='fa fa-align-center'></i>   From Regions to Genes</li>" +
+				"     <li class='menuOption' data-name='fromMiRNAtoGenes' tabindex='0' role='button'><i class='fa fa-link'></i>   From miRNA to Genes</li>"+
 				" </ul></li>" +
 				/* One panel rather than three nested menus. Resources and the
 				   citations are two lists of very different shape, so they get a
@@ -268,7 +268,7 @@ function MainView() {
 				   `.navPanel-inner` carries the grid, not the <ul>: jQuery's
 				   fadeIn() writes `display: block` inline on the submenu itself,
 				   which would beat any display the stylesheet set on it. */
-				" <li class='menuOption' title='Resources, publications and contact'><i class='fa fa-ellipsis-h'></i><span class='menuLabel'>More</span>" +
+				" <li class='menuOption' title='Resources, publications and contact' tabindex='0' role='button' aria-haspopup='true'><i class='fa fa-ellipsis-h'></i><span class='menuLabel'>More</span>" +
 				" <ul class='submenu navPanel'><li class='navPanel-inner'>" +
 				"  <div class='navPanel-col'><h2 class='navPanel-title'>Resources</h2><ul class='navPanel-list'>" +
 				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
@@ -323,7 +323,7 @@ function MainView() {
 				   selected, both of which still resolve through the extra wrappers
 				   to the More pill. */
 				"  <div class='navPanel-foot'><ul class='navPanel-list'>" +
-				"     <li class='menuOption' data-name='contactForm'><i class='fa fa-envelope-o'></i>Contact by email</li>" +
+				"     <li class='menuOption' data-name='contactForm' tabindex='0' role='button'><i class='fa fa-envelope-o'></i>Contact by email</li>" +
 				"  </ul></div>" +
 				" </li></ul></li>" +
 				"</ul>";
@@ -398,6 +398,42 @@ function MainView() {
 						}, function() {
 							$(this).children(".submenu").fadeOut(0);
 						});
+					});
+
+					// The keyboard way in. The pills and options are <li>, which answer
+					// no keys by themselves, and the dropdowns only opened on hover, so
+					// Tools and Contact were mouse-only. Focus opens a pill's dropdown,
+					// Tab walks into it, Enter/Space activates, Escape closes. Focus goes
+					// back to the pill before the click, so a dialog it opens keeps focus.
+					$(".lateralMenu-body .menuOption[tabindex]").on("keydown", function(e) {
+						var pill = $(this).closest(".lateralMenu-body > .menuOption");
+						var dropdown = pill.children(".submenu");
+						// Escape from anywhere inside, the More panel's links included.
+						if (e.key === "Escape" && dropdown.is(":visible")) {
+							pill.focus();
+							dropdown.hide();
+							return;
+						}
+						if (e.target !== this) {
+							return;   // an option's key press also bubbles through its pill
+						}
+						if (e.key === "Enter" || e.key === " ") {
+							e.preventDefault();
+							if (this === pill[0] && dropdown.length) {
+								dropdown.show();
+								return;
+							}
+							pill.focus();
+							dropdown.hide();
+							$(this).trigger("click");
+						}
+					});
+					$(".lateralMenu-body").children(".menuOption").on("focusin", function() {
+						$(this).children(".submenu").show();
+					}).on("focusout", function(e) {
+						if (!this.contains(e.relatedTarget)) {
+							$(this).children(".submenu").hide();
+						}
 					});
 
 					$('#header').click(function() {
@@ -522,11 +558,12 @@ function MainView() {
 	 * Interpret button, which is what put that button on top of "Contact".
 	 *
 	 * Measuring is the only option while they are out of flow, so this measures.
-	 * Two stages, in order, and never more than needed: tighten the pill padding
-	 * first, and only drop the labels for the icons if that was not enough. Every
-	 * item stays present and clickable in both states -- the title attribute set
-	 * in navHTML above names it while the label is hidden -- which is the reason
-	 * to compact the nav rather than clip it. Clipping cannot work here anyway:
+	 * Three stages, in order, and never more than needed: tighten the pill
+	 * padding first, then drop the nav's labels for its icons, and only if that
+	 * still collides drop the step actions' labels too. Every item stays present
+	 * and clickable in every state -- a title names it while its label is hidden
+	 * (navHTML's for the pills; the step actions get one written here) -- which
+	 * is the reason to compact rather than clip. Clipping cannot work here anyway:
 	 * `overflow: hidden` on this list would cut off the dropdowns, which are
 	 * absolutely positioned children of the items.
 	 */
@@ -545,6 +582,15 @@ function MainView() {
 		// so it read as hidden on the very screens this needs to measure.
 		var actions = document.querySelector(".secondTopToolbar");
 		var hasActions = !!(actions && actions.getClientRects().length > 0);
+		// Undo the third stage before measuring, titles included: only the ones
+		// written here carry data-pa-auto-title, so a button's own title survives.
+		if (actions) {
+			actions.classList.remove("is-iconly");
+			Array.prototype.forEach.call(actions.querySelectorAll("[data-pa-auto-title]"), function (b) {
+				b.removeAttribute("title");
+				b.removeAttribute("data-pa-auto-title");
+			});
+		}
 
 		/* Tell the stylesheet where the utility group starts.
 		 *
@@ -594,6 +640,27 @@ function MainView() {
 		}
 
 		nav.classList.add("is-iconly");
+		if (nav.getBoundingClientRect().right <= limit) {
+			return;
+		}
+
+		// Third stage. At 1024px Step 4's six actions alone reach past the
+		// wordmark, so the fixed band painted over the icon-only nav and half the
+		// product name. The actions keep their icons and name themselves in
+		// title while the words are gone; the header buttons carry none of their own.
+		actions.classList.add("is-iconly");
+		Array.prototype.forEach.call(actions.querySelectorAll(".button"), function (b) {
+			if (!b.getAttribute("title")) {
+				b.setAttribute("title", b.textContent.trim());
+				b.setAttribute("data-pa-auto-title", "");
+			}
+		});
+		// The room the actions gave back may be enough for the nav's labels.
+		limit = actions.getBoundingClientRect().left - 12;
+		nav.classList.remove("is-iconly");
+		if (nav.getBoundingClientRect().right > limit) {
+			nav.classList.add("is-iconly");
+		}
 	};
 
 	/* The step actions are built and torn down by each view as the user moves
