@@ -21,8 +21,12 @@
 *     aconesa@cipf.es
 */
 -->
-<html>
+<html lang="en">
 <head>
+	<meta charset="UTF-8">
+	<!-- The charset stays first in <head>: a browser only honours it inside the
+	     first 1024 bytes, and the licence comment above spends about 800. -->
+	<meta name="description" content="Paint every omic layer onto the pathway that explains it: multi-omics pathway analysis across KEGG, Reactome and MapMan, with an AI agent that drafts a cited interpretation.">
 	<title>PaintOmics AI</title>
 	<!-- Drawn for 16px rather than reusing the header mark, which closes into a
 	     ring of mush at that size. One file, two themes: the ink follows
@@ -32,7 +36,6 @@
 	     drawing until it evicts it, which can be weeks. -->
 	<link rel="icon" type="image/svg+xml" href="resources/images/favicon.svg?v=0.2" />
 	<link rel="apple-touch-icon" href="resources/images/favicon.svg?v=0.2" />
-	<meta charset="UTF-8">
 	<link rel="stylesheet" type="text/css" href="js/libs/extjs/resources/ext-theme-neptune/ext-theme-neptune-all.css" />
 	<link rel="stylesheet" type="text/css" href="resources/font-awesome/css/font-awesome.min.css" />
 	<link rel="stylesheet" type="text/css" href="js/libs/dragula/dragula.min.css" />

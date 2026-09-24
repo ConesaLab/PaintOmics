@@ -451,6 +451,17 @@
 	color: var(--pa-ink-body);
 	border-color: var(--pa-border);
 }
+/* Two places the blanket fill above paints a second surface over the first.
+   A window's title band and footer toolbar have their own fill, and their
+   .x-box-inner drew a darker box inside it, behind the title and the buttons.
+   And each view's root container laid a --pa-surface slab over the page
+   ground, which in light is transparent: the cards merged into it, and it
+   ended in a hard edge that lines up with nothing. */
+[data-theme="dark"] .x-window-header .x-box-inner,
+[data-theme="dark"] .x-toolbar .x-box-inner,
+[data-theme="dark"] #mainViewCenterPanel-innerCt > .x-container {
+	background-color: transparent;
+}
 [data-theme="dark"] .x-panel-header,
 [data-theme="dark"] .x-panel-header-default {
 	background-color: var(--pa-surface) !important;
@@ -793,6 +804,22 @@
 /* A disabled block inside a card fades into the card, as it does in light;
    the scrim above is for modals. */
 [data-theme="dark"] .omicbox .x-mask { background-color: var(--pa-surface); }
+/* The "Loading..." chip on that scrim (sign-in, My files) kept Neptune's light
+   grey fill and #666 text. Only background-color is set, so the spinner GIF
+   in .x-mask-msg-text survives. */
+[data-theme="dark"] .x-mask-msg {
+	background-color: var(--pa-surface-quiet);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-mask-msg-inner,
+[data-theme="dark"] .x-mask-msg-text {
+	background-color: transparent;
+	color: var(--pa-ink-body);
+}
+/* main.css gives these two titles light inks (#0076D6, #AC6304) that measure
+   about 3.6:1 on the dark dialog; error and success already read tokens. */
+[data-theme="dark"] #messageDialog.infoDialog h4 { color: var(--pa-status-info-ink); }
+[data-theme="dark"] #messageDialog.warningDialog h4 { color: var(--pa-status-warning-ink); }
 [data-theme="dark"] .x-tip,
 [data-theme="dark"] .x-tip-body {
 	background-color: var(--pa-surface-quiet) !important;
@@ -1873,6 +1900,9 @@
 [data-theme="dark"] .userViewsDialog .x-form-text:hover {
 	border-color: var(--pa-border-control-hover) !important;
 }
+/* main.css's placeholder rule outranks the generic dark input::placeholder, so
+   its dark value is restated here (6.42:1 on the dark field). */
+[data-theme="dark"] .userViewsDialog .x-form-text::placeholder { color: #A1A1AA; }
 [data-theme="dark"] .po-exp-design-hint,
 [data-theme="dark"] .po-exp-design-draft-note {
 	color: var(--pa-ink-muted);

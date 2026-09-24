@@ -131,13 +131,16 @@
 	border-color: var(--pa-btn-primary-border-hover, #285F8C);
 }
 
+/* #878787 like the header ghosts (main.css): the old #C6C4BD made 1.75:1 on
+   the white card, so Decline barely had an edge beside a filled Accept. The
+   light theme never defines the token, so the fallback is what renders. */
 .pa-cookie-card__btn--quiet {
 	background: transparent;
-	border: 1px solid var(--pa-border-control, #C6C4BD);
+	border: 1px solid var(--pa-border-control, #878787);
 	color: var(--pa-ink-control, #3F3F46);
 }
 
 .pa-cookie-card__btn--quiet:hover {
 	background: var(--pa-control-active-bg, #EEEDE7);
-	border-color: var(--pa-border-control-hover, #A9A79F);
+	border-color: var(--pa-border-control-hover, #767676);
 }

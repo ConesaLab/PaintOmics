@@ -439,6 +439,12 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
+/* Form controls do not inherit the page font by default, so the plain selects
+   and the x close buttons outside ExtJS fell back to Arial. Type selectors only:
+   any class (ExtJS's .x-form-field, FontAwesome's .fa) still wins. */
+input, textarea, select, button {
+	font-family: inherit;
+}
 span.helpTip {
 	color: var(--pa-ink-muted);
 }
@@ -909,12 +915,11 @@ ul.submenu {
 .lateralMenu-body > .menuOption {
 	position: relative;
 	display: flex;
-	align-items: center;
-	gap: 5px;
 	/* Tightened from 6px 13px when the step actions joined this row - the nav had
 	   to give back roughly 90px so five Step 4 buttons and the account control
-	   could share the header without colliding. */
-	padding: 6px 10px;
+	   could share the header without colliding. The padding is on .menuPill
+	   (below), so the focusable part fills the whole pill. */
+	padding: 0;
 	border: 0;
 	/* One step inside the track's 8px, because the track insets these by 3px and
 	   a nested corner has to be the outer radius minus the padding or it reads
@@ -933,6 +938,16 @@ ul.submenu {
 	background: #FFFFFF;
 	color: #111111;
 }
+/* The pill's button (MainView.js pillHTML). A span inside the <li>, so the
+   dropdown is not part of the button's name; it carries the padding so its
+   focus ring outlines the whole pill. */
+.lateralMenu-body > .menuOption > .menuPill {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px 10px;
+	border-radius: inherit;
+}
 /* Making room for the step actions ------------------------------------------
    The step actions are `position: fixed` (see .secondTopToolbar), so they take
    part in no layout and the nav has no way to stop before them - it ran
@@ -945,34 +960,49 @@ ul.submenu {
    navHTML names the item while its label is hidden. That is the reason the nav
    compacts instead of clipping: `overflow: hidden` here would also cut off the
    dropdowns, which are absolutely positioned children of these items. */
-.lateralMenu-body.is-compact > .menuOption {
+.lateralMenu-body.is-compact > .menuOption > .menuPill {
 	padding: 6px 7px;
 	gap: 4px;
 }
-.lateralMenu-body.is-iconly > .menuOption {
+.lateralMenu-body.is-iconly > .menuOption > .menuPill {
 	padding: 6px 9px;
 	gap: 0;
 }
-.lateralMenu-body.is-iconly > .menuOption > .menuLabel {
+.lateralMenu-body.is-iconly > .menuOption > .menuPill > .menuLabel {
 	display: none;
 }
+/* The third stage, on the step actions themselves (see fitHeaderNav). font-size
+   0 hides the words without touching the markup, so a label that a handler
+   rewrites still toggles; the icon, and the AI mark sized at 1em, get their
+   size back explicitly. */
+.secondTopToolbar.is-iconly .button {
+	font-size: 0;
+	gap: 0;
+	padding: 0 9px;
+}
+.secondTopToolbar.is-iconly .button > i.fa,
+.secondTopToolbar.is-iconly .button > svg.po-ai-mark {
+	font-size: 13px;
+}
 /* The icon sat above the label in the rail and has to sit beside it here. */
-.lateralMenu-body > .menuOption > i.fa {
+.lateralMenu-body > .menuOption > .menuPill > i.fa {
 	display: inline-block;
 	font-size: 13px;
 	margin: 0;
 	transition: color var(--pa-transition);
 }
 /* The per-section accents survive the move: they were on the rail's left border,
-   then on the icon, and stay on the icon here. */
-.lateralMenu-body > .menuOption:hover > i.fa,
-.lateralMenu-body > .menuOption.selected > i.fa { color: #B02A5B; }
-.lateralMenu-body > .menuOption:nth-child(2):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(2).selected > i.fa { color: #8A7A18; }
-.lateralMenu-body > .menuOption:nth-child(3):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(3).selected > i.fa { color: #2F6FA8; }
-.lateralMenu-body > .menuOption:nth-child(4):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(4).selected > i.fa { color: #2E7D3A; }
+   then on the icon, and stay on the icon here. Read through --pa-nav-accent-N,
+   which only dark.css defines: these light inks sit at 1.7-2.5:1 on the dark
+   pill, so the icon under the cursor went dark instead of lighting up. */
+.lateralMenu-body > .menuOption:hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption.selected > .menuPill > i.fa { color: var(--pa-nav-accent-1, #B02A5B); }
+.lateralMenu-body > .menuOption:nth-child(2):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(2).selected > .menuPill > i.fa { color: var(--pa-nav-accent-2, #8A7A18); }
+.lateralMenu-body > .menuOption:nth-child(3):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(3).selected > .menuPill > i.fa { color: var(--pa-nav-accent-3, #2F6FA8); }
+.lateralMenu-body > .menuOption:nth-child(4):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(4).selected > .menuPill > i.fa { color: var(--pa-nav-accent-4, #2E7D3A); }
 
 /* Dropdowns. The rail flew these out sideways at `left: 65px` with a negative
    top margin; from a header they drop underneath the item that owns them.
@@ -1044,6 +1074,16 @@ ul.submenu li.menuOption {
 ul.submenu li.menuOption:hover {
 	background-color: var(--pa-surface-quiet);
 }
+/* The guest's Storage row is a note, not an option: it has no handler, so it
+   takes no hover fill and no hand cursor. The extra .lateralMenu-body is what
+   outranks dark.css's `ul.submenu li.menuOption` ink and hover fill. */
+.lateralMenu-body ul.submenu li.menuOption.menuNote {
+	cursor: default;
+	color: var(--pa-ink-muted);
+}
+.lateralMenu-body ul.submenu li.menuOption.menuNote:hover {
+	background-color: transparent;
+}
 ul.submenu a {
 	color: var(--pa-link);
 }
@@ -1103,11 +1143,12 @@ ul.submenu i.fa {
 /* 11px and tracked out: these name the columns, they are not read as content,
    and at body size two of them would compete with the links underneath.
 
-   No left margin: the 10px it carried parked each title between its list's
-   icon edge and its text start - on neither. The list items hang their icons
-   at the column's own edge, and that edge is the one rail the column has. */
+   10px each side because the list items carry 10px of side padding (ul.submenu
+   li.menuOption), so the resource icons and the citation names start 10px
+   inside the column. At 0 the title hung 10px left of everything under it; at
+   10px it shares the edge the reader actually sees. */
 .navPanel-title {
-	margin: 0 0 6px;
+	margin: 0 10px 6px;
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.06em;
@@ -1491,8 +1532,10 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	border-color: var(--pa-focus-ring);
 	box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.20);
 }
+/* #71717A, not #A1A1AA: the example address is the only hint of which email
+   to use, and #A1A1AA measured 2.56:1 on the white field (now 4.83:1). */
 .userViewsDialog .x-form-text::placeholder {
-	color: #A1A1AA;
+	color: #71717A;
 }
 /* Neptune marks an invalid field with a red wavy background image tiled along
    the bottom edge, which at this border radius is clipped into a smear. A
@@ -2470,6 +2513,9 @@ body > .x-mask {
    another one. Measured before the fix: 5px/5px/5px/5px on a header whose rule
    said `0 0 1px`. */
 .x-window-default > .x-window-header {
+	/* Neptune's 5px pressed the title against the frame. 12px on the left is
+	   where the confirm, contact and sharing bodies start their text. */
+	padding: 8px 10px 8px 12px;
 	background-color: #F6F5F0;
 	background-image: none;
 	border-width: 0 0 1px !important;
@@ -2518,6 +2564,12 @@ body > .x-mask {
 }
 #messageDialog > .x-window-body {
 	border-radius: var(--pa-radius);
+}
+/* The footer's inner box is exactly as tall as its buttons and clipped, so a
+   focused Yes/No kept only the left and right of its ring. Unclipped here
+   only: the header's inner box keeps its clip (see the header tools below). */
+.x-window .x-toolbar-footer > .x-box-inner {
+	overflow: visible;
 }
 
 /* Header tools - the close control above all - drawn the way a sheet's close
@@ -2722,8 +2774,15 @@ body > .x-mask {
 }
 #messageDialogBody {
 	text-align: left;
+	line-height: 1.5;   /* dialog text is prose; "normal" packed lines at 1.29 */
 	/*max-height: 125px;*/
 	overflow-y: auto;
+}
+
+/* The UA's 40px list indent put bullets off the rail the title and prose share. */
+#messageDialogBody ul {
+	margin: 8px 0;
+	padding-left: 20px;
 }
 
 #messageDialogSpin {
@@ -8211,6 +8270,18 @@ div.contentbox h2.po-omics-col-title {
    is the visible edge, so the radius belongs on it. */
 .x-form-trigger-wrap {
 	border-radius: var(--pa-radius-sm);
+}
+
+/* Neptune sets its own `font: ... helvetica, arial` on each of these, so the
+   body's Source Sans never reached them: form labels, fields, grid cells and
+   dialog buttons were the last text in the old face, beside Source Sans help.
+   .x-form-display-field is left out on purpose: Ext.MessageBox sizes itself
+   around it, and in Source Sans the confirm text wraps and is clipped. */
+.x-form-item, .x-form-item-label, .x-form-cb-label, .x-form-field,
+.x-form-invalid-under, .x-grid-cell, .x-grid-empty, .x-grid-group-title,
+.x-grid-rowbody, .x-column-header, .x-toolbar-text, .x-tab .x-tab-inner,
+.x-btn .x-btn-inner, .x-mask-msg-inner, .x-fieldset-header-text {
+	font-family: var(--pa-font-sans);
 }
 
 /* Checkboxes and radios ------------------------------------------------------
