@@ -43,9 +43,9 @@
     bottom: 20px;
     right: 20px;
     /* Under ExtJS's modal mask (18996) and its windows (19000+), so a dialog
-       blocks the launcher like the rest of the page. 19000 left the FAB lit and
-       clickable over the dimmed page. The page's own layers stop at 9999; only
-       the full-screen panel (20000) and the cookie card (99990) go higher. */
+       blocks the launcher like the rest of the page; 19000 left the FAB lit and
+       clickable over the dimmed page. The conversion sheet, the consent overlay
+       and the cookie card sit above it on purpose. */
     z-index: 18000;
     font-family: var(--pa-font-sans);
     font-size: var(--pa-ai-fs);
