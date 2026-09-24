@@ -175,9 +175,23 @@ function PA_AIInterpretView() {
 
     this.toggleFullscreen = function() {
         if (!this.$root) return;
+        var me = this;
         var $panel = this.$root.find(".ai-widget-panel");
         var $fab = this.$root.find(".ai-widget-fab");
         var $btn = this.$root.find(".ai-fullscreen-btn");
+        // Keep the reader's place. Full screen changes the width and the type
+        // size, so a raw scrollTop would land elsewhere: hold the message at the
+        // top of the view at the same point instead. From the collapsed
+        // launcher, expand() already brings in whatever arrived meanwhile.
+        var anchor = null;
+        if (this.isExpanded) {
+            anchor = this._viewAnchor();
+            // Full screen usually fits the whole reply, leaving nothing to scroll
+            // and so no place to read: going back, return to where the reader
+            // was when they entered it (or to the latest, if a reply came since).
+            if (!anchor && this.isFullscreen) anchor = this._fsEntryAnchor || { latest: true };
+        }
+        if (!this.isFullscreen) this._fsEntryAnchor = anchor;
 
         if (this.isFullscreen) {
             // Exit fullscreen
@@ -195,7 +209,44 @@ function PA_AIInterpretView() {
             fullscreenButton($btn, true);
             this.isFullscreen = true;
         }
-        this._scrollToLatest();
+        if (anchor) {
+            // The panel animates its size (transition: all 0.3s), so the text
+            // keeps reflowing: place it now and again once the size settles.
+            this._restoreViewAnchor(anchor);
+            $panel.one("transitionend", function() { me._restoreViewAnchor(anchor); });
+            setTimeout(function() { me._restoreViewAnchor(anchor); }, 350);
+        }
+    };
+
+    // Where the reader is: the message at the top of the view and how far into
+    // it, as a fraction of its height, or "at the end" when scrolled to the end.
+    // Null when everything fits and there is no place to keep.
+    this._viewAnchor = function() {
+        var $container = this.$root.find(".ai-widget-messages");
+        if (!$container.length) return null;
+        var c = $container[0];
+        if (c.scrollHeight <= c.clientHeight + 2) return null;
+        if (c.scrollTop + c.clientHeight >= c.scrollHeight - 2) return { atEnd: true };
+        var msgs = $container.children(".ai-message").get();
+        for (var i = 0; i < msgs.length; i++) {
+            var top = msgs[i].offsetTop - c.offsetTop;
+            if (top + msgs[i].offsetHeight > c.scrollTop) {
+                return { el: msgs[i], frac: msgs[i].offsetHeight ? (c.scrollTop - top) / msgs[i].offsetHeight : 0 };
+            }
+        }
+        return null;
+    };
+
+    this._restoreViewAnchor = function(anchor) {
+        var c = this.$root.find(".ai-widget-messages")[0];
+        if (!c) return;
+        if (anchor.latest) {
+            this._scrollToLatest();
+        } else if (anchor.atEnd) {
+            c.scrollTop = c.scrollHeight;
+        } else if (anchor.el && anchor.el.parentNode === c) {
+            c.scrollTop = anchor.el.offsetTop - c.offsetTop + anchor.frac * anchor.el.offsetHeight;
+        }
     };
 
     this._lastStatus = null;
@@ -843,13 +894,14 @@ function PA_AIInterpretView() {
                       '</div>';
         $container.append(msgHtml);
         if (!this.isExpanded) { this.hasUnseen = true; }
+        this._fsEntryAnchor = null;
         this._scrollToLatest();
     };
 
     // A reply (or the walk report) taller than the message area opens at its
     // first line, not its last; anything shorter, and the user's own line,
-    // scroll to the end. Shared by addMessage, expand and the full-screen
-    // toggle, so reopening the panel does not jump back to a reply's end.
+    // scroll to the end. Shared by addMessage and expand, so reopening the
+    // panel does not jump back to a reply's end.
     // offsetParent is the panel for both, so this holds at any scroll position.
     this._scrollToLatest = function() {
         if (!this.$root) return;
