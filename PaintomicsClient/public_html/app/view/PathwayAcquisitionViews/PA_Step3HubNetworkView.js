@@ -525,7 +525,7 @@ function PA_Step3HubNetworkView() {
 				'<span class="pa-hub-item-meta">' +
 				(m.name === m.ID ? "" : m.ID + ' &middot; ') +
 				'FDR ' + me.fmt(fdr) +
-				' &middot; ' + m.den + ' DE &middot; best at step ' + m.bestStep + '</span>' +
+				' &middot; ' + m.den + ' DE &middot; best at step&nbsp;' + m.bestStep + '</span>' +
 				'</a>';
 		}).join("");
 		Array.prototype.forEach.call(host.querySelectorAll(".pa-hub-item"), function (el) {

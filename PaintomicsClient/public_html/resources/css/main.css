@@ -3918,7 +3918,7 @@ div.contentbox p > #download_mapping_file {
 .contingencyTable {
 	border-collapse: collapse;
 	text-align: center;
-	font-size: 8px;
+	font-size: 11px;          /* was 8px: these counts are the tip's only content */
 	margin: 2px 15px;
 }
 .contingencyTable tbody tr {
@@ -4024,12 +4024,25 @@ div[id ^= "pathwayClassificationPlot2Box_"] {
 	font-size: 15px;
 	padding-top: 24px;
 }
+/* The pie's percentage labels: Highcharts writes its drilldown default inline
+   (navy, always underlined). Keep the link colour - clicking is the pie's
+   interaction - but underline on hover only, like every other link here.
+   dark.css supplies the dark link colour. */
+div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label > span {
+	color: var(--pa-link) !important;
+	text-decoration: none !important;
+}
+div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label:hover > span {
+	text-decoration: underline !important;
+}
 
 
 
 span.networkClusterImage{width: 30%;display: inline-block;margin: 3px; cursor: pointer;}
 span.networkClusterImage img {width: 100%;}
-span.networkClusterImage p {margin: 0;text-align: center; font-size: 10px;}
+/* padding: 0 - `div.contentbox p` (same specificity, earlier) gave this 61px
+   caption 26px each side, so "Cluster 1" broke onto three lines. */
+span.networkClusterImage p {margin: 0; padding: 0; text-align: center; font-size: 10px; white-space: nowrap;}
 span.networkClusterImage > i {
 	display: none;
 	position: relative;
@@ -4051,6 +4064,10 @@ span.networkClusterImage.disabled > i {display:block;}
    what mmu and most of the example datasets produce. */
 div[id ^= "networkview_"] { max-width:1800px; margin: 5px 0; }
 div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{overflow-y:auto; overflow-x: hidden; padding: 2px 10px;}
+/* The overflow makes the details a block formatting context, which sat beside
+   the floated cluster-count Apply above it and shrank to 147px of the 236px
+   rail, clipping every chart. Clear it so the details take the full rail. */
+div[id ^= "patwaysDetailsWrapper_"] { clear: both; }
 
 /* The pathway explorer card ---------------------------------------------------
    One card per database, holding what used to be four: the classification
@@ -4452,10 +4469,12 @@ div[id ^= "pathwayClassificationContainer"] {overflow-y: auto; overflow-x: hidde
 .step3ClassificationsOptions{display: none; margin-left: 10px;font-size: 11px;}
 .step3ClassificationsTitle:hover > .step3ClassificationsOptions{display: inline-block;}
 .step3ClassificationsOptions a {margin: 0px 2px;}
-.step3ClassificationsOptions a {color: #A7A7A7;margin: 0px 2px; display: inline-block;}
-.step3ClassificationsOptions a.hideOption.selected, .step3ClassificationsOptions a.hideOption:hover{color: #E3643D;}
-.step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #23AE89;}
-.step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #BD7E39;}
+/* 11px text: the old #A7A7A7 / #E3643D / #23AE89 / #BD7E39 were 2.4-3.4:1 on
+   white. Same hues, darkened past 4.5:1; dark.css restates the bright ones. */
+.step3ClassificationsOptions a {color: #6B6B66;margin: 0px 2px; display: inline-block;}
+.step3ClassificationsOptions a.hideOption.selected, .step3ClassificationsOptions a.hideOption:hover{color: #B8431F;}
+.step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #1B7F63;}
+.step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #93602A;}
 .step3ClassificationsOptions a.selected{float: left;font-weight: bold;}
 /* The pathways network toolbar ------------------------------------------------
    The band itself, its status line and the shape of its controls are now
@@ -9098,7 +9117,7 @@ div.repDetectionCard h3 {
 	transition: background-color var(--pa-transition), border-color var(--pa-transition);
 }
 .paGridBar a.downloadXLS:hover,
-.paGridBar #configureButton:not(.x-item-disabled):hover {
+.paGridBar #configureButton:not(.x-item-disabled):not(.x-masked):hover {
 	background-color: #F4F4F5;
 	border-color: var(--pa-border);
 }
@@ -9106,9 +9125,19 @@ div.repDetectionCard h3 {
 	background-color: #FCEEEC;
 	border-color: #E0BFBC;
 }
+/* The anchor itself carries `fa fa-cog`, so its label inherited FontAwesome,
+   which has no Latin glyphs: "Configure" fell back to a serif. Only the cog
+   (the ::before) is set in the icon font. */
+.paGridBar #configureButton { font-family: var(--pa-font-sans); }
+.paGridBar #configureButton::before { font-family: FontAwesome; margin-right: 3px; }
 /* Disabled Configure - the method is not Stouffer - should read as unavailable
-   rather than as a link that ignores you. */
-.paGridBar #configureButton.x-item-disabled {
+   rather than as a link that ignores you. ExtJS disables this component by
+   masking it (x-masked) rather than with x-item-disabled, so both are matched,
+   and the mask, which boxed the word in a scrim, is hidden: the click handler
+   checks isDisabled() itself. */
+.paGridBar #configureButton > .x-mask { display: none; }
+.paGridBar #configureButton.x-item-disabled,
+.paGridBar #configureButton.x-masked {
 	opacity: 1;
 	color: #9A9AA0;
 	cursor: default;
@@ -9791,9 +9820,11 @@ div.repDetectionCard h3 {
 /* Fewer than 3 members: drawn, labelled, but visibly not a class result. */
 .paClassMapMark.paIsDesc .paClassMapLabel, .paClassMapMark.paIsDesc .paClassMapCount,
 .paClassMapMark.paIsDesc .paClassRankFdr { fill: #8A98A8; }
-.paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
-.paClassMapTick { fill: #78879A; font-size: 10.5px; }
-.paClassMapAxis { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+/* The label is text, so it takes a darker ochre than the line and tick it
+   names (#B5761F is 3.8:1 on white, fine for a stroke, not for 11px type). */
+.paClassMapSigLabel { fill: #8C5A14; font-size: 11px; font-weight: 600; }
+.paClassMapTick { fill: #5F6F82; font-size: 10.5px; }
+.paClassMapAxis { fill: #5F6F82; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .paClassMapLabel { fill: #141E2B; font-size: 11.5px; }
 /* A halo in the page colour: the count sits on the stem when the reading is at the axis end. */
 .paClassMapCount { fill: #44556A; font-size: 10px; paint-order: stroke; stroke: #FFFFFF; stroke-width: 3px; stroke-linejoin: round; }
@@ -9801,7 +9832,7 @@ div.repDetectionCard h3 {
 .paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
 .paClassMapSummary { position: relative; margin: 2px 0 10px; color: #44556A; font-size: 13px; }
 .paClassMapWarn { color: #A51F1E; }
-.paClassMapMuted { color: #78879A; }
+.paClassMapMuted { color: #5F6F82; }
 /* Legend. A list, not a run-on sentence: each item is one nowrap flex child,
    so a narrow card wraps BETWEEN keys instead of mid-phrase. */
 /* Aligned to the plot area by drawClassMap, which sets padding-left from the
@@ -9862,10 +9893,10 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapControls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
                       margin: 4px 0 12px; }
 .paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-                          color: #78879A; font-weight: 600; }
+                          color: #5F6F82; font-weight: 600; }
 .paClassMapSelect { height: 32px; padding: 0 8px; border: 1px solid #B5C1CE; border-radius: 6px;
                     background: #FFFFFF; color: #141E2B; font-size: 13px; }
-.paClassMapControlNote { color: #78879A; font-size: 12px; }
+.paClassMapControlNote { color: #5F6F82; font-size: 12px; }
 
 /* The class ranking (drawClassMap): one row per class. The whole row is the
    hover/click target; the selected row stays tinted while its compounds are
@@ -9874,12 +9905,12 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapMark:hover .paClassRankHit { fill: #F1F5F8; }
 .paClassMapMark.paIsSelected .paClassRankHit { fill: #E9F1F9; }
 .paClassMapMark.paIsSelected .paClassMapLabel { font-weight: 600; }
-.paClassRankHead { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
-.paClassMapParent { fill: #78879A; font-size: 9.5px; }
+.paClassRankHead { fill: #5F6F82; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.paClassMapParent { fill: #5F6F82; font-size: 9.5px; }
 .paClassRankStem { stroke: #4A6785; stroke-width: 3; stroke-linecap: round; }
 .paClassRankStemBelow { stroke: #C4CFDA; }
 .paClassRankDot { fill: #141E2B; stroke: #FFFFFF; stroke-width: 1.5; }
-.paClassRankFdr { fill: #78879A; font-size: 11px; font-variant-numeric: tabular-nums; }
+.paClassRankFdr { fill: #5F6F82; font-size: 11px; font-variant-numeric: tabular-nums; }
 .paClassRankFdr.paIsSig { fill: #141E2B; font-weight: 600; }
 
 /* The selected class's compounds, inside the same card as the ranking. */
@@ -9890,15 +9921,15 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassDetail.paIsOpen { display: block; margin-top: 16px; padding: 14px 26px 0; border-top: 1px solid #E3E9EF; }
 .paClassDetailHead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .paClassDetailHead h4 { margin: 0; font-size: 15px; font-weight: 600; color: #141E2B; }
-.paClassDetailStats { color: #78879A; font-size: 12.5px; }
+.paClassDetailStats { color: #5F6F82; font-size: 12.5px; }
 .paClassDetailTools { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: #44556A; }
 .paClassDetailToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .paClassDetailToggle input { margin: 0; }
-.paClassDetailClose { border: 0; background: transparent; color: #78879A; font-size: 20px; line-height: 1;
+.paClassDetailClose { border: 0; background: transparent; color: #5F6F82; font-size: 20px; line-height: 1;
                       padding: 0 2px; cursor: pointer; }
 .paClassDetailClose:hover { color: #141E2B; }
 .paClassDetailScale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 8px;
-                      color: #78879A; font-size: 12px; }
+                      color: #5F6F82; font-size: 12px; }
 /* Heatmap and chart are one figure: the strip is fixed, the chart takes the
    rest, and on a class with many rows the chart stays in view while the
    strip scrolls past. */
@@ -9918,6 +9949,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    and (24px + border) the ladder's first column. */
 .paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; padding: 0 26px; }
 .paLadderBar .paClassMapControlLabel { margin-right: 2px; }
+.paLadderField { display: inline-flex; align-items: center; gap: 10px; }
 /* Three equal cells on one line, the height of the select beside them: a
    segmented control reads as one control only when its parts match. */
 .paLadderSeg { display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #B5C1CE;
@@ -9929,7 +9961,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 /* color: inherit -- the card paints every <b> in the accent blue, which on the
    pressed (blue) segment made the level number vanish. */
 .paLadderSeg button b { font-weight: 600; color: inherit; }
-.paLadderSeg button small { font-size: 11px; line-height: 1; color: #78879A; }
+.paLadderSeg button small { font-size: 11px; line-height: 1; color: #5F6F82; }
 .paLadderSeg button b { line-height: 1; }
 .paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
 .paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }

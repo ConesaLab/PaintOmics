@@ -1448,6 +1448,8 @@
    #001dff attribute, 2.05:1 on the chart ground; CSS outranks it. */
 [data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft) !important; }
 [data-theme="dark"] .omicSummaryBox .highcharts-plot-line { stroke: #6E8BFF; }
+/* The clipped-scale band label is written inline (#71717A, for white). */
+[data-theme="dark"] .highcharts-plot-band-label { fill: var(--pa-chart-ink-soft) !important; }
 [data-theme="dark"] .highcharts-tooltip > span {
 	background: var(--pa-surface-quiet) !important;
 	color: var(--pa-ink-body) !important;
@@ -1488,6 +1490,11 @@
 	border-color: var(--pa-border);
 }
 [data-theme="dark"] .paGridBar-filters { background: var(--pa-surface-subtle); }
+/* main.css inks these labels #52525B, 2.1:1 on this bar. They are toolbar
+   text, not .x-form-cb-label, so the dark checkbox-label rule never reached
+   them; the group-label spans carry an inline weight but no inline colour. */
+[data-theme="dark"] .paGridBar .x-toolbar-text,
+[data-theme="dark"] .paGridBar .x-toolbar-text span[style] { color: var(--pa-ink-label); }
 /* Checkboxes, radios and sliders --------------------------------------------
    main.css draws all four of these in CSS now rather than from sprites, so the
    dark theme has real properties to move instead of an image it could only
@@ -1539,9 +1546,11 @@
    file, which is later and therefore wins; it is left as the one place that
    describes a jQuery UI thumb. */
 [data-theme="dark"] .paGridBar a.downloadXLS:hover,
-[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):hover {
+[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):not(.x-masked):hover {
 	background-color: var(--pa-surface-quiet);
 }
+[data-theme="dark"] .paGridBar #configureButton.x-item-disabled,
+[data-theme="dark"] .paGridBar #configureButton.x-masked { color: var(--pa-ink-muted); }
 [data-theme="dark"] .paGridBar a.multiDelete:hover { background-color: var(--pa-btn-ghost-danger-bg-hover); }
 [data-theme="dark"] .paWeightsTip { background-color: var(--pa-surface); }
 [data-theme="dark"] .paWeightsTip .x-tip-header,
@@ -1574,9 +1583,36 @@
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool { color: var(--pa-ink-control); }
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool:hover,
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool:focus { color: var(--pa-ink-strong); }
+/* Same trap for the hub list: its metabolite names are <a>, so they came out
+   link-blue (and green under the cursor) instead of the ink light uses. */
+[data-theme="dark"] .pa-hub-item,
+[data-theme="dark"] .pa-hub-item:hover { color: var(--pa-ink); }
+/* The hub rings' light literal (#e7e7e4) is the brightest line on the dark
+   plot; a quiet step keeps them a guide, not a strike-through. */
+[data-theme="dark"] .pa-hub-net { --hub-ring: #3A3C43; }
 [data-theme="dark"] div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"] {
 	background: var(--pa-surface) !important;
 }
+/* The node hover card floats on <body>, outside every container that answers
+   main.css's bare `h4 { color: #27272A }`, so its pathway title was 1.1:1.
+   Its Paint button keeps the inline var(--pa-link) fill, which is a light blue
+   in this theme: the neutral button ink on it was 1.75:1, so it takes the same
+   dark ink as .pa-convert-composer-send on the accent blue (8:1). */
+[data-theme="dark"] #sigmaTooltip h4 { color: var(--pa-ink-title); }
+/* The per-omic headings keep their orange accent (main.css #B14C2D, ~3:1
+   here), lifted to this theme's orange; the ID keeps it above the rule above. */
+[data-theme="dark"] .pathwayPlotwrappers h4,
+[data-theme="dark"] #sigmaTooltip .pathwayPlotwrappers h4 { color: var(--pa-accent-orange); }
+[data-theme="dark"] #step3TooltipPaintButton { color: #0F1A2B; }
+/* Category tree Hide/Show/Custom: main.css darkens these for white, too dark
+   here, and the bare `a` rule would otherwise paint the idle ones link blue. */
+[data-theme="dark"] .step3ClassificationsOptions a { color: var(--pa-ink-muted); }
+[data-theme="dark"] .step3ClassificationsOptions a.hideOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.hideOption:hover { color: #E3643D; }
+[data-theme="dark"] .step3ClassificationsOptions a.showOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.showOption:hover { color: #23AE89; }
+[data-theme="dark"] .step3ClassificationsOptions a.customOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.customOption:hover { color: #BD7E39; }
 
 /* ---------------------------------------------------------------------------
    12. Step 4
@@ -2173,7 +2209,7 @@
 :root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapSummary,
 :root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
-:root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapMuted { color: #8A99A9; }
 :root[data-theme="dark"] .paKeyUp { background: #4A8CD2; }
 :root[data-theme="dark"] .paKeyDown { background: #C9524D; }
 :root[data-theme="dark"] .paKeyNeutral { background: #7C93AD; }
@@ -2184,7 +2220,7 @@
 :root[data-theme="dark"] .paClassMapKeys { color: #A1B0C0; }
 
 :root[data-theme="dark"] .paClassMapControlLabel,
-:root[data-theme="dark"] .paClassMapControlNote { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapControlNote { color: #8A99A9; }
 :root[data-theme="dark"] .paClassMapSummary.paIsFocused { color: #E3EAF2; }
 :root[data-theme="dark"] .paDirUp { color: #4A8CD2; }
 :root[data-theme="dark"] .paDirDown { color: #C9524D; }
@@ -2210,10 +2246,10 @@
 :root[data-theme="dark"] .paLadderSeg { background: #151D26; border-color: #3A4754; }
 :root[data-theme="dark"] .paLadderSeg button { color: #A1B0C0; border-right-color: #28333F; }
 :root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] { background: #4A8CD2; color: #0F1E30; }
-:root[data-theme="dark"] .paLadderSeg button small { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderSeg button small { color: #8A99A9; }
 /* The pressed segment is a light blue with dark ink; its small text was still
    the grey above (2.0:1 on that blue), so "class · 8" vanished. */
-:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: rgba(15, 30, 48, 0.82); }
+:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: #0F1E30; }
 :root[data-theme="dark"] .paLadderSwitch, :root[data-theme="dark"] .paLadderExcluded,
 :root[data-theme="dark"] .paLadderExcluded summary { color: #A1B0C0; }
 :root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
