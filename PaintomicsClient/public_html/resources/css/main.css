@@ -5031,6 +5031,11 @@ i.masterRegulator:before {
 #pathwaysPanelsWrapper .secondTopToolbar .button {
 	padding: 0 11px;
 }
+/* The id above outranks the header's icon-only padding, which is meant for
+   exactly this toolbar at narrow widths; restate it at the same weight. */
+#pathwaysPanelsWrapper .secondTopToolbar.is-iconly .button {
+	padding: 0 9px;
+}
 
 /*PATHWAYS THUMBNAILS FOR HISTORY PANEL*/
 

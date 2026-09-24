@@ -2004,9 +2004,9 @@
 [data-theme="dark"] .userViewsDialog .x-box-inner {
 	background-color: transparent;
 }
-/* main.css's #A1A1AA placeholder (0,2,1) outranks this file's own
-   `input::placeholder` rule, and in dark it sits 1.3:1 from typed text, so an
-   empty email box read as filled in. */
+/* main.css's #71717A placeholder (0,2,1) outranks this file's own
+   `input::placeholder` rule, and on the dark field it is too dim to read; the
+   soft ink token reads clearly and still sits apart from typed text. */
 [data-theme="dark"] .userViewsDialog .x-form-text::placeholder {
 	color: var(--pa-ink-soft);
 }
