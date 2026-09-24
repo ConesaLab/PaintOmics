@@ -3751,14 +3751,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				//THE PANEL WITH THE VISUAL OPTIONS
 				'<div id="pathwayNetworkToolsBox_' + me.dbid + '" style="overflow:hidden;">' +
 				'  <h4>Visual settings</h4>' +
-				'  <h5>Node coloring: <span class="helpTip" style="float:right;" title="Change the way in which nodes are colored."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Change the way in which nodes are colored."></span>Node coloring:</h5>' +
 				'  <div id="colorByContainer_' + me.dbid + '"></div>' +
 				/* The tooltip used to describe only the KEGG case ("links to other
 				   KEGG pathways"), which left a Reactome or MapMan user reading
 				   an explanation of a database they were not looking at. Each
 				   database states process relatedness its own way, so say which
 				   one is being used. */
-				'  <h5>Choose what edges represents: <span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span>Choose what edges represents:</h5>' +
 				'  <div id="edgesClassContainer_' + me.dbid + '">' +
 				'    <div class="radio">' +
 				'      <input type="radio" ' + ((visualOptions.edgesClass === "l")? "checked": "")+ ' id="edgesLinkedPathways_' + me.dbid + '" name="edgesClassCheckbox-check_' + me.dbid + '" value="l">' +
@@ -3771,14 +3771,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  </div>'+
 				'  <h5>Other settings:</h5>' +
 				'  <div class="checkbox"><input type="checkbox" id="show-node-labels-check_' + me.dbid + '" name="showNodeLabelsCheckbox">' +
-				'    <label for="show-node-labels-check_' + me.dbid + '">Show all node labels <span class="helpTip" style="float:right;" title="Shows labels for nodes (reduces performance). By default labels are visible when zooming the network."</span></label>' +
+				'    <label for="show-node-labels-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Shows labels for nodes (reduces performance). By default labels are visible when zooming the network."></span>Show all node labels</label>' +
 				'  </div>'+
-				'  <h5>Label font size (<span id="fontSizeValue_' + me.dbid + '">14</span>)<span class="helpTip" style="float:right;" title="Font size of the labels."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Font size of the labels."></span>Label font size (<span id="fontSizeValue_' + me.dbid + '">14</span>)</h5>' +
 				'  <div class="slider-ui" id="fontSizeSlider_' + me.dbid + '"></div>' +
 				'  <div style="display: none;">' +
-				'  <h5>Max node size (<span id="maxNodeSizeValue_' + me.dbid + '">8</span>)<span class="helpTip" style="float:right;" title="Determines the maximum size that a node can have, scaling the others to maintain the correct ratio."</span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Determines the maximum size that a node can have, scaling the others to maintain the correct ratio."></span>Max node size (<span id="maxNodeSizeValue_' + me.dbid + '">8</span>)</h5>' +
 				'  <div class="slider-ui" id="maxNodeSizeSlider_' + me.dbid + '"></div>' +
-				'  <h5>Min node size (<span id="minNodeSizeValue_' + me.dbid + '">1</span>)<span class="helpTip" style="float:right;" title="Determines the minimum size that a node can have, scaling the others to maintain the correct ratio."</span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Determines the minimum size that a node can have, scaling the others to maintain the correct ratio."></span>Min node size (<span id="minNodeSizeValue_' + me.dbid + '">1</span>)</h5>' +
 				'  <div class="slider-ui" id="minNodeSizeSlider_' + me.dbid + '"></div>' +
 				' </div>' +
 				// '  <div class="checkbox"><input type="checkbox" id="show-edge-labels-check" name="showEdgeLabelsCheckbox">' +
@@ -3786,25 +3786,27 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				// '  </div>'+
 				'  <h4>Network layout settings</h4>' +
 				'  <div class="checkbox"><input type="checkbox" id="save-node-positions-check_' + me.dbid + '" name="saveNodePositionsCheckbox">' +
-				'    <label for="save-node-positions-check_' + me.dbid + '">Save the nodes positions<span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network (increases performance)."></span><span class="commentTip" style="padding-left:21px;">Disable the auto-layout for network.</span></label>' +
+				'    <label for="save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network (increases performance)."></span>Save the nodes positions<span class="commentTip" style="padding-left:21px;">Disable the auto-layout for network.</span></label>' +
 				'  </div>'+
 				'  <div class="checkbox" id="pre-auto-save-node-positions-check_' + me.dbid + '"><input type="checkbox" id="auto-save-node-positions-check_' + me.dbid + '" name="autoSaveNodePositionsCheckbox">' +
-				'    <label for="auto-save-node-positions-check_' + me.dbid + '">Auto-save positions<span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network when clicking the \'Apply\' button, instead of having to click \'Save node positions\' before."></span><span class="commentTip" style="padding-left:21px;">Save positions after clicking "Apply".</span></label>' +
+				'    <label for="auto-save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network when clicking the \'Apply\' button, instead of having to click \'Save node positions\' before."></span>Auto-save positions<span class="commentTip" style="padding-left:21px;">Save positions after clicking "Apply".</span></label>' +
 				'  </div>'+
 				'  <div class="checkbox"><input type="checkbox" id="background-layout-check_' + me.dbid + '" name="backgroundLayoutCheckbox">' +
-				'    <label for="background-layout-check_' + me.dbid + '">Calculate layout on background <span class="helpTip" style="float:right;" title="Run the layout on background, apply the new nodes position on stop (increases performance)."></span><span class="commentTip" style="padding-left:21px;">Increases performance.</span></label>' +
+				'    <label for="background-layout-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Run the layout on background, apply the new nodes position on stop (increases performance)."></span>Calculate layout on background<span class="commentTip" style="padding-left:21px;">Increases performance.</span></label>' +
 				'  </div>'+
 				"  <h4>Node filtering options</h4>" +
-				'  <h5>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)<span class="helpTip" style="float:right;" title="Min % of the features in a pathway that your input covers. Only the kinds of feature you submitted are counted, so a metabolomics job is measured against the compounds in the pathway and a transcriptomics job against its genes.<br><br>E.g. at min=50%, a pathway holding 200 countable features needs 100 of them in your input; with 80 it is excluded. The default starts at 50% for gene-based data and 10% for compound-only data, because a metabolomics platform covers far less of a pathway than an RNA-seq experiment does."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Min % of the features in a pathway that your input covers. Only the kinds of feature you submitted are counted, so a metabolomics job is measured against the compounds in the pathway and a transcriptomics job against its genes.<br><br>E.g. at min=50%, a pathway holding 200 countable features needs 100 of them in your input; with 80 it is excluded. The default starts at 50% for gene-based data and 10% for compound-only data, because a metabolomics platform covers far less of a pathway than an RNA-seq experiment does."></span>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)</h5>' +
 				'  <div class="slider-ui" id="minFeaturesSlider_' + me.dbid + '"></div>' +
-				'  <h5>Min shared features (<span id="minSharedFeaturesValue_' + me.dbid + '">10</span>%)<span class="helpTip" style="float:right;" title="Min. % of features shared between 2 pathways (using the smaller pathway as reference). Edges showing a smaller relationship will be excluded.<br>E.g. Taking min=10%, Pathway A (60 features) and B (90 features), if shared features=5 the edge will be ignored (5 < Min(60,90) * 0.1)"></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Min. % of features shared between 2 pathways (using the smaller pathway as reference). Edges showing a smaller relationship will be excluded.<br>E.g. Taking min=10%, Pathway A (60 features) and B (90 features), if shared features=5 the edge will be ignored (5 < Min(60,90) * 0.1)"></span>Min shared features (<span id="minSharedFeaturesValue_' + me.dbid + '">10</span>%)</h5>' +
 				'  <div class="slider-ui" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +
-				'  <h5>Min p-value for the pathway (<span id="minPValue_' + me.dbid + '">0.05</span>)<span class="helpTip" style="float:right;" title="Pathways with lower p-value (more significant) will be represented with bigger nodes. Pathways with higher p-value (less significant), will be shown as small nodes."</span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Only pathways with a p-value at or below this cutoff are drawn; among them, a lower p-value draws a bigger node."></span>Max p-value (<span id="minPValue_' + me.dbid + '">0.05</span>)</h5>' +
 				'  <div class="slider-ui" id="minPValueSlider_' + me.dbid + '"></div>' +
+				/* nowrap: with the help mark now floated on the first line, the label
+				   wraps, and it broke at the hyphen into "p-" / "value". */
 				'  <div class="checkbox"><input type="checkbox" id="use-combined-pval-check_' + me.dbid + '" name="useCombinedPvalCheckbox">' +
-				'    <label for="use-combined-pval-check_' + me.dbid + '">Always use combined p-value <span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."</span></label>' +
+				'    <label for="use-combined-pval-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."></span>Always use combined <span style="white-space:nowrap;">p-value</span></label>' +
 				'  </div>'+
-				'  <h5>P-value selection criteria: <span class="helpTip" style="float:right;" title="Select which adjust method to choose the p-values from."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Select which adjust method to choose the p-values from."></span>P-value selection criteria:</h5>' +
 				'  <div id="pvaluemethod_' + me.dbid + '"></div>' +
 				'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyNetworkSettingsButton_' + me.dbid + '" style="margin-top: 20px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
 				'</div>'

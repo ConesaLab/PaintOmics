@@ -9575,9 +9575,11 @@ div.repDetectionCard h3 {
 /* Fewer than 3 members: drawn, labelled, but visibly not a class result. */
 .paClassMapMark.paIsDesc .paClassMapLabel, .paClassMapMark.paIsDesc .paClassMapCount,
 .paClassMapMark.paIsDesc .paClassRankFdr { fill: #8A98A8; }
-.paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
-.paClassMapTick { fill: #78879A; font-size: 10.5px; }
-.paClassMapAxis { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+/* The label is text, so it takes a darker ochre than the line and tick it
+   names (#B5761F is 3.8:1 on white, fine for a stroke, not for 11px type). */
+.paClassMapSigLabel { fill: #8C5A14; font-size: 11px; font-weight: 600; }
+.paClassMapTick { fill: #5F6F82; font-size: 10.5px; }
+.paClassMapAxis { fill: #5F6F82; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .paClassMapLabel { fill: #141E2B; font-size: 11.5px; }
 /* A halo in the page colour: the count sits on the stem when the reading is at the axis end. */
 .paClassMapCount { fill: #44556A; font-size: 10px; paint-order: stroke; stroke: #FFFFFF; stroke-width: 3px; stroke-linejoin: round; }
@@ -9585,7 +9587,7 @@ div.repDetectionCard h3 {
 .paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
 .paClassMapSummary { position: relative; margin: 2px 0 10px; color: #44556A; font-size: 13px; }
 .paClassMapWarn { color: #A51F1E; }
-.paClassMapMuted { color: #78879A; }
+.paClassMapMuted { color: #5F6F82; }
 /* Legend. A list, not a run-on sentence: each item is one nowrap flex child,
    so a narrow card wraps BETWEEN keys instead of mid-phrase. */
 /* Aligned to the plot area by drawClassMap, which sets padding-left from the
@@ -9646,10 +9648,10 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapControls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
                       margin: 4px 0 12px; }
 .paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-                          color: #78879A; font-weight: 600; }
+                          color: #5F6F82; font-weight: 600; }
 .paClassMapSelect { height: 32px; padding: 0 8px; border: 1px solid #B5C1CE; border-radius: 6px;
                     background: #FFFFFF; color: #141E2B; font-size: 13px; }
-.paClassMapControlNote { color: #78879A; font-size: 12px; }
+.paClassMapControlNote { color: #5F6F82; font-size: 12px; }
 
 /* The class ranking (drawClassMap): one row per class. The whole row is the
    hover/click target; the selected row stays tinted while its compounds are
@@ -9658,12 +9660,12 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapMark:hover .paClassRankHit { fill: #F1F5F8; }
 .paClassMapMark.paIsSelected .paClassRankHit { fill: #E9F1F9; }
 .paClassMapMark.paIsSelected .paClassMapLabel { font-weight: 600; }
-.paClassRankHead { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
-.paClassMapParent { fill: #78879A; font-size: 9.5px; }
+.paClassRankHead { fill: #5F6F82; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.paClassMapParent { fill: #5F6F82; font-size: 9.5px; }
 .paClassRankStem { stroke: #4A6785; stroke-width: 3; stroke-linecap: round; }
 .paClassRankStemBelow { stroke: #C4CFDA; }
 .paClassRankDot { fill: #141E2B; stroke: #FFFFFF; stroke-width: 1.5; }
-.paClassRankFdr { fill: #78879A; font-size: 11px; font-variant-numeric: tabular-nums; }
+.paClassRankFdr { fill: #5F6F82; font-size: 11px; font-variant-numeric: tabular-nums; }
 .paClassRankFdr.paIsSig { fill: #141E2B; font-weight: 600; }
 
 /* The selected class's compounds, inside the same card as the ranking. */
@@ -9674,15 +9676,15 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassDetail.paIsOpen { display: block; margin-top: 16px; padding: 14px 26px 0; border-top: 1px solid #E3E9EF; }
 .paClassDetailHead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .paClassDetailHead h4 { margin: 0; font-size: 15px; font-weight: 600; color: #141E2B; }
-.paClassDetailStats { color: #78879A; font-size: 12.5px; }
+.paClassDetailStats { color: #5F6F82; font-size: 12.5px; }
 .paClassDetailTools { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: #44556A; }
 .paClassDetailToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .paClassDetailToggle input { margin: 0; }
-.paClassDetailClose { border: 0; background: transparent; color: #78879A; font-size: 20px; line-height: 1;
+.paClassDetailClose { border: 0; background: transparent; color: #5F6F82; font-size: 20px; line-height: 1;
                       padding: 0 2px; cursor: pointer; }
 .paClassDetailClose:hover { color: #141E2B; }
 .paClassDetailScale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 8px;
-                      color: #78879A; font-size: 12px; }
+                      color: #5F6F82; font-size: 12px; }
 /* Heatmap and chart are one figure: the strip is fixed, the chart takes the
    rest, and on a class with many rows the chart stays in view while the
    strip scrolls past. */
@@ -9713,7 +9715,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 /* color: inherit -- the card paints every <b> in the accent blue, which on the
    pressed (blue) segment made the level number vanish. */
 .paLadderSeg button b { font-weight: 600; color: inherit; }
-.paLadderSeg button small { font-size: 11px; line-height: 1; color: #78879A; }
+.paLadderSeg button small { font-size: 11px; line-height: 1; color: #5F6F82; }
 .paLadderSeg button b { line-height: 1; }
 .paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
 .paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }

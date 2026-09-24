@@ -635,7 +635,9 @@
 	gap: 6px;
 	margin-top: 6px;
 }
-.pa-hub-railcount {
+/* `div.contentbox p` in main.css is (0,1,2), so a bare class lost to it and
+   the padding: 0 below never applied: the line sat 26px off the rail. */
+div.contentbox p.pa-hub-railcount {
 	/* Same double-inset as the intro: this <p> is inside a 12px-padded rail
 	   head, and main.css adds another 26px on top of that. */
 	margin: 7px 0 0;
@@ -709,7 +711,7 @@
 	color: var(--pa-ink-muted, #595959);
 	font-variant-numeric: tabular-nums;
 }
-.pa-hub-list-empty {
+div.contentbox p.pa-hub-list-empty {   /* outranks `div.contentbox p`, as above */
 	margin: 12px;
 	padding: 0;              /* see .pa-hub-intro */
 	font-size: 12px;

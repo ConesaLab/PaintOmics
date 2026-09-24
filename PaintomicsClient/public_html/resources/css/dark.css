@@ -2102,7 +2102,7 @@
 :root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapSummary,
 :root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
-:root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapMuted { color: #8A99A9; }
 :root[data-theme="dark"] .paKeyUp { background: #4A8CD2; }
 :root[data-theme="dark"] .paKeyDown { background: #C9524D; }
 :root[data-theme="dark"] .paKeyNeutral { background: #7C93AD; }
@@ -2113,7 +2113,7 @@
 :root[data-theme="dark"] .paClassMapKeys { color: #A1B0C0; }
 
 :root[data-theme="dark"] .paClassMapControlLabel,
-:root[data-theme="dark"] .paClassMapControlNote { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapControlNote { color: #8A99A9; }
 :root[data-theme="dark"] .paClassMapSummary.paIsFocused { color: #E3EAF2; }
 :root[data-theme="dark"] .paDirUp { color: #4A8CD2; }
 :root[data-theme="dark"] .paDirDown { color: #C9524D; }
@@ -2139,10 +2139,10 @@
 :root[data-theme="dark"] .paLadderSeg { background: #151D26; border-color: #3A4754; }
 :root[data-theme="dark"] .paLadderSeg button { color: #A1B0C0; border-right-color: #28333F; }
 :root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] { background: #4A8CD2; color: #0F1E30; }
-:root[data-theme="dark"] .paLadderSeg button small { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderSeg button small { color: #8A99A9; }
 /* The pressed segment is a light blue with dark ink; its small text was still
    the grey above (2.0:1 on that blue), so "class · 8" vanished. */
-:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: rgba(15, 30, 48, 0.82); }
+:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: #0F1E30; }
 :root[data-theme="dark"] .paLadderSwitch, :root[data-theme="dark"] .paLadderExcluded,
 :root[data-theme="dark"] .paLadderExcluded summary { color: #A1B0C0; }
 :root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
