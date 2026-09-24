@@ -439,6 +439,12 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
+/* Form controls do not inherit the page font by default, so the plain selects
+   and the x close buttons outside ExtJS fell back to Arial. Type selectors only:
+   any class (ExtJS's .x-form-field, FontAwesome's .fa) still wins. */
+input, textarea, select, button {
+	font-family: inherit;
+}
 span.helpTip {
 	color: var(--pa-ink-muted);
 }
@@ -2753,8 +2759,15 @@ body > .x-mask {
 }
 #messageDialogBody {
 	text-align: left;
+	line-height: 1.5;   /* dialog text is prose; "normal" packed lines at 1.29 */
 	/*max-height: 125px;*/
 	overflow-y: auto;
+}
+
+/* The UA's 40px list indent put bullets off the rail the title and prose share. */
+#messageDialogBody ul {
+	margin: 8px 0;
+	padding-left: 20px;
 }
 
 #messageDialogSpin {
