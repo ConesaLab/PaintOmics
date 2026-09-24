@@ -5800,6 +5800,13 @@ div.mainInfoPanel h3 {
 	display: inline-block;
 	min-width: 245px;
 }
+/* A search result sits on the panel's rail, full width. It used to be an
+   inline-block inside a 245px column pushed 10px in, and its 275px charts ran
+   past the panel edge, clipping the relevance note and scrolling the body
+   sideways. The pathway details card above keeps the rule before this one. */
+.findFeaturesContainer .resultsContainer .mainInfoPanel {
+	display: block;
+}
 
 /***********************************************************/
 /**STYLES FOR MYDATA SECTION *************************/

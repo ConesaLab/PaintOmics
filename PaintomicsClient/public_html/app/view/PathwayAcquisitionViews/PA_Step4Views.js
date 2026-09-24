@@ -754,7 +754,10 @@ function PA_Step4PathwayView() {
 		var me = this;
 
 		this.component = Ext.widget({
-			xtype: "container", flex:1, defaults: {border: false},
+			// Scrolls sideways rather than clipping: the heatmap and details
+			// panels have a 400px minWidth, so a fourth panel (or a 1024px
+			// window) used to run past the right edge where it could not be reached.
+			xtype: "container", flex:1, overflowX: 'auto', overflowY: 'hidden', defaults: {border: false},
 			layout: {type: 'hbox', pack: 'start', align: 'stretch'},
 			items: [],
 			listeners: {
@@ -2138,13 +2141,17 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		}
 
 		var divHeight = Math.max(visibleOmics.length * 40, 120);
+		// The heatmap's own height, from generateHeatmap's formula for one row
+		// per omic. divHeight left out the 34px band of rotated condition
+		// labels, so they were scrolled out of view under the relevance note.
+		var heatmapHeight = Math.max(visibleOmics.length * 40, 80) + 34;
 		$(componentID + " .step4_plotwrappers").html(
 			"  <div class='twoOptionsButtonWrapper'>" +
 			'      <a href="javascript:void(0)" class="button twoOptionsButton selected" name="heatmap-chart">Heatmap</a>'+
 			'      <a href="javascript:void(0)" class="button twoOptionsButton" name="line-chart">Line chart</a>'+
 			"  </div>" +
 			"  <div class='step4-tooltip-plot-container selected' name='heatmap-chart'>" +
-			"    <div id='" + this.getComponent().getId() + "_heatmapcontainer' name='heatmap-chart' style='height:"+ divHeight+ "px;width: 275px;overflow:hidden;overflow-y:auto;padding-right: 15px;'></div>" +
+			"    <div id='" + this.getComponent().getId() + "_heatmapcontainer' name='heatmap-chart' style='height:"+ heatmapHeight + "px;width: 275px;overflow:hidden;overflow-y:auto;padding-right: 15px;'></div>" +
 			"  </div>" +
 			"  <div class='step4-tooltip-plot-container' name='line-chart' style='display:none;'>" +
 			"    <div id='" + this.getComponent().getId() + "_plotcontainer' style='height:"+ divHeight+ "px;width: 275px;'></div>" +
@@ -2219,8 +2226,11 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 				"    <li><a class='ensemblGenomesSearch' href='https://www.ensemblgenomes.org/search/?query=" + encodeURIComponent(featureName) + "' target='_blank' rel='noopener'><i class='fa fa-external-link'></i> Search at Ensembl Genomes</a></li>" +
 				"    <li><a class='ensemblSearch' href='http://www.ensembl.org/Multi/Search/Results?q=" + encodeURIComponent(featureName) + ";facet_species="+ encodeURIComponent(alternativeName) + "' target='_blank'><i class='fa fa-external-link'></i> Search at Ensembl (vertebrates)</a></li>" +
 				((specie === "hsa") ? "<li><a href='http://www.genecards.org/cgi-bin/carddisp.pl?gene=" + featureName + "' target='_blank'><i class='fa fa-external-link'></i> Search at GeneCards Database</a></li>" : "") +
-				"    <li><a href='http://www.ncbi.nlm.nih.gov/pubmed/?term=" + specieName + "' target='_blank'><i class='fa fa-external-link'></i> Find related publications (PubMed)</a></li>" +
-				"    <li><a href='http://www.ncbi.nlm.nih.gov/gene/?term=" + encodeURIComponent("(" + featureName + "[Gene Name]) AND ()"+ alternativeName + "[Organism])") + "' target='_blank'><i class='fa fa-external-link'></i> Search at NCBI Gene</a></li>" +
+				// PubMed searched the species alone, so every gene opened the same
+				// generic search; NCBI Gene had "AND ()House mouse[Organism])", an
+				// empty group and a stray paren around the organism clause.
+				"    <li><a href='http://www.ncbi.nlm.nih.gov/pubmed/?term=" + encodeURIComponent(featureName + " " + specieName.split(" (")[0]) + "' target='_blank'><i class='fa fa-external-link'></i> Find related publications (PubMed)</a></li>" +
+				"    <li><a href='http://www.ncbi.nlm.nih.gov/gene/?term=" + encodeURIComponent("(" + featureName + "[Gene Name]) AND (" + alternativeName + "[Organism])") + "' target='_blank'><i class='fa fa-external-link'></i> Search at NCBI Gene</a></li>" +
 				"    <li><a href='http://www.ncbi.nlm.nih.gov/gquery/?term=" + encodeURIComponent(featureName + " "+ specieName) + "' target='_blank'><i class='fa fa-external-link'></i> Search at all NCBI Databases</a></li>";
 			}else{
 				htmlCode +=
@@ -3478,7 +3488,7 @@ function PA_Step4FindFeaturesView() {
 				'  <div class="searchResultsWrapper" style="display:none;">'+
 				'    <a href="javascript:void(0)" class="backToPathwayDetailsButton" style="margin: 5px 0px;"><i class="fa fa-long-arrow-left"></i> Back to Pathway details</a>' +
 				'    <h3 class="resultsCounter">Found N features.</h3>' +
-				'    <div class="resultsContainer" style="width:245px; margin-left: 10px; padding-bottom:20px;"></div>'+
+				'    <div class="resultsContainer" style="padding-bottom:20px;"></div>'+
 				'  </div>'+
 				"</div>"
 			}
