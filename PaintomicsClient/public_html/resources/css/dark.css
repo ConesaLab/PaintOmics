@@ -330,6 +330,21 @@
 	background-color: var(--pa-btn-ghost-danger-bg-hover);
 	color: var(--pa-btn-ghost-danger-ink-hover);
 }
+/* Step 4's Show Pathway carries .btn-primary. In light the header ghost wins
+   on specificity; here section 13's `.button.btn-primary` ties with the ghost
+   and wins on source order, so dark alone painted it as a filled blue primary.
+   Restated one step more specific, for the real toolbar and its miniature. */
+[data-theme="dark"] .secondTopToolbar .button.btn-primary,
+[data-theme="dark"] .paToolbarMiniature .button.btn-primary {
+	background-color: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .secondTopToolbar .button.btn-primary:hover {
+	background-color: var(--pa-btn-default-bg-hover);
+	color: var(--pa-ink-strong);
+	border-color: var(--pa-border-control-hover);
+}
 /* The account control keeps a filled treatment in dark too (HeaderButton
    tone="account"), but the neutral fill is only 1.42:1 against the #212227
    toolbar, so unlike the light theme the boundary has to stay on the border -
@@ -1661,6 +1676,10 @@
 	background: var(--pa-surface-sunken);
 	border-color: var(--pa-border);
 }
+/* The configurator's purple: #9E3AB3 is 2.74:1 on the sunken surface, under
+   even the 3:1 large-text floor for the 40px numerals. #C77DDB is 5.45:1. */
+[data-theme="dark"] .omicDragHint,
+[data-theme="dark"] div.omicSelection div.omicPosition { color: #C77DDB; }
 [data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer {
 	background: var(--pa-toast-warning-bg);
 	border-color: var(--pa-toast-warning-border);
@@ -1668,7 +1687,32 @@
 }
 [data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .step4PathwayThumbnailHover { background-color: rgba(23, 24, 27, 0.67); }
+/* The History overlay: main.css states its card, thumbnails and captions in
+   literal white, so under the dark heading it was a white slab, and the veil's
+   'Open' kept its dark ink on the dark veil above. */
+[data-theme="dark"] .step4HistoryBox,
+[data-theme="dark"] .step4HistoryBox .step4ThumbContainer,
+[data-theme="dark"] .step4HistoryBox .step4ThumbTitleContainer {
+	background-color: var(--pa-surface);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .step4HistoryBox .step4PathwayThumbnailHover { color: var(--pa-ink-title); }
+/* An <a>, so `[data-theme="dark"] a` painted the close X link blue. */
+[data-theme="dark"] .step4HistoryClose { color: var(--pa-ink-muted); }
+[data-theme="dark"] .step4HistoryClose:hover {
+	background-color: rgba(255, 255, 255, 0.08);
+	color: var(--pa-ink-title);
+}
 [data-theme="dark"] td.whiteBackground { background: var(--pa-surface); }
+/* Step 4's charts (the panels and the node tooltip, an .x-window) draw their
+   reference lines in light neutrals picked for a white card (#dedede for the
+   +/-1 and 0 lines), and Highcharts paints a 'No data' heatmap cell #f7f7f7.
+   On a dark chart both became the brightest marks in it, brighter than the
+   data. A CSS fill/stroke outranks the attribute, as with the grid lines. */
+[data-theme="dark"] #pathwaysPanelsWrapper .highcharts-plot-line,
+[data-theme="dark"] .x-window .highcharts-plot-line { stroke: var(--pa-chart-grid); }
+[data-theme="dark"] #pathwaysPanelsWrapper .highcharts-null-point,
+[data-theme="dark"] .x-window .highcharts-null-point { fill: var(--pa-surface-sunken); }
 /* The Heatmap/Line-chart and Genes/Metagenes segmented control (twoOptionsButton,
    main.css) is built entirely from surface and ink tokens now, so it themes
    itself - no dark override needed here any more. */
@@ -2098,6 +2142,17 @@
 	background-color: rgba(255, 255, 255, 0.08);
 }
 [data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.hideOption { color: var(--pa-ink-muted); }
+/* The Step 4 panel-header discs (close, shrink, expand, configure). main.css's
+   #5F5F66 glyph on a 16% grey disc composites to 2.16:1 here, under the 3:1 a
+   control's glyph needs; a light disc and the muted ink make 3.7:1. */
+[data-theme="dark"] div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool) {
+	background-color: rgba(255, 255, 255, 0.10);
+	color: var(--pa-ink-muted);
+}
+[data-theme="dark"] div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool):hover {
+	background-color: rgba(255, 255, 255, 0.18);
+	color: var(--pa-ink-title);
+}
 [data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
 	background: var(--pa-btn-default-bg);
 	border-color: var(--pa-border-control);

@@ -177,7 +177,7 @@ function PA_Step2JobView() {
 			// Order matches PA_Step4Views' secondTopToolbar; the ring marks the
 			// Settings button the caption above is pointing at.
 			'		 <div class="paToolbarMiniature" aria-hidden="true">' +
-			'			<span class="button btn-danger paMiniatureTarget"><i class="fa fa-wrench"></i> Settings</span>' +
+			'			<span class="button paMiniatureTarget"><i class="fa fa-wrench"></i> Settings</span>' +
 			'			<span class="button btn-info"><i class="fa fa-search"></i> Search</span>' +
 			'			<span class="button btn-secondary"><i class="fa fa-th"></i> Show Heatmap</span>' +
 			'			<span class="button btn-primary"><i class="fa fa-sitemap"></i> Show Pathway</span>' +

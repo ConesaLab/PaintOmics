@@ -4980,6 +4980,15 @@ i.masterRegulator:before {
 .externalLinksContainer a {
 	color: var(--pa-link); /* was #0076E2 - 4.48:1, and bypassed the token */
 }
+/* The list kept the UA's 40px indent, which in a 280px tooltip set the links
+   well right of their heading and wrapped "Find related publications". */
+.externalLinksContainer ul {
+	padding-left: 0;
+	margin: 6px 0 0;
+}
+.externalLinksContainer li {
+	margin: 3px 0;
+}
 .step4PathwayBox {
 	display: inline-table;
 	width: 300px;
@@ -5010,6 +5019,19 @@ i.masterRegulator:before {
 	border-bottom: 1px solid var(--pa-border);
 }
 
+/* Step 4's four view toggles sit in the ExtJS box, which is a plain block, so
+   they touched with no gap while Go back and History (in the flex row around
+   it) stood 8px apart. The box becomes the same row. The 2px trimmed from each
+   side pays for the three new gaps, so the header nav keeps its width at 1440. */
+#pathwaysPanelsWrapper .secondTopToolbar .x-component {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+#pathwaysPanelsWrapper .secondTopToolbar .button {
+	padding: 0 11px;
+}
+
 /*PATHWAYS THUMBNAILS FOR HISTORY PANEL*/
 
 /* This panel slides over the pathway diagram, so it has to read as something
@@ -5023,14 +5045,18 @@ i.masterRegulator:before {
    is anchored to starts ~680px in, so -405px slid the panel sideways and left
    all of it on screen, on top of the pathway title. Closing it looked like it
    had done nothing. Visibility is a state now, not a coordinate, so it holds
-   wherever the panel happens to be anchored. */
+   wherever the panel happens to be anchored.
+
+   Anchored by its right edge, under the History button at the end of the row
+   that opens it; from the left it dropped under Settings, 500px away. */
 .step4HistoryBox {
 	max-width: 360px;
 	width: 360px;
 	position: absolute;
 	padding: 0;
 	top: 55px;
-	left: 0;
+	left: auto;
+	right: 0;
 	z-index: 23;
 	background-color: #FFFFFF;
 	border: 1px solid var(--pa-border);
@@ -5343,9 +5369,12 @@ div[id ^= "sliderClusterNumberContainer_"] {
    panel - so the gutter has nothing to separate them from and simply stops each
    one 5px short of the edge every heading and every field in the same panel is
    squared to. Five pixels is small enough to read as sloppiness rather than as
-   spacing, which is the worst size for it to be. */
+   spacing, which is the worst size for it to be. The Apply at the foot of Step
+   4's Visual settings and of its Global heatmap configurator are the same case. */
 div[id ^= "pathwayNetworkToolsBox_"] > a.button.btn-right,
-.findFeaturesContainer a.button {
+.findFeaturesContainer a.button,
+#applyVisualSettingsButton,
+#updateHeatmapButton {
 	margin-right: 0;
 }
 /* The search field and its button share one flex row. `.button` floats right,
@@ -5637,10 +5666,14 @@ ul.ui-menu.ui-widget.ui-widget-content {
 	border: 1px solid #E2E2E2;
 	background: white;
 }
+/* jQuery UI's theme sets its menus in Trebuchet at 1.1em (15.4px here), so the
+   suggestions under a 13px field came out larger and in another face. */
 ul.ui-menu li.ui-menu-item {
 	list-style: none;
 	color: #333;
 	padding: 5px 5px;
+	font-family: var(--pa-font-sans);
+	font-size: 13px;
 }
 ul.ui-menu li.ui-menu-item.ui-state-focus {
 	/* The highlighted row of the organism autocomplete - reached by arrow keys,
@@ -5651,6 +5684,7 @@ ul.ui-menu li.ui-menu-item.ui-state-focus {
 	background: #0078CE;
 }
 .ui-autocomplete {
+	font-family: var(--pa-font-sans);
 	max-height: 100px;
 	overflow-y: auto;
 	/* prevent horizontal scrollbar */
@@ -5665,6 +5699,11 @@ div.omicSelection div.omicPosition {
 	width: 40px;
 	text-align: left;
 	color: #9E3AB3;
+}
+/* The configurator's "Drag and drop" hint, in the purple of the order numbers. */
+.omicDragHint {
+	color: #9E3AB3;
+	font-weight: 600;
 }
 div.omicSelection div.omicPosition:after {
 	content: "\f0dc";
@@ -5947,6 +5986,13 @@ div.mainInfoPanel h3 {
 .findFeaturesContainer .mainInfoPanel {
 	display: inline-block;
 	min-width: 245px;
+}
+/* A search result sits on the panel's rail, full width. It used to be an
+   inline-block inside a 245px column pushed 10px in, and its 275px charts ran
+   past the panel edge, clipping the relevance note and scrolling the body
+   sideways. The pathway details card above keeps the rule before this one. */
+.findFeaturesContainer .resultsContainer .mainInfoPanel {
+	display: block;
 }
 
 /***********************************************************/

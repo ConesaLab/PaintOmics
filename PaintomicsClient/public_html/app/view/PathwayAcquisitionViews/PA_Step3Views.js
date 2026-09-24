@@ -4347,7 +4347,7 @@ function PA_Step3PathwayDetailsView() {
 				
 				for (var omicName in significanceValues) {
 					var globalP = (globalOmicPvalues[omicName] !== undefined) ? globalOmicPvalues[omicName] : significanceValues[omicName][0][2]; // Fallback to first condition if global not present
-					var renderedGlobalP = (globalP > 0.001 || globalP === 0) ? parseFloat(globalP).toFixed(6) : parseFloat(globalP).toExponential(4);
+					var renderedGlobalP = (globalP > 0.001 || globalP === 0) ? parseFloat(globalP).toFixed(5) : parseFloat(globalP).toExponential(4);
 					
 					var omicID = omicName.replace(/ /g, "_");
 					
@@ -4361,7 +4361,7 @@ function PA_Step3PathwayDetailsView() {
 					// not inline: an inline background is unreachable by dark.css.
 					for (var c = 0; c < significanceValues[omicName].length; c++) {
 						var condP = significanceValues[omicName][c][2];
-						var renderedCondP = (condP > 0.001 || condP === 0) ? parseFloat(condP).toFixed(6) : parseFloat(condP).toExponential(4);
+						var renderedCondP = (condP > 0.001 || condP === 0) ? parseFloat(condP).toFixed(5) : parseFloat(condP).toExponential(4);
 						var condName = conditionNames[c] || ("Condition " + (c+1));
 
 						htmlCode += '<tr class="condition-row cond-row-' + omicID + '" style="display:none;">' +
@@ -4720,24 +4720,7 @@ function PA_Step3PathwayDetailsView() {
 			maxVal = Math.ceil(Math.max(maxVal, 1));
 			minVal = Math.floor(Math.min(minVal, -1));
 
-			/* The three reference lines mark the +/-1 band that turns a point's
-			   marker orange. Their labels used to be unconditional, so on a
-			   pathway whose metagene range is wide (+/-6, +/-10) all three
-			   landed within a few pixels of each other in a 100px chart and
-			   piled up into an unreadable smudge on the right edge. Draw the
-			   lines either way; label the +/-1 pair only when the text has room
-			   to clear the zero label. */
-			var referenceLine = function(value, labelled) {
-				var line = {color: '#dedede', value: value, width: 1};
-				if (labelled) {
-					line.label = {
-						text: String(value), align: 'right', x: -3, y: -2,
-						style: {color: 'gray', fontSize: '9px'}
-					};
-				}
-				return line;
-			};
-
+			// The +/-1 and 0 reference lines - see paReferenceLine().
 			var plot = new Highcharts.Chart({
 				chart: {renderTo: targetID},
 				title: null,
@@ -4748,9 +4731,9 @@ function PA_Step3PathwayDetailsView() {
 					min: minVal,
 					max: maxVal,
 					plotLines: [
-						referenceLine(-1, true),
-						referenceLine(0, true),
-						referenceLine(1, true)
+						paReferenceLine(-1, true),
+						paReferenceLine(0, true),
+						paReferenceLine(1, true)
 					]},
 					series: series,
 					legend: {
@@ -4774,20 +4757,7 @@ function PA_Step3PathwayDetailsView() {
 			);
 
 			plot.yAxis[0].setExtremes(minVal, maxVal);
-
-			/* Now that the axis has real pixel dimensions, drop the +/-1 labels
-			   if they would collide. 11px is the smallest gap at which the 9px
-			   label text still clears its neighbour. */
-			var yAxis0 = plot.yAxis[0];
-			if (Math.abs(yAxis0.toPixels(0) - yAxis0.toPixels(1)) < 11) {
-				yAxis0.update({
-					plotLines: [
-						referenceLine(-1, false),
-						referenceLine(0, true),
-						referenceLine(1, false)
-					]
-				}, true);
-			}
+			paFitReferenceLabels(plot.yAxis[0]);
 
 			return plot;
 		};
@@ -8783,6 +8753,44 @@ var paScaleClipLine = function (value, text, above) {
 			style: {color: "#A1A1AA", fontSize: "9px"}
 		}
 	};
+};
+
+/**
+ * One of the three reference lines (-1, 0, +1) on a scaled-value line chart.
+ *
+ * They mark the +/-1 band that turns a point's marker orange. Their labels
+ * used to be unconditional, so on a wide range (+/-6, +/-10) all three landed
+ * within a few pixels of each other in a 100px chart and piled up into an
+ * unreadable smudge on the right edge. Draw the lines either way; callers
+ * label the +/-1 pair only when the text has room to clear the zero label.
+ * Shared by Step 3's pathway details trend chart and Step 4's node tooltip.
+ */
+var paReferenceLine = function (value, labelled) {
+	var line = {color: '#dedede', value: value, width: 1};
+	if (labelled) {
+		line.label = {
+			text: String(value), align: 'right', x: -3, y: -2,
+			style: {color: 'gray', fontSize: '9px'}
+		};
+	}
+	return line;
+};
+
+/**
+ * Drops the +/-1 labels once the axis has real pixel dimensions, if they would
+ * collide with the zero label. 11px is the smallest gap at which the 9px label
+ * text still clears its neighbour. Call after setExtremes().
+ */
+var paFitReferenceLabels = function (axis) {
+	if (Math.abs(axis.toPixels(0) - axis.toPixels(1)) < 11) {
+		axis.update({
+			plotLines: [
+				paReferenceLine(-1, false),
+				paReferenceLine(0, true),
+				paReferenceLine(1, false)
+			]
+		}, true);
+	}
 };
 
 /**

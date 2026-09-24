@@ -235,12 +235,17 @@ function PA_Step4JobView() {
 				xtype: "container", cls: "toolbar secondTopToolbar",
 				items: [{
 					xtype: "box", html:
-					'<a href="javascript:void(0)" class="button btn-danger helpTip" id="visualSettingsButton"><i class="fa fa-wrench"></i> Settings</a>' +
+					// Settings dropped btn-danger: the header's red ink means
+					// destructive, and opening a settings panel is not.
+					'<a href="javascript:void(0)" class="button helpTip" id="visualSettingsButton"><i class="fa fa-wrench"></i> Settings</a>' +
 					'<a href="javascript:void(0)" class="button btn-info helpTip" id="searchButton"><i class="fa fa-search"></i> Search</a>' +
 					'<a href="javascript:void(0)" class="button btn-secondary helpTip" id="globalHeatmapButton"><i class="fa fa-th"></i> Show Heatmap</a>' +
-					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a></div>' +
+					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a>' +
 					'<a href="javascript:void(0)" class="button btn-default backButton"><i class="fa fa-arrow-left"></i> Go back</a>' +
-					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #CD435D; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
+					// History is navigation, not the step's primary action and not a
+					// destructive one, so it is a ghost like Go back; the red fill it
+					// had was inline, where dark.css could not reach it either.
+					'<a href="javascript:void(0)" class="button btn-default helpTip" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
 					// The panel covers the pathway it slides over and had no way out of
 					// its own: closing it meant knowing to press the History button in
 					// the toolbar behind it a second time.
@@ -749,7 +754,10 @@ function PA_Step4PathwayView() {
 		var me = this;
 
 		this.component = Ext.widget({
-			xtype: "container", flex:1, defaults: {border: false},
+			// Scrolls sideways rather than clipping: the heatmap and details
+			// panels have a 400px minWidth, so a fourth panel (or a 1024px
+			// window) used to run past the right edge where it could not be reached.
+			xtype: "container", flex:1, overflowX: 'auto', overflowY: 'hidden', defaults: {border: false},
 			layout: {type: 'hbox', pack: 'start', align: 'stretch'},
 			items: [],
 			listeners: {
@@ -1193,9 +1201,12 @@ function PA_Step4KeggDiagramView() {
 			html:
 			'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 			'   <div class="lateralOptionsPanel-toolbar">' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="hideDiagramPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel"><i class="fa fa-expand"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="shrinkDiagramPanelButton" title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+			// aria-label repeats each icon-only control's title: tooltipster strips
+			// title on init, which left them as unnamed links. Same on every
+			// panel header in this file and on the Graph walk's close.
+			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="hideDiagramPanelButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="shrinkDiagramPanelButton" title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip" id="downloadDiagramPanelButton" title="Download the diagram"><i class="fa fa-download"></i> Download</a>' +
 			(this.getParent().getParent().getModel().aiConsent && this.model.getSource() !== "MapMan"
 				? '    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip pa-walk-open" title="Walk this pathway with the AI agent"><i class="fa fa-random"></i> Walk</a>'
@@ -2133,20 +2144,29 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		}
 
 		var divHeight = Math.max(visibleOmics.length * 40, 120);
+		// A first guess for the heatmap div; it is resized to the drawn chart
+		// below, since generateHeatmap draws a row per value, not per omic.
+		var heatmapHeight = Math.max(visibleOmics.length * 40, 80) + 34;
 		$(componentID + " .step4_plotwrappers").html(
 			"  <div class='twoOptionsButtonWrapper'>" +
 			'      <a href="javascript:void(0)" class="button twoOptionsButton selected" name="heatmap-chart">Heatmap</a>'+
 			'      <a href="javascript:void(0)" class="button twoOptionsButton" name="line-chart">Line chart</a>'+
 			"  </div>" +
 			"  <div class='step4-tooltip-plot-container selected' name='heatmap-chart'>" +
-			"    <div id='" + this.getComponent().getId() + "_heatmapcontainer' name='heatmap-chart' style='height:"+ divHeight+ "px;width: 275px;overflow:hidden;overflow-y:auto;padding-right: 15px;'></div>" +
+			"    <div id='" + this.getComponent().getId() + "_heatmapcontainer' name='heatmap-chart' style='height:"+ heatmapHeight + "px;width: 275px;overflow:hidden;overflow-y:auto;padding-right: 15px;'></div>" +
 			"  </div>" +
 			"  <div class='step4-tooltip-plot-container' name='line-chart' style='display:none;'>" +
 			"    <div id='" + this.getComponent().getId() + "_plotcontainer' style='height:"+ divHeight+ "px;width: 275px;'></div>" +
 			"  </div>"
 		);
 
-		this.generateHeatmap(this.getComponent().getId() + "_heatmapcontainer", visibleOmics, dataDistributionSummaries, visualOptions);
+		// The div takes the chart's own height, 34px label band included: sized
+		// per omic, a feature with several miRNAs or peaks scrolled its condition
+		// labels out of view. Past 10 rows it scrolls, labels at the bottom.
+		var tipHeatmap = this.generateHeatmap(this.getComponent().getId() + "_heatmapcontainer", visibleOmics, dataDistributionSummaries, visualOptions);
+		if (tipHeatmap && tipHeatmap.chartHeight) {
+			$("#" + this.getComponent().getId() + "_heatmapcontainer").css("height", Math.min(tipHeatmap.chartHeight, 10 * 40 + 34) + "px");
+		}
 		this.generatePlot(this.getComponent().getId() + "_plotcontainer", visibleOmics, dataDistributionSummaries, visualOptions);
 
 		$("#" + me.getComponent().getId() + " a.twoOptionsButton").click( function(){
@@ -2214,8 +2234,11 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 				"    <li><a class='ensemblGenomesSearch' href='https://www.ensemblgenomes.org/search/?query=" + encodeURIComponent(featureName) + "' target='_blank' rel='noopener'><i class='fa fa-external-link'></i> Search at Ensembl Genomes</a></li>" +
 				"    <li><a class='ensemblSearch' href='http://www.ensembl.org/Multi/Search/Results?q=" + encodeURIComponent(featureName) + ";facet_species="+ encodeURIComponent(alternativeName) + "' target='_blank'><i class='fa fa-external-link'></i> Search at Ensembl (vertebrates)</a></li>" +
 				((specie === "hsa") ? "<li><a href='http://www.genecards.org/cgi-bin/carddisp.pl?gene=" + featureName + "' target='_blank'><i class='fa fa-external-link'></i> Search at GeneCards Database</a></li>" : "") +
-				"    <li><a href='http://www.ncbi.nlm.nih.gov/pubmed/?term=" + specieName + "' target='_blank'><i class='fa fa-external-link'></i> Find related publications (PubMed)</a></li>" +
-				"    <li><a href='http://www.ncbi.nlm.nih.gov/gene/?term=" + encodeURIComponent("(" + featureName + "[Gene Name]) AND ()"+ alternativeName + "[Organism])") + "' target='_blank'><i class='fa fa-external-link'></i> Search at NCBI Gene</a></li>" +
+				// PubMed searched the species alone, so every gene opened the same
+				// generic search; NCBI Gene had "AND ()House mouse[Organism])", an
+				// empty group and a stray paren around the organism clause.
+				"    <li><a href='http://www.ncbi.nlm.nih.gov/pubmed/?term=" + encodeURIComponent(featureName + " " + specieName.split(" (")[0]) + "' target='_blank'><i class='fa fa-external-link'></i> Find related publications (PubMed)</a></li>" +
+				"    <li><a href='http://www.ncbi.nlm.nih.gov/gene/?term=" + encodeURIComponent("(" + featureName + "[Gene Name]) AND (" + alternativeName + "[Organism])") + "' target='_blank'><i class='fa fa-external-link'></i> Search at NCBI Gene</a></li>" +
 				"    <li><a href='http://www.ncbi.nlm.nih.gov/gquery/?term=" + encodeURIComponent(featureName + " "+ specieName) + "' target='_blank'><i class='fa fa-external-link'></i> Search at all NCBI Databases</a></li>";
 			}else{
 				htmlCode +=
@@ -2563,11 +2586,9 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 				title: null,
 				min: minVal,
 				max: maxVal,
-				plotLines: [
-					{label: {text: '-1',align: 'right', style: {color: 'gray'}},color: '#dedede',value: -1,width: 1},
-					{label: {text: '0',align: 'right', style: {color: 'gray'}},color: '#dedede',value: 0,width: 1},
-					{label: {text: '1',align: 'right', style: {color: 'gray'}},color: '#dedede',value: 1,width: 1}
-				]},
+				// Step 3's reference lines: inset labels that clear the window edge
+				// and the last-point marker, and drop +/-1 when they would collide.
+				plotLines: [paReferenceLine(-1, true), paReferenceLine(0, true), paReferenceLine(1, true)]},
 				series: series,
 				legend: {
 					itemStyle: {fontSize: "9px",fontWeight: 'lighter'},
@@ -2580,6 +2601,7 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		);
 
 		plot.yAxis[0].setExtremes(minVal, maxVal);
+		paFitReferenceLabels(plot.yAxis[0]);
 
 		return plot;
 	};
@@ -3158,10 +3180,14 @@ function PA_Step4VisualOptionsView() {
 		/********************************************************/
 		/* STEP 1. GENERATE THE "COLOR BY" SECTION  */
 		/********************************************************/
+		// The group label sits outside its selector div, as the first group's
+		// does: inside it, the h4 was that div's first child and matched
+		// main.css's `h4:first-child`, which drops the divider meant only for
+		// the top of the panel.
 		windowContent +=
 		'</div>' + //CLOSE "CHOOSE OMICS TO DRAW" SECTION
+		'<h4>Coloring options</h4>' +
 		'<div class="lateralOptionsSelector">' +
-		'  <h4>Coloring options</h4>' +
 		'  <h5>Reference values</h5>' +
 		'  <div>';
 
@@ -3222,7 +3248,7 @@ function PA_Step4VisualOptionsView() {
 				html:
 				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel" aria-label="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
 				"  <h2>Visual settings</h2>" +
 				"</div>" +
@@ -3360,7 +3386,10 @@ function PA_Step4FindFeaturesView() {
 			this.searchResultsView = Ext.widget({xtype: 'container', renderTo: el.find(".resultsContainer")[0], items: []});
 		}
 
-		el.find(".resultsCounter").text("Found " + this.items.length + " features.");
+		// "Found 1 features." read as a typo, and "Found 0 features." over an
+		// empty column as a panel that had not loaded.
+		var n = this.items.length;
+		el.find(".resultsCounter").text(n === 0 ? "No features in this pathway match your search." : "Found " + n + " feature" + (n === 1 ? "" : "s") + ".");
 		el.find(".searchResultsWrapper").show();
 
 		this.searchResultsView.removeAll();
@@ -3448,7 +3477,7 @@ function PA_Step4FindFeaturesView() {
 				   this header stayed teal while everything around it moved. */
 				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel" aria-label="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
 				"  <h2>Pathway information</h2>" +
 				"</div>" +
@@ -3473,7 +3502,7 @@ function PA_Step4FindFeaturesView() {
 				'  <div class="searchResultsWrapper" style="display:none;">'+
 				'    <a href="javascript:void(0)" class="backToPathwayDetailsButton" style="margin: 5px 0px;"><i class="fa fa-long-arrow-left"></i> Back to Pathway details</a>' +
 				'    <h3 class="resultsCounter">Found N features.</h3>' +
-				'    <div class="resultsContainer" style="width:245px; margin-left: 10px; padding-bottom:20px;"></div>'+
+				'    <div class="resultsContainer" style="padding-bottom:20px;"></div>'+
 				'  </div>'+
 				"</div>"
 			}
@@ -4167,7 +4196,8 @@ function PA_Step4GlobalHeatmapView() {
 
 		var htmlCode =
 		"<h4>Choose the omics to draw</h4>" +
-		'<span class="infoTip"><span style=" color: rgb(158, 58, 179); font-weight: bold; ">Drag and drop</span> to change the order in which heatmaps will be drawn.</span>' +
+		// A class, not an inline colour, so dark.css can lift it (2.74:1 there).
+		'<span class="infoTip"><span class="omicDragHint">Drag and drop</span> to change the order in which heatmaps will be drawn.</span>' +
 		'<div id="omicSelectionWrapper">';
 
 		var omicNames = Object.keys(this.model.getSignificanceValues());
@@ -4234,16 +4264,18 @@ function PA_Step4GlobalHeatmapView() {
 			previousWidth: 400, width: 400, minWidth: 400, html:
 			'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 			'  <div class="lateralOptionsPanel-toolbar">' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandHeatmapButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkHeatmapButton" style="display:none;"  title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap" aria-label="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandHeatmapButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkHeatmapButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 			// '    <a href="javascript:void(0)" class="toolbarOption helpTip" id="downloadHeatmapButton"><i class="fa fa-download"></i></a>' +
 			'  </div>' +
 			"  <h2>Global heatmap</h2>" +
 			"</div>" +
 			"<div class='lateralOptionsPanel-body globalHeatmapView-body'>" +
-			'  <p>This panel contains the heatmap for all the features involved on this pathway. <br>Choose the visible omics features will be visible using the <i class="fa fa-cogs"></i> Settings button.</p>' +
+			// The cogs are this panel's own Configure heatmap tool; the header's
+			// Settings (wrench) opens Visual settings, which the old copy named.
+			'  <p>This panel draws a heatmap of this pathway\'s features, one block per omic.<br>Choose the omics to draw, and whether to show all features or only the relevant ones, with the <i class="fa fa-cogs"></i> Configure heatmap button above.</p>' +
 			'  <div class="updateMessageContainer"> <h3>Visual changes detected! </h3> <p>Some visual settings changed recently but the Heatmap content did not change.<br>Click <a id="refreshHeatmap" href="javascript:void(0)">here</a> if you want to refresh the Heatmap content. </p> </div>' +
 			'  <div class="globalHeatmapConfigurator" ' + (this.showConfigurator ? 'style="display:none"' : '') + '>' +
 			htmlCode +
@@ -4930,19 +4962,21 @@ function PA_Step4DetailsView() {
 				xtype: 'box', html:
 				'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="shrinkFeatureSetButton" style="display:none;"  title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkFeatureSetButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 				'  </div>' +
 				"  <h2>Feature set overview</h2>" +
 				"</div>"
 			},{
 				xtype: "container", cls: "lateralOptionsPanel-body",
 				items: [
-					{xtype: "box", html: '<h2> Features in this set </h2>'},
+					// h4, the section label every other Step 4 panel uses: a bare h2
+					// took the global 23px orange and outranked the 15px panel title.
+					{xtype: "box", html: '<h4>Features in this set</h4>'},
 					{xtype: "container", itemId: "itemsContainer", style:"padding:10px;", items: []},
 
-					{xtype: "box", html: '<h2> Values by omic type </h2>'},
+					{xtype: "box", html: '<h4>Values by omic type</h4>'},
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainer'></div>"},
 
 
@@ -4956,7 +4990,7 @@ function PA_Step4DetailsView() {
 					   nothing ever faded this one in, so it promised feedback
 					   the button did not give. */
 					{xtype: "box", itemId: "neighbouringFeaturesSection", hidden: true, html:
-						'<h2>Neighbouring features</h2>' +
+						'<h4>Neighbouring features</h4>' +
 						'  <div>' +
 						'    Please enter a level (1-4): <input type="number" min="1" max="4" style="width:80px;height:30px"  id="inputLevel">' +
 						'    <a class="button btn-info helpTip" id="showFeatureButton" title="Show the neighbours of this metabolite at the given number of network steps"><i class="fa fa-search"></i> Show Features</a>' +
@@ -4973,11 +5007,15 @@ function PA_Step4DetailsView() {
 					$("#hideFeatureSetButton").click(function () {
 						me.getParent().hideFeatureSetDetails();
 					});
+					// Each button hides itself and shows its twin, so hand focus to the
+					// twin; otherwise a keyboard user's focus falls back to <body>.
 					$("#expandFeatureSetButton").click(function () {
 						me.expand();
+						$("#shrinkFeatureSetButton").focus();
 					});
 					$("#shrinkFeatureSetButton").click(function () {
 						me.shrink();
+						$("#expandFeatureSetButton").focus();
 					});
 					$("#showFeatureButton").click(function () {
 						me.showNeighbouringFeatures();
