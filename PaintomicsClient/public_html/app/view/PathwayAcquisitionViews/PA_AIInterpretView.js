@@ -154,11 +154,10 @@ function PA_AIInterpretView() {
 
     this.collapse = function() {
         if (!this.$root) return;
+        // Leave full screen the same way its button does, so the reader's place
+        // survives: the collapsed panel keeps its scrollTop for expand().
         if (this.isFullscreen) {
-            this.$root.find(".ai-widget-panel").removeClass("is-fullscreen");
-            this.$root.find(".ai-widget-fab").show();
-            fullscreenButton(this.$root.find(".ai-fullscreen-btn"), false);
-            this.isFullscreen = false;
+            this.toggleFullscreen();
         }
         this.$root.find(".ai-widget-panel").removeClass("is-expanded");
         this.$root.find(".ai-widget-fab").attr("aria-expanded", "false");
