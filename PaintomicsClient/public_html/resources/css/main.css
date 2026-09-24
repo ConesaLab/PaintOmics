@@ -3326,6 +3326,16 @@ div.po-omic-check-inset {
 	margin-left: 155px;
 }
 
+/* Step 1's prose that promises AI conversion, and its converter-off twin.
+   format-panel.js sets html.pa-converter-off once /ai_provider answers. */
+.po-if-no-converter,
+html.pa-converter-off .po-if-converter {
+	display: none;
+}
+html.pa-converter-off .po-if-no-converter {
+	display: inline;
+}
+
 /* A bare <hr> took the UA's 2px grey inset rule, the brightest line in the
    card in dark. The card's own hairline, in both themes. */
 .omicbox hr {

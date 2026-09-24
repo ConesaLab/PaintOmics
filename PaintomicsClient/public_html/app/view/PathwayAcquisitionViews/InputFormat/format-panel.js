@@ -469,7 +469,13 @@
             converterPromise = fetch("ai_provider", { credentials: "same-origin" })
                 .then(function (r) { return r.json(); })
                 .then(function (p) { return !(p && p.success && p.inputConverter === false); })
-                .catch(function () { return true; });
+                .catch(function () { return true; })
+                .then(function (available) {
+                    // Step 1's lead and Help make the same offer in prose; this
+                    // class swaps them to the converter-off wording (main.css).
+                    if (!available) document.documentElement.classList.add("pa-converter-off");
+                    return available;
+                });
         }
         return converterPromise;
     }
@@ -1027,7 +1033,10 @@
                     renderProblem(strip, "err", "The file is not saved as UTF-8.",
                         available
                             ? "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let the PaintOmics AI agent convert it. " + AI_EXPLAINER
-                            : "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8). " + MANUAL_ADVICE,
+                            // Not MANUAL_ADVICE: Excel's "Text (Tab delimited)" writes the
+                            // system code page, so following it would fail this check again.
+                            : "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8, or Unicode Text). " +
+                              "Or ask the server's administrator to switch the converter on.",
                         available ? aiActions(input, file, fieldName) : []);
                 });
                 return;

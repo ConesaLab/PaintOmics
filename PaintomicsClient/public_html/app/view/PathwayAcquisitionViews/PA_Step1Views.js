@@ -2200,9 +2200,14 @@ function PA_Step1JobView() {
 							   Cut to one line as well, on the owner's second pass: "each file is
 							   checked the moment you pick it" is the mechanism, and the sentence
 							   only has to make the offer. Two rows, 194px down to 90. */
-							'<p class="ai-intro-copy po-upload-ai-lead"><b>Bring your files as they are.</b> ' +
+							/* Two wordings: format-panel.js marks <html> pa-converter-off when
+							   /ai_provider says this server has no converter, and the offer
+							   would be one the strip below cannot make. */
+							'<p class="ai-intro-copy po-upload-ai-lead"><span class="po-if-converter"><b>Bring your files as they are.</b> ' +
 							'If a file is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> offers to ' +
-							'convert it in your browser and shows you the result.</p>' +
+							'convert it in your browser and shows you the result.</span>' +
+							'<span class="po-if-no-converter"><b>Each file is checked as you pick it.</b> ' +
+							'If one is not in PaintOmics’ format, its card says what to change.</span></p>' +
 							/* The specification line: what wrote the file, and what the file is.
 
 							   Two labelled rows in a 320px column, under an uppercase "Works with"
@@ -2345,7 +2350,7 @@ function PA_Step1JobView() {
 							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them<span class="po-if-converter">; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format</span>.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
