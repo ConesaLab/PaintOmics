@@ -1870,6 +1870,23 @@
 [data-theme="dark"] .userViewsDialog .x-form-text::placeholder {
 	color: var(--pa-ink-soft);
 }
+/* main.css's .po-dialog pair (organism request, contact form, file pickers).
+   Its --pa-accent-blue fill turns pale in dark (2:1 under the button ink) and
+   the outline's rgba(24,24,27,.2) border disappears, so both are restated. */
+[data-theme="dark"] .po-dialog .po-dialog-primary.x-btn-default-small {
+	background-color: var(--pa-btn-primary-bg);
+	border-color: var(--pa-btn-primary-border);
+}
+[data-theme="dark"] .po-dialog .po-dialog-primary.x-btn-default-small .x-btn-inner {
+	color: #FFFFFF;
+}
+[data-theme="dark"] .po-dialog .x-btn-default-small:not(.po-dialog-primary) {
+	background-color: var(--pa-btn-default-bg);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .po-dialog .x-btn-default-small:not(.po-dialog-primary):hover {
+	background-color: var(--pa-btn-default-bg-hover);
+}
 [data-theme="dark"] .po-exp-design-hint,
 [data-theme="dark"] .po-exp-design-draft-note {
 	color: var(--pa-ink-muted);

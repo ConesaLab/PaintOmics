@@ -336,7 +336,7 @@ function DM_MyDataFileListView() {
 						}]
 					}),
 					columns: [{
-						text: 'File Name',
+						text: 'File name',
 						dataIndex: 'fileName',
 						flex: 2
 					}, {
@@ -386,7 +386,7 @@ function DM_MyDataFileListView() {
 							return poFormatBytes(value);
 						}
 					}, {
-						text: 'Submission Date',
+						text: 'Submission date',
 						dataIndex: 'submissionDate',
 						width: 140,
 						renderer: function(value) {
@@ -412,7 +412,7 @@ function DM_MyDataFileListView() {
 						}
 					}, {
 						xtype: 'customactioncolumn',
-						text: "File Options",
+						text: "File options",
 						width: 190,
 						hidden: !me.allowRowRemoving,
 						items: [{
@@ -693,12 +693,12 @@ function DM_MyDataJobListView() {
 						}
 					}, {
 						xtype: 'customactioncolumn',
-						text: "Job Options",
+						text: "Job options",
 						width: 150,
 						items: [{
 							icon: "fa-repeat",
 							text: "Recover",
-							tooltip: 'Recover this Job.',
+							tooltip: 'Recover this job.',
 							handler: function(grid, rowIndex, colIndex) {
 								me.getController().recoverJobsHandler(me, grid.getStore().getAt(rowIndex).get("jobID"), grid.getStore().getAt(rowIndex).get("jobType"), grid.getStore().getAt(rowIndex).get("date"));
 							}
@@ -706,7 +706,7 @@ function DM_MyDataJobListView() {
 							icon: "fa-trash-o",
 							text: "Delete",
 							style: "color: rgb(242, 105, 105);",
-							tooltip: 'Delete this file.',
+							tooltip: 'Delete this job.',
 							handler: function(grid, rowIndex, colIndex) {
 								me.getController().deleteJobsHandler(me, grid.getStore().getAt(rowIndex).get("jobID"), grid.getStore().getAt(rowIndex).get("jobType"));
 							}
@@ -1038,7 +1038,7 @@ function DM_GTFFileListView() {
 					text: ''
 				}],
 				columns: [{
-					text: 'File Name',
+					text: 'File name',
 					dataIndex: 'fileName',
 					flex: 2,
 					renderer: renderWithTooltip
@@ -1431,12 +1431,20 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 Ext.define('Paintomics.view.common.MyFilesSelectorDialog', {
 	extend: 'Ext.window.Window',
 	alias: 'widget.myFilesSelectorDialog',
+	/* A title names the dialog for screen readers (the header was an
+	   empty bar) and modal dims the page it is picking for. po-dialog
+	   gives Accept the fill and Cancel an outline, as in the organism
+	   request dialog: two filled buttons read as no primary. */
+	title: 'Choose a file from My files',
+	modal: true,
+	cls: 'po-dialog',
 	autoScroll: true,
 	selectedItem: null,
 	_callback: null,
 	buttons: [{
 		text: 'Accept',
 		itemId: "acceptButton",
+		cls: 'po-dialog-primary',
 		handler: function() {
 			/* Accept with no row picked is a Cancel: the callers treat null as
 			   one, but read [0] of anything else, so an empty [] threw. */
@@ -1486,11 +1494,15 @@ Ext.define('Paintomics.view.common.MyFilesSelectorDialog', {
 Ext.define('Paintomics.view.common.GTFSelectorDialog', {
 	extend: 'Ext.window.Window',
 	alias: 'widget.GTFSelectorDialog',
+	title: 'Choose a reference GTF file',
+	modal: true,
+	cls: 'po-dialog',
 	selectedItem: null,
 	_callback: null,
 	buttons: [{
 		text: 'Accept',
 		itemId: "acceptButton",
+		cls: 'po-dialog-primary',
 		handler: function() {
 			/* Accept with no row picked is a Cancel: the callers treat null as
 			   one, but read [0] of anything else, so an empty [] threw. */
@@ -1540,11 +1552,15 @@ Ext.define('Paintomics.view.common.GTFSelectorDialog', {
 Ext.define('Paintomics.view.common.OmicInputSelectorDialog', {
 	extend: 'Ext.window.Window',
 	alias: 'widget.OmicInputSelectorDialog',
+	title: 'Choose a file already in this form',
+	modal: true,
+	cls: 'po-dialog',
 	selectedItem: null,
 	_callback: null,
 	buttons: [{
 		text: 'Accept',
 		itemId: "acceptButton",
+		cls: 'po-dialog-primary',
 		handler: function() {
 			/* Accept with no row picked is a Cancel: the callers treat null as
 			   one, but read [0] of anything else, so an empty [] threw. */
@@ -1612,7 +1628,7 @@ Ext.define('Paintomics.view.common.OmicInputSelectorDialog', {
 					dataIndex: 'omic',
 					flex: 1
 				}, {
-					text: 'Filename',
+					text: 'File name',
 					dataIndex: 'file',
 					flex: 1
 				}]
