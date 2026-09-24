@@ -154,6 +154,12 @@ function MainView() {
 
 		me.currentView = aView;
 
+		// Name the tab after the job, so several open jobs (and their history
+		// entries) can be told apart. Views without a job restore the plain name.
+		var model = (aView.getModel && aView.getModel()) || null;
+		var jobID = (model && model.getJobID) ? model.getJobID() : null;
+		document.title = jobID ? "Job " + jobID + " \u00b7 PaintOmics AI" : "PaintOmics AI";
+
 		me.getComponent().queryById("mainViewCenterPanel").add(aView.getComponent());
 
 		// The contents rail belongs to the centre panel, not to the view that
@@ -338,8 +344,11 @@ function MainView() {
 				cls: "toolbar mainTopToolbar",
 				region: 'north',
 				html:
-				'<div id="header">'+
-				'  <img src="resources/images/paintomics-mark.svg" alt="PaintOmics AI">' +
+				// The mark is decorative (the h1 beside it says the name), and the
+				// title names what clicking the wordmark does. No role="button": it
+				// would flatten the h1, and every step toolbar has a keyboard Reset.
+				'<div id="header" title="Start a new analysis">'+
+				'  <img src="resources/images/paintomics-mark.svg" alt="">' +
 				/* No version chip beside the wordmark. The header is the one row
 				   in the application where two groups grow towards each other -
 				   the nav pills from the left, the step actions from the right -
@@ -363,7 +372,7 @@ function MainView() {
 				   readable zones: brand and navigation, the actions for this step,
 				   and the controls that are not about the analysis at all. */
 				'<div class="headerUtilities">' +
-				'  <button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +
+				'  <button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-label="Dark theme" aria-pressed="false"><i class="fa fa-moon-o" aria-hidden="true"></i></button>' +
 				'  <a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton" href="javascript:void(0)">' + (noLogin !== true ? '<i class="fa fa-sign-out" aria-hidden="true"></i> Log out' : '<i class="fa fa-sign-in" aria-hidden="true"></i> Sign in') + '</a>' +
 				'</div>'
 			}, {
@@ -500,7 +509,9 @@ function MainView() {
 			var dark = root.getAttribute("data-theme") === "dark";
 			button.setAttribute("aria-pressed", dark ? "true" : "false");
 			button.setAttribute("title", dark ? "Switch to light" : "Switch to dark");
-			button.innerHTML = '<i class="fa ' + (dark ? "fa-sun-o" : "fa-moon-o") + '"></i>';
+			// The name stays "Dark theme" (aria-label) and aria-pressed carries the
+			// state; the flipping title is only the sighted tooltip.
+			button.innerHTML = '<i class="fa ' + (dark ? "fa-sun-o" : "fa-moon-o") + '" aria-hidden="true"></i>';
 		};
 
 		button.addEventListener("click", function () {
