@@ -594,6 +594,11 @@
 [data-theme="dark"] .paExploreCard h4 {
 	color: var(--pa-ink-label);
 }
+/* The same bare h4, on the Regions2Genes / miRNA2Genes intro card: the one-line
+   summary of what each tool does measured 1.11:1. */
+[data-theme="dark"] .po-tool-intro > h4 {
+	color: var(--pa-ink-title);
+}
 
 /* Form fields.
 
@@ -1643,6 +1648,7 @@
 /* The sign-in dialog's validation line. main.css states it as #D22, which is
    4.51:1 on white but only about 3.4:1 on the dark panel. */
 [data-theme="dark"] .formMessage { color: var(--pa-status-error-ink); }
+[data-theme="dark"] .formMessage.is-success { color: var(--pa-status-success-ink); }
 
 /* The rule that divides the sign-in panel's two columns. It was an inline
    `border-left: 1px solid #E7E7E7` on three separate divs, which no stylesheet
@@ -1846,6 +1852,23 @@
 }
 [data-theme="dark"] .userViewsDialog .x-form-text:hover {
 	border-color: var(--pa-border-control-hover) !important;
+}
+/* One surface, as main.css intends. The section-3 blanket paints every panel,
+   container and box-inner --pa-surface at (0,2,0) after main.css's transparent
+   rule, so the form sat in a darker box that stopped short of the window's
+   bottom edge. */
+[data-theme="dark"] .userViewsDialog .x-panel,
+[data-theme="dark"] .userViewsDialog .x-panel-body,
+[data-theme="dark"] .userViewsDialog .x-panel-body-default,
+[data-theme="dark"] .userViewsDialog .x-container,
+[data-theme="dark"] .userViewsDialog .x-box-inner {
+	background-color: transparent;
+}
+/* main.css's #A1A1AA placeholder (0,2,1) outranks this file's own
+   `input::placeholder` rule, and in dark it sits 1.3:1 from typed text, so an
+   empty email box read as filled in. */
+[data-theme="dark"] .userViewsDialog .x-form-text::placeholder {
+	color: var(--pa-ink-soft);
 }
 [data-theme="dark"] .po-exp-design-hint,
 [data-theme="dark"] .po-exp-design-draft-note {
