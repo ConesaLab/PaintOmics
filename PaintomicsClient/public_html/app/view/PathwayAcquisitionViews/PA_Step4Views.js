@@ -2144,9 +2144,8 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		}
 
 		var divHeight = Math.max(visibleOmics.length * 40, 120);
-		// The heatmap's own height, from generateHeatmap's formula for one row
-		// per omic. divHeight left out the 34px band of rotated condition
-		// labels, so they were scrolled out of view under the relevance note.
+		// A first guess for the heatmap div; it is resized to the drawn chart
+		// below, since generateHeatmap draws a row per value, not per omic.
 		var heatmapHeight = Math.max(visibleOmics.length * 40, 80) + 34;
 		$(componentID + " .step4_plotwrappers").html(
 			"  <div class='twoOptionsButtonWrapper'>" +
@@ -2161,7 +2160,13 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 			"  </div>"
 		);
 
-		this.generateHeatmap(this.getComponent().getId() + "_heatmapcontainer", visibleOmics, dataDistributionSummaries, visualOptions);
+		// The div takes the chart's own height, 34px label band included: sized
+		// per omic, a feature with several miRNAs or peaks scrolled its condition
+		// labels out of view. Past 10 rows it scrolls, labels at the bottom.
+		var tipHeatmap = this.generateHeatmap(this.getComponent().getId() + "_heatmapcontainer", visibleOmics, dataDistributionSummaries, visualOptions);
+		if (tipHeatmap && tipHeatmap.chartHeight) {
+			$("#" + this.getComponent().getId() + "_heatmapcontainer").css("height", Math.min(tipHeatmap.chartHeight, 10 * 40 + 34) + "px");
+		}
 		this.generatePlot(this.getComponent().getId() + "_plotcontainer", visibleOmics, dataDistributionSummaries, visualOptions);
 
 		$("#" + me.getComponent().getId() + " a.twoOptionsButton").click( function(){
@@ -4957,9 +4962,9 @@ function PA_Step4DetailsView() {
 				xtype: 'box', html:
 				'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="shrinkFeatureSetButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkFeatureSetButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 				'  </div>' +
 				"  <h2>Feature set overview</h2>" +
 				"</div>"
