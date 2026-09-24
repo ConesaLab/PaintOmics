@@ -583,6 +583,11 @@ function PA_Step2JobView() {
 					$('#download_mapping_file').click(function() {
 						application.getController("DataManagementController").downloadFilesHandler(me, "mapping_results_" + me.getModel().getJobID() + ".zip", "job_result", me.getModel().getJobID());
 					});
+					// The centre panel is one scroller for every step, so without
+					// this Step 2 opened at Step 1's offset (1207 px after the
+					// example), on the per-omic charts rather than its first card.
+					// Step 1 resets itself the same way.
+					$("#mainViewCenterPanel").scrollTop(0);
 					me.initAISuggestButton();
 					initializeTooltips(".helpTip");
 					me.initCompoundsPanelHandlers(this.queryById("compoundsPanelsContainer"));
