@@ -30,9 +30,9 @@
        rather than a value that happened not to matter. */
     --pa-ai-bold: 700;
 
-    /* Characters used as icons -- close cross, minimise dash, send arrow, info
-       circle. Sized to their hit target, not to the 13px body, so deliberately
-       off the scale above. */
+    /* The icons in the panel's controls -- full screen, minimise, send. Font
+       Awesome, which takes its size from font-size. Sized to their hit target,
+       not to the 13px body, so deliberately off the scale above. */
     --pa-ai-glyph: 16px;      /* controls in a 28-36px hit target */
     --pa-ai-glyph-lg: 20px;   /* the dialog's own close */
 }
@@ -42,7 +42,10 @@
     position: fixed;
     bottom: 20px;
     right: 20px;
-    z-index: 19000;
+    /* Under ExtJS's modal mask (18996) and its windows (19000+), so a dialog
+       blocks the launcher like the rest of the page. 19000 left the FAB lit and
+       clickable over the dimmed page. Nothing static sits above 9999. */
+    z-index: 18000;
     font-family: var(--pa-font-sans);
     font-size: var(--pa-ai-fs);
 }
@@ -107,6 +110,7 @@
     right: -2px;
     border: 2px solid #fff;
     font-size: var(--pa-ai-fs-xs);
+    font-weight: var(--pa-ai-bold);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -116,6 +120,9 @@
 .ai-widget-panel {
     width: 380px;
     height: 500px;
+    /* 70px above the widget, which is 20px off the bottom; the last 20px keep
+       the header and its controls on screen on a short or zoomed window. */
+    max-height: calc(100vh - 110px);
     position: absolute;
     bottom: 70px;
     right: 0;
@@ -128,17 +135,23 @@
     opacity: 0;
     transform: translateY(20px);
     pointer-events: none;
+    /* Out of the tab order and the accessibility tree while collapsed: opacity
+       alone left five invisible stops behind the launcher. `all` transitions
+       visibility too, which stays visible until the fade-out has finished. */
+    visibility: hidden;
     transition: all 0.3s ease;
 }
 .ai-widget-panel.is-expanded {
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
+    visibility: visible;
 }
 .ai-widget-panel.is-fullscreen {
     opacity: 1;
     transform: none;
     pointer-events: auto;
+    visibility: visible;
     position: fixed;
     top: 20px;
     left: 20px;
@@ -146,6 +159,7 @@
     bottom: 20px;
     width: auto;
     height: auto;
+    max-height: none;
     border-radius: 8px;
     z-index: 20000;
 }
@@ -170,8 +184,12 @@
    down, at 900px. An earlier 800px stood here and was simply overridden. */
 
 /* ── Header ── */
+/* The action fill, not --pa-ai-blue: it carries white text, and dark.css's
+   lighter blue measures 3.3:1 under it (see main.css on --pa-ai-action-bg).
+   The ring is white here because the accent ring is 1.96:1 on this fill. */
 .ai-widget-header {
-    background: var(--pa-ai-blue, #4A90D9);
+    background: var(--pa-ai-action-bg, #19589E);
+    --pa-focus-ring: #fff;
     color: #fff;
     padding: 10px 12px 10px 16px;
     display: flex;
@@ -232,6 +250,10 @@
     background: #f0f7ff;
     border-bottom: 1px solid #e0e0e0;
 }
+/* Not started: nothing is loading, so no empty bar under the Start offer. */
+.ai-widget-progress.is-idle .ai-progress-track {
+    display: none;
+}
 .ai-progress-detail {
     font-size: var(--pa-ai-fs-sm);
     color: #336;
@@ -263,10 +285,12 @@
     flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #6b7a99;
+    /* Was #6b7a99 (4.00:1) and #8a93a8 (2.85:1) at 11px. These clear 4.5:1 on
+       all three strip fills: running, done and error. */
+    color: #56627d;
 }
-.ai-activity-ms { flex: 0 0 auto; color: #8a93a8; font-variant-numeric: tabular-nums; }
-.ai-activity-row.is-count { color: #8a93a8; font-style: italic; }
+.ai-activity-ms { flex: 0 0 auto; color: #5e6a84; font-variant-numeric: tabular-nums; }
+.ai-activity-row.is-count { color: #5e6a84; font-style: italic; }
 .ai-activity-row.is-failed .ai-activity-tool,
 .ai-activity-row.is-failed .ai-activity-detail { color: #b23b3b; }
 
@@ -363,8 +387,14 @@
     padding-bottom: 4px;
     border-bottom: 2px solid var(--pa-ai-blue, #4A90D9);
 }
-.ai-msg-assistant .ai-msg-bubble h1:first-child {
-    margin-top: 0;
+/* A heading that opens a bubble takes a paragraph's 4px, so the inset is the
+   same 15px whatever comes first. The h2-h4 rules below (and graph-walk.css's
+   walk title) would otherwise push it to 21px; this out-specifies them. */
+.ai-msg-assistant .ai-msg-bubble > h1:first-child,
+.ai-msg-assistant .ai-msg-bubble > h2:first-child,
+.ai-msg-assistant .ai-msg-bubble > h3:first-child,
+.ai-msg-assistant .ai-msg-bubble > h4:first-child {
+    margin-top: 4px;
 }
 .ai-msg-assistant .ai-msg-bubble h2 {
     font-size: var(--pa-ai-fs-xl);
@@ -569,12 +599,13 @@
     min-height: 36px;
     max-height: 80px;
     font-family: inherit;
-    outline: none;
     line-height: 1.4;
 }
-.ai-widget-input-area textarea:focus {
-    border-color: var(--pa-ai-blue, #4A90D9);
-    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
+/* No :focus border or glow of its own: the global --pa-focus-ring outline is
+   the one focus indicator for text fields (main.css, after `input, textarea`),
+   and a second ring here drew two concentric blue halos. */
+.ai-widget-input-area textarea:disabled {
+    cursor: not-allowed;
 }
 .ai-send-btn {
     width: 36px;
@@ -591,8 +622,10 @@
     flex-shrink: 0;
     transition: background 0.2s;
 }
-.ai-send-btn:hover {
-    background: #3a7bc8;
+/* Darker on hover. #3a7bc8 was written for the old #4a90d9 rest and now
+   lightens the button, to 4.33:1 under white. */
+.ai-send-btn:not(:disabled):hover {
+    background: var(--pa-ai-action-bg-hover, #124676);
 }
 .ai-send-btn:disabled {
     background: #ccc;
@@ -621,8 +654,13 @@
 }
 .ai-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
 .ai-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-.ai-retry-btn {
-    background: var(--pa-ai-blue, #4A90D9);
+/* The report's "Try again" is the same kind of button; it matched no rule and
+   drew the user agent's grey bevel. Not given .ai-retry-btn in the markup,
+   because updateProgress binds every .ai-retry-btn to onRetry. White text, so
+   the action fill in both themes. */
+.ai-retry-btn,
+.ai-reload-report-btn {
+    background: var(--pa-ai-action-bg, #19589E);
     color: #fff;
     border: none;
     border-radius: var(--pa-radius-btn, 8px);
@@ -631,8 +669,9 @@
     cursor: pointer;
     margin-top: 6px;
 }
-.ai-retry-btn:hover {
-    background: #3a7bc8;
+.ai-retry-btn:not(:disabled):hover,
+.ai-reload-report-btn:not(:disabled):hover {
+    background: var(--pa-ai-action-bg-hover, #124676);
 }
 
 /* ── Keyframes ── */
