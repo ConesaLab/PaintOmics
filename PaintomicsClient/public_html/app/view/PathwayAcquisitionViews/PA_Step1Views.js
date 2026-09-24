@@ -1551,7 +1551,7 @@ function PA_Step1JobView() {
 							   untick a box that cannot be unticked sends them looking for a
 							   broken control, so the sentence below is careful to say which
 							   databases can actually be unticked. */
-							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Decide whether to enable the AI interpretation, describing your experiment design if you do. Then upload your multi-omic data — or load an example (<a class="button btn-secondary btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-file-text-o"></i> Load example</a>) to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
+							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Optionally, describe your experiment design for the AI interpretation. Then upload your multi-omic data — or load an example <span class="po-nowrap">(<a class="button btn-secondary btn-inline btn-small"><i class="fa fa-file-text-o"></i> Load example</a>)</span> to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_UPLOAD + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
@@ -1569,7 +1569,7 @@ function PA_Step1JobView() {
 							   useful half is the promise, not the constraint. 17 words
 							   now, leading with what PaintOmics does; every term the
 							   original used, Entrez included, is still here. */
-							'<p>PaintOmics converts the identifiers in your files to the Entrez IDs that KEGG, Reactome and MapMan need. This screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small" href="javascript:void(0)"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
+							'<p>PaintOmics converts the identifiers in your files to the Entrez IDs that KEGG, Reactome and MapMan need. The next screen shows the number of features successfully mapped and the data distribution used for pathway colouring. Metabolite name assignments are shown, and you can choose which one to keep when a name is ambiguous. Click <a class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Next step</a> when you are ready.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_MATCH + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
@@ -1577,7 +1577,7 @@ function PA_Step1JobView() {
 								'<div class="po-step-number">3</div>' +
 								'<h3 data-guides="ignore">Explore results</h3>' +
 							'</div>' +
-							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark() + ' AI Interpret</a>. Read more about these analyses in <a href="https://conesalab.github.io/PaintOmics/" target="_blank">our documentation</a>.</p>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a class="button btn-inline btn-small btn-paint" role="img" aria-label="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a class="button btn-inline btn-small btn-ai">' + getAIMark() + ' AI Interpret</a>. Read more about these analyses in <a href="https://conesalab.github.io/PaintOmics/" target="_blank">our documentation</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_EXPLORE + '</div>' +
 						'</div>' +
 					'</div>' +

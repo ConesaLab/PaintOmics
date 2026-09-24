@@ -948,6 +948,9 @@
 }
 [data-theme="dark"] .po-step-card li,
 [data-theme="dark"] .po-step-card p { color: var(--pa-ink-body); }
+/* Dark ink on the disc: white on the dark theme's lighter orange is 2.61:1 at
+   13px bold; the page colour on it is 6.8:1. */
+[data-theme="dark"] .po-step-number { color: var(--pa-surface-page); }
 /* The diagram plate. Its light fill is one of the warm literals main.css lists
    as untokenised, so it cannot follow a token here and has to be restated - the
    same reason the surfaces around it are restated by selector rather than by

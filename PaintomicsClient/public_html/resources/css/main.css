@@ -7476,12 +7476,17 @@ div.po-step-card p,
      reads is the most expensive place in the product to look faint. */
   color: #3F3F46;
   /* 1.6 gave a 20.8px line box, and the inline buttons sitting in this prose
-     are 22px tall - so every one of them stuck out of its own line and
+     were taller than that - so every one of them stuck out of its own line and
      overlapped the line above. In step 3, where two of them land on
      consecutive lines, the paint control and the AI Interpret pill collided
-     outright. 1.75 is 22.75px, which clears the tallest of them. */
+     outright. 1.75 is 22.75px, which clears the chips' 21px (see the padding
+     on `.po-step-card a.button.btn-inline` below). */
   line-height: 1.75;
   text-align: left;
+  /* The card is a flex column, so the head's 14px margin-bottom no longer
+     collapses with the paragraph's UA margin-top: the two added up to 27px
+     between the step's rule and its first line. */
+  margin-top: 0;
 }
 
 /* The inline buttons in these cards are pictures of real controls, so they
@@ -7501,6 +7506,16 @@ div.po-step-card p,
 .po-step-card a.button.btn-inline {
   border-radius: var(--pa-radius-btn);
   vertical-align: middle;
+  /* 1px, not the base .button's 5px: that margin spaces toolbar buttons, and
+     in prose it pushed "(", ")", "," and "." away from the chip they follow. */
+  margin: 0 1px;
+  /* 21px tall rather than btn-small's 25, so a chip fits the 22.75px line box
+     and two chips on consecutive lines no longer touch. */
+  padding-top: 2px;
+  padding-bottom: 2px;
+  /* Pictures, not controls: they carry no href and do nothing, so they must
+     not hover, show a hand cursor or take focus as if they did. */
+  pointer-events: none;
 }
 
 .po-step-card a.button.btn-secondary.btn-inline {
