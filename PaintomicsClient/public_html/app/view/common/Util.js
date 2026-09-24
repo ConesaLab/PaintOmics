@@ -801,6 +801,45 @@ function describeUnansweredRequest(jqXHR, textStatus) {
     return "the connection was dropped before any answer";
 }
 
+/*
+ * $.ajax with `timeout` counted from the last byte received instead of from
+ * the start: the request is cut off only after `timeout` ms in which nothing
+ * arrived. Before the first byte that is the same limit as before, so a
+ * stalled server still fails at the same moment; once the answer is flowing,
+ * every download `progress` event starts the count again.
+ *
+ * A finished Step 2 is a single status answer of about 1 MB gzipped. On
+ * 2026-09-18 a user whose connection moved ~15 kB/s polled job Ap16613d5J
+ * five times in five minutes; each poll had received 0.8-1.06 MB of the
+ * 1.12 MB when the flat 65 s timeout cut it off, and the chain gave up with
+ * "no answer within 65 s" although the server had answered every time.
+ *
+ * The abort goes through jqXHR.abort("timeout"), so the error callback sees
+ * textStatus "timeout" exactly as it did for jQuery's own timeout.
+ */
+function ajaxWithStallTimeout(settings) {
+    var limit = settings.timeout;
+    if (!(limit > 0)) { return $.ajax(settings); }
+    var timer = null;
+    var jqXHR = null;
+    var arm = function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { if (jqXHR) { jqXHR.abort("timeout"); } }, limit);
+    };
+    var makeXhr = settings.xhr || $.ajaxSettings.xhr;
+    jqXHR = $.ajax($.extend({}, settings, {
+        timeout: 0,
+        xhr: function () {
+            var xhr = makeXhr();
+            xhr.addEventListener("progress", arm);
+            return xhr;
+        }
+    }));
+    arm();
+    jqXHR.always(function () { clearTimeout(timer); });
+    return jqXHR;
+}
+
 /* The line the dialogs show for an answer they cannot read. It used to be
    "Unable to parse the error message.", which describes the client's
    difficulty; the guest whose report reached us on 2026-09-11 had been shown

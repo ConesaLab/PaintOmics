@@ -124,8 +124,10 @@ PUBLISHED = {
     # v=3.1 changes only the frame constant showMessage falls back on (7 -> 8)
     # and the comment beside it, for the dialog whose accent bar moved from the
     # border into 4px of padding; the measured path is unchanged.
+    # v=3.2 adds ajaxWithStallTimeout: the job status poll's 65 s limit counts
+    # from the last byte received, so a large answer on a slow link finishes.
     "app/view/common/Util.js": (
-        "3.1", "ee86cc1484046f423eaf1b7bc4d592d7859d6daa498ed44a565ec23ee0f4dcfa"),
+        "3.2", "9801041a7e0045bf12f036e224fc67dbbe536c46abd13e5b9e4b353a435acfde"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.

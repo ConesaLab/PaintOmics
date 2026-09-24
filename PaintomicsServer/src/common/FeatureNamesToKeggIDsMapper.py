@@ -689,6 +689,27 @@ def _handOver(target, slot, items):
         target[slot] = items
 
 
+def stripOrganismPrefix(featureList, organism):
+    """
+    Rename, in place, every feature whose name is KEGG's "<organism>:<gene>"
+    form to the bare "<gene>". Only the job's own organism code is stripped
+    (case-insensitive), and never down to an empty name, so any other name
+    that happens to contain a colon is left exactly as uploaded.
+
+    @returns {Integer} how many features were renamed
+    """
+    if not organism:
+        return 0
+    prefix = organism.lower() + ":"
+    renamed = 0
+    for feature in featureList:
+        name = feature.getName()
+        if isinstance(name, str) and len(name) > len(prefix) and name[:len(prefix)].lower() == prefix:
+            feature.setName(name[len(prefix):])
+            renamed += 1
+    return renamed
+
+
 def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
     """
     This function is used to query the database in different threads.
@@ -750,6 +771,13 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     try:
         # Save found features for each database, plus the unique between them
         matches = {db: set() for db in databases + ["Total"]}
+
+        # KEGG writes its own gene identifiers as "<organism>:<gene>" (fox:FOXG_00001,
+        # hsa:7157), and a list copied from KEGG carries the prefix. The xref
+        # stores the bare gene (FOXG_00001), so the exact lookup below matched
+        # none of them: on 2026-09-16 a fox job of 16,248 such identifiers was
+        # refused with "matched 0". Drop the prefix for THIS organism only.
+        stripOrganismPrefix(featureList, organism)
 
         # Extract names from features
         featureNames = set(map(attrgetter('name'), featureList))
