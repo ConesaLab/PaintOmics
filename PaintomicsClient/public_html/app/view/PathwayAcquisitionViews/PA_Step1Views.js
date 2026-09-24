@@ -2683,6 +2683,9 @@ function OmicSubmittingPanel(nElem, options) {
 							editable: false,
 							allowBlank: false,
 							listeners: {
+								/* An instance `listeners` replaces the one the field override
+								   (ExtJS_extensions.js) uses to add the helpTip's (?). */
+								boxready: Ext.form.field.Base.prototype.listeners.boxready,
 								/* The design file is a compound omic's. `hidden` above was read
 								   once at build time, so a panel switched to Metabolites afterwards
 								   never showed it and a second compound omic could carry no design. */
@@ -4212,6 +4215,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							"to the regulated gene. A negative correlation will fit better to this expected profile. " +
 							"Default: If gene expression (GE) if avilable, select and order by 'negative correlation'. 'Max fold-change' in other case.",
 							listeners:{
+								// Restores the helpTip's (?): see mapToSelector above.
+								boxready: Ext.form.field.Base.prototype.listeners.boxready,
 								change: function(elem, newValue, oldValue){
 									elem = elem.nextSibling("numberfield");
 									if(newValue === "negative_correlation"){
@@ -4725,6 +4730,9 @@ function MORESubmittingPanel(nElem, options) {
 					},
 					helpTip: "Which regression model finds the significant regulators, and which implementation runs it. Options this server cannot run are shown greyed with the reason.",
 					listeners: {
+						// Restores the helpTip's (?), which this `listeners` would
+						// otherwise replace (see mapToSelector in OmicSubmittingPanel).
+						boxready: Ext.form.field.Base.prototype.listeners.boxready,
 						afterrender: function(combo) {
 							loadMOREEngines(combo);
 						},
@@ -4733,8 +4741,14 @@ function MORESubmittingPanel(nElem, options) {
 						   but only after the user has filled in the rest of the form. */
 						beforeselect: function(combo, record) {
 							if (record.get('available') === false) {
-								showInfoMessage("Not available on this server",
-									record.get('unavailableReason'));
+								/* An options object: showMessage reads data.message and
+								   data.showButton, so a bare string gave an empty, modal
+								   dialog with no way out. Encoded because the reason is
+								   the server's text and the body is written as HTML. */
+								showInfoMessage("Not available on this server", {
+									message: Ext.String.htmlEncode(record.get('unavailableReason') || ""),
+									showButton: true
+								});
 								return false;
 							}
 						},
@@ -5221,6 +5235,10 @@ function loadMOREEngines(combo) {
 				message: "This server has no more-rs binary installed, so a " +
 				         "regulatory analysis cannot be started. Please " +
 				         "contact the administrator.",
+				/* The dialog is modal with no close tool, and showWarningMessage
+				   does not default a button: without this the notice locked the
+				   whole form until a reload. */
+				showButton: true,
 				logMessage: "GET /more_backends reported no available engine."
 			});
 		}
