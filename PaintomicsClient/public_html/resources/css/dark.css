@@ -2011,6 +2011,10 @@
 }
 [data-theme="dark"] .po-example:hover { border-color: var(--pa-border-hover); }
 [data-theme="dark"] .po-example-title { color: var(--pa-ink-title); }
+/* The counts inherit the grey facts line, as in light. The global dark `b`
+   rule ties main.css's `.po-example-facts b` and wins on load order, which
+   turned them the link-like bold blue. */
+[data-theme="dark"] .po-example-facts b { color: inherit; }
 [data-theme="dark"] .po-example-tests { border-top-color: var(--pa-border); }
 [data-theme="dark"] .po-example-dot { color: var(--pa-border-control); }
 /* The two badges are 8%-ish tints mixed against white in main.css. Same hues,
@@ -2025,7 +2029,8 @@
 }
 [data-theme="dark"] .po-example-badge-default {
 	background: var(--pa-surface-quiet);
-	color: var(--pa-ink-muted);
+	/* --pa-ink-muted was 4.26:1 on this fill at 11px; the label ink is 5.9. */
+	color: var(--pa-ink-label);
 }
 
 /* The AI conversion sheet and the Step 1 upload strips. The sheet declares

@@ -902,7 +902,10 @@ function PA_Step1JobView() {
 					(tests ? '<div class="po-example-tests">' +
 						'<h5>Exercises</h5><ul>' + tests + '</ul></div>' : '') +
 					'<div class="po-example-actions">' +
-					'<a href="javascript:void(0)" class="button btn-inline po-example-load">Load this dataset</a>' +
+					/* Named after its card: seven identical "Load this dataset" stops
+					   could not be told apart by keyboard or in a screen-reader link list. */
+					'<a href="javascript:void(0)" class="button btn-inline po-example-load" aria-label="Load this dataset: ' +
+					Ext.String.htmlEncode(scenario.title) + '">Load this dataset</a>' +
 					'</div>' +
 					'</article>',
 				listeners: {
@@ -1070,10 +1073,17 @@ function PA_Step1JobView() {
 		// to print the manifest's list, which after this change would understate
 		// every mmu example by leaving Reactome out of a run that includes it.
 		this.applyDatabaseAvailability(function(databases) {
+			// The name the form beside this dialog shows, not the bare KEGG code
+			// the manifest stores ("mmu"); the code follows it for anyone matching
+			// it against KEGG. Falls back to the code if the combo has no name.
+			var organismCombo = me.getComponent().queryById("speciesCombobox");
+			var organismCode = (scenario && scenario.organism) || "mmu";
+			var organismName = (organismCombo && organismCombo.getRawValue()) || organismCode;
+			if (organismName !== organismCode) { organismName += " — " + organismCode; }
 			var facts = scenario
 				? '<ul>' +
 					'<li><b>Dataset:</b> ' + Ext.String.htmlEncode(scenario.title) + '</li>' +
-					'<li><b>Organism:</b> ' + Ext.String.htmlEncode(scenario.organism || "mmu") + '</li>' +
+					'<li><b>Organism:</b> ' + Ext.String.htmlEncode(organismName) + '</li>' +
 					'<li><b>Omics:</b> ' + Ext.String.htmlEncode((scenario.omicNames || []).join(', ')) + '</li>' +
 					'<li><b>Conditions:</b> ' + ((scenario.conditions || []).length || 1) + '</li>' +
 					'<li><b>Databases:</b> ' + Ext.String.htmlEncode(databases.join(', ')) + '</li>' +

@@ -7080,6 +7080,13 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	font-size: 15px;
 	font-weight: 600;
 }
+/* Neptune's 5px header padding put the title 19px left of the body's rail and
+   the close tool 19px past the cards. 24 = the 22px bodyPadding plus the
+   window border and the body's 1px offset. In the stylesheet, not injected:
+   ExtJS reads header padding when it lays the header out. */
+.po-example-window > .x-window-header {
+	padding: 7px 24px;
+}
 .po-example-intro p {
 	margin: 18px 0 6px;
 	font-size: 13.5px;
@@ -7143,13 +7150,15 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	letter-spacing: 0.02em;
 	white-space: nowrap;
 }
+/* Inks darkened on the same hues: #2F73BC and #B4690E were 4.28 and 3.78:1
+   on their tints, under AA at 11px. dark.css restates both. */
 .po-example-badge-sim {
 	background: #E8F1FA;
-	color: #2F73BC;
+	color: #19589E;
 }
 .po-example-badge-real {
 	background: #FDF0E6;
-	color: #B4690E;
+	color: #8F520B;
 }
 .po-example-badge-default {
 	background: var(--pa-surface-quiet);
