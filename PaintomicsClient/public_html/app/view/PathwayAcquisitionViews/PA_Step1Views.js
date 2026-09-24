@@ -738,7 +738,7 @@ function PA_Step1JobView() {
 			(type === "regulatoryomic" && this.regulatoryMethod === "pairwise")
 		);
 		if (!keepCardVisible) {
-			$("div.availableOmicsBox[title=" + type + "]").css("display", "none");
+			$("div.availableOmicsBox[data-type=" + type + "]").css("display", "none");
 		}
 
 		if (submitForm.items.getCount() > 2) {
@@ -763,11 +763,11 @@ function PA_Step1JobView() {
 		if (!this.exampleMode) {
 			if (removedType === "moreanalysis") {
 				// MORE panel removed — free up the unified Regulatory Omic card again.
-				$("div.availableOmicsBox[title=regulatoryomic]").fadeIn();
+				$("div.availableOmicsBox[data-type=regulatoryomic]").fadeIn();
 			} else if (removedType !== undefined &&
 				removedType !== "otheromic" && removedType !== "bedbasedomic" &&
 				removedType !== "mirnabasedomic") {
-				$("div.availableOmicsBox[title=" + removedType + "]").fadeIn();
+				$("div.availableOmicsBox[data-type=" + removedType + "]").fadeIn();
 			}
 		}
 
@@ -2262,12 +2262,12 @@ function PA_Step1JobView() {
 							   inset, so the drag sources start where the headings do. */
 							padding: "10 0",
 							html: '<h2 class="po-omics-col-title">Available omics</h2>' +
-							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene expression</h4></div>' +
-							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
-							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
-							'<div class="availableOmicsBox" title="regulatoryomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory Omic</h4></div>' +
-							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region-based omic</h4></div>' +
-							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>'
+							'<div class="availableOmicsBox" data-type="geneexpression"><h4><a href="javascript:void(0)" aria-label="Add Gene expression"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Gene expression</h4></div>' +
+							'<div class="availableOmicsBox" data-type="metabolomics"><h4><a href="javascript:void(0)" aria-label="Add Metabolomics"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Metabolomics</h4></div>' +
+							'<div class="availableOmicsBox" data-type="proteomics"><h4><a href="javascript:void(0)" aria-label="Add Proteomics"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Proteomics</h4></div>' +
+							'<div class="availableOmicsBox" data-type="regulatoryomic"><h4><a href="javascript:void(0)" aria-label="Add Regulatory Omic"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Regulatory Omic</h4></div>' +
+							'<div class="availableOmicsBox" data-type="bedbasedomic"><h4><a href="javascript:void(0)" aria-label="Add Region-based omic"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Region-based omic</h4></div>' +
+							'<div class="availableOmicsBox" data-type="otheromic"><h4><a href="javascript:void(0)" aria-label="Add Other omics"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Other omics</h4></div>'
 						}, {
 							xtype: "container",
 							id: "submittingPanelsContainer",
@@ -2346,7 +2346,7 @@ function PA_Step1JobView() {
 					});
 
 					$(".availableOmicsBox a").click(function(){
-						var type = $(this).parents(".availableOmicsBox").first().attr("title");
+						var type = $(this).parents(".availableOmicsBox").first().attr("data-type");
 						me.addNewOmicSubmittingPanel(type);
 					});
 			
@@ -2362,7 +2362,7 @@ function PA_Step1JobView() {
 						}
 					}).on("drop", function(el, container, source) {
 						if (container.id === "submittingPanelsContainer-targetEl") {
-							var type = $(el).attr("title");
+							var type = $(el).attr("data-type");
 							me.addNewOmicSubmittingPanel(type);
 						}
 						this.cancel(true);
@@ -2526,7 +2526,8 @@ function OmicSubmittingPanel(nElem, options) {
 					   simply stays at the bottom where it is invisible. */
 					xtype: "box", cls: "omicboxTitle " + this.class, html:
 					'<h4>' +
-					' <a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"><i class="fa fa-trash"></i></a>' +
+					' <a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+					' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"><i class="fa fa-trash" aria-hidden="true"></i></a>' +
 					this.title +
 					'</h4>'
 				}, {
@@ -2925,8 +2926,13 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				   from, and it landed on the section heading below. */
 				xtype: "box",
 				cls: "omicboxTitle " + this.class,
-				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
-				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+				/* Icon-only, so it is named here. A non-removable card keeps the
+				   (empty) anchor for its click binding; take it out of the Tab order
+				   so a keyboard user cannot land on an invisible delete link. */
+				(me.removable
+					? ' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"> <i class="fa fa-trash" aria-hidden="true"></i></a>'
+					: ' tabindex="-1" aria-hidden="true"></a>') + this.title +
 				'</h4>'
 			}, {
 				xtype: "box",
@@ -3786,8 +3792,11 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				   from, and it landed on the section heading below. */
 				xtype: "box",
 				cls: "omicboxTitle " + this.class,
-				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
-				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+				// Named, or out of the Tab order: see RegionBasedOmicSubmittingPanel.
+				(me.removable
+					? ' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"> <i class="fa fa-trash" aria-hidden="true"></i></a>'
+					: ' tabindex="-1" aria-hidden="true"></a>') + this.title +
 				'</h4>'
 			},
 			{
@@ -4463,8 +4472,11 @@ function MORESubmittingPanel(nElem, options) {
 				   from, and it landed on the section heading below. */
 				xtype: "box",
 				cls: "omicboxTitle moreBasedFileBox",
-				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
-				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+				// Named, or out of the Tab order: see RegionBasedOmicSubmittingPanel.
+				(me.removable
+					? ' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"> <i class="fa fa-trash" aria-hidden="true"></i></a>'
+					: ' tabindex="-1" aria-hidden="true"></a>') + this.title +
 				'</h4>'
 			},
 			{

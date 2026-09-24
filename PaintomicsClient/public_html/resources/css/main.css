@@ -3195,19 +3195,19 @@ div.radio input[type='radio'] + label:before {
 .availableOmicsBox {
 	--pa-omic-color: rgb(85, 201, 166);
 }
-.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[title=metabolomics] {
+.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[data-type=metabolomics] {
 	--pa-omic-color: rgb(121, 176, 236);
 }
-.omicboxTitle.proteomicsFileBox, .availableOmicsBox[title=proteomics] {
+.omicboxTitle.proteomicsFileBox, .availableOmicsBox[data-type=proteomics] {
 	--pa-omic-color: rgb(180, 161, 221);
 }
-.omicboxTitle.otherFileBox, .availableOmicsBox[title=otheromic] {
+.omicboxTitle.otherFileBox, .availableOmicsBox[data-type=otheromic] {
 	--pa-omic-color: rgb(214, 127, 107);
 }
-.omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
+.omicboxTitle.bedbasedFileBox, .availableOmicsBox[data-type=bedbasedomic] {
 	--pa-omic-color: #738B9D;
 }
-.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
+.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[data-type=regulatoryomic] {
 	--pa-omic-color: rgb(154, 150, 78);
 }
 .omicboxTitle {
