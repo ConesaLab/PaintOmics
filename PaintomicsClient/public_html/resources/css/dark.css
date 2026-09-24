@@ -1523,6 +1523,13 @@
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool { color: var(--pa-ink-control); }
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool:hover,
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool:focus { color: var(--pa-ink-strong); }
+/* Same trap for the hub list: its metabolite names are <a>, so they came out
+   link-blue (and green under the cursor) instead of the ink light uses. */
+[data-theme="dark"] .pa-hub-item,
+[data-theme="dark"] .pa-hub-item:hover { color: var(--pa-ink); }
+/* The hub rings' light literal (#e7e7e4) is the brightest line on the dark
+   plot; a quiet step keeps them a guide, not a strike-through. */
+[data-theme="dark"] .pa-hub-net { --hub-ring: #3A3C43; }
 [data-theme="dark"] div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"] {
 	background: var(--pa-surface) !important;
 }
