@@ -1336,6 +1336,11 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	color: #D22;
 	font-size: 16px;
 }
+/* The Reset password confirmation. Same green as the notice glyph; the class
+   is removed again on failure, so an error after it goes back to red. */
+.formMessage.is-success {
+	color: #1F6B4A;
+}
 
 /* The rule between the sign-in form and the no-account column. It was an
    inline `border-left: 1px solid #E7E7E7` repeated on three divs, which put it
@@ -1491,8 +1496,12 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 /* The framework renders labels bold and nearly black, which made "Email
    Address:" heavier than the heading above it. Medium weight and a step down
    in size: a label names its field, it does not compete with the title. */
+/* font-family too: Neptune sets Helvetica on labels, inputs and the checkbox
+   label, so every other line of this dialog was Source Sans and the field it
+   names was not. */
 .userViewsDialog .x-form-item-label,
 .userViewsDialog .x-form-item-label-inner {
+	font-family: var(--pa-font-sans);
 	font-size: 12.5px;
 	font-weight: 600;
 	color: #3F3F46;
@@ -1509,6 +1518,7 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
    `height` onto the input element inline when it lays the field out; matching
    it here keeps the box the size the layout thinks it is. */
 .userViewsDialog .x-form-text {
+	font-family: var(--pa-font-sans);
 	font-size: 13.5px;
 	height: 38px;
 	padding: 0 12px;
@@ -1602,6 +1612,12 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 .userViewsDialog .formActionRow {
 	margin-top: 20px;
 }
+/* Body size inside the dialog. At the old 16px the validation line was the
+   largest text after the title; its colour is what makes it stand out. */
+.userViewsDialog .formMessage {
+	font-size: 13px;
+	line-height: 1.45;
+}
 /* Quiet the secondary links under the primary: they were the same weight and
    size as the action itself. */
 .userViewsDialog .po-auth-links {
@@ -1674,9 +1690,11 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	font-weight: 600;
 	color: #3F3F46;
 }
+/* 96, not 112: the paired rows above now carry the 14px field gap, and the
+   form has to fit the fixed-height window without a scrollbar. */
 .po-auth-terms #dataProtection {
 	display: block;
-	height: 112px;
+	height: 96px;
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius-sm);
 	background: var(--pa-surface-quiet, #F7F8FA);
@@ -1693,6 +1711,7 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	width: auto !important;
 	flex: 1 1 auto;
 	margin: 0;
+	font-family: var(--pa-font-sans);
 	font-size: 13px;
 	line-height: 1.45;
 	color: var(--pa-ink-body, #555);

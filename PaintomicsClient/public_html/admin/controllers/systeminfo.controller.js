@@ -7,39 +7,54 @@
 
 	app.controller('SystemInfoController', function($rootScope, $scope, $http, $dialogs, $state, $interval, APP_EVENTS) {
 
+		/* True from a failed poll until the next good one: an outage shows one
+		   error, not a new one every 3 s, and polling carries on so the charts
+		   recover on their own once the server answers again. */
+		var failing = false;
+
 		this.retrieveSystemInfo = function(){
 			$http($rootScope.getHttpRequestConfig("GET", "system-info", {})).
 			then(
 				function successCallback(response){
+					failing = false;
 					$scope.cpu_load = [response.data.cpu_use, 100 - response.data.cpu_use];
 					$scope.mem_load = [response.data.mem_use, 100 - response.data.mem_use];
 					$scope.swap_use = [response.data.swap_use, 100 - response.data.swap_use];
 					$scope.disk_use = response.data.disk_use;
 				},
 				function errorCallback(response){
+					console.error(response.data);
+					var denied = response.data && /CredentialException/.test(response.data.message || "");
+					/* No admin session will not fix itself between polls, so stop
+					   polling and say how to fix it. Anything else may be a blip. */
+					if (denied) {
+						$rootScope.interval.forEach(function(i){ $interval.cancel(i); });
+						$rootScope.interval = [];
+					} else if (failing) {
+						return;
+					}
+					failing = true;
 					$dialogs.closeDialog();
-					debugger;
-					var message = "Failed while retrieving the system information.";
+					var message = denied
+						? "Sign in to PaintOmics with an administrator account, then reload this page."
+						: "Failed while retrieving the system information. The charts will update again once the server responds.";
 					$dialogs.showErrorDialog(message, {
 						logMessage : message + " at SystemInfoController:retrieveSystemInfo."
 					});
-					console.error(response.data);
 				}
 			);
 		};
 
 		this.sendCleanDatabasesRequest = function(){
-			$dialogs.showWaitDialog("This process may take few seconds, be patient!");
+			$dialogs.showWaitDialog("Cleaning the databases. This can take a few seconds.");
 			$http($rootScope.getHttpRequestConfig("DELETE", "clean-databases", {})).
 			then(
 				function successCallback(response){
 					$dialogs.closeDialog();
-					$dialogs.showSuccessDialog("Databases have been succesfully cleaned.");
+					$dialogs.showSuccessDialog("Databases cleaned.");
 				},
 				function errorCallback(response){
 					$dialogs.closeDialog();
-
-					debugger;
 					var message = "Failed while cleaning databases.";
 					$dialogs.showErrorDialog(message, {
 						logMessage : message + " at SystemInfoController:sendCleanDatabasesRequest."

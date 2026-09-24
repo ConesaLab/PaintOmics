@@ -83,7 +83,7 @@ function DM_MyDataListView() {
 					{
 						xtype: 'container',
 						layout: 'column',
-						style: "max-width:1300px; margin: 5px 10px; margin-top:50px;",
+						style: "max-width:1300px; margin: 5px 0; margin-top:50px;",
 						items: [{
 							xtype: 'box', cls: "contentbox omicSummaryBox poMyDataCard", minHeight: 230, html:
 							/* The account card was a two-column table of bold labels, and one
@@ -336,21 +336,33 @@ function DM_MyDataFileListView() {
 						}]
 					}),
 					columns: [{
-						text: 'File Name',
+						/* The fixed columns below are sized to their measured
+						   content, and the name out-flexes Description, so at 1024
+						   it keeps 160px instead of 42 ("g…"); the tooltip gives
+						   the rest of a long name. */
+						text: 'File name',
 						dataIndex: 'fileName',
-						flex: 2
+						flex: 3,
+						minWidth: 160,
+						renderer: function(value, metadata) {
+							var text = (value === null || value === undefined) ? "" : String(value);
+							if (text !== "") {
+								metadata.tdAttr = 'data-qtip="' + Ext.String.htmlEncode(Ext.String.htmlEncode(text)) + '"';
+							}
+							return Ext.String.htmlEncode(text);
+						}
 					}, {
 						text: 'Omic',
 						dataIndex: 'omicType',
-						width: 180
+						width: 115
 					}, {
 						text: 'File type',
 						dataIndex: 'dataType',
-						width: 180
+						width: 170
 					}, {
 						text: 'Description',
 						dataIndex: 'description',
-						flex: 3,
+						flex: 2,
 						renderer: function(value, metadata, record) {
 							var tooltipContent = '';
 							
@@ -378,14 +390,15 @@ function DM_MyDataFileListView() {
 					}, {
 						text: 'Size',
 						dataIndex: 'size',
-						width: 80,
-						renderer: function(value, meta) {
-							return Math.round(value / 1024) + "Kb";
+						width: 65,
+						align: 'right',
+						renderer: function(value) {
+							return poFormatBytes(value);
 						}
 					}, {
-						text: 'Submission Date',
+						text: 'Submission date',
 						dataIndex: 'submissionDate',
-						width: 140,
+						width: 130,
 						renderer: function(value) {
 							return value.substr(6, 4) + "-" + value.substr(3, 2) + "-" + value.substr(0, 2) + " " + value.substr(11, 5);
 						},
@@ -409,8 +422,8 @@ function DM_MyDataFileListView() {
 						}
 					}, {
 						xtype: 'customactioncolumn',
-						text: "File Options",
-						width: 200,
+						text: "File options",
+						width: 180,
 						hidden: !me.allowRowRemoving,
 						items: [{
 							icon: "fa-download",
@@ -437,6 +450,7 @@ function DM_MyDataFileListView() {
 						}]
 					}],
 					listeners: {
+						afterrender: poFitMyDataGrid,
 						cellclick: function(grid, td, cellIndex, record, tr, rowIndex) {
 							var visibleColumns = grid.panel.query('gridcolumn:not([hidden]):not([isGroupHeader])').length;
 							if (cellIndex === visibleColumns - 1) {
@@ -561,21 +575,32 @@ function DM_MyDataJobListView() {
 						}]
 					}),
 					columns: [{
+						/* Fixed widths for the ID and dates: at flex they were cut to
+						   "s1VP44l…" and "2026-09-21…" at every width, while the often
+						   empty Description kept hundreds of px. */
 						text: 'Job ID',
 						dataIndex: 'jobID',
-						flex: .5
+						width: 100
 					}, {
 						text: 'Type',
 						dataIndex: 'jobType',
-						flex: 1
+						flex: 1,
+						/* Wide enough for "PaintOmics analysis" at 1024, where the
+						   fixed columns leave the flex ones about 90px each. */
+						minWidth: 140,
+						/* Display only: the tool names the nav uses, not the server's
+						   class names. Recover and delete still read jobType itself. */
+						renderer: function(value) {
+							return ({PathwayAcquisitionJob: 'PaintOmics analysis', MiRNA2GeneJob: 'miRNA2Genes', Bed2GeneJob: 'Regions2Genes'})[value] || value;
+						}
 					}, {
 						text: 'Last step',
 						dataIndex: 'lastStep',
-						flex: .4
+						width: 80
 					}, {
 						text: 'Submission date',
 						dataIndex: 'date',
-						flex: .6,
+						width: 130,
 						renderer: function(value) {
 							return value.substr(0, 4) + "-" + value.substr(4, 2) + "-" + value.substr(6, 2) + " " + value.substr(8, 2) + ":" + value.substr(10, 2);
 						},
@@ -600,7 +625,7 @@ function DM_MyDataJobListView() {
 					}, {
 						text: 'Expiration date',
 						dataIndex: 'accessDate',
-						flex: .6,
+						width: 115,
 						renderer: function(value) {
 							var date = new Date(value.substr(0, 4) + "-" + value.substr(4, 2) + "-" + value.substr(6, 2));
 							date.setDate(date.getDate() + MAX_LIVE_JOB);
@@ -627,15 +652,18 @@ function DM_MyDataJobListView() {
 					}, {
 						text: 'Description',
 						dataIndex: 'description',
-						flex: 2,
+						flex: 1,
 						renderer: function(value, metadata, record) {
 							var tooltipContent = '';
-							
-							if (value === '') {
-								tooltipContent = "<b style='display:block; width:200px'><i>No description for this job</i></b>";
-						  	} else {
-								var textLines = value.split(';').filter(x => $.trim(x).length && !x.match("Example Job"));
+							var textLines = (value || '').split(';').filter(x => $.trim(x).length && !x.match("Example Job"));
 
+							/* The server describes every example job as just "Example Job;",
+							   which the filter above empties: reading textLines[0] then threw,
+							   and the row stopped rendering here, Recover and Delete included. */
+							if (!textLines.length) {
+								metadata.tdAttr = 'data-qtip="' + "<b style='display:block; width:200px'><i>No description for this job</i></b>" + '"';
+								return /Example Job/.test(value || '') ? 'Example job' : '';
+							} else {
 								if (textLines[0][textLines[0].length - 1] !== ':') {
 									tooltipContent += "<b style='display:block; width:200px'>Description</b><br/><ul><li>" + textLines.filter(x => !x.match("Params")).join('</li><li>') + '</li></ul>';
 								} else {
@@ -682,12 +710,12 @@ function DM_MyDataJobListView() {
 						}
 					}, {
 						xtype: 'customactioncolumn',
-						text: "Job Options",
-						width: 150,
+						text: "Job options",
+						width: 125,
 						items: [{
 							icon: "fa-repeat",
 							text: "Recover",
-							tooltip: 'Recover this Job.',
+							tooltip: 'Recover this job.',
 							handler: function(grid, rowIndex, colIndex) {
 								me.getController().recoverJobsHandler(me, grid.getStore().getAt(rowIndex).get("jobID"), grid.getStore().getAt(rowIndex).get("jobType"), grid.getStore().getAt(rowIndex).get("date"));
 							}
@@ -695,12 +723,15 @@ function DM_MyDataJobListView() {
 							icon: "fa-trash-o",
 							text: "Delete",
 							style: "color: rgb(242, 105, 105);",
-							tooltip: 'Delete this file.',
+							tooltip: 'Delete this job.',
 							handler: function(grid, rowIndex, colIndex) {
 								me.getController().deleteJobsHandler(me, grid.getStore().getAt(rowIndex).get("jobID"), grid.getStore().getAt(rowIndex).get("jobType"));
 							}
 						}]
 					}],
+					listeners: {
+						afterrender: poFitMyDataGrid
+					},
 					multiDeleteHandler: function() {
 						var selectedRows = this.getSelectionModel().getSelection();
 						var selectedIDs = selectedRows.map(x => x.get("jobID"));
@@ -822,6 +853,64 @@ function DM_MyDataJobListView() {
 }
 DM_MyDataUploadFilesPanel.prototype = new View;
 
+/* Bytes as something a human can read, for every size column in this file.
+   The MyData grid used to print Math.round(value / 1024) + "Kb": the kilobit
+   symbol, "0Kb" under 512 B, and "2334265Kb" for a human GTF, next to a Used
+   space meter in MB. The unit has to move with the value. */
+function poFormatBytes(bytes) {
+	var value = Number(bytes);
+	if (!isFinite(value) || value <= 0) {
+		return "";
+	}
+	var units = ["B", "KB", "MB", "GB", "TB"];
+	var unit = 0;
+	while (value >= 1024 && unit < units.length - 1) {
+		value = value / 1024;
+		unit++;
+	}
+	/* One decimal while the mantissa is small (2.4 GB), none once it is not
+	   (566 MB): past 10 the extra digit is noise in a column that gets
+	   scanned rather than measured. */
+	return (unit > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))) + " " + units[unit];
+}
+
+/* Fits the My files and My jobs grids (and the My files picker) to their card.
+   "Search by gene/compound" is a Step 3 control: here it filters on an
+   `identifiers` field these rows lack (and, unticked, on `title` rather than
+   fileName/jobID), and its 170px pushed "Delete selected" past the card edge
+   at 1024. Description, mostly empty, is hidden when the fixed columns leave
+   the flex ones under 300px, where it would get a sliver and the name columns
+   nothing (My data at 1024); the wider picker keeps it. */
+function poFitMyDataGrid(grid) {
+	var toggle = grid.down('#searchByIdCheckbox');
+	if (toggle) {
+		toggle.hide();
+	}
+	Ext.each(grid.query('tbtext'), function(item) {
+		if (item.text === 'Search by gene/compound') {
+			item.hide();
+		}
+	});
+	var fitDescription = function(g, width) {
+		var column = g.down('gridcolumn[dataIndex=description]');
+		if (!column || !width) {
+			return;
+		}
+		var fixed = 0;
+		Ext.each(g.headerCt.getGridColumns(), function(c) {
+			if (!c.flex && !c.isHidden()) {
+				fixed += (c.rendered && c.el) ? c.getWidth() : (c.width || 0);
+			}
+		});
+		var show = (width - fixed) >= 300;
+		if (column.isHidden() === show) {
+			column.setVisible(show);
+		}
+	};
+	grid.on('resize', fitDescription);
+	fitDescription(grid, grid.getWidth());
+}
+
 function DM_GTFFileListView() {
 	/*********************************************************************
 	* ATTRIBUTES
@@ -833,28 +922,6 @@ function DM_GTFFileListView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	/* Bytes as something a human can read. The MyData grid above prints
-	   Math.round(value / 1024) + "Kb", which suits the files a user uploads and
-	   falls apart on a reference library: the human GRCh38 annotation renders
-	   as "2334265Kb". Inbuilt GTFs run from well under a megabyte (yeast) to
-	   gigabytes (human, mouse), so the unit has to move with the value. */
-	var formatFileSize = function(bytes) {
-		var value = Number(bytes);
-		if (!isFinite(value) || value <= 0) {
-			return "";
-		}
-		var units = ["B", "KB", "MB", "GB", "TB"];
-		var unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value = value / 1024;
-			unit++;
-		}
-		/* One decimal while the mantissa is small (2.4 GB), none once it is not
-		   (566 MB): past 10 the extra digit is noise in a column that gets
-		   scanned rather than measured. */
-		return (unit > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))) + " " + units[unit];
-	};
-
 	/* Show the whole cell on hover. Every text column here truncates in a
 	   window this narrow -- "Staphylococcus aureus subsp. aureus strain
 	   MRSA252", "GenBank: BX571856.1" -- and a clipped cell with no tooltip is
@@ -965,7 +1032,7 @@ function DM_GTFFileListView() {
 			? total + (total === 1 ? " file" : " files")
 			: shown + " of " + total + " files";
 		if (this.totalBytes) {
-			text += " &middot; " + formatFileSize(this.totalBytes) + " on disk";
+			text += " &middot; " + poFormatBytes(this.totalBytes) + " on disk";
 		}
 		summary.setText(text);
 	};
@@ -1028,7 +1095,7 @@ function DM_GTFFileListView() {
 					text: ''
 				}],
 				columns: [{
-					text: 'File Name',
+					text: 'File name',
 					dataIndex: 'fileName',
 					flex: 2,
 					renderer: renderWithTooltip
@@ -1057,7 +1124,7 @@ function DM_GTFFileListView() {
 					dataIndex: 'size',
 					width: 90,
 					align: 'right',
-					renderer: formatFileSize
+					renderer: poFormatBytes
 				}, {
 					text: 'Description',
 					dataIndex: 'description',
@@ -1421,14 +1488,25 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 Ext.define('Paintomics.view.common.MyFilesSelectorDialog', {
 	extend: 'Ext.window.Window',
 	alias: 'widget.myFilesSelectorDialog',
+	/* A title names the dialog for screen readers (the header was an
+	   empty bar) and modal dims the page it is picking for. po-dialog
+	   gives Accept the fill and Cancel an outline, as in the organism
+	   request dialog: two filled buttons read as no primary. */
+	title: 'Choose a file from My files',
+	modal: true,
+	cls: 'po-dialog',
 	autoScroll: true,
 	selectedItem: null,
 	_callback: null,
 	buttons: [{
 		text: 'Accept',
 		itemId: "acceptButton",
+		cls: 'po-dialog-primary',
 		handler: function() {
-			this.up("window").selectedItem = this.up("window").queryById("myFilesGrid").getSelectionModel().getSelection();
+			/* Accept with no row picked is a Cancel: the callers treat null as
+			   one, but read [0] of anything else, so an empty [] threw. */
+			var picked = this.up("window").queryById("myFilesGrid").getSelectionModel().getSelection();
+			this.up("window").selectedItem = picked.length ? picked : null;
 			this.up("window").close();
 		}
 	}, {
@@ -1473,13 +1551,20 @@ Ext.define('Paintomics.view.common.MyFilesSelectorDialog', {
 Ext.define('Paintomics.view.common.GTFSelectorDialog', {
 	extend: 'Ext.window.Window',
 	alias: 'widget.GTFSelectorDialog',
+	title: 'Choose a reference GTF file',
+	modal: true,
+	cls: 'po-dialog',
 	selectedItem: null,
 	_callback: null,
 	buttons: [{
 		text: 'Accept',
 		itemId: "acceptButton",
+		cls: 'po-dialog-primary',
 		handler: function() {
-			this.up("window").selectedItem = this.up("window").queryById("GTFFilesGrid").getSelectionModel().getSelection();
+			/* Accept with no row picked is a Cancel: the callers treat null as
+			   one, but read [0] of anything else, so an empty [] threw. */
+			var picked = this.up("window").queryById("GTFFilesGrid").getSelectionModel().getSelection();
+			this.up("window").selectedItem = picked.length ? picked : null;
 			this.up("window").close();
 		}
 	}, {
@@ -1524,13 +1609,20 @@ Ext.define('Paintomics.view.common.GTFSelectorDialog', {
 Ext.define('Paintomics.view.common.OmicInputSelectorDialog', {
 	extend: 'Ext.window.Window',
 	alias: 'widget.OmicInputSelectorDialog',
+	title: 'Choose a file already in this form',
+	modal: true,
+	cls: 'po-dialog',
 	selectedItem: null,
 	_callback: null,
 	buttons: [{
 		text: 'Accept',
 		itemId: "acceptButton",
+		cls: 'po-dialog-primary',
 		handler: function() {
-			this.up("window").selectedItem = this.up("window").queryById("OmicInputFilesGrid").getSelectionModel().getSelection();
+			/* Accept with no row picked is a Cancel: the callers treat null as
+			   one, but read [0] of anything else, so an empty [] threw. */
+			var picked = this.up("window").queryById("OmicInputFilesGrid").getSelectionModel().getSelection();
+			this.up("window").selectedItem = picked.length ? picked : null;
 			this.up("window").close();
 		}
 	}, {
@@ -1593,7 +1685,7 @@ Ext.define('Paintomics.view.common.OmicInputSelectorDialog', {
 					dataIndex: 'omic',
 					flex: 1
 				}, {
-					text: 'Filename',
+					text: 'File name',
 					dataIndex: 'file',
 					flex: 1
 				}]
