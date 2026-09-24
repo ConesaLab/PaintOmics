@@ -709,6 +709,7 @@ def stripOrganismPrefix(featureList, organism):
             renamed += 1
     return renamed
 
+
 def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
     """
     This function is used to query the database in different threads.
