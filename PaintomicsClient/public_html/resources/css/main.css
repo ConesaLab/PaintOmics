@@ -1824,6 +1824,10 @@ div.contentbox .po-spec-list li,
 	align-items: center;
 	gap: 6px;
 	flex: none;
+	/* On the textarea's left edge, not .button's 5px in; and 16px + btn-small's
+	   2x4px padding + 2px border is the 26px the ghost action beside it matches. */
+	margin: 0;
+	line-height: 16px;
 }
 /* "Draft this for me" asks the model to write the experiment design, which
    makes it the only AI action on this form -- and it was .btn-secondary's
@@ -3195,19 +3199,19 @@ div.radio input[type='radio'] + label:before {
 .availableOmicsBox {
 	--pa-omic-color: rgb(85, 201, 166);
 }
-.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[title=metabolomics] {
+.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[data-type=metabolomics] {
 	--pa-omic-color: rgb(121, 176, 236);
 }
-.omicboxTitle.proteomicsFileBox, .availableOmicsBox[title=proteomics] {
+.omicboxTitle.proteomicsFileBox, .availableOmicsBox[data-type=proteomics] {
 	--pa-omic-color: rgb(180, 161, 221);
 }
-.omicboxTitle.otherFileBox, .availableOmicsBox[title=otheromic] {
+.omicboxTitle.otherFileBox, .availableOmicsBox[data-type=otheromic] {
 	--pa-omic-color: rgb(214, 127, 107);
 }
-.omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
+.omicboxTitle.bedbasedFileBox, .availableOmicsBox[data-type=bedbasedomic] {
 	--pa-omic-color: #738B9D;
 }
-.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
+.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[data-type=regulatoryomic] {
 	--pa-omic-color: rgb(154, 150, 78);
 }
 .omicboxTitle {
@@ -3300,11 +3304,71 @@ div.availableOmicsBox h4 {
 	display: none;
 	text-align: center !important;
 	color: #6D7075; /* was #8B8E93 - 3.04:1 on this panel's own #F6F6F6 fill */
-	font-size: 22px;
+	/* A drop zone, not a heading: at 22px it was the loudest text in the
+	   section. The dashed edge is what says "drop here". */
+	font-size: 14px;
 	background: #F6F5F0;
-	padding: 10px;
-	border: 1px solid var(--pa-border);
+	padding: 18px 12px;
+	border: 1px dashed rgba(24, 24, 27, 0.24);
 	border-radius: var(--pa-radius);
+}
+
+/* The option rows inside the Region-based and Pairwise cards were inline
+   16px at a 50px inset -- bigger than the card's 13px labels and on neither
+   rail. The container starts 406px in (416 for the correlation row), so these
+   margins put the drawn box on the 571px input rail. */
+div.po-omic-check {
+	margin: 8px 0 8px 165px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+div.po-omic-check-inset {
+	margin-left: 155px;
+}
+
+/* Step 1's prose that promises AI conversion, and its converter-off twin.
+   format-panel.js sets html.pa-converter-off once /ai_provider answers. */
+.po-if-no-converter,
+html.pa-converter-off .po-if-converter {
+	display: none;
+}
+html.pa-converter-off .po-if-no-converter {
+	display: inline;
+}
+
+/* A bare <hr> took the UA's 2px grey inset rule, the brightest line in the
+   card in dark. The card's own hairline, in both themes. */
+.omicbox hr {
+	height: 0;
+	border: 0;
+	border-top: 1px solid var(--pa-border);
+}
+
+/* Combos and spinners: the global ring lands on the <input> alone and cuts
+   between the text and the trigger arrow. Ring the whole control instead;
+   `!important` because the global rule carries it too. */
+.paStep1Form .x-form-trigger-wrap:has(input:focus-visible) {
+	outline: 3px solid var(--pa-focus-ring);
+	outline-offset: 2px;
+	border-radius: var(--pa-radius-sm);
+}
+.paStep1Form .x-form-trigger-wrap input.x-form-field:focus-visible {
+	outline: none !important;
+}
+
+/* MORE's 'Regulatory model' list: the template marks the engines this server
+   cannot run, and the field's help promises they are "shown greyed with the
+   reason". Muted name, and the reason as a caption on its own line rather than
+   run on after the name as if it were part of it. */
+.x-boundlist-item .more-engine-unavailable {
+	color: var(--pa-ink-muted);
+}
+.more-engine-why {
+	display: block;
+	margin-top: 1px;
+	font-size: 11.5px;
+	line-height: 1.35;
+	color: var(--pa-ink-muted);
 }
 
 #additionalInfoContainer {
@@ -7674,7 +7738,9 @@ p.po-aside-title {
   line-height: 18px;
 }
 
-.po-organism-panel .po-aside-title {
+/* Qualified to outrank `div.contentbox p.po-aside-title` above (0,2,2), which
+   otherwise won and left the 0/8px margins this rule exists to replace. */
+div.contentbox .po-organism-panel p.po-aside-title {
   margin-top: 4px;
   /* No bottom margin here, unlike Section 3's copy of this title: what follows
      it is a row of controls that has to sit on the same line as the field in
@@ -7815,6 +7881,16 @@ a.po-ghost-action > i.fa {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Below ~1150px the four columns cannot hold "X not installed" on one line, and
+   the nowrap label pushed the last column outside the panel, leaving a bare
+   checkbox. Wrap there, and only there: wider windows keep the one-line labels
+   argued for in PA_Step1Views.js. */
+@media (max-width: 1150px) {
+  .po-database-group .x-form-cb-wrap > .x-form-cb-label {
+    white-space: normal;
+    min-width: 0;
+  }
+}
 .po-database-group .x-form-cb-wrap > .x-form-checkbox {
   flex: 0 0 auto;
   /* Neptune gives the box `margin: 5px 0 0` to sit it on a text baseline in the
@@ -7941,6 +8017,17 @@ a.po-ghost-action > i.fa {
 }
 .x-item-disabled .po-browse button:disabled {
   opacity: 1;
+}
+
+/* The Regulatory Omic method chooser: its two option panels kept Neptune's
+   blue frame, grey fill and Arial header -- the only such frame on Step 1. */
+.po-method-chooser .x-panel-body {
+  border-color: var(--pa-border);
+  background-color: var(--pa-surface);
+  color: var(--pa-ink-body, #3F3F46);
+}
+.po-method-chooser .x-panel-header-text {
+  font-family: var(--pa-font-sans);
 }
 
 /* The "Request an organism" dialog, opened by the pill above.
@@ -9758,11 +9845,11 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
 .paLadderExcluded li { padding: 1px 0; }
 .paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
-/* Under the design field, on the input's rail: the label column is 150px
-   (the panel's labelWidth) and the generic paragraph inset is cancelled --
+/* Under the design field, on the input's rail: the label column is 155px
+   (the panel's labelWidth 150 + labelPad 5) and the generic paragraph inset is cancelled --
    with it the note started 26px right of the input it annotates. The
    parent selector outranks `div.contentbox p`. */
-.x-box-item > p.paDesignNote { margin: 0 0 6px 150px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
+.x-box-item > p.paDesignNote { margin: 0 0 6px 155px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
 
 /* ==========================================================================
    Step 2 · the compound cards, redrawn (2026-08-29)

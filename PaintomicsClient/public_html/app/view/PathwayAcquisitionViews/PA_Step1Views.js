@@ -619,6 +619,7 @@ function PA_Step1JobView() {
 		};
 		var win = Ext.create('Ext.window.Window', {
 			title: 'Regulatory Omic — choose analysis method',
+			cls: 'po-dialog po-method-chooser',
 			modal: true,
 			width: 720,
 			closable: true,
@@ -738,7 +739,7 @@ function PA_Step1JobView() {
 			(type === "regulatoryomic" && this.regulatoryMethod === "pairwise")
 		);
 		if (!keepCardVisible) {
-			$("div.availableOmicsBox[title=" + type + "]").css("display", "none");
+			$("div.availableOmicsBox[data-type=" + type + "]").css("display", "none");
 		}
 
 		if (submitForm.items.getCount() > 2) {
@@ -763,11 +764,11 @@ function PA_Step1JobView() {
 		if (!this.exampleMode) {
 			if (removedType === "moreanalysis") {
 				// MORE panel removed — free up the unified Regulatory Omic card again.
-				$("div.availableOmicsBox[title=regulatoryomic]").fadeIn();
+				$("div.availableOmicsBox[data-type=regulatoryomic]").fadeIn();
 			} else if (removedType !== undefined &&
 				removedType !== "otheromic" && removedType !== "bedbasedomic" &&
 				removedType !== "mirnabasedomic") {
-				$("div.availableOmicsBox[title=" + removedType + "]").fadeIn();
+				$("div.availableOmicsBox[data-type=" + removedType + "]").fadeIn();
 			}
 		}
 
@@ -1030,7 +1031,13 @@ function PA_Step1JobView() {
 			}
 		}
 
-		$("#availableOmicsContainer").css("display", "none");
+		// The Help's drag and remove lines go first: neither control exists in
+		// example mode (the trash links are hidden), and the relayout below then
+		// measures the shorter Help box. The column is hidden through ExtJS, not
+		// jQuery, so the hbox gives its 250px back instead of reserving it blank.
+		// Reset rebuilds the view, which brings both back.
+		$("#additionalInfoContainer .content p").slice(0, 2).hide();
+		Ext.getCmp("availableOmicsContainer").hide();
 		// The button used to hide itself here, so a second dataset could only be
 		// reached by throwing the whole job away with Reset. Loading an example is
 		// not a one-way door -- the clear-out above is the first thing this
@@ -1275,7 +1282,10 @@ function PA_Step1JobView() {
 			/* data-guides="ignore" for the same reason as the column title
 			   above it: its rail-mates are the card edges below, which the
 			   overlay's groups cannot offer it as company. */
-			html: '<p data-guides="ignore" style="margin:0 10px 10px;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
+			/* max-width:none: a box, not a paragraph, so it spans the cards under
+			   it; the prose measure cut it short once example mode gave the
+			   column the Available omics width. */
+			html: '<p data-guides="ignore" style="margin:0 10px 10px;max-width:none;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
 				'background:rgba(38,132,255,0.08);font-size:12px;line-height:1.5;">' +
 				'<b>This example dataset is fixed.</b> Its omics, organism and databases come from ' +
 				'the server&rsquo;s catalogue' +
@@ -2200,9 +2210,14 @@ function PA_Step1JobView() {
 							   Cut to one line as well, on the owner's second pass: "each file is
 							   checked the moment you pick it" is the mechanism, and the sentence
 							   only has to make the offer. Two rows, 194px down to 90. */
-							'<p class="ai-intro-copy po-upload-ai-lead"><b>Bring your files as they are.</b> ' +
+							/* Two wordings: format-panel.js marks <html> pa-converter-off when
+							   /ai_provider says this server has no converter, and the offer
+							   would be one the strip below cannot make. */
+							'<p class="ai-intro-copy po-upload-ai-lead"><span class="po-if-converter"><b>Bring your files as they are.</b> ' +
 							'If a file is not in PaintOmics’ format, the <b>PaintOmics AI agent</b> offers to ' +
-							'convert it in your browser and shows you the result.</p>' +
+							'convert it in your browser and shows you the result.</span>' +
+							'<span class="po-if-no-converter"><b>Each file is checked as you pick it.</b> ' +
+							'If one is not in PaintOmics’ format, its card says what to change.</span></p>' +
 							/* The specification line: what wrote the file, and what the file is.
 
 							   Two labelled rows in a 320px column, under an uppercase "Works with"
@@ -2263,6 +2278,27 @@ function PA_Step1JobView() {
 						   height and each omic's coloured header grows a 50px band of
 						   empty colour under its title. */
 						layout: {type: 'hbox'},
+						/* Below 1000px of row (a 1024-1152 window) the fixed 250 + 302
+						   side columns left the omic card ~200px and its file field 0px.
+						   There they narrow, and the Help column gives up its alignment
+						   with Section 2's note (see the 302 below): the file fields
+						   come first. The width check keeps a re-layout from looping. */
+						listeners: {
+							boxready: function(row) {
+								row.fireEvent("resize", row, row.getWidth());
+							},
+							resize: function(row, width) {
+								if (!width) { return; }
+								var narrow = width < 1000;
+								Ext.suspendLayouts();
+								[["availableOmicsContainer", narrow ? 170 : 250],
+								 ["additionalInfoContainer", narrow ? 200 : 302]].forEach(function(s) {
+									var c = Ext.getCmp(s[0]);
+									if (c && !c.isDestroyed && c.width !== s[1]) { c.setWidth(s[1]); }
+								});
+								Ext.resumeLayouts(true);
+							}
+						},
 						items: [{
 							xtype: "box",
 							id: "availableOmicsContainer",
@@ -2272,12 +2308,12 @@ function PA_Step1JobView() {
 							   inset, so the drag sources start where the headings do. */
 							padding: "10 0",
 							html: '<h2 class="po-omics-col-title">Available omics</h2>' +
-							'<div class="availableOmicsBox" title="geneexpression"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Gene expression</h4></div>' +
-							'<div class="availableOmicsBox" title="metabolomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Metabolomics</h4></div>' +
-							'<div class="availableOmicsBox" title="proteomics"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Proteomics</h4></div>' +
-							'<div class="availableOmicsBox" title="regulatoryomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Regulatory Omic</h4></div>' +
-							'<div class="availableOmicsBox" title="bedbasedomic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Region-based omic</h4></div>' +
-							'<div class="availableOmicsBox" title="otheromic"><h4><a href="javascript:void(0)"><i class="fa fa-plus-circle"></i></a> Other omics</h4></div>'
+							'<div class="availableOmicsBox" data-type="geneexpression"><h4><a href="javascript:void(0)" aria-label="Add Gene expression"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Gene expression</h4></div>' +
+							'<div class="availableOmicsBox" data-type="metabolomics"><h4><a href="javascript:void(0)" aria-label="Add Metabolomics"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Metabolomics</h4></div>' +
+							'<div class="availableOmicsBox" data-type="proteomics"><h4><a href="javascript:void(0)" aria-label="Add Proteomics"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Proteomics</h4></div>' +
+							'<div class="availableOmicsBox" data-type="regulatoryomic"><h4><a href="javascript:void(0)" aria-label="Add Regulatory Omic"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Regulatory Omic</h4></div>' +
+							'<div class="availableOmicsBox" data-type="bedbasedomic"><h4><a href="javascript:void(0)" aria-label="Add Region-based omic"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Region-based omic</h4></div>' +
+							'<div class="availableOmicsBox" data-type="otheromic"><h4><a href="javascript:void(0)" aria-label="Add Other omics"><i class="fa fa-plus-circle" aria-hidden="true"></i></a> Other omics</h4></div>'
 						}, {
 							xtype: "container",
 							id: "submittingPanelsContainer",
@@ -2293,7 +2329,7 @@ function PA_Step1JobView() {
 								// so measured raw it reports 270px off the form rail while
 								// sitting exactly where it was tuned to sit.
 								{xtype: 'box',html: '<h2 class="po-omics-col-title" data-guides="ignore">Selected omics</h2>'},
-								{xtype: 'box',html: '<p class="dragHerePanel">Drag and drop here your selected <i>omics</i></p>'}
+								{xtype: 'box',html: '<p class="dragHerePanel">Drag an omic here from <b>Available omics</b>, or click its <i class="fa fa-plus-circle" aria-hidden="true"></i></p>'}
 							]
 						},
 				   		{
@@ -2324,7 +2360,7 @@ function PA_Step1JobView() {
 							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them<span class="po-if-converter">; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format</span>.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
@@ -2356,7 +2392,7 @@ function PA_Step1JobView() {
 					});
 
 					$(".availableOmicsBox a").click(function(){
-						var type = $(this).parents(".availableOmicsBox").first().attr("title");
+						var type = $(this).parents(".availableOmicsBox").first().attr("data-type");
 						me.addNewOmicSubmittingPanel(type);
 					});
 			
@@ -2372,7 +2408,7 @@ function PA_Step1JobView() {
 						}
 					}).on("drop", function(el, container, source) {
 						if (container.id === "submittingPanelsContainer-targetEl") {
-							var type = $(el).attr("title");
+							var type = $(el).attr("data-type");
 							me.addNewOmicSubmittingPanel(type);
 						}
 						this.cancel(true);
@@ -2536,7 +2572,8 @@ function OmicSubmittingPanel(nElem, options) {
 					   simply stays at the bottom where it is invisible. */
 					xtype: "box", cls: "omicboxTitle " + this.class, html:
 					'<h4>' +
-					' <a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"><i class="fa fa-trash"></i></a>' +
+					' <a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+					' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"><i class="fa fa-trash" aria-hidden="true"></i></a>' +
 					this.title +
 					'</h4>'
 				}, {
@@ -2615,7 +2652,7 @@ function OmicSubmittingPanel(nElem, options) {
 								filterOnLoad:true,
 								filters: [{property: 'type', value : 'data'}]
 							}),
-							helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+							helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 						}, {
 							xtype: "myFilesSelectorButton",
 							requiredTag: "optional",
@@ -2677,7 +2714,7 @@ function OmicSubmittingPanel(nElem, options) {
 							xtype: 'box',
 							itemId: "designFileNote",
 							hidden: this.mapTo !== "Compound",
-							/* data-guides="ignore": the note sits on the INPUT rail (150px
+							/* data-guides="ignore": the note sits on the INPUT rail (155px
 							   in, under the field it annotates), which the overlay lists as a
 							   rail but judges this paragraph against the label column. */
 							html: '<p class="paDesignNote" data-guides="ignore">Optional &mdash; runs the class test on your replicates.</p>'
@@ -2688,11 +2725,14 @@ function OmicSubmittingPanel(nElem, options) {
 							hidden: this.omicName !== "",
 							itemId: "mapToSelector",
 							displayField: 'name', valueField: 'value',
-							emptyText: 'Choose the file type',
+							emptyText: 'Genes or metabolites',
 							value: this.mapTo,
 							editable: false,
 							allowBlank: false,
 							listeners: {
+								/* An instance `listeners` replaces the one the field override
+								   (ExtJS_extensions.js) uses to add the helpTip's (?). */
+								boxready: Ext.form.field.Base.prototype.listeners.boxready,
 								/* The design file is a compound omic's. `hidden` above was read
 								   once at build time, so a panel switched to Metabolites afterwards
 								   never showed it and a second compound omic could carry no design. */
@@ -2712,7 +2752,7 @@ function OmicSubmittingPanel(nElem, options) {
 									['Metabolites', 'compound']
 								]
 							}),
-							helpTip: "Defines whether the data can be assigned to Genes or to Metabolites, for example  the values of concentration for proteins that can be mapped to the corresponding codifying gene."
+							helpTip: "Defines whether the data can be assigned to Genes or to Metabolites, for example, the values of concentration for proteins that can be mapped to the corresponding codifying gene."
 						},
 						{
 							xtype: 'combo',
@@ -2730,7 +2770,7 @@ function OmicSubmittingPanel(nElem, options) {
 									['Features', 'features']
 								]
 							}),
-							helpTip: "Define how the Fisher contingency table must be done: counting genes or features (i.e: microRNA, proteins...)."
+							helpTip: "Define how the Fisher contingency table must be done: counting genes or features (e.g. microRNA, proteins)."
 						}
 					]
 				}
@@ -2756,7 +2796,7 @@ function OmicSubmittingPanel(nElem, options) {
 				   allowBlank then refused with no field named. */
 				if (Ext.isEmpty(Ext.String.trim(this.queryById("omicNameField").getValue() || ""))) {
 					valid = false;
-					this.queryById("omicNameField").markInvalid("Please, specify a Omic Name.");
+					this.queryById("omicNameField").markInvalid("Please, specify an omic name.");
 				}
 				if (this.queryById("mainFileSelector").getValue() === "") {
 					valid = false;
@@ -2772,7 +2812,7 @@ function OmicSubmittingPanel(nElem, options) {
 				}
 				if (this.queryById("mapToSelector").getValue() === null) {
 					valid = false;
-					this.queryById("mapToSelector").markInvalid("Please, specify a this field.");
+					this.queryById("mapToSelector").markInvalid("Please, specify whether this data maps to genes or metabolites.");
 				}
 
 				return valid;
@@ -2932,20 +2972,25 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				   from, and it landed on the section heading below. */
 				xtype: "box",
 				cls: "omicboxTitle " + this.class,
-				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
-				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+				/* Icon-only, so it is named here. A non-removable card keeps the
+				   (empty) anchor for its click binding; take it out of the Tab order
+				   so a keyboard user cannot land on an invisible delete link. */
+				(me.removable
+					? ' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"> <i class="fa fa-trash" aria-hidden="true"></i></a>'
+					: ' tabindex="-1" aria-hidden="true"></a>') + this.title +
 				'</h4>'
 			}, {
 				xtype: "box",
 				itemId: "toogleMapRegions",
 				hidden: !this.allowToogle,
-				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My regions are already mapped to Gene IDs, skip this step.</label></div>'
+				html: '<div class="checkbox po-omic-check"><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My regions are already mapped to Gene IDs, skip this step.</label></div>'
 			},
 			{
 				xtype: "box",
 				itemId: "toogleUseAssociations",
 				hidden: !this.allowToogle,
-				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_useAssociations"><label for="' + this.namePrefix + '_useAssociations">Provide own associations lists.</label></div>'
+				html: '<div class="checkbox po-omic-check"><input type="checkbox" id="' + this.namePrefix + '_useAssociations"><label for="' + this.namePrefix + '_useAssociations">Provide own associations lists.</label></div>'
 			}, {
 				xtype: "container",
 				itemId: "itemsContainerAlt",
@@ -3001,7 +3046,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					itemId: "fileTypeSelector",
 					value: "Bed file (regions mapped to Genes)",
 					hidden: true,
-					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
 					requiredTag: "optional",
@@ -3048,7 +3093,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of feature & gene)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of feature & gene)."
 				}]
 			}, {
 				xtype: "container",
@@ -3104,7 +3149,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					itemId: "fileTypeSelector",
 					value: "Map file (features mapped to Genes)",
 					hidden: true,
-					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
 					requiredTag: "optional",
@@ -3166,7 +3211,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or the relevant associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or the relevant associations (combination of genes & features)."
 				}]
 			}, {
 				xtype: "container",
@@ -3377,7 +3422,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					xtype: 'textfield',
 					itemId: "gtfTagField",
 					name: this.namePrefix + '_geneIDtag',
-					fieldLabel: 'GTF Tag for gene ID/name ',
+					fieldLabel: 'GTF tag for gene ID/name',
 					value: "gene_id",
 					allowBlank: false,
 					helpTip: "GTF tag used to get gene ids/names. Default: gene_id"
@@ -3419,7 +3464,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of genes & features)."
 				},{
 					xtype: 'fieldcontainer',
 					fieldLabel: 'Report',
@@ -3793,15 +3838,18 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				   from, and it landed on the section heading below. */
 				xtype: "box",
 				cls: "omicboxTitle " + this.class,
-				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
-				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+				// Named, or out of the Tab order: see RegionBasedOmicSubmittingPanel.
+				(me.removable
+					? ' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"> <i class="fa fa-trash" aria-hidden="true"></i></a>'
+					: ' tabindex="-1" aria-hidden="true"></a>') + this.title +
 				'</h4>'
 			},
 			{
 				xtype: "box",
 				itemId: "toogleMapRegions",
 				hidden: !this.allowToogle,
-				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My features are already mapped to Gene IDs, skip this step.</label></div>'
+				html: '<div class="checkbox po-omic-check"><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My features are already mapped to Gene IDs, skip this step.</label></div>'
 			},
 			{
 				xtype: "container",
@@ -3857,7 +3905,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					itemId: "fileTypeSelector",
 					value: "Map file (features mapped to Genes)",
 					hidden: true,
-					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
 					requiredTag: "optional",
@@ -3935,7 +3983,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of genes & features)."
 				}]
 			}, {
 				xtype: "container",
@@ -4039,7 +4087,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of genes & features)."
 				},
 				/*TARGETS FILE*/
 				{
@@ -4072,7 +4120,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				/* CORRELATION OPTIONS */
 				{
 					xtype: 'box',
-					html: '<hr><p>You can provide a relevant associations file or let the program to automatically retrieve them based on correlation with a gene expression dataset.</p>'
+					html: '<hr><p>You can provide a relevant associations file or let the program retrieve them automatically based on correlation with a gene expression dataset.</p>'
 				},
 				{
 					xtype: "myFilesSelectorButton",
@@ -4086,7 +4134,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					xtype: "box",
 					itemId: "toogleCorrOptions",
 					hidden: !this.allowToogle,
-					html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 14px; "><input type="checkbox" id="' + this.namePrefix + '_corrOptions"><label for="' + this.namePrefix + '_corrOptions">Automatically select relevant associations using correlation.</label></div>'		
+					html: '<div class="checkbox po-omic-check po-omic-check-inset"><input type="checkbox" id="' + this.namePrefix + '_corrOptions"><label for="' + this.namePrefix + '_corrOptions">Automatically select relevant associations using correlation.</label></div>'		
 				},
 				/* CORRELATION OPTIONS */
 				{
@@ -4220,8 +4268,10 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							"Determines how we select the potential features that are regulating a certain gene. " +
 							"For instance, usually miRNA act as inhibitors of gene expression so we should expect an opposite behavior " +
 							"to the regulated gene. A negative correlation will fit better to this expected profile. " +
-							"Default: If gene expression (GE) if avilable, select and order by 'negative correlation'. 'Max fold-change' in other case.",
+							"Default: If gene expression (GE) is available, select and order by 'negative correlation'. 'Max fold-change' in other case.",
 							listeners:{
+								// Restores the helpTip's (?): see mapToSelector above.
+								boxready: Ext.form.field.Base.prototype.listeners.boxready,
 								change: function(elem, newValue, oldValue){
 									elem = elem.nextSibling("numberfield");
 									if(newValue === "negative_correlation"){
@@ -4468,8 +4518,11 @@ function MORESubmittingPanel(nElem, options) {
 				   from, and it landed on the section heading below. */
 				xtype: "box",
 				cls: "omicboxTitle moreBasedFileBox",
-				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;">' +
-				(me.removable ? ' <i class="fa fa-trash"></i></a>' : "</a>") + this.title +
+				html: '<h4><a class="deleteOmicBox" href="javascript:void(0)" style="margin: 0; float:right;  padding-right: 15px;"' +
+				// Named, or out of the Tab order: see RegionBasedOmicSubmittingPanel.
+				(me.removable
+					? ' aria-label="Remove ' + Ext.String.htmlEncode(this.title) + '" title="Remove this omic"> <i class="fa fa-trash" aria-hidden="true"></i></a>'
+					: ' tabindex="-1" aria-hidden="true"></a>') + this.title +
 				'</h4>'
 			},
 			{
@@ -4735,6 +4788,9 @@ function MORESubmittingPanel(nElem, options) {
 					},
 					helpTip: "Which regression model finds the significant regulators, and which implementation runs it. Options this server cannot run are shown greyed with the reason.",
 					listeners: {
+						// Restores the helpTip's (?), which this `listeners` would
+						// otherwise replace (see mapToSelector in OmicSubmittingPanel).
+						boxready: Ext.form.field.Base.prototype.listeners.boxready,
 						afterrender: function(combo) {
 							loadMOREEngines(combo);
 						},
@@ -4743,8 +4799,14 @@ function MORESubmittingPanel(nElem, options) {
 						   but only after the user has filled in the rest of the form. */
 						beforeselect: function(combo, record) {
 							if (record.get('available') === false) {
-								showInfoMessage("Not available on this server",
-									record.get('unavailableReason'));
+								/* An options object: showMessage reads data.message and
+								   data.showButton, so a bare string gave an empty, modal
+								   dialog with no way out. Encoded because the reason is
+								   the server's text and the body is written as HTML. */
+								showInfoMessage("Not available on this server", {
+									message: Ext.String.htmlEncode(record.get('unavailableReason') || ""),
+									showButton: true
+								});
 								return false;
 							}
 						},
@@ -5231,6 +5293,10 @@ function loadMOREEngines(combo) {
 				message: "This server has no more-rs binary installed, so a " +
 				         "regulatory analysis cannot be started. Please " +
 				         "contact the administrator.",
+				/* The dialog is modal with no close tool, and showWarningMessage
+				   does not default a button: without this the notice locked the
+				   whole form until a reload. */
+				showButton: true,
 				logMessage: "GET /more_backends reported no available engine."
 			});
 		}
