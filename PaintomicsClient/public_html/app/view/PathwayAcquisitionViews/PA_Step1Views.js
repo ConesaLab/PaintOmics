@@ -1027,7 +1027,13 @@ function PA_Step1JobView() {
 			}
 		}
 
-		$("#availableOmicsContainer").css("display", "none");
+		// The Help's drag and remove lines go first: neither control exists in
+		// example mode (the trash links are hidden), and the relayout below then
+		// measures the shorter Help box. The column is hidden through ExtJS, not
+		// jQuery, so the hbox gives its 250px back instead of reserving it blank.
+		// Reset rebuilds the view, which brings both back.
+		$("#additionalInfoContainer .content p").slice(0, 2).hide();
+		Ext.getCmp("availableOmicsContainer").hide();
 		// The button used to hide itself here, so a second dataset could only be
 		// reached by throwing the whole job away with Reset. Loading an example is
 		// not a one-way door -- the clear-out above is the first thing this
@@ -1265,7 +1271,10 @@ function PA_Step1JobView() {
 			/* data-guides="ignore" for the same reason as the column title
 			   above it: its rail-mates are the card edges below, which the
 			   overlay's groups cannot offer it as company. */
-			html: '<p data-guides="ignore" style="margin:0 10px 10px;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
+			/* max-width:none: a box, not a paragraph, so it spans the cards under
+			   it; the prose measure cut it short once example mode gave the
+			   column the Available omics width. */
+			html: '<p data-guides="ignore" style="margin:0 10px 10px;max-width:none;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
 				'background:rgba(38,132,255,0.08);font-size:12px;line-height:1.5;">' +
 				'<b>This example dataset is fixed.</b> Its omics, organism and databases come from ' +
 				'the server&rsquo;s catalogue' +
@@ -2253,6 +2262,27 @@ function PA_Step1JobView() {
 						   height and each omic's coloured header grows a 50px band of
 						   empty colour under its title. */
 						layout: {type: 'hbox'},
+						/* Below 1000px of row (a 1024-1152 window) the fixed 250 + 302
+						   side columns left the omic card ~200px and its file field 0px.
+						   There they narrow, and the Help column gives up its alignment
+						   with Section 2's note (see the 302 below): the file fields
+						   come first. The width check keeps a re-layout from looping. */
+						listeners: {
+							boxready: function(row) {
+								row.fireEvent("resize", row, row.getWidth());
+							},
+							resize: function(row, width) {
+								if (!width) { return; }
+								var narrow = width < 1000;
+								Ext.suspendLayouts();
+								[["availableOmicsContainer", narrow ? 170 : 250],
+								 ["additionalInfoContainer", narrow ? 200 : 302]].forEach(function(s) {
+									var c = Ext.getCmp(s[0]);
+									if (c && !c.isDestroyed && c.width !== s[1]) { c.setWidth(s[1]); }
+								});
+								Ext.resumeLayouts(true);
+							}
+						},
 						items: [{
 							xtype: "box",
 							id: "availableOmicsContainer",
