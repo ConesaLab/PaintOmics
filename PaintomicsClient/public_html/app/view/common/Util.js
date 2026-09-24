@@ -600,6 +600,10 @@ function showMessage(title, data) {
         messageDialog = Ext.create('Ext.window.Window', {
             id: "messageDialog", header: false, closeAction: "hide",
             modal: true, closable: false,
+            // Focus is placed after show() below. Left to ExtJS, toFront()
+            // refocuses the window 10ms later and takes it back from Close on
+            // every dialog after the first.
+            focusOnToFront: false,
             /* data-guides="ignore": a centred floating dialog has no left rail
                against the page - its x is half of whatever width the viewport
                happens to have - and the guides overlay's column model cannot
@@ -627,8 +631,12 @@ function showMessage(title, data) {
                 // format-panel.js adds on a file error -- the floats wrapped
                 // into a ragged 2x2 block with the offer on its own line.
                 ' <div id="messageDialogActions" class="messageDialogActions">' +
-                '   <a id="reportErrorButton" class="button btn-warning"><i class="fa fa-bug"></i> Report error</a>' +
-                '   <a id="messageDialogButton" class="button btn-default">Close</a>' +
+                // The href is what puts them in the tab order: without one an
+                // <a> is not focusable, and with closable:false Close was the
+                // only way out, so a keyboard user could not dismiss a message.
+                // No role="button": an <a> does not answer Space.
+                '   <a id="reportErrorButton" href="javascript:void(0)" class="button btn-warning"><i class="fa fa-bug"></i> Report error</a>' +
+                '   <a id="messageDialogButton" href="javascript:void(0)" class="button btn-default">Close</a>' +
                 " </div>" +
                 "</div>",
             listeners: {
@@ -659,6 +667,12 @@ function showMessage(title, data) {
 
     $.wait(function () {
         messageDialog.show();
+        // Inside the modal, so Tab does not start on the page behind the scrim.
+        if (showButton) {
+            $("#messageDialogButton").focus();
+        } else {
+            messageDialog.el.focus();
+        }
 
         if (closeTimeout !== 0) {
             $.wait(function () {

@@ -2492,6 +2492,9 @@ body > .x-mask {
    another one. Measured before the fix: 5px/5px/5px/5px on a header whose rule
    said `0 0 1px`. */
 .x-window-default > .x-window-header {
+	/* Neptune's 5px pressed the title against the frame. 12px on the left is
+	   where the confirm, contact and sharing bodies start their text. */
+	padding: 8px 10px 8px 12px;
 	background-color: #F6F5F0;
 	background-image: none;
 	border-width: 0 0 1px !important;
@@ -2540,6 +2543,12 @@ body > .x-mask {
 }
 #messageDialog > .x-window-body {
 	border-radius: var(--pa-radius);
+}
+/* The footer's inner box is exactly as tall as its buttons and clipped, so a
+   focused Yes/No kept only the left and right of its ring. Unclipped here
+   only: the header's inner box keeps its clip (see the header tools below). */
+.x-window .x-toolbar-footer > .x-box-inner {
+	overflow: visible;
 }
 
 /* Header tools - the close control above all - drawn the way a sheet's close
@@ -8120,6 +8129,18 @@ div.contentbox h2.po-omics-col-title {
    is the visible edge, so the radius belongs on it. */
 .x-form-trigger-wrap {
 	border-radius: var(--pa-radius-sm);
+}
+
+/* Neptune sets its own `font: ... helvetica, arial` on each of these, so the
+   body's Source Sans never reached them: form labels, fields, grid cells and
+   dialog buttons were the last text in the old face, beside Source Sans help.
+   .x-form-display-field is left out on purpose: Ext.MessageBox sizes itself
+   around it, and in Source Sans the confirm text wraps and is clipped. */
+.x-form-item, .x-form-item-label, .x-form-cb-label, .x-form-field,
+.x-form-invalid-under, .x-grid-cell, .x-grid-empty, .x-grid-group-title,
+.x-grid-rowbody, .x-column-header, .x-toolbar-text, .x-tab .x-tab-inner,
+.x-btn .x-btn-inner, .x-mask-msg-inner, .x-fieldset-header-text {
+	font-family: var(--pa-font-sans);
 }
 
 /* Checkboxes and radios ------------------------------------------------------

@@ -447,6 +447,17 @@
 	color: var(--pa-ink-body);
 	border-color: var(--pa-border);
 }
+/* Two places the blanket fill above paints a second surface over the first.
+   A window's title band and footer toolbar have their own fill, and their
+   .x-box-inner drew a darker box inside it, behind the title and the buttons.
+   And each view's root container laid a --pa-surface slab over the page
+   ground, which in light is transparent: the cards merged into it, and it
+   ended in a hard edge that lines up with nothing. */
+[data-theme="dark"] .x-window-header .x-box-inner,
+[data-theme="dark"] .x-toolbar .x-box-inner,
+[data-theme="dark"] #mainViewCenterPanel-innerCt > .x-container {
+	background-color: transparent;
+}
 [data-theme="dark"] .x-panel-header,
 [data-theme="dark"] .x-panel-header-default {
 	background-color: var(--pa-surface) !important;
@@ -786,6 +797,10 @@
 	background-color: #FFFFFF;
 }
 [data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
+/* main.css gives these two titles light inks (#0076D6, #AC6304) that measure
+   about 3.6:1 on the dark dialog; error and success already read tokens. */
+[data-theme="dark"] #messageDialog.infoDialog h4 { color: var(--pa-status-info-ink); }
+[data-theme="dark"] #messageDialog.warningDialog h4 { color: var(--pa-status-warning-ink); }
 [data-theme="dark"] .x-tip,
 [data-theme="dark"] .x-tip-body {
 	background-color: var(--pa-surface-quiet) !important;
