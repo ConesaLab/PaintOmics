@@ -9285,6 +9285,12 @@ div.repDetectionCard h3 {
 	flex: 0 1 49%;
 	min-width: 0;
 }
+/* ...unless there is no offer: without AI or consent the panel is rendered
+   display:none (renderAIActions), and the header stopped at half the card.
+   Keyed on that inline style, which jQuery .show() clears. */
+.compoundsIntroText:has(+ .aiSuggestActions[style*="none"]) {
+	flex-basis: 100%;
+}
 
 /* ---- The AI offer ------------------------------------------------------- */
 
@@ -10076,7 +10082,9 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	padding-bottom: 12px;
 	border-bottom: 1px solid var(--pa-border);
 }
-#threshold_box .paClassHowTitle { color: var(--pa-fig-faint); }
+/* Muted ink, not --pa-fig-faint: that is the figure/icon grey, 2.47:1 on the
+   band, and it made the band's own title the faintest text on the step. */
+#threshold_box .paClassHowTitle { color: var(--pa-ink-muted); }
 #threshold_box .paClassHowCol > i { font-size: 12px; color: var(--pa-fig-faint); }
 #threshold_box .paClassHowRow { padding: 20px 0; }
 #threshold_box .paClassHowRow + .paClassHowRow { border-top: 1px solid var(--pa-border); }

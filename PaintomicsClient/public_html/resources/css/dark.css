@@ -105,10 +105,14 @@
   --pa-btn-secondary-border: #2E9A78;
   --pa-btn-secondary-bg-hover: #38AC87;
   --pa-btn-secondary-border-hover: #38AC87;
-  --pa-btn-success-bg: #3F9A3F;
-  --pa-btn-success-border: #3F9A3F;
-  --pa-btn-success-bg-hover: #4BAE4B;
-  --pa-btn-success-border-hover: #4BAE4B;
+  /* The same mistake as the primary above: #3F9A3F carried the white label at
+     3.56:1 and its hover #4BAE4B at about 2.9:1. The light pair is used in both
+     themes (4.62:1, hover darkening to about 6:1) - Next step, Run PaintOmics,
+     the step-card chips and acceptButton all read these. */
+  --pa-btn-success-bg: #3A843A;
+  --pa-btn-success-border: #3A843A;
+  --pa-btn-success-bg-hover: #31702F;
+  --pa-btn-success-border-hover: #31702F;
   --pa-btn-danger-bg: #DB4B47;
   --pa-btn-danger-border: #DB4B47;
   --pa-btn-danger-bg-hover: #E75D59;
@@ -1377,8 +1381,11 @@
    and leaves it unstroked, so on a chart with axes the rule above turns it into
    the frame the axes hang off - and on the classification pie, which has no
    axes, it turns it into a bare 513x215 rectangle floating around the slices.
-   That box is in every dark screenshot of Step 3 and belongs to nothing. */
-[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border {
+   That box is in every dark screenshot of Step 3 and belongs to nothing.
+   The mapped/unmapped donuts (Step 2's cards, Step 3's Show mapping) are pies
+   too and drew the same box, so any chart with a pie series is caught. */
+[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border,
+[data-theme="dark"] .highcharts-container:has(.highcharts-pie-series) .highcharts-plot-border {
 	stroke: none;
 }
 [data-theme="dark"] .highcharts-axis-labels text,
