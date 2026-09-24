@@ -936,9 +936,9 @@
    "Data Uploading" headings were the worst, at 2.2 and 1.0.
    --------------------------------------------------------------------------- */
 
-[data-theme="dark"] .po-hero,
-[data-theme="dark"] .po-hero-section,
-[data-theme="dark"] .po-about-section { background: var(--pa-surface-page); }
+/* No background on the hero or the About section: both sit in (or are) a
+   .contentbox, which already takes --pa-surface. Painting them the page colour
+   made the first two cards read as holes, and the About card two-toned. */
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
 
@@ -948,6 +948,9 @@
 }
 [data-theme="dark"] .po-step-card li,
 [data-theme="dark"] .po-step-card p { color: var(--pa-ink-body); }
+/* Dark ink on the disc: white on the dark theme's lighter orange is 2.61:1 at
+   13px bold; the page colour on it is 6.8:1. */
+[data-theme="dark"] .po-step-number { color: var(--pa-surface-page); }
 /* The diagram plate. Its light fill is one of the warm literals main.css lists
    as untokenised, so it cannot follow a token here and has to be restated - the
    same reason the surfaces around it are restated by selector rather than by
@@ -2008,6 +2011,10 @@
 }
 [data-theme="dark"] .po-example:hover { border-color: var(--pa-border-hover); }
 [data-theme="dark"] .po-example-title { color: var(--pa-ink-title); }
+/* The counts inherit the grey facts line, as in light. The global dark `b`
+   rule ties main.css's `.po-example-facts b` and wins on load order, which
+   turned them the link-like bold blue. */
+[data-theme="dark"] .po-example-facts b { color: inherit; }
 [data-theme="dark"] .po-example-tests { border-top-color: var(--pa-border); }
 [data-theme="dark"] .po-example-dot { color: var(--pa-border-control); }
 /* The two badges are 8%-ish tints mixed against white in main.css. Same hues,
@@ -2022,7 +2029,8 @@
 }
 [data-theme="dark"] .po-example-badge-default {
 	background: var(--pa-surface-quiet);
-	color: var(--pa-ink-muted);
+	/* --pa-ink-muted was 4.26:1 on this fill at 11px; the label ink is 5.9. */
+	color: var(--pa-ink-label);
 }
 
 /* The AI conversion sheet and the Step 1 upload strips. The sheet declares
