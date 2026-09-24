@@ -326,6 +326,21 @@
 	background-color: var(--pa-btn-ghost-danger-bg-hover);
 	color: var(--pa-btn-ghost-danger-ink-hover);
 }
+/* Step 4's Show Pathway carries .btn-primary. In light the header ghost wins
+   on specificity; here section 13's `.button.btn-primary` ties with the ghost
+   and wins on source order, so dark alone painted it as a filled blue primary.
+   Restated one step more specific, for the real toolbar and its miniature. */
+[data-theme="dark"] .secondTopToolbar .button.btn-primary,
+[data-theme="dark"] .paToolbarMiniature .button.btn-primary {
+	background-color: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .secondTopToolbar .button.btn-primary:hover {
+	background-color: var(--pa-btn-default-bg-hover);
+	color: var(--pa-ink-strong);
+	border-color: var(--pa-border-control-hover);
+}
 /* The account control keeps a filled treatment in dark too (HeaderButton
    tone="account"), but the neutral fill is only 1.42:1 against the #212227
    toolbar, so unlike the light theme the boundary has to stay on the border -

@@ -235,12 +235,17 @@ function PA_Step4JobView() {
 				xtype: "container", cls: "toolbar secondTopToolbar",
 				items: [{
 					xtype: "box", html:
-					'<a href="javascript:void(0)" class="button btn-danger helpTip" id="visualSettingsButton"><i class="fa fa-wrench"></i> Settings</a>' +
+					// Settings dropped btn-danger: the header's red ink means
+					// destructive, and opening a settings panel is not.
+					'<a href="javascript:void(0)" class="button helpTip" id="visualSettingsButton"><i class="fa fa-wrench"></i> Settings</a>' +
 					'<a href="javascript:void(0)" class="button btn-info helpTip" id="searchButton"><i class="fa fa-search"></i> Search</a>' +
 					'<a href="javascript:void(0)" class="button btn-secondary helpTip" id="globalHeatmapButton"><i class="fa fa-th"></i> Show Heatmap</a>' +
-					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a></div>' +
+					'<a href="javascript:void(0)" class="button btn-primary helpTip" id="showPathwayButton"><i class="fa fa-sitemap"></i>  Show Pathway</a>' +
 					'<a href="javascript:void(0)" class="button btn-default backButton"><i class="fa fa-arrow-left"></i> Go back</a>' +
-					'<a href="javascript:void(0)" class="button helpTip" style=" float: left; background-color: #CD435D; color: #fff;" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
+					// History is navigation, not the step's primary action and not a
+					// destructive one, so it is a ghost like Go back; the red fill it
+					// had was inline, where dark.css could not reach it either.
+					'<a href="javascript:void(0)" class="button btn-default helpTip" id="showHistoryButton"><i class="fa fa-history"></i> History</a>' +
 					// The panel covers the pathway it slides over and had no way out of
 					// its own: closing it meant knowing to press the History button in
 					// the toolbar behind it a second time.

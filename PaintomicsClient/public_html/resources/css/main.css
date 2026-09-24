@@ -4849,6 +4849,19 @@ i.masterRegulator:before {
 	border-bottom: 1px solid var(--pa-border);
 }
 
+/* Step 4's four view toggles sit in the ExtJS box, which is a plain block, so
+   they touched with no gap while Go back and History (in the flex row around
+   it) stood 8px apart. The box becomes the same row. The 2px trimmed from each
+   side pays for the three new gaps, so the header nav keeps its width at 1440. */
+#pathwaysPanelsWrapper .secondTopToolbar .x-component {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+#pathwaysPanelsWrapper .secondTopToolbar .button {
+	padding: 0 11px;
+}
+
 /*PATHWAYS THUMBNAILS FOR HISTORY PANEL*/
 
 /* This panel slides over the pathway diagram, so it has to read as something
