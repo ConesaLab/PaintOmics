@@ -1357,6 +1357,12 @@
    they are secondary counts over the checkbox lists that carry the content. */
 [data-theme="dark"] .metaboliteBox h4 { color: var(--pa-ink-label); }
 
+/* The AI offer's label. `#mainViewCenterPanel h3` above inks every card heading
+   --pa-ink-title at (1,1,1), which outranks main.css's AI-blue rule and left
+   the one AI-coloured label on the step grey. Dark --pa-ai-blue measures about
+   4.5:1 on the panel's tint, as it does on .aiBadge-ai. */
+[data-theme="dark"] #mainViewCenterPanel .aiSuggestActionsBody > .aiSuggestActionsTitle { color: var(--pa-ai-blue); }
+
 /* ---------------------------------------------------------------------------
    10. Highcharts
 

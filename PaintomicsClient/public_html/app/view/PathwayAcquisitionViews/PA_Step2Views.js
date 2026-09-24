@@ -300,7 +300,7 @@ function PA_Step2JobView() {
 				items: [{
 					html: '<h2 style="width: 100%;">Configure the number of clusters</h2>'
 				}, {
-					html: '<p>In the next step PaintOmics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.<br><br></p>'
+					html: '<p>In the next step PaintOmics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.</p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,
@@ -2246,7 +2246,12 @@ function renderMappingDonut(divName, omicName, mapped, unmapped, note) {
 		},
 		credits: {enabled: false},
 		tooltip: {
-			pointFormat: '{series.name}: <b>{point.y}</b><br/><br/>{point.options.note}<br/>'
+			// Grouped like the caption under the ring ("11,296"), not with
+			// Highcharts' default space; no blank lines when there is no note.
+			pointFormatter: function () {
+				return Ext.String.htmlEncode(this.series.name) + ': <b>' + this.y.toLocaleString() + '</b>' +
+					(this.options.note ? '<br/><br/>' + this.options.note : '');
+			}
 		},
 		plotOptions: {
 			pie: {
@@ -2299,7 +2304,7 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 		this.component = Ext.widget({
 			xtype: "box",
 			cls: "contentbox omicSummaryBox",
-			html: '<h3 class = "metaboliteTitle" style="display:inline-block;margin-right: 20px;">' + this.omicName + '</h3>' +
+			html: '<h3 class = "metaboliteTitle" style="display:inline-block;margin-right: 20px;">' + Ext.String.htmlEncode(this.omicName) + '</h3>' +
 			'<div>' +
 			'  <div style="height:195px; overflow:hidden; width:50%; float: right;" id="' + divName + 'data_dstribution_plot"></div>' +
 			// The chart keeps its fixed height; the caption sits below it inside
@@ -2329,8 +2334,11 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							if ("Total" in mappedInfo) {
 								mappedFeatures = mappedInfo["Total"];
 
-								added_info = Object.keys(mappedInfo).map(function(db) {
-									return("• " + db + ": " + mappedInfo[db]);
+								// "Total" is the headline number already; list databases only.
+								added_info = Object.keys(mappedInfo).filter(function(db) {
+									return db !== "Total";
+								}).map(function(db) {
+									return("• " + db + ": " + Number(mappedInfo[db]).toLocaleString());
 								}).join('<br />');
 							} else {
 								mappedFeatures = mappedInfo[Object.keys(mappedInfo)[0]];
@@ -2398,11 +2406,13 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							labels: {
 								enabled: false
 							},
+							// No labels on this axis, so its tick was a stub pointing at nothing.
+							tickLength: 0,
 							title: null
 						},
 						tooltip: {
 							formatter: function() {
-								var text = '<span style="font-size:9px; text-align: right;"><em>' + me.omicName + '</em><br/>';
+								var text = '<span style="font-size:9px; text-align: right;"><em>' + Ext.String.htmlEncode(me.omicName) + '</em><br/>';
 								text += "<b>Min (outliers inc.): </b>" + (me.dataDistribution[2]).toFixed(4) + '<br/>';
 								text += "<b>Lower whisker: </b>" + (this.point.low / 10).toFixed(4) + '<br/>';
 								text += "<b>Percentile 10: </b>" + (me.dataDistribution[3]).toFixed(4) + '<br/>';
@@ -2427,7 +2437,7 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 								value: me.dataDistribution[3] * 10,
 								color: '#001dff',
 								width: 1,
-								dashstyle: "DashDot",
+								dashStyle: "DashDot",
 								// Level and beside the line rather than the default
 								// rotated along it; #595959 is 7:1 on white, where
 								// 'gray' was 3.95:1. dark.css restates the ink.
@@ -2443,7 +2453,7 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 								value: me.dataDistribution[7] * 10,
 								color: '#001dff',
 								width: 1,
-								dashstyle: "DashDot",
+								dashStyle: "DashDot",
 								label: {
 									text: 'p90',
 									rotation: 0,
