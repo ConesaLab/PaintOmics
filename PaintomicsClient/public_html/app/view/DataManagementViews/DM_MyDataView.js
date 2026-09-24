@@ -336,23 +336,33 @@ function DM_MyDataFileListView() {
 						}]
 					}),
 					columns: [{
+						/* The fixed columns below are sized to their measured
+						   content, and the name out-flexes Description, so at 1024
+						   it keeps 160px instead of 42 ("g…"); the tooltip gives
+						   the rest of a long name. */
 						text: 'File name',
 						dataIndex: 'fileName',
-						flex: 2
+						flex: 3,
+						minWidth: 160,
+						renderer: function(value, metadata) {
+							var text = (value === null || value === undefined) ? "" : String(value);
+							if (text !== "") {
+								metadata.tdAttr = 'data-qtip="' + Ext.String.htmlEncode(Ext.String.htmlEncode(text)) + '"';
+							}
+							return Ext.String.htmlEncode(text);
+						}
 					}, {
-						/* 130 and 190 (Options) rather than 180 and 200: at 1024 the
-						   fixed columns overran the card and cut "Delete" to "Del". */
 						text: 'Omic',
 						dataIndex: 'omicType',
-						width: 130
+						width: 115
 					}, {
 						text: 'File type',
 						dataIndex: 'dataType',
-						width: 180
+						width: 170
 					}, {
 						text: 'Description',
 						dataIndex: 'description',
-						flex: 3,
+						flex: 2,
 						renderer: function(value, metadata, record) {
 							var tooltipContent = '';
 							
@@ -380,7 +390,7 @@ function DM_MyDataFileListView() {
 					}, {
 						text: 'Size',
 						dataIndex: 'size',
-						width: 80,
+						width: 65,
 						align: 'right',
 						renderer: function(value) {
 							return poFormatBytes(value);
@@ -388,7 +398,7 @@ function DM_MyDataFileListView() {
 					}, {
 						text: 'Submission date',
 						dataIndex: 'submissionDate',
-						width: 140,
+						width: 130,
 						renderer: function(value) {
 							return value.substr(6, 4) + "-" + value.substr(3, 2) + "-" + value.substr(0, 2) + " " + value.substr(11, 5);
 						},
@@ -413,7 +423,7 @@ function DM_MyDataFileListView() {
 					}, {
 						xtype: 'customactioncolumn',
 						text: "File options",
-						width: 190,
+						width: 180,
 						hidden: !me.allowRowRemoving,
 						items: [{
 							icon: "fa-download",
@@ -440,6 +450,7 @@ function DM_MyDataFileListView() {
 						}]
 					}],
 					listeners: {
+						afterrender: poFitMyDataGrid,
 						cellclick: function(grid, td, cellIndex, record, tr, rowIndex) {
 							var visibleColumns = grid.panel.query('gridcolumn:not([hidden]):not([isGroupHeader])').length;
 							if (cellIndex === visibleColumns - 1) {
@@ -574,6 +585,9 @@ function DM_MyDataJobListView() {
 						text: 'Type',
 						dataIndex: 'jobType',
 						flex: 1,
+						/* Wide enough for "PaintOmics analysis" at 1024, where the
+						   fixed columns leave the flex ones about 90px each. */
+						minWidth: 140,
 						/* Display only: the tool names the nav uses, not the server's
 						   class names. Recover and delete still read jobType itself. */
 						renderer: function(value) {
@@ -694,7 +708,7 @@ function DM_MyDataJobListView() {
 					}, {
 						xtype: 'customactioncolumn',
 						text: "Job options",
-						width: 150,
+						width: 125,
 						items: [{
 							icon: "fa-repeat",
 							text: "Recover",
@@ -712,6 +726,9 @@ function DM_MyDataJobListView() {
 							}
 						}]
 					}],
+					listeners: {
+						afterrender: poFitMyDataGrid
+					},
 					multiDeleteHandler: function() {
 						var selectedRows = this.getSelectionModel().getSelection();
 						var selectedIDs = selectedRows.map(x => x.get("jobID"));
@@ -852,6 +869,32 @@ function poFormatBytes(bytes) {
 	   (566 MB): past 10 the extra digit is noise in a column that gets
 	   scanned rather than measured. */
 	return (unit > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))) + " " + units[unit];
+}
+
+/* Fits the My files and My jobs grids (and the My files picker) to their card.
+   "Search by gene/compound" is a Step 3 control: here it filters on an
+   `identifiers` field these rows lack (and, unticked, on `title` rather than
+   fileName/jobID), and its 170px pushed "Delete selected" past the card edge
+   at 1024. Description, mostly empty, is hidden below 1000px, where the fixed
+   columns would leave it a sliver and the name columns nothing. */
+function poFitMyDataGrid(grid) {
+	var toggle = grid.down('#searchByIdCheckbox');
+	if (toggle) {
+		toggle.hide();
+	}
+	Ext.each(grid.query('tbtext'), function(item) {
+		if (item.text === 'Search by gene/compound') {
+			item.hide();
+		}
+	});
+	var fitDescription = function(g, width) {
+		var column = g.down('gridcolumn[dataIndex=description]');
+		if (column && column.isHidden() === (width >= 1000)) {
+			column.setVisible(width >= 1000);
+		}
+	};
+	grid.on('resize', fitDescription);
+	fitDescription(grid, grid.getWidth());
 }
 
 function DM_GTFFileListView() {
