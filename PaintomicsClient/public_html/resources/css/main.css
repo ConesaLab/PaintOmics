@@ -1523,8 +1523,10 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	border-color: var(--pa-focus-ring);
 	box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.20);
 }
+/* #71717A, not #A1A1AA: the example address is the only hint of which email
+   to use, and #A1A1AA measured 2.56:1 on the white field (now 4.83:1). */
 .userViewsDialog .x-form-text::placeholder {
-	color: #A1A1AA;
+	color: #71717A;
 }
 /* Neptune marks an invalid field with a red wavy background image tiled along
    the bottom edge, which at this border radius is clipped into a smear. A

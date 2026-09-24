@@ -797,6 +797,18 @@
 	background-color: #FFFFFF;
 }
 [data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
+/* The "Loading..." chip on that scrim (sign-in, My files) kept Neptune's light
+   grey fill and #666 text. Only background-color is set, so the spinner GIF
+   in .x-mask-msg-text survives. */
+[data-theme="dark"] .x-mask-msg {
+	background-color: var(--pa-surface-quiet);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-mask-msg-inner,
+[data-theme="dark"] .x-mask-msg-text {
+	background-color: transparent;
+	color: var(--pa-ink-body);
+}
 /* main.css gives these two titles light inks (#0076D6, #AC6304) that measure
    about 3.6:1 on the dark dialog; error and success already read tokens. */
 [data-theme="dark"] #messageDialog.infoDialog h4 { color: var(--pa-status-info-ink); }
@@ -1862,6 +1874,9 @@
 [data-theme="dark"] .userViewsDialog .x-form-text:hover {
 	border-color: var(--pa-border-control-hover) !important;
 }
+/* main.css's placeholder rule outranks the generic dark input::placeholder, so
+   its dark value is restated here (6.42:1 on the dark field). */
+[data-theme="dark"] .userViewsDialog .x-form-text::placeholder { color: #A1A1AA; }
 [data-theme="dark"] .po-exp-design-hint,
 [data-theme="dark"] .po-exp-design-draft-note {
 	color: var(--pa-ink-muted);
