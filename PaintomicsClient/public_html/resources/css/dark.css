@@ -852,16 +852,22 @@
    4. AI interpretation surfaces (ai-interpret.css owns these, untokenised)
    --------------------------------------------------------------------------- */
 
+/* A whole border, not border-color: the light panel has none, so the colour
+   alone drew nothing, and the panel sat on a card of the same #1A1B1E with
+   only a shadow for an edge. */
 [data-theme="dark"] .ai-widget-panel {
 	background: var(--pa-ai-panel-bg);
-	border-color: var(--pa-border);
+	border: 1px solid var(--pa-border);
 	box-shadow: var(--pa-shadow-ai-panel);
 }
-[data-theme="dark"] .ai-widget-header { background: var(--pa-ai-blue); }
+/* The action fill, as in the light theme: white on --pa-ai-blue is 3.34:1. */
+[data-theme="dark"] .ai-widget-header { background: var(--pa-ai-action-bg); }
 [data-theme="dark"] .ai-widget-messages { background: var(--pa-ai-panel-bg); }
+/* border-color too: the assistant bubble's #e0e0e0 frame is 11.5:1 here. */
 [data-theme="dark"] .ai-msg-bubble {
 	background: var(--pa-ai-bubble-bg);
 	color: var(--pa-ink-body);
+	border-color: var(--pa-border);
 }
 [data-theme="dark"] .ai-msg-user .ai-msg-bubble {
 	background: var(--pa-ai-user-bubble);
@@ -1883,6 +1889,7 @@
 [data-theme="dark"] .ai-widget-progress {
 	background: var(--pa-ai-progress-bg);
 	color: var(--pa-ai-progress-ink);
+	border-bottom-color: var(--pa-border);
 }
 [data-theme="dark"] .ai-widget-progress.is-done { background: var(--pa-toast-success-bg); }
 [data-theme="dark"] .ai-widget-progress.is-error { background: var(--pa-toast-error-bg); }
