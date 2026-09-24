@@ -9358,8 +9358,9 @@ div.repDetectionCard h3 {
 /* ==========================================================================
    Step 2 - "Choose for me" (AI compound disambiguation)
 
-   Built entirely from tokens dark.css already redefines, so the theme follows
-   without a single [data-theme] rule here.
+   Built entirely from tokens dark.css already redefines, so the colours follow
+   the theme; the one [data-theme] rule it needs (the label, which dark.css's
+   card-heading ink outranks) lives in dark.css section 9.
 
    The one idea this styling has to carry: after the button runs, you should be
    able to tell at a glance WHAT touched each card. Three states, three colours,
@@ -9415,6 +9416,12 @@ div.repDetectionCard h3 {
 .compoundsIntroText {
 	flex: 0 1 49%;
 	min-width: 0;
+}
+/* ...unless there is no offer: without AI or consent the panel is rendered
+   display:none (renderAIActions), and the header stopped at half the card.
+   Keyed on that inline style, which jQuery .show() clears. */
+.compoundsIntroText:has(+ .aiSuggestActions[style*="none"]) {
+	flex-basis: 100%;
 }
 
 /* ---- The AI offer ------------------------------------------------------- */
@@ -10207,7 +10214,9 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	padding-bottom: 12px;
 	border-bottom: 1px solid var(--pa-border);
 }
-#threshold_box .paClassHowTitle { color: var(--pa-fig-faint); }
+/* Muted ink, not --pa-fig-faint: that is the figure/icon grey, 2.47:1 on the
+   band, and it made the band's own title the faintest text on the step. */
+#threshold_box .paClassHowTitle { color: var(--pa-ink-muted); }
 #threshold_box .paClassHowCol > i { font-size: 12px; color: var(--pa-fig-faint); }
 #threshold_box .paClassHowRow { padding: 20px 0; }
 #threshold_box .paClassHowRow + .paClassHowRow { border-top: 1px solid var(--pa-border); }
@@ -10261,10 +10270,12 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	color: var(--pa-ink-muted);
 	text-wrap: pretty;
 }
+/* The rule above the footnote sits on the last row, not on the <p>: the p's
+   measure capped its border at two thirds of the band's width. */
+#threshold_box .paClassHowRow:last-of-type { border-bottom: 1px solid var(--pa-border); }
 #threshold_box .paClassHowFoot {
 	margin: 0;
 	padding: 14px 0 0;
-	border-top: 1px solid var(--pa-border);
 	font-size: 12.5px;
 	line-height: 1.45;
 	color: var(--pa-ink-muted);

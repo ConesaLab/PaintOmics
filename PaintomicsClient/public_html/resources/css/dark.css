@@ -105,10 +105,14 @@
   --pa-btn-secondary-border: #2E9A78;
   --pa-btn-secondary-bg-hover: #38AC87;
   --pa-btn-secondary-border-hover: #38AC87;
-  --pa-btn-success-bg: #3F9A3F;
-  --pa-btn-success-border: #3F9A3F;
-  --pa-btn-success-bg-hover: #4BAE4B;
-  --pa-btn-success-border-hover: #4BAE4B;
+  /* The same mistake as the primary above: #3F9A3F carried the white label at
+     3.56:1 and its hover #4BAE4B at about 2.9:1. The light pair is used in both
+     themes (4.62:1, hover darkening to about 6:1) - Next step, Run PaintOmics,
+     the step-card chips and acceptButton all read these. */
+  --pa-btn-success-bg: #3A843A;
+  --pa-btn-success-border: #3A843A;
+  --pa-btn-success-bg-hover: #31702F;
+  --pa-btn-success-border-hover: #31702F;
   --pa-btn-danger-bg: #DB4B47;
   --pa-btn-danger-border: #DB4B47;
   --pa-btn-danger-bg-hover: #E75D59;
@@ -1362,6 +1366,12 @@
    they are secondary counts over the checkbox lists that carry the content. */
 [data-theme="dark"] .metaboliteBox h4 { color: var(--pa-ink-label); }
 
+/* The AI offer's label. `#mainViewCenterPanel h3` above inks every card heading
+   --pa-ink-title at (1,1,1), which outranks main.css's AI-blue rule and left
+   the one AI-coloured label on the step grey. Dark --pa-ai-blue measures about
+   4.5:1 on the panel's tint, as it does on .aiBadge-ai. */
+[data-theme="dark"] #mainViewCenterPanel .aiSuggestActionsBody > .aiSuggestActionsTitle { color: var(--pa-ai-blue); }
+
 /* ---------------------------------------------------------------------------
    10. Highcharts
 
@@ -1386,8 +1396,11 @@
    and leaves it unstroked, so on a chart with axes the rule above turns it into
    the frame the axes hang off - and on the classification pie, which has no
    axes, it turns it into a bare 513x215 rectangle floating around the slices.
-   That box is in every dark screenshot of Step 3 and belongs to nothing. */
-[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border {
+   That box is in every dark screenshot of Step 3 and belongs to nothing.
+   The mapped/unmapped donuts (Step 2's cards, Step 3's Show mapping) are pies
+   too and drew the same box, so any chart with a pie series is caught. */
+[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border,
+[data-theme="dark"] .highcharts-container:has(.highcharts-pie-series) .highcharts-plot-border {
 	stroke: none;
 }
 [data-theme="dark"] .highcharts-axis-labels text,
@@ -1398,7 +1411,11 @@
 /* The box plot's box is drawn white so the median line and whiskers read
    through it; on a dark chart the equivalent is the chart ground, not white. */
 [data-theme="dark"] .highcharts-boxplot-box { fill: var(--pa-surface-quiet); }
-[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft); }
+/* !important because Highcharts writes the label colour inline (style="fill:
+   ..."), so without it this rule never applied. The p10/p90 lines keep a
+   #001dff attribute, 2.05:1 on the chart ground; CSS outranks it. */
+[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft) !important; }
+[data-theme="dark"] .omicSummaryBox .highcharts-plot-line { stroke: #6E8BFF; }
 [data-theme="dark"] .highcharts-tooltip > span {
 	background: var(--pa-surface-quiet) !important;
 	color: var(--pa-ink-body) !important;
