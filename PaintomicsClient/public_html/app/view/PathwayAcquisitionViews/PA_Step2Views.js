@@ -210,12 +210,18 @@ function PA_Step2JobView() {
 
 			databases.forEach(function(dbname) {
 				var matchedCount = matched.perDatabase[dbname];
+				// An omic with no input features must not divide by zero.
+				var pct = (totalFeatures > 0) ? Math.round(matchedCount / totalFeatures * 100) : 0;
 
 				matchingPerDB[dbname] = $.extend(matchingPerDB[dbname] || {}, {
 					[omicName]: {
 						"matched": matchedCount,
-						// An omic with no input features must not divide by zero.
-						"percentage": (totalFeatures > 0) ? Math.ceil(matchedCount / totalFeatures * 100) : 0
+						"percentage": pct,
+						// Rounded, not Math.ceil'd: ceil printed 2,363 of 2,384 as
+						// 100% beside a caption reading 99%. The two ends say <1 / >99
+						// so a partial count never reads as none or as all.
+						"label": (matchedCount > 0 && pct === 0) ? "&lt;1"
+							: (matchedCount < totalFeatures && pct === 100) ? "&gt;99" : pct
 					}});
 			});
 
@@ -361,14 +367,15 @@ function PA_Step2JobView() {
 					   at a glance and gives the card's width something to do. The
 					   figures stay - the bar is the second reading, not the only one.
 
-					   Clamped: the percentage is Math.ceil'd upstream, so a fully
+					   Clamped: the percentage is rounded upstream, so a fully
 					   matched omic can arrive as 100 and nothing above it should
-					   ever draw past the track. */
+					   ever draw past the track. The bar reads `percentage`; the
+					   figure reads `label`, which says <1 / >99 at the ends. */
 					var share = Math.max(0, Math.min(100, Number(cell.percentage) || 0));
 					return '<td><span class="paDbCell">' +
 					'<span class="paDbBar"><i style="width:' + share + '%"></i></span>' +
 					'<span class="paDbCount">' + Number(cell.matched || 0).toLocaleString() + '</span>' +
-					'<span class="paDbPct">' + cell.percentage + '%</span>' +
+					'<span class="paDbPct">' + (cell.label !== undefined ? cell.label : cell.percentage) + '%</span>' +
 					'</span></td>';
 				}).join('') + '</tr>';
 			}).join('');
@@ -2167,8 +2174,22 @@ function mappingSummaryCaption(mappedFeatures, unmappedFeatures) {
 	var total = mapped + unmapped;
 
 	// An omic with no input features at all must not divide by zero.
-	var mappedPct = (total > 0) ? Math.round(mapped / total * 100) : 0;
-	var unmappedPct = (total > 0) ? (100 - mappedPct) : 0;
+	var p = (total > 0) ? Math.round(mapped / total * 100) : 0;
+	var q = (total > 0) ? (100 - p) : 0;
+	// 33 of 8,618 rounds to 0%, and printed "33 unmapped (0%)" under
+	// "8,585 mapped (100%)". A count that is neither none nor all says <1 / >99;
+	// the unmapped share stays the complement, so the pair still sums to 100.
+	var guard = function(n, pct) {
+		if (n > 0 && pct === 0) {
+			return "&lt;1";
+		}
+		if (n < total && pct === 100) {
+			return "&gt;99";
+		}
+		return String(pct);
+	};
+	var mappedPct = guard(mapped, p);
+	var unmappedPct = guard(unmapped, q);
 
 	var row = function(color, count, label, percentage) {
 		return '<div>' +
