@@ -1824,6 +1824,10 @@ div.contentbox .po-spec-list li,
 	align-items: center;
 	gap: 6px;
 	flex: none;
+	/* On the textarea's left edge, not .button's 5px in; and 16px + btn-small's
+	   2x4px padding + 2px border is the 26px the ghost action beside it matches. */
+	margin: 0;
+	line-height: 16px;
 }
 /* "Draft this for me" asks the model to write the experiment design, which
    makes it the only AI action on this form -- and it was .btn-secondary's
@@ -3300,11 +3304,46 @@ div.availableOmicsBox h4 {
 	display: none;
 	text-align: center !important;
 	color: #6D7075; /* was #8B8E93 - 3.04:1 on this panel's own #F6F6F6 fill */
-	font-size: 22px;
+	/* A drop zone, not a heading: at 22px it was the loudest text in the
+	   section. The dashed edge is what says "drop here". */
+	font-size: 14px;
 	background: #F6F5F0;
-	padding: 10px;
-	border: 1px solid var(--pa-border);
+	padding: 18px 12px;
+	border: 1px dashed rgba(24, 24, 27, 0.24);
 	border-radius: var(--pa-radius);
+}
+
+/* The option rows inside the Region-based and Pairwise cards were inline
+   16px at a 50px inset -- bigger than the card's 13px labels and on neither
+   rail. The container starts 406px in (416 for the correlation row), so these
+   margins put the drawn box on the 571px input rail. */
+div.po-omic-check {
+	margin: 8px 0 8px 165px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+div.po-omic-check-inset {
+	margin-left: 155px;
+}
+
+/* A bare <hr> took the UA's 2px grey inset rule, the brightest line in the
+   card in dark. The card's own hairline, in both themes. */
+.omicbox hr {
+	height: 0;
+	border: 0;
+	border-top: 1px solid var(--pa-border);
+}
+
+/* Combos and spinners: the global ring lands on the <input> alone and cuts
+   between the text and the trigger arrow. Ring the whole control instead;
+   `!important` because the global rule carries it too. */
+.paStep1Form .x-form-trigger-wrap:has(input:focus-visible) {
+	outline: 3px solid var(--pa-focus-ring);
+	outline-offset: 2px;
+	border-radius: var(--pa-radius-sm);
+}
+.paStep1Form .x-form-trigger-wrap input.x-form-field:focus-visible {
+	outline: none !important;
 }
 
 /* MORE's 'Regulatory model' list: the template marks the engines this server
@@ -7940,6 +7979,17 @@ a.po-ghost-action > i.fa {
   opacity: 1;
 }
 
+/* The Regulatory Omic method chooser: its two option panels kept Neptune's
+   blue frame, grey fill and Arial header -- the only such frame on Step 1. */
+.po-method-chooser .x-panel-body {
+  border-color: var(--pa-border);
+  background-color: var(--pa-surface);
+  color: var(--pa-ink-body, #3F3F46);
+}
+.po-method-chooser .x-panel-header-text {
+  font-family: var(--pa-font-sans);
+}
+
 /* The "Request an organism" dialog, opened by the pill above.
 
    One line of introduction and two fields, so the body needs nothing but a
@@ -9741,11 +9791,11 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
 .paLadderExcluded li { padding: 1px 0; }
 .paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
-/* Under the design field, on the input's rail: the label column is 150px
-   (the panel's labelWidth) and the generic paragraph inset is cancelled --
+/* Under the design field, on the input's rail: the label column is 155px
+   (the panel's labelWidth 150 + labelPad 5) and the generic paragraph inset is cancelled --
    with it the note started 26px right of the input it annotates. The
    parent selector outranks `div.contentbox p`. */
-.x-box-item > p.paDesignNote { margin: 0 0 6px 150px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
+.x-box-item > p.paDesignNote { margin: 0 0 6px 155px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
 
 /* ==========================================================================
    Step 2 · the compound cards, redrawn (2026-08-29)

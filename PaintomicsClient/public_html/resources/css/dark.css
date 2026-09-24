@@ -786,6 +786,9 @@
 	background-color: #FFFFFF;
 }
 [data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
+/* A disabled block inside a card fades into the card, as it does in light;
+   the scrim above is for modals. */
+[data-theme="dark"] .omicbox .x-mask { background-color: var(--pa-surface); }
 [data-theme="dark"] .x-tip,
 [data-theme="dark"] .x-tip-body {
 	background-color: var(--pa-surface-quiet) !important;
@@ -2123,7 +2126,9 @@
 :root[data-theme="dark"] .paLadderExcluded summary { color: #A1B0C0; }
 :root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
 :root[data-theme="dark"] .paLadderExcluded li.paIsSig { color: #E3EAF2; }
-:root[data-theme="dark"] .paDesignNote { color: #A1B0C0; }
+/* Scoped like the Step 1 form's `p` rule, which outranked the bare class and
+   painted the note in body ink. */
+[data-theme="dark"] #mainViewCenterPanel .paStep1Form p.paDesignNote { color: var(--pa-ink-label); }
 :root[data-theme="dark"] {
   --pa-fig-bar: #3A4756;
   --pa-fig-bar-strong: #55657A;

@@ -619,6 +619,7 @@ function PA_Step1JobView() {
 		};
 		var win = Ext.create('Ext.window.Window', {
 			title: 'Regulatory Omic — choose analysis method',
+			cls: 'po-dialog po-method-chooser',
 			modal: true,
 			width: 720,
 			closable: true,
@@ -2313,7 +2314,7 @@ function PA_Step1JobView() {
 								// so measured raw it reports 270px off the form rail while
 								// sitting exactly where it was tuned to sit.
 								{xtype: 'box',html: '<h2 class="po-omics-col-title" data-guides="ignore">Selected omics</h2>'},
-								{xtype: 'box',html: '<p class="dragHerePanel">Drag and drop here your selected <i>omics</i></p>'}
+								{xtype: 'box',html: '<p class="dragHerePanel">Drag an omic here from <b>Available omics</b>, or click its <i class="fa fa-plus-circle" aria-hidden="true"></i></p>'}
 							]
 						},
 				   		{
@@ -2968,13 +2969,13 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				xtype: "box",
 				itemId: "toogleMapRegions",
 				hidden: !this.allowToogle,
-				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My regions are already mapped to Gene IDs, skip this step.</label></div>'
+				html: '<div class="checkbox po-omic-check"><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My regions are already mapped to Gene IDs, skip this step.</label></div>'
 			},
 			{
 				xtype: "box",
 				itemId: "toogleUseAssociations",
 				hidden: !this.allowToogle,
-				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_useAssociations"><label for="' + this.namePrefix + '_useAssociations">Provide own associations lists.</label></div>'
+				html: '<div class="checkbox po-omic-check"><input type="checkbox" id="' + this.namePrefix + '_useAssociations"><label for="' + this.namePrefix + '_useAssociations">Provide own associations lists.</label></div>'
 			}, {
 				xtype: "container",
 				itemId: "itemsContainerAlt",
@@ -3833,7 +3834,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				xtype: "box",
 				itemId: "toogleMapRegions",
 				hidden: !this.allowToogle,
-				html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 16px; "><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My features are already mapped to Gene IDs, skip this step.</label></div>'
+				html: '<div class="checkbox po-omic-check"><input type="checkbox" id="' + this.namePrefix + '_mapRegions"><label for="' + this.namePrefix + '_mapRegions">My features are already mapped to Gene IDs, skip this step.</label></div>'
 			},
 			{
 				xtype: "container",
@@ -4118,7 +4119,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					xtype: "box",
 					itemId: "toogleCorrOptions",
 					hidden: !this.allowToogle,
-					html: '<div class="checkbox" style=" margin: 10px 50px; font-size: 14px; "><input type="checkbox" id="' + this.namePrefix + '_corrOptions"><label for="' + this.namePrefix + '_corrOptions">Automatically select relevant associations using correlation.</label></div>'		
+					html: '<div class="checkbox po-omic-check po-omic-check-inset"><input type="checkbox" id="' + this.namePrefix + '_corrOptions"><label for="' + this.namePrefix + '_corrOptions">Automatically select relevant associations using correlation.</label></div>'		
 				},
 				/* CORRELATION OPTIONS */
 				{
