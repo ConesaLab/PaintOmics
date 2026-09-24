@@ -4467,11 +4467,13 @@ function PA_Step3PathwayDetailsView() {
 						"  <div class='step3-tooltip-plot-container' name='heatmap-chart'  style='display:none;'>" +
 						/* +34px on top of the row height: that is the band the rotated
 					   condition labels occupy under the x axis. Without it they
-					   would come out of the 35px allowed per trend. */
-					"    <div id='" + divName + "_heatmapcontainer' name='heatmap-chart' style='height:"+ (metagenes.length * 35 + 44 )+ "px;width: 230px;'></div>" +
+					   would come out of the 35px allowed per trend. 200px wide, not 230:
+					   the Details rail's content box is ~203px, and the wider chart lost
+					   its last time point off the right edge. */
+					"    <div id='" + divName + "_heatmapcontainer' name='heatmap-chart' style='height:"+ (metagenes.length * 35 + 44 )+ "px;width: 200px;'></div>" +
 						"  </div>" +
 						"  <div class='step3-tooltip-plot-container selected' name='line-chart'>" +
-						"    <div id='" + divName + "_plotcontainer' style='height:100px;width: 230px;'></div>" +
+						"    <div id='" + divName + "_plotcontainer' style='height:100px;width: 200px;'></div>" +
 						"  </div>"+
 						"</div>"
 					);
@@ -6024,7 +6026,9 @@ function PA_Step3StatsView() {
 				{
 						xtype: 'container', itemId: "omicSummaryPanelStep3",
 						cls: "omicSummaryContainer",
-						layout: 'column',  style: "margin-top:20px;width: 100%;",
+						/* No width: 100% - with the class's 10px left margin it ran
+						   10px past the card and clipped the right-hand omic cards. */
+						layout: 'column',  style: "margin-top:20px;",
 						items: omicSummaryPanelComponents
 				}
 			],

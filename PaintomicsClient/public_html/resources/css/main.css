@@ -3887,7 +3887,9 @@ div[id ^= "pathwayClassificationPlot2Box_"] {
 
 span.networkClusterImage{width: 30%;display: inline-block;margin: 3px; cursor: pointer;}
 span.networkClusterImage img {width: 100%;}
-span.networkClusterImage p {margin: 0;text-align: center; font-size: 10px;}
+/* padding: 0 - `div.contentbox p` (same specificity, earlier) gave this 61px
+   caption 26px each side, so "Cluster 1" broke onto three lines. */
+span.networkClusterImage p {margin: 0; padding: 0; text-align: center; font-size: 10px; white-space: nowrap;}
 span.networkClusterImage > i {
 	display: none;
 	position: relative;
@@ -3909,6 +3911,10 @@ span.networkClusterImage.disabled > i {display:block;}
    what mmu and most of the example datasets produce. */
 div[id ^= "networkview_"] { max-width:1800px; margin: 5px 0; }
 div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{overflow-y:auto; overflow-x: hidden; padding: 2px 10px;}
+/* The overflow makes the details a block formatting context, which sat beside
+   the floated cluster-count Apply above it and shrank to 147px of the 236px
+   rail, clipping every chart. Clear it so the details take the full rail. */
+div[id ^= "patwaysDetailsWrapper_"] { clear: both; }
 
 /* The pathway explorer card ---------------------------------------------------
    One card per database, holding what used to be four: the classification
