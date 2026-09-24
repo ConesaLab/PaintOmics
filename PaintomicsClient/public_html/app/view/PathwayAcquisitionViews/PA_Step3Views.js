@@ -3087,9 +3087,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			if (!me.network) {
 				return;
 			}
-			me.network.renderers.forEach(function(renderer) {
-				if (renderer.resize) {
-					renderer.resize();
+			// sigma keeps its renderers in an object keyed by id, not an array:
+			// forEach threw here on every call, so refresh() never ran either.
+			var renderers = me.network.renderers;
+			Object.keys(renderers).forEach(function(id) {
+				if (renderers[id] && renderers[id].resize) {
+					renderers[id].resize();
 				}
 			});
 			me.network.refresh();
