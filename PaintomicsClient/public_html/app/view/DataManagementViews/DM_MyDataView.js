@@ -655,12 +655,15 @@ function DM_MyDataJobListView() {
 						flex: 1,
 						renderer: function(value, metadata, record) {
 							var tooltipContent = '';
-							
-							if (value === '') {
-								tooltipContent = "<b style='display:block; width:200px'><i>No description for this job</i></b>";
-						  	} else {
-								var textLines = value.split(';').filter(x => $.trim(x).length && !x.match("Example Job"));
+							var textLines = (value || '').split(';').filter(x => $.trim(x).length && !x.match("Example Job"));
 
+							/* The server describes every example job as just "Example Job;",
+							   which the filter above empties: reading textLines[0] then threw,
+							   and the row stopped rendering here, Recover and Delete included. */
+							if (!textLines.length) {
+								metadata.tdAttr = 'data-qtip="' + "<b style='display:block; width:200px'><i>No description for this job</i></b>" + '"';
+								return /Example Job/.test(value || '') ? 'Example job' : '';
+							} else {
 								if (textLines[0][textLines[0].length - 1] !== ':') {
 									tooltipContent += "<b style='display:block; width:200px'>Description</b><br/><ul><li>" + textLines.filter(x => !x.match("Params")).join('</li><li>') + '</li></ul>';
 								} else {
@@ -875,8 +878,9 @@ function poFormatBytes(bytes) {
    "Search by gene/compound" is a Step 3 control: here it filters on an
    `identifiers` field these rows lack (and, unticked, on `title` rather than
    fileName/jobID), and its 170px pushed "Delete selected" past the card edge
-   at 1024. Description, mostly empty, is hidden below 1000px, where the fixed
-   columns would leave it a sliver and the name columns nothing. */
+   at 1024. Description, mostly empty, is hidden when the fixed columns leave
+   the flex ones under 300px, where it would get a sliver and the name columns
+   nothing (My data at 1024); the wider picker keeps it. */
 function poFitMyDataGrid(grid) {
 	var toggle = grid.down('#searchByIdCheckbox');
 	if (toggle) {
@@ -889,8 +893,18 @@ function poFitMyDataGrid(grid) {
 	});
 	var fitDescription = function(g, width) {
 		var column = g.down('gridcolumn[dataIndex=description]');
-		if (column && column.isHidden() === (width >= 1000)) {
-			column.setVisible(width >= 1000);
+		if (!column || !width) {
+			return;
+		}
+		var fixed = 0;
+		Ext.each(g.headerCt.getGridColumns(), function(c) {
+			if (!c.flex && !c.isHidden()) {
+				fixed += (c.rendered && c.el) ? c.getWidth() : (c.width || 0);
+			}
+		});
+		var show = (width - fixed) >= 300;
+		if (column.isHidden() === show) {
+			column.setVisible(show);
 		}
 	};
 	grid.on('resize', fitDescription);
