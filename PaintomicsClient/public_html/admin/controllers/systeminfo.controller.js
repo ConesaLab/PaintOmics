@@ -17,9 +17,14 @@
 					$scope.disk_use = response.data.disk_use;
 				},
 				function errorCallback(response){
+					/* Stop polling first: every 3 s failure closed the error and
+					   opened a new one, so it could never be dismissed. Name the
+					   usual cause (no admin session) rather than a generic line. */
+					$rootScope.interval.forEach(function(i){ $interval.cancel(i); });
+					$rootScope.interval = [];
 					$dialogs.closeDialog();
-					debugger;
-					var message = "Failed while retrieving the system information.";
+					var denied = response.data && /CredentialException/.test(response.data.message || "");
+					var message = denied ? "Sign in to PaintOmics with an administrator account, then reload this page." : "Failed while retrieving the system information.";
 					$dialogs.showErrorDialog(message, {
 						logMessage : message + " at SystemInfoController:retrieveSystemInfo."
 					});
@@ -29,17 +34,15 @@
 		};
 
 		this.sendCleanDatabasesRequest = function(){
-			$dialogs.showWaitDialog("This process may take few seconds, be patient!");
+			$dialogs.showWaitDialog("Cleaning the databases. This can take a few seconds.");
 			$http($rootScope.getHttpRequestConfig("DELETE", "clean-databases", {})).
 			then(
 				function successCallback(response){
 					$dialogs.closeDialog();
-					$dialogs.showSuccessDialog("Databases have been succesfully cleaned.");
+					$dialogs.showSuccessDialog("Databases cleaned.");
 				},
 				function errorCallback(response){
 					$dialogs.closeDialog();
-
-					debugger;
 					var message = "Failed while cleaning databases.";
 					$dialogs.showErrorDialog(message, {
 						logMessage : message + " at SystemInfoController:sendCleanDatabasesRequest."
