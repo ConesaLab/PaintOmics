@@ -915,12 +915,11 @@ ul.submenu {
 .lateralMenu-body > .menuOption {
 	position: relative;
 	display: flex;
-	align-items: center;
-	gap: 5px;
 	/* Tightened from 6px 13px when the step actions joined this row - the nav had
 	   to give back roughly 90px so five Step 4 buttons and the account control
-	   could share the header without colliding. */
-	padding: 6px 10px;
+	   could share the header without colliding. The padding is on .menuPill
+	   (below), so the focusable part fills the whole pill. */
+	padding: 0;
 	border: 0;
 	/* One step inside the track's 8px, because the track insets these by 3px and
 	   a nested corner has to be the outer radius minus the padding or it reads
@@ -939,6 +938,16 @@ ul.submenu {
 	background: #FFFFFF;
 	color: #111111;
 }
+/* The pill's button (MainView.js pillHTML). A span inside the <li>, so the
+   dropdown is not part of the button's name; it carries the padding so its
+   focus ring outlines the whole pill. */
+.lateralMenu-body > .menuOption > .menuPill {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px 10px;
+	border-radius: inherit;
+}
 /* Making room for the step actions ------------------------------------------
    The step actions are `position: fixed` (see .secondTopToolbar), so they take
    part in no layout and the nav has no way to stop before them - it ran
@@ -951,15 +960,15 @@ ul.submenu {
    navHTML names the item while its label is hidden. That is the reason the nav
    compacts instead of clipping: `overflow: hidden` here would also cut off the
    dropdowns, which are absolutely positioned children of these items. */
-.lateralMenu-body.is-compact > .menuOption {
+.lateralMenu-body.is-compact > .menuOption > .menuPill {
 	padding: 6px 7px;
 	gap: 4px;
 }
-.lateralMenu-body.is-iconly > .menuOption {
+.lateralMenu-body.is-iconly > .menuOption > .menuPill {
 	padding: 6px 9px;
 	gap: 0;
 }
-.lateralMenu-body.is-iconly > .menuOption > .menuLabel {
+.lateralMenu-body.is-iconly > .menuOption > .menuPill > .menuLabel {
 	display: none;
 }
 /* The third stage, on the step actions themselves (see fitHeaderNav). font-size
@@ -976,7 +985,7 @@ ul.submenu {
 	font-size: 13px;
 }
 /* The icon sat above the label in the rail and has to sit beside it here. */
-.lateralMenu-body > .menuOption > i.fa {
+.lateralMenu-body > .menuOption > .menuPill > i.fa {
 	display: inline-block;
 	font-size: 13px;
 	margin: 0;
@@ -986,14 +995,14 @@ ul.submenu {
    then on the icon, and stay on the icon here. Read through --pa-nav-accent-N,
    which only dark.css defines: these light inks sit at 1.7-2.5:1 on the dark
    pill, so the icon under the cursor went dark instead of lighting up. */
-.lateralMenu-body > .menuOption:hover > i.fa,
-.lateralMenu-body > .menuOption.selected > i.fa { color: var(--pa-nav-accent-1, #B02A5B); }
-.lateralMenu-body > .menuOption:nth-child(2):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(2).selected > i.fa { color: var(--pa-nav-accent-2, #8A7A18); }
-.lateralMenu-body > .menuOption:nth-child(3):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(3).selected > i.fa { color: var(--pa-nav-accent-3, #2F6FA8); }
-.lateralMenu-body > .menuOption:nth-child(4):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(4).selected > i.fa { color: var(--pa-nav-accent-4, #2E7D3A); }
+.lateralMenu-body > .menuOption:hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption.selected > .menuPill > i.fa { color: var(--pa-nav-accent-1, #B02A5B); }
+.lateralMenu-body > .menuOption:nth-child(2):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(2).selected > .menuPill > i.fa { color: var(--pa-nav-accent-2, #8A7A18); }
+.lateralMenu-body > .menuOption:nth-child(3):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(3).selected > .menuPill > i.fa { color: var(--pa-nav-accent-3, #2F6FA8); }
+.lateralMenu-body > .menuOption:nth-child(4):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(4).selected > .menuPill > i.fa { color: var(--pa-nav-accent-4, #2E7D3A); }
 
 /* Dropdowns. The rail flew these out sideways at `left: 65px` with a negative
    top margin; from a header they drop underneath the item that owns them.

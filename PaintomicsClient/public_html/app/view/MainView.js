@@ -248,22 +248,33 @@ function MainView() {
 				"<a class='navPanel-cite-bib' href='resources/images/" + bib + "' target='_blank'>BibTeX</a></li>";
 		};
 
+		// The pill's button is an inner span, not the <li>: the <li> also holds
+		// the dropdown, and a button takes its name from all its content, so the
+		// Tools pill was read as "Tools From Regions to Genes From miRNA to Genes"
+		// and its options were nested inside a button. title names the pill while
+		// fitHeaderNav() hides its label.
+		var pillHTML = function(icon, label, title, hasPopup) {
+			return "<span class='menuPill' tabindex='0' role='button' title='" + title + "'" +
+				(hasPopup ? " aria-haspopup='true' aria-expanded='false'" : "") + ">" +
+				"<i aria-hidden='true' class='fa " + icon + "'></i><span class='menuLabel'>" + label + "</span></span>";
+		};
+
 		var navHTML = "<ul class='lateralMenu-body'>" +
-				" <li class='menuOption' id='homeButton' title='Job view' tabindex='0' role='button'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" +
-				" <li class='menuOption loggedOption' title='Personal storage' tabindex='0' role='button' aria-haspopup='true'><i class='fa fa-cloud'></i><span class='menuLabel'>Storage</span>" +
+				" <li class='menuOption' id='homeButton'>" + pillHTML("fa-paint-brush", "Job view", "Job view", false) + "</li>" +
+				" <li class='menuOption loggedOption'>" + pillHTML("fa-cloud", "Storage", "Personal storage", true) +
 				"  <ul class='submenu loggedOption'>" +
 				(noLogin != true ?
-					"     <li class='menuOption' data-name='DM_MyDataListView' tabindex='0' role='button'><i class='fa fa-file-text'></i>  My files and Jobs</li>" +
-					"     <li class='menuOption' data-name='DM_MyDataUploadFilesPanel' tabindex='0' role='button'><i class='fa fa-cloud-upload'></i>   Upload new files</li>"
+					"     <li class='menuOption' data-name='DM_MyDataListView' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-file-text'></i>  My files and Jobs</li>" +
+					"     <li class='menuOption' data-name='DM_MyDataUploadFilesPanel' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-cloud-upload'></i>   Upload new files</li>"
 					:
-					"     <li class='menuOption externalOption menuNote'><i class='fa fa-file-text'></i>  Only available for registered accounts.</li>"
+					"     <li class='menuOption externalOption menuNote'><i aria-hidden='true' class='fa fa-file-text'></i>  Only available for registered accounts.</li>"
 				) +
 				// "     <li class='menuOption' data-name='fileEdition'><i class='fa fa-cloud-upload'></i>   File edition</li>"+
 				" </ul></li>" +
-				" <li class='menuOption loggedOption' title='Supporting tools' tabindex='0' role='button' aria-haspopup='true'><i class='fa fa-rocket'></i><span class='menuLabel'>Tools</span>" +
+				" <li class='menuOption loggedOption'>" + pillHTML("fa-rocket", "Tools", "Supporting tools", true) +
 				" <ul class='submenu loggedOption'>" +
-				"     <li class='menuOption' data-name='fromBEDtoGenes' tabindex='0' role='button'><i class='fa fa-align-center'></i>   From Regions to Genes</li>" +
-				"     <li class='menuOption' data-name='fromMiRNAtoGenes' tabindex='0' role='button'><i class='fa fa-link'></i>   From miRNA to Genes</li>"+
+				"     <li class='menuOption' data-name='fromBEDtoGenes' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-align-center'></i>   From Regions to Genes</li>" +
+				"     <li class='menuOption' data-name='fromMiRNAtoGenes' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-link'></i>   From miRNA to Genes</li>"+
 				" </ul></li>" +
 				/* One panel rather than three nested menus. Resources and the
 				   citations are two lists of very different shape, so they get a
@@ -274,10 +285,10 @@ function MainView() {
 				   `.navPanel-inner` carries the grid, not the <ul>: jQuery's
 				   fadeIn() writes `display: block` inline on the submenu itself,
 				   which would beat any display the stylesheet set on it. */
-				" <li class='menuOption' title='Resources, publications and contact' tabindex='0' role='button' aria-haspopup='true'><i class='fa fa-ellipsis-h'></i><span class='menuLabel'>More</span>" +
+				" <li class='menuOption'>" + pillHTML("fa-ellipsis-h", "More", "Resources, publications and contact", true) +
 				" <ul class='submenu navPanel'><li class='navPanel-inner'>" +
 				"  <div class='navPanel-col'><h2 class='navPanel-title'>Resources</h2><ul class='navPanel-list'>" +
-				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
+				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i aria-hidden=\"true\" class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
 				/* The published site, not paintomics.readthedocs.io. That Read the
 				   Docs project last built in July 2022 -- it has no webhook and
 				   still points at the pre-rename repository -- so every one of the
@@ -285,7 +296,7 @@ function MainView() {
 				   copy of the guide, on which the pages for both AI features 404.
 				   The guide is now published from this repository by
 				   .github/workflows/docs.yml on every push to master. */
-				"     <li class='menuOption externalOption'><a href='https://conesalab.github.io/PaintOmics/' target='_blank' rel='noopener'><i class='fa fa-book'></i>Documentation</a></li>" +
+				"     <li class='menuOption externalOption'><a href='https://conesalab.github.io/PaintOmics/' target='_blank' rel='noopener'><i aria-hidden='true' class='fa fa-book'></i>Documentation</a></li>" +
 				// The "PaintOmics 3" entry pointed at http://188.166.42.44/, a bare IP
 				// that no longer answers at all (connection failure, not an error
 				// page). Removed rather than repointed: there is no live PaintOmics 3
@@ -296,7 +307,7 @@ function MainView() {
 				// This server's own examples, not another instance's copy of a
 				// 2017 archive: a deployment with its own datasets installed was
 				// sending people elsewhere for data it does not use.
-				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i class='fa fa-download'></i>PaintOmics example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i aria-hidden='true' class='fa fa-download'></i>PaintOmics example data</a></li>" +
 				// "RGmatch example data" stood here, linking
 				// paintomics.uv.es/resources/rgmatch_example_data.zip. The archive
 				// left the repository in #170 and neither paintomics.org nor
@@ -305,7 +316,7 @@ function MainView() {
 				// PaintOmics 3 entry above; RGmatch's own repository is linked from
 				// the Regions-to-Genes tool. miRNA2Genes is ours, so it comes from
 				// the manifest.
-				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i class='fa fa-download'></i>miRNA2Genes example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i aria-hidden='true' class='fa fa-download'></i>miRNA2Genes example data</a></li>" +
 				"  </ul></div>" +
 				/* The four entries used to be full citations set at `font-size:
 				   9px` with a white heading inline - illegible on the dark rail
@@ -329,7 +340,7 @@ function MainView() {
 				   selected, both of which still resolve through the extra wrappers
 				   to the More pill. */
 				"  <div class='navPanel-foot'><ul class='navPanel-list'>" +
-				"     <li class='menuOption' data-name='contactForm' tabindex='0' role='button'><i class='fa fa-envelope-o'></i>Contact by email</li>" +
+				"     <li class='menuOption' data-name='contactForm' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-envelope-o'></i>Contact by email</li>" +
 				"  </ul></div>" +
 				" </li></ul></li>" +
 				"</ul>";
@@ -400,49 +411,57 @@ function MainView() {
 						me.changeMainView(this.getAttribute("data-name"));
 					});
 
+					// The keyboard way in. The dropdowns only opened on hover, so Tools and
+					// Contact were mouse-only. Focus opens a pill's dropdown, Tab walks into
+					// it, Enter/Space activates, Escape closes. Focus goes back to the pill
+					// before the click, so a dialog it opens keeps focus. setOpen() keeps
+					// aria-expanded true to what is on screen, whichever way it opened.
 					$(".lateralMenu-body").children(".menuOption").each(function() {
-						var me = this;
-						$(this).hover(function() {
-							$(this).children(".submenu").fadeIn(100);
-						}, function() {
-							$(this).children(".submenu").fadeOut(0);
-						});
-					});
-
-					// The keyboard way in. The pills and options are <li>, which answer
-					// no keys by themselves, and the dropdowns only opened on hover, so
-					// Tools and Contact were mouse-only. Focus opens a pill's dropdown,
-					// Tab walks into it, Enter/Space activates, Escape closes. Focus goes
-					// back to the pill before the click, so a dialog it opens keeps focus.
-					$(".lateralMenu-body .menuOption[tabindex]").on("keydown", function(e) {
-						var pill = $(this).closest(".lateralMenu-body > .menuOption");
-						var dropdown = pill.children(".submenu");
-						// Escape from anywhere inside, the More panel's links included.
-						if (e.key === "Escape" && dropdown.is(":visible")) {
-							pill.focus();
-							dropdown.hide();
-							return;
-						}
-						if (e.target !== this) {
-							return;   // an option's key press also bubbles through its pill
-						}
-						if (e.key === "Enter" || e.key === " ") {
-							e.preventDefault();
-							if (this === pill[0] && dropdown.length) {
-								dropdown.show();
+						var pill = this;
+						var button = $(pill).children(".menuPill");
+						var dropdown = $(pill).children(".submenu");
+						var setOpen = function(open, fade) {
+							if (!dropdown.length) {
 								return;
 							}
-							pill.focus();
-							dropdown.hide();
-							$(this).trigger("click");
-						}
-					});
-					$(".lateralMenu-body").children(".menuOption").on("focusin", function() {
-						$(this).children(".submenu").show();
-					}).on("focusout", function(e) {
-						if (!this.contains(e.relatedTarget)) {
-							$(this).children(".submenu").hide();
-						}
+							if (fade) {
+								dropdown[open ? "fadeIn" : "fadeOut"](open ? 100 : 0);
+							} else {
+								dropdown.toggle(open);
+							}
+							button.attr("aria-expanded", open ? "true" : "false");
+						};
+						$(pill).hover(function() {
+							setOpen(true, true);
+						}, function() {
+							setOpen(false, true);
+						});
+						$(pill).on("focusin", function() {
+							setOpen(true);
+						}).on("focusout", function(e) {
+							if (!pill.contains(e.relatedTarget)) {
+								setOpen(false);
+							}
+						});
+						$(pill).on("keydown", function(e) {
+							// Escape from anywhere inside, the More panel's links included.
+							if (e.key === "Escape" && dropdown.is(":visible")) {
+								button.focus();
+								setOpen(false);
+								return;
+							}
+							// The pill's button or an option; the links answer Enter themselves.
+							if ((e.key === "Enter" || e.key === " ") && $(e.target).is("[tabindex]")) {
+								e.preventDefault();
+								if (e.target === button[0] && dropdown.length) {
+									setOpen(true);
+									return;
+								}
+								button.focus();
+								setOpen(false);
+								$(e.target).trigger("click");
+							}
+						});
 					});
 
 					$('#header').click(function() {

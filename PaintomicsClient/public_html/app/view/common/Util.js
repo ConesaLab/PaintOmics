@@ -643,6 +643,23 @@ function showMessage(title, data) {
                 boxready: function () {
                     updateDialog(messageDialog);
 
+                    // Keep Tab inside the dialog ourselves. ExtJS's modal wrap
+                    // (Ext.util.Floating.onKeyDown) calls focus(false, true) on a
+                    // raw DOM node, which throws, so it never wraps. Capture phase,
+                    // so this runs before ExtJS sees the key.
+                    messageDialog.el.dom.addEventListener("keydown", function (e) {
+                        if (e.key !== "Tab") {
+                            return;
+                        }
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var items = $("#messageDialog").find("a[href], button, input, [tabindex]:not([tabindex='-1'])").filter(":visible").toArray();
+                        if (items.length > 0) {
+                            var i = items.indexOf(document.activeElement);
+                            items[e.shiftKey ? (i <= 0 ? items.length : i) - 1 : (i + 1) % items.length].focus();
+                        }
+                    }, true);
+
                     $("#messageDialogButton").click(function () {
                         // Restore visualizing AJAX errors
                         ignoreOtherErrors = false;
