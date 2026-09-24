@@ -1582,6 +1582,10 @@
 	background: var(--pa-surface-sunken);
 	border-color: var(--pa-border);
 }
+/* The configurator's purple: #9E3AB3 is 2.74:1 on the sunken surface, under
+   even the 3:1 large-text floor for the 40px numerals. #C77DDB is 5.45:1. */
+[data-theme="dark"] .omicDragHint,
+[data-theme="dark"] div.omicSelection div.omicPosition { color: #C77DDB; }
 [data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer {
 	background: var(--pa-toast-warning-bg);
 	border-color: var(--pa-toast-warning-border);
