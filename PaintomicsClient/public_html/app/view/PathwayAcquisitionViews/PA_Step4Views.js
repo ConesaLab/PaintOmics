@@ -1201,9 +1201,12 @@ function PA_Step4KeggDiagramView() {
 			html:
 			'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 			'   <div class="lateralOptionsPanel-toolbar">' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="hideDiagramPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel"><i class="fa fa-expand"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="shrinkDiagramPanelButton" title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+			// aria-label repeats each icon-only control's title: tooltipster strips
+			// title on init, which left them as unnamed links. Same on every
+			// panel header in this file and on the Graph walk's close.
+			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="hideDiagramPanelButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="expandDiagramPanelButton" style="display:none;"  title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-primary helpTip" id="shrinkDiagramPanelButton" title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip" id="downloadDiagramPanelButton" title="Download the diagram"><i class="fa fa-download"></i> Download</a>' +
 			(this.getParent().getParent().getModel().aiConsent && this.model.getSource() !== "MapMan"
 				? '    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip pa-walk-open" title="Walk this pathway with the AI agent"><i class="fa fa-random"></i> Walk</a>'
@@ -2578,11 +2581,9 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 				title: null,
 				min: minVal,
 				max: maxVal,
-				plotLines: [
-					{label: {text: '-1',align: 'right', style: {color: 'gray'}},color: '#dedede',value: -1,width: 1},
-					{label: {text: '0',align: 'right', style: {color: 'gray'}},color: '#dedede',value: 0,width: 1},
-					{label: {text: '1',align: 'right', style: {color: 'gray'}},color: '#dedede',value: 1,width: 1}
-				]},
+				// Step 3's reference lines: inset labels that clear the window edge
+				// and the last-point marker, and drop +/-1 when they would collide.
+				plotLines: [paReferenceLine(-1, true), paReferenceLine(0, true), paReferenceLine(1, true)]},
 				series: series,
 				legend: {
 					itemStyle: {fontSize: "9px",fontWeight: 'lighter'},
@@ -2595,6 +2596,7 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 		);
 
 		plot.yAxis[0].setExtremes(minVal, maxVal);
+		paFitReferenceLabels(plot.yAxis[0]);
 
 		return plot;
 	};
@@ -3173,10 +3175,14 @@ function PA_Step4VisualOptionsView() {
 		/********************************************************/
 		/* STEP 1. GENERATE THE "COLOR BY" SECTION  */
 		/********************************************************/
+		// The group label sits outside its selector div, as the first group's
+		// does: inside it, the h4 was that div's first child and matched
+		// main.css's `h4:first-child`, which drops the divider meant only for
+		// the top of the panel.
 		windowContent +=
 		'</div>' + //CLOSE "CHOOSE OMICS TO DRAW" SECTION
+		'<h4>Coloring options</h4>' +
 		'<div class="lateralOptionsSelector">' +
-		'  <h4>Coloring options</h4>' +
 		'  <h5>Reference values</h5>' +
 		'  <div>';
 
@@ -3237,7 +3243,7 @@ function PA_Step4VisualOptionsView() {
 				html:
 				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-danger helpTip" id="hideVisualSettingsPanelButton" title="Close this panel" aria-label="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
 				"  <h2>Visual settings</h2>" +
 				"</div>" +
@@ -3375,7 +3381,10 @@ function PA_Step4FindFeaturesView() {
 			this.searchResultsView = Ext.widget({xtype: 'container', renderTo: el.find(".resultsContainer")[0], items: []});
 		}
 
-		el.find(".resultsCounter").text("Found " + this.items.length + " features.");
+		// "Found 1 features." read as a typo, and "Found 0 features." over an
+		// empty column as a panel that had not loaded.
+		var n = this.items.length;
+		el.find(".resultsCounter").text(n === 0 ? "No features in this pathway match your search." : "Found " + n + " feature" + (n === 1 ? "" : "s") + ".");
 		el.find(".searchResultsWrapper").show();
 
 		this.searchResultsView.removeAll();
@@ -3463,7 +3472,7 @@ function PA_Step4FindFeaturesView() {
 				   this header stayed teal while everything around it moved. */
 				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip" id="hideFindFeaturePanelButton" title="Close this panel" aria-label="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
 				"  <h2>Pathway information</h2>" +
 				"</div>" +
@@ -4182,7 +4191,8 @@ function PA_Step4GlobalHeatmapView() {
 
 		var htmlCode =
 		"<h4>Choose the omics to draw</h4>" +
-		'<span class="infoTip"><span style=" color: rgb(158, 58, 179); font-weight: bold; ">Drag and drop</span> to change the order in which heatmaps will be drawn.</span>' +
+		// A class, not an inline colour, so dark.css can lift it (2.74:1 there).
+		'<span class="infoTip"><span class="omicDragHint">Drag and drop</span> to change the order in which heatmaps will be drawn.</span>' +
 		'<div id="omicSelectionWrapper">';
 
 		var omicNames = Object.keys(this.model.getSignificanceValues());
@@ -4249,16 +4259,18 @@ function PA_Step4GlobalHeatmapView() {
 			previousWidth: 400, width: 400, minWidth: 400, html:
 			'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 			'  <div class="lateralOptionsPanel-toolbar">' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandHeatmapButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +
-			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkHeatmapButton" style="display:none;"  title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap" aria-label="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandHeatmapButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkHeatmapButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 			// '    <a href="javascript:void(0)" class="toolbarOption helpTip" id="downloadHeatmapButton"><i class="fa fa-download"></i></a>' +
 			'  </div>' +
 			"  <h2>Global heatmap</h2>" +
 			"</div>" +
 			"<div class='lateralOptionsPanel-body globalHeatmapView-body'>" +
-			'  <p>This panel contains the heatmap for all the features involved on this pathway. <br>Choose the visible omics features will be visible using the <i class="fa fa-cogs"></i> Settings button.</p>' +
+			// The cogs are this panel's own Configure heatmap tool; the header's
+			// Settings (wrench) opens Visual settings, which the old copy named.
+			'  <p>This panel draws a heatmap of this pathway\'s features, one block per omic.<br>Choose the omics to draw, and whether to show all features or only the relevant ones, with the <i class="fa fa-cogs"></i> Configure heatmap button above.</p>' +
 			'  <div class="updateMessageContainer"> <h3>Visual changes detected! </h3> <p>Some visual settings changed recently but the Heatmap content did not change.<br>Click <a id="refreshHeatmap" href="javascript:void(0)">here</a> if you want to refresh the Heatmap content. </p> </div>' +
 			'  <div class="globalHeatmapConfigurator" ' + (this.showConfigurator ? 'style="display:none"' : '') + '>' +
 			htmlCode +
@@ -4945,19 +4957,21 @@ function PA_Step4DetailsView() {
 				xtype: 'box', html:
 				'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +
-				'    <a class="toolbarOption btn-secondary helpTip" id="shrinkFeatureSetButton" style="display:none;"  title="Shrink this panel"><i class="fa fa-compress"></i></a>' +
+				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel" aria-label="Hide this panel"><i class="fa fa-times"></i></a>' +
+				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
+				'    <a class="toolbarOption btn-secondary helpTip" id="shrinkFeatureSetButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
 				'  </div>' +
 				"  <h2>Feature set overview</h2>" +
 				"</div>"
 			},{
 				xtype: "container", cls: "lateralOptionsPanel-body",
 				items: [
-					{xtype: "box", html: '<h2> Features in this set </h2>'},
+					// h4, the section label every other Step 4 panel uses: a bare h2
+					// took the global 23px orange and outranked the 15px panel title.
+					{xtype: "box", html: '<h4>Features in this set</h4>'},
 					{xtype: "container", itemId: "itemsContainer", style:"padding:10px;", items: []},
 
-					{xtype: "box", html: '<h2> Values by omic type </h2>'},
+					{xtype: "box", html: '<h4>Values by omic type</h4>'},
 					{xtype: 'box', html: "<div id='featureFamilyOverviewContainer'></div>"},
 
 
@@ -4971,7 +4985,7 @@ function PA_Step4DetailsView() {
 					   nothing ever faded this one in, so it promised feedback
 					   the button did not give. */
 					{xtype: "box", itemId: "neighbouringFeaturesSection", hidden: true, html:
-						'<h2>Neighbouring features</h2>' +
+						'<h4>Neighbouring features</h4>' +
 						'  <div>' +
 						'    Please enter a level (1-4): <input type="number" min="1" max="4" style="width:80px;height:30px"  id="inputLevel">' +
 						'    <a class="button btn-info helpTip" id="showFeatureButton" title="Show the neighbours of this metabolite at the given number of network steps"><i class="fa fa-search"></i> Show Features</a>' +
