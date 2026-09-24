@@ -1147,6 +1147,9 @@
 [data-theme="dark"] #mainViewCenterPanel .content i,
 [data-theme="dark"] #mainViewCenterPanel .content span { color: var(--pa-ink-body); }
 [data-theme="dark"] #mainViewCenterPanel .content h5 { color: var(--pa-ink-title); }
+/* The span rule above also caught the Help legend's asterisk and greyed it;
+   a legend has to match the red mark it explains in the field labels. */
+[data-theme="dark"] #mainViewCenterPanel .content .po-required-mark { color: var(--pa-status-error-ink); }
 
 /* ---------------------------------------------------------------------------
    7. Prose that has no class of its own
