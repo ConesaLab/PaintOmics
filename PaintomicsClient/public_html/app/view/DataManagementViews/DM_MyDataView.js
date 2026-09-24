@@ -83,7 +83,7 @@ function DM_MyDataListView() {
 					{
 						xtype: 'container',
 						layout: 'column',
-						style: "max-width:1300px; margin: 5px 10px; margin-top:50px;",
+						style: "max-width:1300px; margin: 5px 0; margin-top:50px;",
 						items: [{
 							xtype: 'box', cls: "contentbox omicSummaryBox poMyDataCard", minHeight: 230, html:
 							/* The account card was a two-column table of bold labels, and one
@@ -340,9 +340,11 @@ function DM_MyDataFileListView() {
 						dataIndex: 'fileName',
 						flex: 2
 					}, {
+						/* 130 and 190 (Options) rather than 180 and 200: at 1024 the
+						   fixed columns overran the card and cut "Delete" to "Del". */
 						text: 'Omic',
 						dataIndex: 'omicType',
-						width: 180
+						width: 130
 					}, {
 						text: 'File type',
 						dataIndex: 'dataType',
@@ -379,8 +381,9 @@ function DM_MyDataFileListView() {
 						text: 'Size',
 						dataIndex: 'size',
 						width: 80,
-						renderer: function(value, meta) {
-							return Math.round(value / 1024) + "Kb";
+						align: 'right',
+						renderer: function(value) {
+							return poFormatBytes(value);
 						}
 					}, {
 						text: 'Submission Date',
@@ -410,7 +413,7 @@ function DM_MyDataFileListView() {
 					}, {
 						xtype: 'customactioncolumn',
 						text: "File Options",
-						width: 200,
+						width: 190,
 						hidden: !me.allowRowRemoving,
 						items: [{
 							icon: "fa-download",
@@ -561,21 +564,29 @@ function DM_MyDataJobListView() {
 						}]
 					}),
 					columns: [{
+						/* Fixed widths for the ID and dates: at flex they were cut to
+						   "s1VP44l…" and "2026-09-21…" at every width, while the often
+						   empty Description kept hundreds of px. */
 						text: 'Job ID',
 						dataIndex: 'jobID',
-						flex: .5
+						width: 100
 					}, {
 						text: 'Type',
 						dataIndex: 'jobType',
-						flex: 1
+						flex: 1,
+						/* Display only: the tool names the nav uses, not the server's
+						   class names. Recover and delete still read jobType itself. */
+						renderer: function(value) {
+							return ({PathwayAcquisitionJob: 'PaintOmics analysis', MiRNA2GeneJob: 'miRNA2Genes', Bed2GeneJob: 'Regions2Genes'})[value] || value;
+						}
 					}, {
 						text: 'Last step',
 						dataIndex: 'lastStep',
-						flex: .4
+						width: 80
 					}, {
 						text: 'Submission date',
 						dataIndex: 'date',
-						flex: .6,
+						width: 130,
 						renderer: function(value) {
 							return value.substr(0, 4) + "-" + value.substr(4, 2) + "-" + value.substr(6, 2) + " " + value.substr(8, 2) + ":" + value.substr(10, 2);
 						},
@@ -600,7 +611,7 @@ function DM_MyDataJobListView() {
 					}, {
 						text: 'Expiration date',
 						dataIndex: 'accessDate',
-						flex: .6,
+						width: 115,
 						renderer: function(value) {
 							var date = new Date(value.substr(0, 4) + "-" + value.substr(4, 2) + "-" + value.substr(6, 2));
 							date.setDate(date.getDate() + MAX_LIVE_JOB);
@@ -627,7 +638,7 @@ function DM_MyDataJobListView() {
 					}, {
 						text: 'Description',
 						dataIndex: 'description',
-						flex: 2,
+						flex: 1,
 						renderer: function(value, metadata, record) {
 							var tooltipContent = '';
 							
@@ -822,6 +833,27 @@ function DM_MyDataJobListView() {
 }
 DM_MyDataUploadFilesPanel.prototype = new View;
 
+/* Bytes as something a human can read, for every size column in this file.
+   The MyData grid used to print Math.round(value / 1024) + "Kb": the kilobit
+   symbol, "0Kb" under 512 B, and "2334265Kb" for a human GTF, next to a Used
+   space meter in MB. The unit has to move with the value. */
+function poFormatBytes(bytes) {
+	var value = Number(bytes);
+	if (!isFinite(value) || value <= 0) {
+		return "";
+	}
+	var units = ["B", "KB", "MB", "GB", "TB"];
+	var unit = 0;
+	while (value >= 1024 && unit < units.length - 1) {
+		value = value / 1024;
+		unit++;
+	}
+	/* One decimal while the mantissa is small (2.4 GB), none once it is not
+	   (566 MB): past 10 the extra digit is noise in a column that gets
+	   scanned rather than measured. */
+	return (unit > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))) + " " + units[unit];
+}
+
 function DM_GTFFileListView() {
 	/*********************************************************************
 	* ATTRIBUTES
@@ -833,28 +865,6 @@ function DM_GTFFileListView() {
 	/*********************************************************************
 	* OTHER FUNCTIONS
 	***********************************************************************/
-	/* Bytes as something a human can read. The MyData grid above prints
-	   Math.round(value / 1024) + "Kb", which suits the files a user uploads and
-	   falls apart on a reference library: the human GRCh38 annotation renders
-	   as "2334265Kb". Inbuilt GTFs run from well under a megabyte (yeast) to
-	   gigabytes (human, mouse), so the unit has to move with the value. */
-	var formatFileSize = function(bytes) {
-		var value = Number(bytes);
-		if (!isFinite(value) || value <= 0) {
-			return "";
-		}
-		var units = ["B", "KB", "MB", "GB", "TB"];
-		var unit = 0;
-		while (value >= 1024 && unit < units.length - 1) {
-			value = value / 1024;
-			unit++;
-		}
-		/* One decimal while the mantissa is small (2.4 GB), none once it is not
-		   (566 MB): past 10 the extra digit is noise in a column that gets
-		   scanned rather than measured. */
-		return (unit > 0 && value < 10 ? value.toFixed(1) : String(Math.round(value))) + " " + units[unit];
-	};
-
 	/* Show the whole cell on hover. Every text column here truncates in a
 	   window this narrow -- "Staphylococcus aureus subsp. aureus strain
 	   MRSA252", "GenBank: BX571856.1" -- and a clipped cell with no tooltip is
@@ -965,7 +975,7 @@ function DM_GTFFileListView() {
 			? total + (total === 1 ? " file" : " files")
 			: shown + " of " + total + " files";
 		if (this.totalBytes) {
-			text += " &middot; " + formatFileSize(this.totalBytes) + " on disk";
+			text += " &middot; " + poFormatBytes(this.totalBytes) + " on disk";
 		}
 		summary.setText(text);
 	};
@@ -1057,7 +1067,7 @@ function DM_GTFFileListView() {
 					dataIndex: 'size',
 					width: 90,
 					align: 'right',
-					renderer: formatFileSize
+					renderer: poFormatBytes
 				}, {
 					text: 'Description',
 					dataIndex: 'description',
@@ -1428,7 +1438,10 @@ Ext.define('Paintomics.view.common.MyFilesSelectorDialog', {
 		text: 'Accept',
 		itemId: "acceptButton",
 		handler: function() {
-			this.up("window").selectedItem = this.up("window").queryById("myFilesGrid").getSelectionModel().getSelection();
+			/* Accept with no row picked is a Cancel: the callers treat null as
+			   one, but read [0] of anything else, so an empty [] threw. */
+			var picked = this.up("window").queryById("myFilesGrid").getSelectionModel().getSelection();
+			this.up("window").selectedItem = picked.length ? picked : null;
 			this.up("window").close();
 		}
 	}, {
@@ -1479,7 +1492,10 @@ Ext.define('Paintomics.view.common.GTFSelectorDialog', {
 		text: 'Accept',
 		itemId: "acceptButton",
 		handler: function() {
-			this.up("window").selectedItem = this.up("window").queryById("GTFFilesGrid").getSelectionModel().getSelection();
+			/* Accept with no row picked is a Cancel: the callers treat null as
+			   one, but read [0] of anything else, so an empty [] threw. */
+			var picked = this.up("window").queryById("GTFFilesGrid").getSelectionModel().getSelection();
+			this.up("window").selectedItem = picked.length ? picked : null;
 			this.up("window").close();
 		}
 	}, {
@@ -1530,7 +1546,10 @@ Ext.define('Paintomics.view.common.OmicInputSelectorDialog', {
 		text: 'Accept',
 		itemId: "acceptButton",
 		handler: function() {
-			this.up("window").selectedItem = this.up("window").queryById("OmicInputFilesGrid").getSelectionModel().getSelection();
+			/* Accept with no row picked is a Cancel: the callers treat null as
+			   one, but read [0] of anything else, so an empty [] threw. */
+			var picked = this.up("window").queryById("OmicInputFilesGrid").getSelectionModel().getSelection();
+			this.up("window").selectedItem = picked.length ? picked : null;
 			this.up("window").close();
 		}
 	}, {
