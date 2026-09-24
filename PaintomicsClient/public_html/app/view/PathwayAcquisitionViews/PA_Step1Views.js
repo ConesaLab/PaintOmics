@@ -2636,7 +2636,7 @@ function OmicSubmittingPanel(nElem, options) {
 								filterOnLoad:true,
 								filters: [{property: 'type', value : 'data'}]
 							}),
-							helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+							helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 						}, {
 							xtype: "myFilesSelectorButton",
 							requiredTag: "optional",
@@ -2698,7 +2698,7 @@ function OmicSubmittingPanel(nElem, options) {
 							xtype: 'box',
 							itemId: "designFileNote",
 							hidden: this.mapTo !== "Compound",
-							/* data-guides="ignore": the note sits on the INPUT rail (150px
+							/* data-guides="ignore": the note sits on the INPUT rail (155px
 							   in, under the field it annotates), which the overlay lists as a
 							   rail but judges this paragraph against the label column. */
 							html: '<p class="paDesignNote" data-guides="ignore">Optional &mdash; runs the class test on your replicates.</p>'
@@ -2709,7 +2709,7 @@ function OmicSubmittingPanel(nElem, options) {
 							hidden: this.omicName !== "",
 							itemId: "mapToSelector",
 							displayField: 'name', valueField: 'value',
-							emptyText: 'Choose the file type',
+							emptyText: 'Genes or metabolites',
 							value: this.mapTo,
 							editable: false,
 							allowBlank: false,
@@ -2736,7 +2736,7 @@ function OmicSubmittingPanel(nElem, options) {
 									['Metabolites', 'compound']
 								]
 							}),
-							helpTip: "Defines whether the data can be assigned to Genes or to Metabolites, for example  the values of concentration for proteins that can be mapped to the corresponding codifying gene."
+							helpTip: "Defines whether the data can be assigned to Genes or to Metabolites, for example, the values of concentration for proteins that can be mapped to the corresponding codifying gene."
 						},
 						{
 							xtype: 'combo',
@@ -2754,7 +2754,7 @@ function OmicSubmittingPanel(nElem, options) {
 									['Features', 'features']
 								]
 							}),
-							helpTip: "Define how the Fisher contingency table must be done: counting genes or features (i.e: microRNA, proteins...)."
+							helpTip: "Define how the Fisher contingency table must be done: counting genes or features (e.g. microRNA, proteins)."
 						}
 					]
 				}
@@ -2780,7 +2780,7 @@ function OmicSubmittingPanel(nElem, options) {
 				   allowBlank then refused with no field named. */
 				if (Ext.isEmpty(Ext.String.trim(this.queryById("omicNameField").getValue() || ""))) {
 					valid = false;
-					this.queryById("omicNameField").markInvalid("Please, specify a Omic Name.");
+					this.queryById("omicNameField").markInvalid("Please, specify an omic name.");
 				}
 				if (this.queryById("mainFileSelector").getValue() === "") {
 					valid = false;
@@ -2796,7 +2796,7 @@ function OmicSubmittingPanel(nElem, options) {
 				}
 				if (this.queryById("mapToSelector").getValue() === null) {
 					valid = false;
-					this.queryById("mapToSelector").markInvalid("Please, specify a this field.");
+					this.queryById("mapToSelector").markInvalid("Please, specify whether this data maps to genes or metabolites.");
 				}
 
 				return valid;
@@ -3030,7 +3030,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					itemId: "fileTypeSelector",
 					value: "Bed file (regions mapped to Genes)",
 					hidden: true,
-					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
 					requiredTag: "optional",
@@ -3077,7 +3077,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of feature & gene)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of feature & gene)."
 				}]
 			}, {
 				xtype: "container",
@@ -3133,7 +3133,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					itemId: "fileTypeSelector",
 					value: "Map file (features mapped to Genes)",
 					hidden: true,
-					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
 					requiredTag: "optional",
@@ -3195,7 +3195,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or the relevant associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or the relevant associations (combination of genes & features)."
 				}]
 			}, {
 				xtype: "container",
@@ -3406,7 +3406,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					xtype: 'textfield',
 					itemId: "gtfTagField",
 					name: this.namePrefix + '_geneIDtag',
-					fieldLabel: 'GTF Tag for gene ID/name ',
+					fieldLabel: 'GTF tag for gene ID/name',
 					value: "gene_id",
 					allowBlank: false,
 					helpTip: "GTF tag used to get gene ids/names. Default: gene_id"
@@ -3448,7 +3448,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of genes & features)."
 				},{
 					xtype: 'fieldcontainer',
 					fieldLabel: 'Report',
@@ -3889,7 +3889,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					itemId: "fileTypeSelector",
 					value: "Map file (features mapped to Genes)",
 					hidden: true,
-					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
+					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomics quantification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
 					requiredTag: "optional",
@@ -3967,7 +3967,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of genes & features)."
 				}]
 			}, {
 				xtype: "container",
@@ -4071,7 +4071,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							['Associations', 'associations']
 						]
 					}),
-					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (i.e: microRNA, proteins...) or associations (combination of genes & features)."
+					helpTip: "Define how the Fisher contingency table must be done: counting genes, features (e.g. microRNA, proteins) or associations (combination of genes & features)."
 				},
 				/*TARGETS FILE*/
 				{
@@ -4104,7 +4104,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				/* CORRELATION OPTIONS */
 				{
 					xtype: 'box',
-					html: '<hr><p>You can provide a relevant associations file or let the program to automatically retrieve them based on correlation with a gene expression dataset.</p>'
+					html: '<hr><p>You can provide a relevant associations file or let the program retrieve them automatically based on correlation with a gene expression dataset.</p>'
 				},
 				{
 					xtype: "myFilesSelectorButton",
@@ -4252,7 +4252,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							"Determines how we select the potential features that are regulating a certain gene. " +
 							"For instance, usually miRNA act as inhibitors of gene expression so we should expect an opposite behavior " +
 							"to the regulated gene. A negative correlation will fit better to this expected profile. " +
-							"Default: If gene expression (GE) if avilable, select and order by 'negative correlation'. 'Max fold-change' in other case.",
+							"Default: If gene expression (GE) is available, select and order by 'negative correlation'. 'Max fold-change' in other case.",
 							listeners:{
 								// Restores the helpTip's (?): see mapToSelector above.
 								boxready: Ext.form.field.Base.prototype.listeners.boxready,
