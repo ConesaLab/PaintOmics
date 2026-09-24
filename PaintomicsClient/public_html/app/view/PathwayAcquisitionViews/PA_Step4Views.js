@@ -5007,11 +5007,15 @@ function PA_Step4DetailsView() {
 					$("#hideFeatureSetButton").click(function () {
 						me.getParent().hideFeatureSetDetails();
 					});
+					// Each button hides itself and shows its twin, so hand focus to the
+					// twin; otherwise a keyboard user's focus falls back to <body>.
 					$("#expandFeatureSetButton").click(function () {
 						me.expand();
+						$("#shrinkFeatureSetButton").focus();
 					});
 					$("#shrinkFeatureSetButton").click(function () {
 						me.shrink();
+						$("#expandFeatureSetButton").focus();
 					});
 					$("#showFeatureButton").click(function () {
 						me.showNeighbouringFeatures();
