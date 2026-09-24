@@ -837,7 +837,11 @@ function PA_Step3JobView() {
 					]
 				 }
 				 :
-				 {xtype: "box", html: "<br><div style='text-align: center;'><b>You are not the owner or the job does not have an owner account so sharing options cannot be modified.</b></div>"}
+				 // Name the one case that applies: an ownerless job and someone
+				 // else's job are different reasons, and neither is an alert.
+				 {xtype: "box", html: "<div style='margin-top:10px;'>" + (hasOwner ?
+					"Only the owner of this job can change its sharing options." :
+					"This job was created without an account, so it has no owner and its sharing options cannot be changed.") + "</div>"}
 				)
 			],
 			// An empty object here still renders as a button: a blank blue pill
@@ -2053,14 +2057,14 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 			   first thing under the card's heading and started 16px left of
 			   it. */
 			'<div id="pathwayClassificationPlot1Box_' + me.dbid + '" style="padding-left: var(--pa-card-inset);overflow:hidden;  min-height:300px; width: 45%; float: left;">'+
-			'  <h4>Category Distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
+			'  <h4>Category distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
 			'  <div id="pathwayDistributionsContainer_' + me.dbid + '" style="height: 240px;"></div>'+
 			'</div>' +
 			/* The card's own inset on the right, like the column beside it takes on
 			   the left. 30px was 4px past it, which is what put the Apply button
 			   below on a right edge of its own. */
 			'<div id="pathwayClassificationPlot2Box_' + me.dbid + '" style="overflow:hidden;  min-height:300px; width: 55%; display:inline-block; padding: 0px var(--pa-card-inset)">'+
-			'  <h4>Filter by category<span class="infoTip">Use this tool to <b>Show or Hide Pathways</b> based on their classification</span></h4> '+
+			'  <h4>Filter by category<span class="infoTip">Use this tool to <b>show or hide pathways</b> based on their classification.</span></h4> '+
 			'  <div id="pathwayClassificationContainer_' + me.dbid + '"></div>'+
 			/* No right margin. The 50px here stopped the only action in this card
 			   54px short of the rail its own heading, its "Filter by category"
@@ -2808,7 +2812,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			$("#sliderClusterNumberShow_" + me.dbid).html(totalClusters);
 			$("#sliderClusterNumber_" + me.dbid).slider("option", "value", totalClusters);
 
-			$("#networkClustersContainer_" + me.dbid + " h5").text(clusterNumber + " Clusters found from " + totalClusters + " in total.");
+			$("#networkClustersContainer_" + me.dbid + " h5").text(clusterNumber + " of " + totalClusters + " clusters in this network");
 			//Generate the images and the containers
 			var img_path;
 			var db_suffix = (me.dbid != "KEGG" ? "_" + me.dbid.toLowerCase(): '');
@@ -3758,7 +3762,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				   an explanation of a database they were not looking at. Each
 				   database states process relatedness its own way, so say which
 				   one is being used. */
-				'  <h5><span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span>Choose what edges represents:</h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span>Edges represent:</h5>' +
 				'  <div id="edgesClassContainer_' + me.dbid + '">' +
 				'    <div class="radio">' +
 				'      <input type="radio" ' + ((visualOptions.edgesClass === "l")? "checked": "")+ ' id="edgesLinkedPathways_' + me.dbid + '" name="edgesClassCheckbox-check_' + me.dbid + '" value="l">' +
@@ -3786,7 +3790,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				// '  </div>'+
 				'  <h4>Network layout settings</h4>' +
 				'  <div class="checkbox"><input type="checkbox" id="save-node-positions-check_' + me.dbid + '" name="saveNodePositionsCheckbox">' +
-				'    <label for="save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network (increases performance)."></span>Save the nodes positions<span class="commentTip" style="padding-left:21px;">Disable the auto-layout for network.</span></label>' +
+				'    <label for="save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network (increases performance)."></span>Save node positions<span class="commentTip" style="padding-left:21px;">Turns off the auto-layout.</span></label>' +
 				'  </div>'+
 				'  <div class="checkbox" id="pre-auto-save-node-positions-check_' + me.dbid + '"><input type="checkbox" id="auto-save-node-positions-check_' + me.dbid + '" name="autoSaveNodePositionsCheckbox">' +
 				'    <label for="auto-save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network when clicking the \'Apply\' button, instead of having to click \'Save node positions\' before."></span>Auto-save positions<span class="commentTip" style="padding-left:21px;">Save positions after clicking "Apply".</span></label>' +
@@ -3824,7 +3828,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				xtype: 'box', cls: "paNetRailTabs", html:
 				'<a href="javascript:void(0)" class="paNetRailTab is-active helpTip" data-pane="tools" title="Everything that changes what the graph shows. Some options also affect the table below."><i class="fa fa-sliders"></i> Tools</a>' +
 				'<a href="javascript:void(0)" class="paNetRailTab helpTip" data-pane="details" title="The colour legend, and the detail for whichever pathway you last clicked"><i class="fa fa-info-circle"></i> Details</a>' +
-				'<a href="javascript:void(0)" class="paNetRailHide helpTip" title="Hide this panel and give the graph the whole card"><i class="fa fa-times"></i></a>'
+				'<a href="javascript:void(0)" class="paNetRailHide helpTip" aria-label="Hide this panel" title="Hide this panel and give the graph the whole card"><i class="fa fa-times" aria-hidden="true"></i></a>'
 			},{
 				xtype: 'box', id: 'networkPanel_' + me.dbid,
 				/* `paNetMain` is the graph half of the grid, and the element that
@@ -5635,10 +5639,10 @@ function PA_Step3PathwayTableView() {
 
 					// Only show tooltip for condition-specific columns OR single-condition jobs
 					if (isCondition || nCond <= 1) {
-						myToolTipText += '<b>p-value:</b>'  + (value === -1 ? "-" : renderedValue) + "</br>";
+						myToolTipText += '<b>p-value:</b> '  + (value === -1 ? "-" : renderedValue) + "</br>";
 						myToolTipText +=
 						"<table class='contingencyTable'>" +
-						' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+						' <thead><th></th><th>Relevant</th><th>Not relevant</th><th></th></thead>' +
 						'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
 						'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 						'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
@@ -8975,9 +8979,9 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 			if (foundRelevant !== undefined) {
 				myToolTipText +=
-					'<b>p-value:</b>' + (value === -1 ? "-" : renderedValue) + "</br>" +
+					'<b>p-value:</b> ' + (value === -1 ? "-" : renderedValue) + "</br>" +
 					"<table class='contingencyTable'>" +
-					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+					' <thead><th></th><th>Relevant</th><th>Not relevant</th><th></th></thead>' +
 					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
 					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +

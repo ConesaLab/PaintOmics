@@ -3776,7 +3776,7 @@ div.contentbox p > #download_mapping_file {
 .contingencyTable {
 	border-collapse: collapse;
 	text-align: center;
-	font-size: 8px;
+	font-size: 11px;          /* was 8px: these counts are the tip's only content */
 	margin: 2px 15px;
 }
 .contingencyTable tbody tr {
