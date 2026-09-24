@@ -137,11 +137,7 @@ function PA_AIInterpretView() {
         this.$root.find(".ai-widget-panel").addClass("is-expanded");
         this.$root.find(".ai-widget-fab").attr("aria-expanded", "true");
         this.isExpanded = true;
-        // Auto-scroll messages
-        var msgs = this.$root.find(".ai-widget-messages");
-        if (msgs.length) {
-            msgs.scrollTop(msgs[0].scrollHeight);
-        }
+        this._scrollToLatest();
         // Auto-load report if done and not loaded
         if (!this.reportLoaded && this._lastStatus === "done") {
             this.loadReport();
@@ -191,11 +187,7 @@ function PA_AIInterpretView() {
             fullscreenButton($btn, true);
             this.isFullscreen = true;
         }
-        // Auto-scroll messages
-        var msgs = this.$root.find(".ai-widget-messages");
-        if (msgs.length) {
-            msgs.scrollTop(msgs[0].scrollHeight);
-        }
+        this._scrollToLatest();
     };
 
     this._lastStatus = null;
@@ -840,14 +832,25 @@ function PA_AIInterpretView() {
                       '  <div class="ai-msg-label">' + label + '</div>' +
                       '  <div class="ai-msg-bubble">' + bubbleContent + '</div>' +
                       '</div>';
-        var $msg = $(msgHtml).appendTo($container);
-        // A reply taller than the message area opens at its first line, not
-        // its last; anything shorter, and the user's own line, scroll to the
-        // end as before. offsetParent is the panel for both, so this holds at
-        // any scroll position.
-        var top = $msg[0].offsetTop - $container[0].offsetTop - 12;
-        $container.scrollTop(role === "assistant" && $msg.outerHeight() > $container.innerHeight()
-            ? top : $container[0].scrollHeight);
+        $container.append(msgHtml);
+        this._scrollToLatest();
+    };
+
+    // A reply (or the walk report) taller than the message area opens at its
+    // first line, not its last; anything shorter, and the user's own line,
+    // scroll to the end. Shared by addMessage, expand and the full-screen
+    // toggle, so reopening the panel does not jump back to a reply's end.
+    // offsetParent is the panel for both, so this holds at any scroll position.
+    this._scrollToLatest = function() {
+        if (!this.$root) return;
+        var $container = this.$root.find(".ai-widget-messages");
+        var $msg = $container.children(".ai-message").last();
+        if (!$container.length) return;
+        if ($msg.hasClass("ai-msg-assistant") && $msg.outerHeight() > $container.innerHeight()) {
+            $container.scrollTop($msg[0].offsetTop - $container[0].offsetTop - 12);
+        } else {
+            $container.scrollTop($container[0].scrollHeight);
+        }
     };
 
     this.addLoadingIndicator = function() {
