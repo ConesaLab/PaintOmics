@@ -1115,7 +1115,7 @@ function PA_Step2JobView() {
 				message += "</ul>";
 
 				showWarningMessage("Compound already selected", {
-					message : "This compound has been already selected in other box. Duplicated compounds may affect to the results in next stages.<br>" + message,
+					message : "This compound is already ticked on another card. Counting it twice can skew the results of the next steps.<br>" + message,
 					showButton : true
 				});
 			}
@@ -1162,10 +1162,10 @@ function PA_Step2JobView() {
 				otherCompoundsPanel.html(this.items[setIndex].renderOtherCompounds());
 			}
 			card.addClass("expandedBox");
-			button.addClass("visible").html('<i class="fa fa-chevron-down"></i> ' + button.attr("data-label"));
+			button.attr("aria-expanded", "true").addClass("visible").html('<i class="fa fa-chevron-down"></i> ' + button.attr("data-label"));
 		} else {
 			card.removeClass("expandedBox");
-			button.removeClass("visible").html('<i class="fa fa-chevron-right"></i> ' + button.attr("data-label"));
+			button.attr("aria-expanded", "false").removeClass("visible").html('<i class="fa fa-chevron-right"></i> ' + button.attr("data-label"));
 		}
 
 		otherCompoundsPanel.toggle(!isVisible);
@@ -1941,6 +1941,13 @@ function renderCompoundCandidate(compound, aiPickedID) {
 	var compoundID = compound.getID();
 	var safeID = Ext.String.htmlEncode(compoundID);
 	var safeName = Ext.String.htmlEncode(compound.getName());
+	// KEGG's name list repeats synonyms ("Adenosine, Adenosine"), which pushed
+	// long names into an ellipsis. Shown once each; data-compound-name keeps
+	// the raw list the selection logic matches on. Plain JS: the test stub
+	// provides only Ext.String.
+	var safeDisplayName = Ext.String.htmlEncode(String(compound.getName()).split(", ").filter(function (part, i, all) {
+		return all.indexOf(part) === i;
+	}).join(", "));
 	// Marks the one candidate the AI chose, so a card with four ticked-looking
 	// rows still says WHICH row the machine is responsible for.
 	var picked = (aiPickedID && compoundID === aiPickedID) ? " aiPickedCandidate" : "";
@@ -1950,8 +1957,8 @@ function renderCompoundCandidate(compound, aiPickedID) {
 	// which one they are ticking.
 	return '' +
 	'<div class="metaboliteCompound' + picked + '" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '">' +
-	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '">' +
-	'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + encodeURIComponent(compoundID) + '" target="_blank">' + safeName + '</a>' +
+	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '" aria-label="' + safeDisplayName + ' (' + safeID + ')">' +
+	'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + encodeURIComponent(compoundID) + '" target="_blank">' + safeDisplayName + '</a>' +
 	'  <code class="metaboliteId">' + safeID + '</code>' +
 	'</div>';
 }
@@ -2135,7 +2142,7 @@ function PA_Step2CompoundSetView() {
 		if (otherCompounds.length > 0) {
 			var more = countLabel(otherCompounds.length, "more match", "more matches");
 			html +=
-			'  <a class="showOtherCompoundsButton" href="javascript:void(0)" data-label="' + more + '">' +
+			'  <a class="showOtherCompoundsButton" href="javascript:void(0)" role="button" aria-expanded="false" data-label="' + more + '">' +
 			'<i class="fa fa-chevron-right"></i> ' + more + '</a>' +
 			'  <div class="otherCompoundsPanel" style="display: none;"></div>';
 		}
