@@ -1443,6 +1443,17 @@ function PA_Step3JobView() {
 					$(".mappingButton").click(function() {
 						var cmp = Ext.getCmp('statsViewContainer');
 						cmp.getEl().toggle();
+						/* The per-omic charts are drawn while this card is hidden, so
+						   they keep a guessed width and ran ~20px past their columns,
+						   clipping the right-hand axis label. Fit them once shown. */
+						if (cmp.getEl().isVisible()) {
+							$(cmp.getEl().dom).find('[data-highcharts-chart]').each(function() {
+								var c = $(this).highcharts();
+								if (c) {
+									c.reflow();
+								}
+							});
+						}
 
 						var buttonHTML = $(this).html();
 
