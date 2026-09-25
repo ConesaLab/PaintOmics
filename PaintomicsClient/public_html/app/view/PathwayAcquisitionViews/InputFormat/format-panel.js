@@ -438,8 +438,9 @@
         strip.className = "pa-format-strip pa-format-idle";
         strip.innerHTML = "";
         if (converterOn === false) {
-            // No converter on this server: promise only what does happen.
-            strip.appendChild(el("span", "pa-format-text", "Each file is checked the moment you pick it."));
+            // No converter on this server, so no offer to make: the section
+            // lead already says each file is checked, and repeating it in
+            // every card put the sentence on screen six times. Empty is hidden.
             return;
         }
         var icon = el("span", "pa-format-icon pa-format-icon-ai");

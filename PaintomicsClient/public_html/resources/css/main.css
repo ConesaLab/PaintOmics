@@ -4056,6 +4056,10 @@ span.networkClusterImage > i {
 span.networkClusterImage.disabled > i {display:block;}
 .mainInfoPanel {font-size: 12px;}
 .pathwayPlotwrappers h4{color: #B14C2D;/* was #D16949 - 3.60:1 */font-size: 13px;margin: 0;margin-top: 5px;}
+/* An omic with a chart ends in its legend, ~30px above the next heading; one
+   with no trend ended in a single line of text, 12px above it, so the next
+   omic read as part of it. */
+.pathwayPlotwrappers > .paOmicNoTrend + div {margin-top: 30px;}
 /* Vertical margin only. The horizontal 10px put the "Pathways network" card
    10px right of the "Pathways classification" card stacked directly above it,
    and of every other card on Step 3. It was already being zeroed further down
@@ -8191,9 +8195,12 @@ a.po-ghost-action > i.fa {
   line-height: 1.55;
   color: var(--pa-ink-body, #3F3F46);
 }
+/* 13px in body ink, the size of the intro above: at 12px grey the labels
+   read as captions under a paragraph, not as the three questions the form
+   asks. */
 .po-dialog .x-form-item-label {
-  font-size: 12px;
-  color: var(--pa-ink-label);
+  font-size: 13px;
+  color: var(--pa-ink-body, #3F3F46);
 }
 /* One action, one way out. Neptune paints every window button the same filled
    blue, so "Send request" and "Cancel" carried identical weight -- two primary

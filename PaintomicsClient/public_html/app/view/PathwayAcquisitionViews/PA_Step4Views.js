@@ -255,6 +255,7 @@ function PA_Step4JobView() {
 				xtype: "container", flex:1,
 				style: "padding: 5px 10px;",
 				itemId: "pathwaysPanelsContainer",
+				cls: "paStep4Panels", // dark.css: no slab behind the panels
 				layout: 'fit',
 				items: []
 			}],

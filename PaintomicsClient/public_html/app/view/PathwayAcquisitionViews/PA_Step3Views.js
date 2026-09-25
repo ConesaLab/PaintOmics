@@ -1443,6 +1443,17 @@ function PA_Step3JobView() {
 					$(".mappingButton").click(function() {
 						var cmp = Ext.getCmp('statsViewContainer');
 						cmp.getEl().toggle();
+						/* The per-omic charts are drawn while this card is hidden, so
+						   they keep a guessed width and ran ~20px past their columns,
+						   clipping the right-hand axis label. Fit them once shown. */
+						if (cmp.getEl().isVisible()) {
+							$(cmp.getEl().dom).find('[data-highcharts-chart]').each(function() {
+								var c = $(this).highcharts();
+								if (c) {
+									c.reflow();
+								}
+							});
+						}
 
 						var buttonHTML = $(this).html();
 
@@ -3811,10 +3822,13 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  <div class="slider-ui" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +
 				'  <h5><span class="helpTip" style="float:right;" title="Only pathways with a p-value at or below this cutoff are drawn; among them, a lower p-value draws a bigger node."></span>Max p-value (<span id="minPValue_' + me.dbid + '">0.05</span>)</h5>' +
 				'  <div class="slider-ui" id="minPValueSlider_' + me.dbid + '"></div>' +
-				/* nowrap: with the help mark now floated on the first line, the label
-				   wraps, and it broke at the hyphen into "p-" / "value". */
+				/* The help mark floats on the first line, which leaves the label 160px:
+				   "Always use combined p-value" is 172px and wrapped to an orphaned
+				   "p-value". "Filter by combined p-value" (156px) says what the box does;
+				   the tip keeps the "even when colouring by one omic" part. nowrap keeps
+				   "p-value" from breaking at its hyphen if the rail narrows. */
 				'  <div class="checkbox"><input type="checkbox" id="use-combined-pval-check_' + me.dbid + '" name="useCombinedPvalCheckbox">' +
-				'    <label for="use-combined-pval-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."></span>Always use combined <span style="white-space:nowrap;">p-value</span></label>' +
+				'    <label for="use-combined-pval-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="When coloring for one omic, always use the combined p-value for filtering if enabled, otherwise rely on the omic p-value."></span>Filter by combined <span style="white-space:nowrap;">p-value</span></label>' +
 				'  </div>'+
 				'  <h5><span class="helpTip" style="float:right;" title="Select which adjust method to choose the p-values from."></span>P-value selection criteria:</h5>' +
 				'  <div id="pvaluemethod_' + me.dbid + '"></div>' +
@@ -4463,9 +4477,10 @@ function PA_Step3PathwayDetailsView() {
 					);
 				}else if (metagenes.length === 0){
 					/* An omic with no trend here: say so, rather than drawing a
-					   Heatmap/Line chart toggle over two empty charts. */
+					   Heatmap/Line chart toggle over two empty charts. The class
+					   gives the next omic the air a chart would have left. */
 					pathwayPlotwrappers.append(
-						"<div>" +
+						"<div class='paOmicNoTrend'>" +
 						"  <h4>" + omicDataType[i] + "</h4>" +
 						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> No major trends in this pathway.</span>" +
 						"</div>"
@@ -5079,8 +5094,14 @@ function PA_Step3PathwayTableView() {
 				   A real minimum is what survives that arithmetic. 220px fits the
 				   median KEGG name outright and leaves the long Reactome ones
 				   recoverable on hover, and when the omic columns are expanded the
-				   grid scrolls sideways rather than crushing this one. */
-				minWidth: 220
+				   grid scrolls sideways rather than crushing this one.
+
+				   235px fits "Cytokine-cytokine receptor interaction" (229px with
+				   padding) whole. The 15px is what the grid can give at 1440px
+				   and still end its last p-value column inside the view: 10px of
+				   slack and 2px off each omic column. External links sits after
+				   that column, so narrowing it would not help. */
+				minWidth: 235
 			},{
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,
@@ -5665,7 +5686,9 @@ function PA_Step3PathwayTableView() {
 			var omicColumn = {
 				text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer;" data-omic="' + omicName + '"></i> ' : '') + omic.omicName.replace(" ","</br>"), 
 				cls:"header-45deg",
-				dataIndex: 'pValue' + omicName, width:90,
+				// 88, not 90: "Metabolomics" needs 66px of the 68 left inside the
+				// padding, and the 2px per omic go to Pathway name (its minWidth).
+				dataIndex: 'pValue' + omicName, width:88,
 				flex: 1, hidden : hidden, sortable: true, align: "center",
 				filter: {type: 'numeric'},
 				renderer: renderFunction,
@@ -5729,7 +5752,7 @@ function PA_Step3PathwayTableView() {
 			adjustedPvaluesMethods.forEach(function(m) {
 				columns.push({
 					text: omics[i].omicName.replace(" ","</br>") + '</br>(' + m + ')', cls:"header-45deg",
-					dataIndex: 'adjpval' + m + omicName, width:90,
+					dataIndex: 'adjpval' + m + omicName, width:88,
 					flex: 1, hidden: (hidden || selectedAdjustedMethod != m),
 					sortable: true, align: "center",
 					filter: {type: 'numeric'},

@@ -1570,8 +1570,11 @@ function PA_Step1JobView() {
 							   (required)" - the server adds it regardless. Telling someone to
 							   untick a box that cannot be unticked sends them looking for a
 							   broken control, so the sentence below is careful to say which
-							   databases can actually be unticked. */
-							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Optionally, describe your experiment design for the AI interpretation. Then upload your multi-omic data — or load an example <span class="po-nowrap">(<a class="button btn-secondary btn-inline btn-small"><i class="fa fa-file-text-o"></i> Load example</a>)</span> to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
+							   databases can actually be unticked.
+
+							   No brackets round the Load example chip: against its rounded
+							   border they read as a doubled "((" and "))". */
+							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Optionally, describe your experiment design for the AI interpretation. Then upload your multi-omic data — or load an example <a class="button btn-secondary btn-inline btn-small"><i class="fa fa-file-text-o"></i> Load example</a> to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_UPLOAD + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +
@@ -2360,7 +2363,7 @@ function PA_Step1JobView() {
 							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them<span class="po-if-converter">; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format</span>.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p class="po-if-converter">Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					

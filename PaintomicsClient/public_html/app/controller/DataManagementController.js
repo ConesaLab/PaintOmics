@@ -453,8 +453,10 @@ this.sendReportHandler = function(){
 				xtype:"box", html:
 				"<div style='margin-bottom:10px;'>Questions or suggestions about PaintOmics? Send us a message and we will get back to you. If you are using a guest account, give an email address we can reply to.</div>"
 			},
-			{xtype: 'textfield', itemId : 'nameTextField', fieldLabel: 'Your name', value: Ext.util.Cookies.get("userName")},
-			{xtype: 'textfield', itemId : 'emailTextField', fieldLabel: 'Your email',  value: (Ext.util.Cookies.get("lastEmail") == null || Ext.util.Cookies.get("lastEmail").indexOf("guest") !== -1?"":Ext.util.Cookies.get("lastEmail"))},
+			/* width 500, as the message: at the default 150px input the three
+			   fields ended on two different right edges. */
+			{xtype: 'textfield', itemId : 'nameTextField', fieldLabel: 'Your name', width: 500, value: Ext.util.Cookies.get("userName")},
+			{xtype: 'textfield', itemId : 'emailTextField', fieldLabel: 'Your email', width: 500, value: (Ext.util.Cookies.get("lastEmail") == null || Ext.util.Cookies.get("lastEmail").indexOf("guest") !== -1?"":Ext.util.Cookies.get("lastEmail"))},
 			{xtype: 'textareafield', itemId : 'commentsTextArea', fieldLabel: 'Message', width: 500, height:100}
 		],
 		buttons: [
