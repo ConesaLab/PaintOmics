@@ -5073,7 +5073,7 @@ function PA_Step3PathwayTableView() {
 				}
 			}),
 			{
-				text: 'Pathway name', dataIndex: 'title', filterable: true, flex: 1,
+				text: 'Pathway name', dataIndex: 'title', filterable: true, flex: 2,
 				/* The pathway name is the identifier for the row, and the long
 				   Reactome ones ("Regulation of Insulin-like Growth Factor...")
 				   do not fit any column width this table can afford. Truncated
@@ -5092,8 +5092,12 @@ function PA_Step3PathwayTableView() {
 				   A real minimum is what survives that arithmetic. 220px fits the
 				   median KEGG name outright and leaves the long Reactome ones
 				   recoverable on hover, and when the omic columns are expanded the
-				   grid scrolls sideways rather than crushing this one. */
-				minWidth: 220
+				   grid scrolls sideways rather than crushing this one.
+
+				   flex 2 and 260px: at an equal share with the p-value columns
+				   the name still truncated while they had width to spare. 260px
+				   fits "Cytokine-cytokine receptor interaction" whole. */
+				minWidth: 260
 			},{
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,

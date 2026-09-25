@@ -2360,7 +2360,7 @@ function PA_Step1JobView() {
 							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them<span class="po-if-converter">; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format</span>.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p class="po-if-converter">Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					

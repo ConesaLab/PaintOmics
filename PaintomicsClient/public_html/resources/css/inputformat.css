@@ -263,6 +263,10 @@ input[type="text"].pa-field-err {
     font-size: 12px;
     align-items: center;
 }
+/* The converter-off idle strip says nothing (format-panel.js renderIdle). */
+.pa-format-idle:empty {
+    display: none;
+}
 .pa-format-idle .pa-format-icon-ai {
     display: inline-flex;
     color: var(--pa-ai-blue, #4A90D9);
