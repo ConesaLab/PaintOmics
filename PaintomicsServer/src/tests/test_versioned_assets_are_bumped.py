@@ -92,9 +92,10 @@ PUBLISHED = {
     # v=4.2 stops offering the AI conversion on a server whose converter is off:
     # the idle strip and the not-UTF-8 message give the manual advice instead,
     # and the page's lead and Help switch wording through .pa-converter-off,
-    # which lives in main.css v=2.32.
+    # which lives in main.css v=2.32. The idle strip itself stays empty there
+    # (inputformat.css v=2.19), so the page says it once, in the section lead.
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "4.2", "4ea6cd76a909f01ab7a20d0bcb64f5aa207cd6fb81ba9d73006d2b7a4011969a"),
+        "4.2", "10ce95beb5196d128752ad4f832ca063a00f49233a073ce563ff40520f59e2cf"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
