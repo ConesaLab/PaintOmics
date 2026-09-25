@@ -1,4 +1,4 @@
-/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, paWalkEl, paWalkResultsNode, paWalkReferencesNode, paWalkStatementsNode, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway, paWalkHeaderNode, paWalkGatesNode, paWalkTextShown, paWalkBlockedNode, paWalkModuleSegments, paWalkAnchorGene */
+/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, readableAnswer, paWalkEl, paWalkCount, paWalkResultsNode, paWalkReferencesNode, paWalkStatementsNode, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway, paWalkHeaderNode, paWalkGatesNode, paWalkTextShown, paWalkBlockedNode, paWalkModuleSegments, paWalkAnchorGene */
 
 if (typeof marked !== "undefined" && marked.use) {
     marked.use({
@@ -16,6 +16,8 @@ function PA_AIInterpretView() {
     this.REPORT_RETRIES = 2;
     this.$root = null;
     this.isExpanded = false;
+    // A message arrived while the panel was collapsed (see expand).
+    this.hasUnseen = false;
     this.chatHistory = [];
     this.isWaitingResponse = false;
     this.jobID = null;
@@ -25,6 +27,15 @@ function PA_AIInterpretView() {
     // id/name/source of the pathways the interpretation walk runs through,
     // used to turn pathway mentions in chat replies into links.
     this.pathwayIndex = [];
+
+    var CHAT_PLACEHOLDER = "Ask a follow-up question...";
+    var CHAT_WAIT_PLACEHOLDER = "Questions open once the walk has finished";
+
+    var fullscreenButton = function($btn, full) {
+        var label = full ? "Exit full screen" : "Full screen";
+        $btn.html('<i class="fa fa-' + (full ? "compress" : "expand") + '" aria-hidden="true"></i>')
+            .attr({title: label, "aria-label": label});
+    };
 
     this.init = function(jobID) {
         this.jobID = jobID;
@@ -39,9 +50,13 @@ function PA_AIInterpretView() {
                other, and without this the picture the user clicked disappears
                the moment they click it. */
             '      <span class="ai-widget-header-title">' + getAIMark() + 'PaintOmics AI</span>' +
+            /* Font Awesome, as the app's other full-screen toggles (Step 3,
+               Step 4). The characters these replace were drawn from whatever
+               symbol font the OS had, and the exit cross read as "close". The
+               name is an aria-label because the icon is aria-hidden. */
             '      <div class="ai-widget-header-actions">' +
-            '        <button class="ai-fullscreen-btn" title="Fullscreen">&#x26F6;</button>' +
-            '        <button class="ai-minimize-btn" title="Minimize">&mdash;</button>' +
+            '        <button class="ai-fullscreen-btn" title="Full screen" aria-label="Full screen"><i class="fa fa-expand" aria-hidden="true"></i></button>' +
+            '        <button class="ai-minimize-btn" title="Minimize" aria-label="Minimize panel"><i class="fa fa-minus" aria-hidden="true"></i></button>' +
             '      </div>' +
             '    </div>' +
             '    <div class="ai-widget-progress" style="display:none;">' +
@@ -50,12 +65,13 @@ function PA_AIInterpretView() {
             '      <ul class="ai-activity" style="display:none"></ul>' +
             '    </div>' +
             '    <div class="ai-widget-messages"></div>' +
+            /* Disabled until the walk is done: see updateProgress. */
             '    <div class="ai-widget-input-area">' +
-            '      <textarea placeholder="Ask a follow-up question..." rows="1"></textarea>' +
-            '      <button class="ai-send-btn" title="Send">&#10148;</button>' +
+            '      <textarea aria-label="Ask PaintOmics AI a question" placeholder="' + CHAT_WAIT_PLACEHOLDER + '" rows="1" disabled></textarea>' +
+            '      <button class="ai-send-btn" title="Send" aria-label="Send question" disabled><i class="fa fa-paper-plane" aria-hidden="true"></i></button>' +
             '    </div>' +
             '  </div>' +
-            '  <button class="ai-widget-fab" title="PaintOmics AI">' +
+            '  <button class="ai-widget-fab" title="PaintOmics AI" aria-expanded="false">' +
             '    <span class="ai-fab-icon">' + getAIMark(26) + '</span>' +
             '    <span class="ai-widget-fab-badge" style="display:none;"></span>' +
             '  </button>' +
@@ -86,6 +102,12 @@ function PA_AIInterpretView() {
                 e.preventDefault();
                 me.sendChat();
             }
+        }).on("input", function() {
+            // Grow with the question up to the CSS max-height (80px, then it
+            // scrolls): at rows=1 a three-line question showed its last line.
+            // +2 for the borders, since the field is border-box.
+            this.style.height = "auto";
+            this.style.height = Math.min(this.scrollHeight + 2, 80) + "px";
         });
 
         // Delegated so it covers the pathway links in the walk and in chat
@@ -115,11 +137,14 @@ function PA_AIInterpretView() {
     this.expand = function() {
         if (!this.$root) return;
         this.$root.find(".ai-widget-panel").addClass("is-expanded");
+        this.$root.find(".ai-widget-fab").attr("aria-expanded", "true");
         this.isExpanded = true;
-        // Auto-scroll messages
-        var msgs = this.$root.find(".ai-widget-messages");
-        if (msgs.length) {
-            msgs.scrollTop(msgs[0].scrollHeight);
+        // Only bring in what arrived while it was collapsed. Otherwise the
+        // hidden panel kept its scrollTop, and a reader who minimised to look
+        // at a pathway comes back to the same place in the report.
+        if (this.hasUnseen) {
+            this.hasUnseen = false;
+            this._scrollToLatest();
         }
         // Auto-load report if done and not loaded
         if (!this.reportLoaded && this._lastStatus === "done") {
@@ -129,13 +154,13 @@ function PA_AIInterpretView() {
 
     this.collapse = function() {
         if (!this.$root) return;
+        // Leave full screen the same way its button does, so the reader's place
+        // survives: the collapsed panel keeps its scrollTop for expand().
         if (this.isFullscreen) {
-            this.$root.find(".ai-widget-panel").removeClass("is-fullscreen");
-            this.$root.find(".ai-widget-fab").show();
-            this.$root.find(".ai-fullscreen-btn").html("&#x26F6;").attr("title", "Fullscreen");
-            this.isFullscreen = false;
+            this.toggleFullscreen();
         }
         this.$root.find(".ai-widget-panel").removeClass("is-expanded");
+        this.$root.find(".ai-widget-fab").attr("aria-expanded", "false");
         this.isExpanded = false;
     };
 
@@ -149,15 +174,29 @@ function PA_AIInterpretView() {
 
     this.toggleFullscreen = function() {
         if (!this.$root) return;
+        var me = this;
         var $panel = this.$root.find(".ai-widget-panel");
         var $fab = this.$root.find(".ai-widget-fab");
         var $btn = this.$root.find(".ai-fullscreen-btn");
+        // Keep the reader's place. Full screen changes the width and the type
+        // size, so a raw scrollTop would land elsewhere: hold the message at the
+        // top of the view at the same point instead. From the collapsed
+        // launcher, expand() already brings in whatever arrived meanwhile.
+        var anchor = null;
+        if (this.isExpanded) {
+            anchor = this._viewAnchor();
+            // Full screen usually fits the whole reply, leaving nothing to scroll
+            // and so no place to read: going back, return to where the reader
+            // was when they entered it (or to the latest, if a reply came since).
+            if (!anchor && this.isFullscreen) anchor = this._fsEntryAnchor || { latest: true };
+        }
+        if (!this.isFullscreen) this._fsEntryAnchor = anchor;
 
         if (this.isFullscreen) {
             // Exit fullscreen
             $panel.removeClass("is-fullscreen");
             $fab.show();
-            $btn.html("&#x26F6;").attr("title", "Fullscreen");
+            fullscreenButton($btn, false);
             this.isFullscreen = false;
         } else {
             // Enter fullscreen - make sure panel is expanded first
@@ -166,13 +205,46 @@ function PA_AIInterpretView() {
             }
             $panel.addClass("is-fullscreen");
             $fab.hide();
-            $btn.html("&#x2716;").attr("title", "Exit fullscreen");
+            fullscreenButton($btn, true);
             this.isFullscreen = true;
         }
-        // Auto-scroll messages
-        var msgs = this.$root.find(".ai-widget-messages");
-        if (msgs.length) {
-            msgs.scrollTop(msgs[0].scrollHeight);
+        if (anchor) {
+            // The panel animates its size (transition: all 0.3s), so the text
+            // keeps reflowing: place it now and again once the size settles.
+            this._restoreViewAnchor(anchor);
+            $panel.one("transitionend", function() { me._restoreViewAnchor(anchor); });
+            setTimeout(function() { me._restoreViewAnchor(anchor); }, 350);
+        }
+    };
+
+    // Where the reader is: the message at the top of the view and how far into
+    // it, as a fraction of its height, or "at the end" when scrolled to the end.
+    // Null when everything fits and there is no place to keep.
+    this._viewAnchor = function() {
+        var $container = this.$root.find(".ai-widget-messages");
+        if (!$container.length) return null;
+        var c = $container[0];
+        if (c.scrollHeight <= c.clientHeight + 2) return null;
+        if (c.scrollTop + c.clientHeight >= c.scrollHeight - 2) return { atEnd: true };
+        var msgs = $container.children(".ai-message").get();
+        for (var i = 0; i < msgs.length; i++) {
+            var top = msgs[i].offsetTop - c.offsetTop;
+            if (top + msgs[i].offsetHeight > c.scrollTop) {
+                return { el: msgs[i], frac: msgs[i].offsetHeight ? (c.scrollTop - top) / msgs[i].offsetHeight : 0 };
+            }
+        }
+        return null;
+    };
+
+    this._restoreViewAnchor = function(anchor) {
+        var c = this.$root.find(".ai-widget-messages")[0];
+        if (!c) return;
+        if (anchor.latest) {
+            this._scrollToLatest();
+        } else if (anchor.atEnd) {
+            c.scrollTop = c.scrollHeight;
+        } else if (anchor.el && anchor.el.parentNode === c) {
+            c.scrollTop = anchor.el.offsetTop - c.offsetTop + anchor.frac * anchor.el.offsetHeight;
         }
     };
 
@@ -229,10 +301,21 @@ function PA_AIInterpretView() {
 
         this._lastStatus = status;
 
+        // Chat needs a finished walk: the server refuses any question before
+        // it ("must be finished before chatting"), so the field says when it
+        // opens instead of taking a question that can only come back failed.
+        var ready = status === "done";
+        this.$root.find(".ai-widget-input-area textarea").prop("disabled", !ready)
+            .attr("placeholder", ready ? CHAT_PLACEHOLDER
+                : (status === "unavailable" ? "Chat is unavailable for this job" : CHAT_WAIT_PLACEHOLDER));
+        this.$root.find(".ai-send-btn").prop("disabled", !ready || this.isWaitingResponse);
+
+        /* Badge fills that hold white at 3:1 or better: #66bb6a was 2.36:1
+           under the check mark and #ef5350 3.49:1 under the "!". */
         if (status === "done") {
             $progress.hide();
             $fab.removeClass("is-processing");
-            $badge.css("background", "#66bb6a").html("&#10003;").show();
+            $badge.css("background", "#2e7d32").html("&#10003;").show();
             // Load as soon as it is ready, expanded or not, so the result is
             // there the moment the panel opens.
             if (!this.reportLoaded) {
@@ -245,20 +328,20 @@ function PA_AIInterpretView() {
             // be refused for exactly the same reason. A button that cannot
             // work is worse than no button -- it reads as "we could fix this
             // if you asked again".
-            $progress.show().removeClass("is-done").addClass("is-error");
+            $progress.show().removeClass("is-done is-idle").addClass("is-error");
             this.$root.find(".ai-progress-fill").css("width", "100%");
             this.$root.find(".ai-progress-detail").text(detail || "Unavailable");
             $fab.removeClass("is-processing");
-            $badge.css("background", "#ef5350").html("!").show();
+            $badge.css("background", "#c62828").html("!").show();
         } else if (status === "error") {
-            $progress.show().removeClass("is-done").addClass("is-error");
+            $progress.show().removeClass("is-done is-idle").addClass("is-error");
             this.$root.find(".ai-progress-fill").css("width", "100%");
             this.$root.find(".ai-progress-detail").html(
                 (detail || "Unknown error") +
                 ' <button class="ai-retry-btn">Retry</button>'
             );
             $fab.removeClass("is-processing");
-            $badge.css("background", "#ef5350").html("!").show();
+            $badge.css("background", "#c62828").html("!").show();
             // Bind retry
             var me = this;
             this.$root.find(".ai-retry-btn").on("click", function() {
@@ -274,8 +357,9 @@ function PA_AIInterpretView() {
         } else if (status === "not_started") {
             // No walk for this job: one analysed before the walk existed, or
             // whose start after Step 2 never reached the server. Offer to start
-            // it rather than showing a bar that will never move.
-            $progress.show().removeClass("is-done is-error");
+            // it rather than showing a bar that will never move (is-idle
+            // hides the track).
+            $progress.show().removeClass("is-done is-error").addClass("is-idle");
             this.$root.find(".ai-progress-fill").css("width", "0%");
             var $detail = this.$root.find(".ai-progress-detail").empty()
                 .append(document.createTextNode("No interpretation has run for this job yet. "));
@@ -290,7 +374,7 @@ function PA_AIInterpretView() {
             $badge.hide();
         } else {
             // Processing
-            $progress.show().removeClass("is-done is-error");
+            $progress.show().removeClass("is-done is-error is-idle");
             this.$root.find(".ai-progress-fill").css("width", percent + "%");
             this.$root.find(".ai-progress-detail").text(detail || status || "Processing...");
             $fab.addClass("is-processing");
@@ -729,11 +813,14 @@ function PA_AIInterpretView() {
         var counts = view.counts || {};
         bubble.appendChild(paWalkEl("h3", "ai-walk-title", "Graph walk across KEGG, Reactome and OmniPath"));
         var starts = counts.segments || 1;
+        // Grouped like every other count on Step 3 ("1,007 Pathways found").
+        var nodes = Number((view.graph || {}).nodes);
         bubble.appendChild(paWalkEl("p", "pa-walk-meta", "AI agents walked the network of every KEGG, Reactome and " +
-            "OmniPath interaction for this organism (" + ((view.graph || {}).nodes || "?") + " nodes), with your " +
-            "values on its nodes. They started from " + starts + " node" + (starts === 1 ? "" : "s") +
-            " whose neighbourhoods hold surprisingly many relevant features and took " + (counts.steps || 0) +
-            " steps."));
+            "OmniPath interaction for this organism (" +
+            (isFinite(nodes) && nodes > 0 ? nodes.toLocaleString("en-US") : "?") + " nodes), with your " +
+            "values on its nodes. They started from " + paWalkCount(starts, "node") + " whose neighbourhood" +
+            (starts === 1 ? " holds" : "s hold") + " surprisingly many relevant features and took " +
+            paWalkCount(counts.steps, "step") + "."));
         /* The perturbation line and the five gates first; the text they judged
            only when every gate passed (or the walk predates them). A walk they
            held back shows a note in its place and opens its legs. */
@@ -754,8 +841,8 @@ function PA_AIInterpretView() {
         }
         var chain = paWalkEl("details", "pa-walk-chain");
         chain.open = !shown;
-        chain.appendChild(paWalkEl("summary", null, "The walk: " + (counts.steps || 0) + " steps, " +
-            (counts.jumps || 0) + " jumps"));
+        chain.appendChild(paWalkEl("summary", null, "The walk: " + paWalkCount(counts.steps, "step") + ", " +
+            paWalkCount(counts.jumps, "jump")));
         chain.appendChild(paWalkLegsNode(view.chain, {onLeg: focusLeg, pathwayLink: paWalkPathwayLink,
             segments: paWalkModuleSegments(view), anchorGene: paWalkAnchorGene(view)}));
         bubble.appendChild(chain);
@@ -769,6 +856,7 @@ function PA_AIInterpretView() {
         provenance.appendChild(model);
         bubble.appendChild(provenance);
         this.$root.find(".ai-widget-messages").append($bubble);
+        if (!this.isExpanded) { this.hasUnseen = true; }
         if (typeof withAIProviderInfo === "function") {
             withAIProviderInfo(function(info) {
                 var text = "Generated at " + info.host;
@@ -804,7 +892,26 @@ function PA_AIInterpretView() {
                       '  <div class="ai-msg-bubble">' + bubbleContent + '</div>' +
                       '</div>';
         $container.append(msgHtml);
-        $container.scrollTop($container[0].scrollHeight);
+        if (!this.isExpanded) { this.hasUnseen = true; }
+        this._fsEntryAnchor = null;
+        this._scrollToLatest();
+    };
+
+    // A reply (or the walk report) taller than the message area opens at its
+    // first line, not its last; anything shorter, and the user's own line,
+    // scroll to the end. Shared by addMessage and expand, so reopening the
+    // panel does not jump back to a reply's end.
+    // offsetParent is the panel for both, so this holds at any scroll position.
+    this._scrollToLatest = function() {
+        if (!this.$root) return;
+        var $container = this.$root.find(".ai-widget-messages");
+        var $msg = $container.children(".ai-message").last();
+        if (!$container.length) return;
+        if ($msg.hasClass("ai-msg-assistant") && $msg.outerHeight() > $container.innerHeight()) {
+            $container.scrollTop($msg[0].offsetTop - $container[0].offsetTop - 12);
+        } else {
+            $container.scrollTop($container[0].scrollHeight);
+        }
     };
 
     this.addLoadingIndicator = function() {
@@ -830,11 +937,25 @@ function PA_AIInterpretView() {
 
         if (!message || me.isWaitingResponse) return;
 
-        $input.val("");
+        $input.val("").css("height", "");
         me.addMessage("user", message);
         me.isWaitingResponse = true;
         me.addLoadingIndicator();
         me.$root.find(".ai-send-btn").prop("disabled", true);
+
+        // The server's refusal as a sentence: handleException prefixes the
+        // exception and its location and, for a signed-in user, appends the
+        // user ID. Step 3 strips the same prefix off a refused Start.
+        var reason = function(text) {
+            return String(text || "")
+                .replace(/^\w+: AT [^:]+: \w+\. ERROR MESSAGE: /, "")
+                .replace(/\. User ID: \S+$/, "");
+        };
+        // A failed question goes back in the field, so trying again is one
+        // key, unless the user has typed something new while waiting.
+        var giveBack = function() {
+            if (!$input.val()) { $input.val(message).trigger("input"); }
+        };
 
         $.ajax({
             type: "POST",
@@ -851,14 +972,22 @@ function PA_AIInterpretView() {
                 if (response.success && response.response) {
                     me.addMessage("assistant", response.response);
                 } else {
-                    me.addMessage("assistant", "Sorry, I couldn't process your question. " + (response.message || ""));
+                    giveBack();
+                    me.addMessage("assistant", "Sorry, I couldn't process your question. " + reason(response.message));
                 }
             },
-            error: function() {
+            error: function(jqXHR) {
                 me.removeLoadingIndicator();
                 me.isWaitingResponse = false;
                 me.$root.find(".ai-send-btn").prop("disabled", false);
-                me.addMessage("assistant", "Failed to get a response. Please try again.");
+                giveBack();
+                // A handled refusal (AI off, walk not finished, no consent)
+                // says why, and retrying it cannot help; only an unreadable
+                // answer, a transport failure, is worth trying again.
+                var answer = readableAnswer(jqXHR);
+                var why = answer && answer.message ? reason(answer.message) : "";
+                me.addMessage("assistant", why ? "Sorry, I couldn't process your question. " + why
+                    : "Failed to get a response. Please try again.");
             }
         });
     };
@@ -869,6 +998,7 @@ function PA_AIInterpretView() {
             this.$root = null;
         }
         this.isExpanded = false;
+        this.hasUnseen = false;
         this.reportLoaded = false;
         this.chatHistory = [];
     };

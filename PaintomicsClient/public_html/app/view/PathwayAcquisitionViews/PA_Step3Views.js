@@ -837,7 +837,11 @@ function PA_Step3JobView() {
 					]
 				 }
 				 :
-				 {xtype: "box", html: "<br><div style='text-align: center;'><b>You are not the owner or the job does not have an owner account so sharing options cannot be modified.</b></div>"}
+				 // Name the one case that applies: an ownerless job and someone
+				 // else's job are different reasons, and neither is an alert.
+				 {xtype: "box", html: "<div style='margin-top:10px;'>" + (hasOwner ?
+					"Only the owner of this job can change its sharing options." :
+					"This job was created without an account, so it has no owner and its sharing options cannot be changed.") + "</div>"}
 				)
 			],
 			// An empty object here still renders as a button: a blank blue pill
@@ -1439,6 +1443,17 @@ function PA_Step3JobView() {
 					$(".mappingButton").click(function() {
 						var cmp = Ext.getCmp('statsViewContainer');
 						cmp.getEl().toggle();
+						/* The per-omic charts are drawn while this card is hidden, so
+						   they keep a guessed width and ran ~20px past their columns,
+						   clipping the right-hand axis label. Fit them once shown. */
+						if (cmp.getEl().isVisible()) {
+							$(cmp.getEl().dom).find('[data-highcharts-chart]').each(function() {
+								var c = $(this).highcharts();
+								if (c) {
+									c.reflow();
+								}
+							});
+						}
 
 						var buttonHTML = $(this).html();
 
@@ -1698,7 +1713,13 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		var mainClassifications = [], secondClassifications = [], mainClassificationInstance, secClassificationInstance, drilldownAux;
 		var classificationID, secondClassificationID;
 
-		for (classificationID in classificationData){
+		/* Sorted, like the selector panel in STEP 3. Both hand out fallback
+		   colours from OTHER_COLORS with shift(), so they must visit the
+		   classifications in the same order: in insertion order 5 of the 8
+		   OmniPath wedges drew in a different colour from their own chip. */
+		var pieClassificationIDs = Object.keys(classificationData).sort();
+		for (var pieIndex = 0; pieIndex < pieClassificationIDs.length; pieIndex++){
+			classificationID = pieClassificationIDs[pieIndex];
 			mainClassificationInstance = classificationData[classificationID];
 
 			mainClassifications.push({
@@ -1722,7 +1743,8 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		}
 
 		me.highcharts = Highcharts.chart('pathwayDistributionsContainer_' + me.dbid, {
-			chart: {type: 'pie'},
+			// inherit: the labels were Highcharts' Lucida Grande, the only such face on the card.
+			chart: {type: 'pie', style: {fontFamily: 'inherit'}},
 			title: null, credits: {enabled: false},
 			plotOptions: {
 				series: {
@@ -1960,9 +1982,14 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 
 		// Avoid this when no pathways are visible.
 		if (pathwaysVisibility.length) {
-			Object.keys(classificationData).forEach(function(classificationID) {
+			/* Sorted, and the colour taken before the visibility test: the
+			   selector panel gives every classification a fallback colour, shown
+			   or not, so a hidden one must still use up its OTHER_COLORS slot here
+			   or every wedge after it shifts one colour along. */
+			Object.keys(classificationData).sort().forEach(function(classificationID) {
 				var mainClassificationInstance = classificationData[classificationID];
 				var mainVisiblePathways = 0;
+				var color = me.getParent().getClassificationColor(classificationID, otherColors);
 
 				drilldownAux = {
 					name: mainClassificationInstance.name,
@@ -1987,7 +2014,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 					mainClassifications.push({
 						name: mainClassificationInstance.name,
 						y: (mainVisiblePathways/pathwaysVisibility.length) * 100,
-						color: me.getParent().getClassificationColor(classificationID, otherColors),
+						color: color,
 						drilldown: classificationID
 					});
 				}
@@ -2042,14 +2069,14 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 			   first thing under the card's heading and started 16px left of
 			   it. */
 			'<div id="pathwayClassificationPlot1Box_' + me.dbid + '" style="padding-left: var(--pa-card-inset);overflow:hidden;  min-height:300px; width: 45%; float: left;">'+
-			'  <h4>Category Distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
+			'  <h4>Category distribution<span class="infoTip">Click on each slice to view the distribution of the subcategories.</span></h4> '+
 			'  <div id="pathwayDistributionsContainer_' + me.dbid + '" style="height: 240px;"></div>'+
 			'</div>' +
 			/* The card's own inset on the right, like the column beside it takes on
 			   the left. 30px was 4px past it, which is what put the Apply button
 			   below on a right edge of its own. */
 			'<div id="pathwayClassificationPlot2Box_' + me.dbid + '" style="overflow:hidden;  min-height:300px; width: 55%; display:inline-block; padding: 0px var(--pa-card-inset)">'+
-			'  <h4>Filter by category<span class="infoTip">Use this tool to <b>Show or Hide Pathways</b> based on their classification</span></h4> '+
+			'  <h4>Filter by category<span class="infoTip">Use this tool to <b>show or hide pathways</b> based on their classification.</span></h4> '+
 			'  <div id="pathwayClassificationContainer_' + me.dbid + '"></div>'+
 			/* No right margin. The 50px here stopped the only action in this card
 			   54px short of the rail its own heading, its "Filter by category"
@@ -2619,6 +2646,8 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				minNodeSize: visualOptions.minNodeSize,
 				maxNodeSize: visualOptions.maxNodeSize,
 				defaultLabelSize: visualOptions.fontSize,
+				// sigma's default is "arial", the only Arial on the card and wider than the UI face.
+				font: "SourceSansPro, 'Source Sans Pro', sans-serif",
 				defaultLabelColor: paNetworkLabelInk()
 			}
 		});
@@ -2780,9 +2809,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 
 		if(visualOptions.colorBy === "classification"){
 			var color, classification;
-			for (var classificationID in me.getParent().classificationData[me.database]){
+			// Sorted, so the legend reads in the same order as the category tree.
+			var legendClassificationIDs = Object.keys(me.getParent().classificationData[me.database]).sort();
+			for (var legendIndex = 0; legendIndex < legendClassificationIDs.length; legendIndex++){
+				var classificationID = legendClassificationIDs[legendIndex];
 				classification = me.getParent().classificationData[me.database][classificationID];
-				color = color = this.getParent().getClassificationColor(classificationID, []);
+				color = this.getParent().getClassificationColor(classificationID, []);
 				htmlCode += '<div style="text-align:left;"><i class="classificationNameBox" style="' + classificationBadgeStyle(color) + '">' + classification.name.charAt(0).toUpperCase() + '</i>' +  classification.name + "</div>";
 			}
 			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
@@ -2794,7 +2826,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			$("#sliderClusterNumberShow_" + me.dbid).html(totalClusters);
 			$("#sliderClusterNumber_" + me.dbid).slider("option", "value", totalClusters);
 
-			$("#networkClustersContainer_" + me.dbid + " h5").text(clusterNumber + " Clusters found from " + totalClusters + " in total.");
+			$("#networkClustersContainer_" + me.dbid + " h5").text(clusterNumber + " of " + totalClusters + " clusters in this network");
 			//Generate the images and the containers
 			var img_path;
 			var db_suffix = (me.dbid != "KEGG" ? "_" + me.dbid.toLowerCase(): '');
@@ -3066,9 +3098,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			if (!me.network) {
 				return;
 			}
-			me.network.renderers.forEach(function(renderer) {
-				if (renderer.resize) {
-					renderer.resize();
+			// sigma keeps its renderers in an object keyed by id, not an array:
+			// forEach threw here on every call, so refresh() never ran either.
+			var renderers = me.network.renderers;
+			Object.keys(renderers).forEach(function(id) {
+				if (renderers[id] && renderers[id].resize) {
+					renderers[id].resize();
 				}
 			});
 			me.network.refresh();
@@ -3737,14 +3772,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				//THE PANEL WITH THE VISUAL OPTIONS
 				'<div id="pathwayNetworkToolsBox_' + me.dbid + '" style="overflow:hidden;">' +
 				'  <h4>Visual settings</h4>' +
-				'  <h5>Node coloring: <span class="helpTip" style="float:right;" title="Change the way in which nodes are colored."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Change the way in which nodes are colored."></span>Node coloring:</h5>' +
 				'  <div id="colorByContainer_' + me.dbid + '"></div>' +
 				/* The tooltip used to describe only the KEGG case ("links to other
 				   KEGG pathways"), which left a Reactome or MapMan user reading
 				   an explanation of a database they were not looking at. Each
 				   database states process relatedness its own way, so say which
 				   one is being used. */
-				'  <h5>Choose what edges represents: <span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="<b>Linked biological processes</b> means the two pathways are related in biological terms, as the database itself states it. In KEGG that is a link drawn on a pathway map to another map; in Reactome it is the pathway hierarchy - two processes under a common parent, or a process and one nested inside it - together with any sub-pathway a diagram embeds.<br><br><b>Shared biological features</b> instead draws an edge wherever two pathways have genes or compounds in common, with the thickness increasing with the similarity between the two sets of matched features. Use the <i>Min shared features</i> slider below to set how much overlap is enough."></span>Edges represent:</h5>' +
 				'  <div id="edgesClassContainer_' + me.dbid + '">' +
 				'    <div class="radio">' +
 				'      <input type="radio" ' + ((visualOptions.edgesClass === "l")? "checked": "")+ ' id="edgesLinkedPathways_' + me.dbid + '" name="edgesClassCheckbox-check_' + me.dbid + '" value="l">' +
@@ -3757,14 +3792,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  </div>'+
 				'  <h5>Other settings:</h5>' +
 				'  <div class="checkbox"><input type="checkbox" id="show-node-labels-check_' + me.dbid + '" name="showNodeLabelsCheckbox">' +
-				'    <label for="show-node-labels-check_' + me.dbid + '">Show all node labels <span class="helpTip" style="float:right;" title="Shows labels for nodes (reduces performance). By default labels are visible when zooming the network."</span></label>' +
+				'    <label for="show-node-labels-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Shows labels for nodes (reduces performance). By default labels are visible when zooming the network."></span>Show all node labels</label>' +
 				'  </div>'+
-				'  <h5>Label font size (<span id="fontSizeValue_' + me.dbid + '">14</span>)<span class="helpTip" style="float:right;" title="Font size of the labels."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Font size of the labels."></span>Label font size (<span id="fontSizeValue_' + me.dbid + '">14</span>)</h5>' +
 				'  <div class="slider-ui" id="fontSizeSlider_' + me.dbid + '"></div>' +
 				'  <div style="display: none;">' +
-				'  <h5>Max node size (<span id="maxNodeSizeValue_' + me.dbid + '">8</span>)<span class="helpTip" style="float:right;" title="Determines the maximum size that a node can have, scaling the others to maintain the correct ratio."</span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Determines the maximum size that a node can have, scaling the others to maintain the correct ratio."></span>Max node size (<span id="maxNodeSizeValue_' + me.dbid + '">8</span>)</h5>' +
 				'  <div class="slider-ui" id="maxNodeSizeSlider_' + me.dbid + '"></div>' +
-				'  <h5>Min node size (<span id="minNodeSizeValue_' + me.dbid + '">1</span>)<span class="helpTip" style="float:right;" title="Determines the minimum size that a node can have, scaling the others to maintain the correct ratio."</span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Determines the minimum size that a node can have, scaling the others to maintain the correct ratio."></span>Min node size (<span id="minNodeSizeValue_' + me.dbid + '">1</span>)</h5>' +
 				'  <div class="slider-ui" id="minNodeSizeSlider_' + me.dbid + '"></div>' +
 				' </div>' +
 				// '  <div class="checkbox"><input type="checkbox" id="show-edge-labels-check" name="showEdgeLabelsCheckbox">' +
@@ -3772,25 +3807,30 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				// '  </div>'+
 				'  <h4>Network layout settings</h4>' +
 				'  <div class="checkbox"><input type="checkbox" id="save-node-positions-check_' + me.dbid + '" name="saveNodePositionsCheckbox">' +
-				'    <label for="save-node-positions-check_' + me.dbid + '">Save the nodes positions<span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network (increases performance)."></span><span class="commentTip" style="padding-left:21px;">Disable the auto-layout for network.</span></label>' +
+				'    <label for="save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network (increases performance)."></span>Save node positions<span class="commentTip" style="padding-left:21px;">Turns off the auto-layout.</span></label>' +
 				'  </div>'+
 				'  <div class="checkbox" id="pre-auto-save-node-positions-check_' + me.dbid + '"><input type="checkbox" id="auto-save-node-positions-check_' + me.dbid + '" name="autoSaveNodePositionsCheckbox">' +
-				'    <label for="auto-save-node-positions-check_' + me.dbid + '">Auto-save positions<span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network when clicking the \'Apply\' button, instead of having to click \'Save node positions\' before."></span><span class="commentTip" style="padding-left:21px;">Save positions after clicking "Apply".</span></label>' +
+				'    <label for="auto-save-node-positions-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Use this option if you want to save the position for nodes in the network when clicking the \'Apply\' button, instead of having to click \'Save node positions\' before."></span>Auto-save positions<span class="commentTip" style="padding-left:21px;">Save positions after clicking "Apply".</span></label>' +
 				'  </div>'+
 				'  <div class="checkbox"><input type="checkbox" id="background-layout-check_' + me.dbid + '" name="backgroundLayoutCheckbox">' +
-				'    <label for="background-layout-check_' + me.dbid + '">Calculate layout on background <span class="helpTip" style="float:right;" title="Run the layout on background, apply the new nodes position on stop (increases performance)."></span><span class="commentTip" style="padding-left:21px;">Increases performance.</span></label>' +
+				'    <label for="background-layout-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="Run the layout on background, apply the new nodes position on stop (increases performance)."></span>Calculate layout on background<span class="commentTip" style="padding-left:21px;">Increases performance.</span></label>' +
 				'  </div>'+
 				"  <h4>Node filtering options</h4>" +
-				'  <h5>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)<span class="helpTip" style="float:right;" title="Min % of the features in a pathway that your input covers. Only the kinds of feature you submitted are counted, so a metabolomics job is measured against the compounds in the pathway and a transcriptomics job against its genes.<br><br>E.g. at min=50%, a pathway holding 200 countable features needs 100 of them in your input; with 80 it is excluded. The default starts at 50% for gene-based data and 10% for compound-only data, because a metabolomics platform covers far less of a pathway than an RNA-seq experiment does."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Min % of the features in a pathway that your input covers. Only the kinds of feature you submitted are counted, so a metabolomics job is measured against the compounds in the pathway and a transcriptomics job against its genes.<br><br>E.g. at min=50%, a pathway holding 200 countable features needs 100 of them in your input; with 80 it is excluded. The default starts at 50% for gene-based data and 10% for compound-only data, because a metabolomics platform covers far less of a pathway than an RNA-seq experiment does."></span>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)</h5>' +
 				'  <div class="slider-ui" id="minFeaturesSlider_' + me.dbid + '"></div>' +
-				'  <h5>Min shared features (<span id="minSharedFeaturesValue_' + me.dbid + '">10</span>%)<span class="helpTip" style="float:right;" title="Min. % of features shared between 2 pathways (using the smaller pathway as reference). Edges showing a smaller relationship will be excluded.<br>E.g. Taking min=10%, Pathway A (60 features) and B (90 features), if shared features=5 the edge will be ignored (5 < Min(60,90) * 0.1)"></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Min. % of features shared between 2 pathways (using the smaller pathway as reference). Edges showing a smaller relationship will be excluded.<br>E.g. Taking min=10%, Pathway A (60 features) and B (90 features), if shared features=5 the edge will be ignored (5 < Min(60,90) * 0.1)"></span>Min shared features (<span id="minSharedFeaturesValue_' + me.dbid + '">10</span>%)</h5>' +
 				'  <div class="slider-ui" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +
-				'  <h5>Min p-value for the pathway (<span id="minPValue_' + me.dbid + '">0.05</span>)<span class="helpTip" style="float:right;" title="Pathways with lower p-value (more significant) will be represented with bigger nodes. Pathways with higher p-value (less significant), will be shown as small nodes."</span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Only pathways with a p-value at or below this cutoff are drawn; among them, a lower p-value draws a bigger node."></span>Max p-value (<span id="minPValue_' + me.dbid + '">0.05</span>)</h5>' +
 				'  <div class="slider-ui" id="minPValueSlider_' + me.dbid + '"></div>' +
+				/* The help mark floats on the first line, which leaves the label 160px:
+				   "Always use combined p-value" is 172px and wrapped to an orphaned
+				   "p-value". "Filter by combined p-value" (156px) says what the box does;
+				   the tip keeps the "even when colouring by one omic" part. nowrap keeps
+				   "p-value" from breaking at its hyphen if the rail narrows. */
 				'  <div class="checkbox"><input type="checkbox" id="use-combined-pval-check_' + me.dbid + '" name="useCombinedPvalCheckbox">' +
-				'    <label for="use-combined-pval-check_' + me.dbid + '">Always use combined p-value <span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."</span></label>' +
+				'    <label for="use-combined-pval-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="When coloring for one omic, always use the combined p-value for filtering if enabled, otherwise rely on the omic p-value."></span>Filter by combined <span style="white-space:nowrap;">p-value</span></label>' +
 				'  </div>'+
-				'  <h5>P-value selection criteria: <span class="helpTip" style="float:right;" title="Select which adjust method to choose the p-values from."></span></h5>' +
+				'  <h5><span class="helpTip" style="float:right;" title="Select which adjust method to choose the p-values from."></span>P-value selection criteria:</h5>' +
 				'  <div id="pvaluemethod_' + me.dbid + '"></div>' +
 				'  <a href="javascript:void(0)" class="button btn-success btn-right helpTip" id="applyNetworkSettingsButton_' + me.dbid + '" style="margin-top: 20px;" title="Apply changes"><i class="fa fa-check"></i> Apply</a>' +
 				'</div>'
@@ -3808,7 +3848,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				xtype: 'box', cls: "paNetRailTabs", html:
 				'<a href="javascript:void(0)" class="paNetRailTab is-active helpTip" data-pane="tools" title="Everything that changes what the graph shows. Some options also affect the table below."><i class="fa fa-sliders"></i> Tools</a>' +
 				'<a href="javascript:void(0)" class="paNetRailTab helpTip" data-pane="details" title="The colour legend, and the detail for whichever pathway you last clicked"><i class="fa fa-info-circle"></i> Details</a>' +
-				'<a href="javascript:void(0)" class="paNetRailHide helpTip" title="Hide this panel and give the graph the whole card"><i class="fa fa-times"></i></a>'
+				'<a href="javascript:void(0)" class="paNetRailHide helpTip" aria-label="Hide this panel" title="Hide this panel and give the graph the whole card"><i class="fa fa-times" aria-hidden="true"></i></a>'
 			},{
 				xtype: 'box', id: 'networkPanel_' + me.dbid,
 				/* `paNetMain` is the graph half of the grid, and the element that
@@ -4324,7 +4364,7 @@ function PA_Step3PathwayDetailsView() {
 				
 				for (var omicName in significanceValues) {
 					var globalP = (globalOmicPvalues[omicName] !== undefined) ? globalOmicPvalues[omicName] : significanceValues[omicName][0][2]; // Fallback to first condition if global not present
-					var renderedGlobalP = (globalP > 0.001 || globalP === 0) ? parseFloat(globalP).toFixed(6) : parseFloat(globalP).toExponential(4);
+					var renderedGlobalP = (globalP > 0.001 || globalP === 0) ? parseFloat(globalP).toFixed(5) : parseFloat(globalP).toExponential(4);
 					
 					var omicID = omicName.replace(/ /g, "_");
 					
@@ -4338,7 +4378,7 @@ function PA_Step3PathwayDetailsView() {
 					// not inline: an inline background is unreachable by dark.css.
 					for (var c = 0; c < significanceValues[omicName].length; c++) {
 						var condP = significanceValues[omicName][c][2];
-						var renderedCondP = (condP > 0.001 || condP === 0) ? parseFloat(condP).toFixed(6) : parseFloat(condP).toExponential(4);
+						var renderedCondP = (condP > 0.001 || condP === 0) ? parseFloat(condP).toFixed(5) : parseFloat(condP).toExponential(4);
 						var condName = conditionNames[c] || ("Condition " + (c+1));
 
 						htmlCode += '<tr class="condition-row cond-row-' + omicID + '" style="display:none;">' +
@@ -4435,6 +4475,16 @@ function PA_Step3PathwayDetailsView() {
 						"<h4 style='color: #D16949;font-size: 13px;margin: 0;'>" + omicDataType[i] + "</h4>"+
 						"<b>No data for this pathway.</b>"
 					);
+				}else if (metagenes.length === 0){
+					/* An omic with no trend here: say so, rather than drawing a
+					   Heatmap/Line chart toggle over two empty charts. The class
+					   gives the next omic the air a chart would have left. */
+					pathwayPlotwrappers.append(
+						"<div class='paOmicNoTrend'>" +
+						"  <h4>" + omicDataType[i] + "</h4>" +
+						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> No major trends in this pathway.</span>" +
+						"</div>"
+					);
 				}else{
 					/****************************************************************/
 					/* STEP 3.C UPDATE THE HEATMAP AND THE PLOT                     */
@@ -4451,11 +4501,13 @@ function PA_Step3PathwayDetailsView() {
 						"  <div class='step3-tooltip-plot-container' name='heatmap-chart'  style='display:none;'>" +
 						/* +34px on top of the row height: that is the band the rotated
 					   condition labels occupy under the x axis. Without it they
-					   would come out of the 35px allowed per trend. */
-					"    <div id='" + divName + "_heatmapcontainer' name='heatmap-chart' style='height:"+ (metagenes.length * 35 + 44 )+ "px;width: 230px;'></div>" +
+					   would come out of the 35px allowed per trend. 200px wide, not 230:
+					   the Details rail's content box is ~203px, and the wider chart lost
+					   its last time point off the right edge. */
+					"    <div id='" + divName + "_heatmapcontainer' name='heatmap-chart' style='height:"+ (metagenes.length * 35 + 44 )+ "px;width: 200px;'></div>" +
 						"  </div>" +
 						"  <div class='step3-tooltip-plot-container selected' name='line-chart'>" +
-						"    <div id='" + divName + "_plotcontainer' style='height:100px;width: 230px;'></div>" +
+						"    <div id='" + divName + "_plotcontainer' style='height:100px;width: 200px;'></div>" +
 						"  </div>"+
 						"</div>"
 					);
@@ -4686,24 +4738,7 @@ function PA_Step3PathwayDetailsView() {
 			maxVal = Math.ceil(Math.max(maxVal, 1));
 			minVal = Math.floor(Math.min(minVal, -1));
 
-			/* The three reference lines mark the +/-1 band that turns a point's
-			   marker orange. Their labels used to be unconditional, so on a
-			   pathway whose metagene range is wide (+/-6, +/-10) all three
-			   landed within a few pixels of each other in a 100px chart and
-			   piled up into an unreadable smudge on the right edge. Draw the
-			   lines either way; label the +/-1 pair only when the text has room
-			   to clear the zero label. */
-			var referenceLine = function(value, labelled) {
-				var line = {color: '#dedede', value: value, width: 1};
-				if (labelled) {
-					line.label = {
-						text: String(value), align: 'right', x: -3, y: -2,
-						style: {color: 'gray', fontSize: '9px'}
-					};
-				}
-				return line;
-			};
-
+			// The +/-1 and 0 reference lines - see paReferenceLine().
 			var plot = new Highcharts.Chart({
 				chart: {renderTo: targetID},
 				title: null,
@@ -4714,9 +4749,9 @@ function PA_Step3PathwayDetailsView() {
 					min: minVal,
 					max: maxVal,
 					plotLines: [
-						referenceLine(-1, true),
-						referenceLine(0, true),
-						referenceLine(1, true)
+						paReferenceLine(-1, true),
+						paReferenceLine(0, true),
+						paReferenceLine(1, true)
 					]},
 					series: series,
 					legend: {
@@ -4740,20 +4775,7 @@ function PA_Step3PathwayDetailsView() {
 			);
 
 			plot.yAxis[0].setExtremes(minVal, maxVal);
-
-			/* Now that the axis has real pixel dimensions, drop the +/-1 labels
-			   if they would collide. 11px is the smallest gap at which the 9px
-			   label text still clears its neighbour. */
-			var yAxis0 = plot.yAxis[0];
-			if (Math.abs(yAxis0.toPixels(0) - yAxis0.toPixels(1)) < 11) {
-				yAxis0.update({
-					plotLines: [
-						referenceLine(-1, false),
-						referenceLine(0, true),
-						referenceLine(1, false)
-					]
-				}, true);
-			}
+			paFitReferenceLabels(plot.yAxis[0]);
 
 			return plot;
 		};
@@ -5072,8 +5094,14 @@ function PA_Step3PathwayTableView() {
 				   A real minimum is what survives that arithmetic. 220px fits the
 				   median KEGG name outright and leaves the long Reactome ones
 				   recoverable on hover, and when the omic columns are expanded the
-				   grid scrolls sideways rather than crushing this one. */
-				minWidth: 220
+				   grid scrolls sideways rather than crushing this one.
+
+				   235px fits "Cytokine-cytokine receptor interaction" (229px with
+				   padding) whole. The 15px is what the grid can give at 1440px
+				   and still end its last p-value column inside the view: 10px of
+				   slack and 2px off each omic column. External links sits after
+				   that column, so narrowing it would not help. */
+				minWidth: 235
 			},{
 				text: '', dataIndex: 'classification',
 				filterable: true, width:10, resizable: false,
@@ -5617,10 +5645,10 @@ function PA_Step3PathwayTableView() {
 
 					// Only show tooltip for condition-specific columns OR single-condition jobs
 					if (isCondition || nCond <= 1) {
-						myToolTipText += '<b>p-value:</b>'  + (value === -1 ? "-" : renderedValue) + "</br>";
+						myToolTipText += '<b>p-value:</b> '  + (value === -1 ? "-" : renderedValue) + "</br>";
 						myToolTipText +=
 						"<table class='contingencyTable'>" +
-						' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+						' <thead><th></th><th>Relevant</th><th>Not relevant</th><th></th></thead>' +
 						'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
 						'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 						'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
@@ -5658,7 +5686,9 @@ function PA_Step3PathwayTableView() {
 			var omicColumn = {
 				text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer;" data-omic="' + omicName + '"></i> ' : '') + omic.omicName.replace(" ","</br>"), 
 				cls:"header-45deg",
-				dataIndex: 'pValue' + omicName, width:90,
+				// 88, not 90: "Metabolomics" needs 66px of the 68 left inside the
+				// padding, and the 2px per omic go to Pathway name (its minWidth).
+				dataIndex: 'pValue' + omicName, width:88,
 				flex: 1, hidden : hidden, sortable: true, align: "center",
 				filter: {type: 'numeric'},
 				renderer: renderFunction,
@@ -5722,7 +5752,7 @@ function PA_Step3PathwayTableView() {
 			adjustedPvaluesMethods.forEach(function(m) {
 				columns.push({
 					text: omics[i].omicName.replace(" ","</br>") + '</br>(' + m + ')', cls:"header-45deg",
-					dataIndex: 'adjpval' + m + omicName, width:90,
+					dataIndex: 'adjpval' + m + omicName, width:88,
 					flex: 1, hidden: (hidden || selectedAdjustedMethod != m),
 					sortable: true, align: "center",
 					filter: {type: 'numeric'},
@@ -6008,7 +6038,9 @@ function PA_Step3StatsView() {
 				{
 						xtype: 'container', itemId: "omicSummaryPanelStep3",
 						cls: "omicSummaryContainer",
-						layout: 'column',  style: "margin-top:20px;width: 100%;",
+						/* No width: 100% - with the class's 10px left margin it ran
+						   10px past the card and clipped the right-hand omic cards. */
+						layout: 'column',  style: "margin-top:20px;",
 						items: omicSummaryPanelComponents
 				}
 			],
@@ -7091,22 +7123,25 @@ function PA_Step3MetaboliteView() {
 		}).join("");
 		var condSel = "";
 		if (!perm && (classActivity.nConditions || 1) > 1) {
-			condSel = '<label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
+			condSel = '<span class="paLadderField"><label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
 				+ '<select id="classLadderCondition" class="paClassMapSelect">'
 				+ (classActivity.conditions || []).map(function (name, i) {
 					return '<option value="' + i + '"' + (i === ladderState.condition ? " selected" : "") + '>' + classMapEscape(name) + '</option>';
-				}).join("") + '</select>';
+				}).join("") + '</select></span>';
 		}
 		controls.innerHTML = '<div class="paLadderBar">'
-			+ '<span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div>'
+			/* Each label and its control share a paLadderField, so a wrapping
+			   bar never leaves "Order by" at the end of one row and its select
+			   at the start of the next. */
+			+ '<span class="paLadderField"><span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div></span>'
 			/* data-guides="ignore" on the mid-row labels: their rail is the
 			   select they name, not the card's. */
-			+ '<label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
+			+ '<span class="paLadderField"><label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
 			+ '<select id="classLadderSort" class="paClassMapSelect">'
 			+ '<option value="effect"' + (ladderState.sort === "effect" ? " selected" : "") + '>' + (perm ? "Effect (mean F)" : "Share in relevant list") + '</option>'
 			+ '<option value="p"' + (ladderState.sort === "p" ? " selected" : "") + '>p-value</option>'
 			+ '<option value="n"' + (ladderState.sort === "n" ? " selected" : "") + '>Class size</option>'
-			+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select>'
+			+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select></span>'
 			+ condSel
 			+ '<label class="paLadderSwitch" data-guides="ignore"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
 			+ '> Hide classes with fewer than 3 members</label></div>';
@@ -8747,6 +8782,44 @@ var paScaleClipLine = function (value, text, above) {
 };
 
 /**
+ * One of the three reference lines (-1, 0, +1) on a scaled-value line chart.
+ *
+ * They mark the +/-1 band that turns a point's marker orange. Their labels
+ * used to be unconditional, so on a wide range (+/-6, +/-10) all three landed
+ * within a few pixels of each other in a 100px chart and piled up into an
+ * unreadable smudge on the right edge. Draw the lines either way; callers
+ * label the +/-1 pair only when the text has room to clear the zero label.
+ * Shared by Step 3's pathway details trend chart and Step 4's node tooltip.
+ */
+var paReferenceLine = function (value, labelled) {
+	var line = {color: '#dedede', value: value, width: 1};
+	if (labelled) {
+		line.label = {
+			text: String(value), align: 'right', x: -3, y: -2,
+			style: {color: 'gray', fontSize: '9px'}
+		};
+	}
+	return line;
+};
+
+/**
+ * Drops the +/-1 labels once the axis has real pixel dimensions, if they would
+ * collide with the zero label. 11px is the smallest gap at which the 9px label
+ * text still clears its neighbour. Call after setExtremes().
+ */
+var paFitReferenceLabels = function (axis) {
+	if (Math.abs(axis.toPixels(0) - axis.toPixels(1)) < 11) {
+		axis.update({
+			plotLines: [
+				paReferenceLine(-1, false),
+				paReferenceLine(0, true),
+				paReferenceLine(1, false)
+			]
+		}, true);
+	}
+};
+
+/**
  * The y axis of a line chart drawn beside a heatmap of the same values.
  *
  * Highcharts' default axis fitted the data and nothing else: a series that
@@ -8790,8 +8863,9 @@ var paPlotYAxis = function (limits, dataMin, dataMax, options) {
 
 	if (hasClip) {
 		var bandColor = "rgba(120, 135, 154, 0.09)";
+		// #71717A/10px: the old #A1A1AA at 9px was 2.6:1 on white. dark.css restates it.
 		var bandLabel = {text: "beyond colour scale", align: "right", x: -4,
-			style: {color: "#A1A1AA", fontSize: "9px"}};
+			style: {color: "#71717A", fontSize: "10px"}};
 		if (dataMax > limits.max) {
 			axis.plotBands.push({from: limits.max, to: axis.max, color: bandColor, zIndex: 0,
 				label: Ext.apply({y: 12}, bandLabel)});
@@ -8955,9 +9029,9 @@ var renderFunctionLimit = function (value, metadata, record) {
 
 			if (foundRelevant !== undefined) {
 				myToolTipText +=
-					'<b>p-value:</b>' + (value === -1 ? "-" : renderedValue) + "</br>" +
+					'<b>p-value:</b> ' + (value === -1 ? "-" : renderedValue) + "</br>" +
 					"<table class='contingencyTable'>" +
-					' <thead><th></th><th>Relevant</th><th>Not Relevant</th><th></th></thead>' +
+					' <thead><th></th><th>Relevant</th><th>Not relevant</th><th></th></thead>' +
 					'  <tr><td>Found</td><td>' + foundRelevant + '</td><td>' + foundNotRelevant + '</td><td>' + foundFeatures + '</td></tr>' +
 					'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 					'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +

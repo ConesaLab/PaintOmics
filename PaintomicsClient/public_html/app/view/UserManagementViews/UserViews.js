@@ -378,8 +378,9 @@ function SignUpPanel() {
         congratzPanel.setVisible(true);
         /* The window was sized for a six-field form and this is three lines and
            a button, so without this the confirmation sits in the top fifth of
-           700px of empty dialog. */
-        poResizeDialog(420, 300);
+           700px of empty dialog. 260 rather than tighter: the sentence carries
+           the address, and a long one wraps it to three lines. */
+        poResizeDialog(420, 260);
     };
 
     this.initComponent = function () {
@@ -402,15 +403,18 @@ function SignUpPanel() {
                                    tree, so nesting them in an hbox does not change what
                                    getValues() returns. The gap is stated as an ExtJS
                                    `margin` and not in CSS because the hbox measures its
-                                   items' margins when it divides the width. */
-                                {xtype: "container", cls: "po-auth-row", layout: {type: 'hbox', align: 'stretch'},
+                                   items' margins when it divides the width. Those inline
+                                   margins also override main.css's 14px .x-form-item gap
+                                   with a 0 bottom, so the rows touched; each row carries
+                                   the gap instead. */
+                                {xtype: "container", cls: "po-auth-row", layout: {type: 'hbox', align: 'stretch'}, margin: '0 0 14 0',
                                     defaults: {labelAlign: "top", labelSeparator: "", border: false, flex: 1},
                                     items: [
                                         {xtype: "textfield", name: 'email', fieldLabel: 'Email address', vtype: 'email', emptyText: 'you@institution.org', allowBlank: false, margin: '0 9 0 0'},
                                         {xtype: "textfield", name: 'userName', fieldLabel: 'Your name or nickname', allowBlank: false, margin: '0 0 0 9'}
                                     ]
                                 },
-                                {xtype: "container", cls: "po-auth-row", layout: {type: 'hbox', align: 'stretch'},
+                                {xtype: "container", cls: "po-auth-row", layout: {type: 'hbox', align: 'stretch'}, margin: '0 0 14 0',
                                     defaults: {labelAlign: "top", labelSeparator: "", border: false, flex: 1},
                                     items: [
                                         {xtype: "textfield", name: 'password', fieldLabel: 'Choose a password', inputType: 'password', allowBlank: false, margin: '0 9 0 0'},
@@ -489,8 +493,11 @@ function ForgetPasswordPanel() {
 
     this.initComponent = function () {
         var me = this;
+        /* The same 20px inset as the other three account forms. Without it this
+           was the only one whose heading and field sat on the window's edge, and
+           the field's focus and invalid rings were clipped by the border. */
         this.component = Ext.widget(
-                {xtype: "container", cls: "po-auth", layout: {type: 'vbox', align: 'stretch'}, flex: 1,
+                {xtype: "container", cls: "po-auth", layout: {type: 'vbox', align: 'stretch'}, flex: 1, margin: '20 20 10 20',
                   items: [
                           {xtype: 'form', itemId: "signInForm", flex: 1, border: 0, cls: "po-auth-form",
                               layout: {type: 'vbox', align: 'stretch'}, defaults: {labelAlign: "top", labelSeparator: "", border: false},
@@ -648,7 +655,7 @@ function ChangePasswordPanel() {
             successPanel.setVisible(true);
             /* Same as showCongratzPanel: the window is the size of the form
                that was here a moment ago, and this is one sentence. */
-            poResizeDialog(420, 280);
+            poResizeDialog(420, 225);
         };
 
     this.initComponent = function () {

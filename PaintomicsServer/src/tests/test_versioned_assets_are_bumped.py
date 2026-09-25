@@ -89,8 +89,13 @@ PUBLISHED = {
         "0.3", "1ffc008d6636025b8e6216ef4de528abce65a0d7485bbfc641f281768ee4761f"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
+    # v=4.2 stops offering the AI conversion on a server whose converter is off:
+    # the idle strip and the not-UTF-8 message give the manual advice instead,
+    # and the page's lead and Help switch wording through .pa-converter-off,
+    # which lives in main.css v=2.32. The idle strip itself stays empty there
+    # (inputformat.css v=2.19), so the page says it once, in the section lead.
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "4.1", "1e1bd0533e1f2d98fd843b0ad331d1f326e7f2242df39849ce3c33fd81c5a90f"),
+        "4.2", "10ce95beb5196d128752ad4f832ca063a00f49233a073ce563ff40520f59e2cf"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
         "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
@@ -124,8 +129,12 @@ PUBLISHED = {
     # v=3.1 changes only the frame constant showMessage falls back on (7 -> 8)
     # and the comment beside it, for the dialog whose accent bar moved from the
     # border into 4px of padding; the measured path is unchanged.
+    # v=3.2 makes the message dialog usable from the keyboard: Close and Report
+    # error get an href so they take focus, focus starts on Close, and Tab is kept
+    # inside the dialog by a capture-phase handler -- ExtJS's own modal wrap calls
+    # focus() on a raw DOM node, throws, and never wraps.
     "app/view/common/Util.js": (
-        "3.1", "ee86cc1484046f423eaf1b7bc4d592d7859d6daa498ed44a565ec23ee0f4dcfa"),
+        "3.2", "5ed35d928c2754572a21c03d77ded0d644e017e22c40cb387df1673327267b67"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
@@ -150,8 +159,12 @@ PUBLISHED = {
     # v=1.3: the report fetch retries instead of dead-ending, and a job that no
     # longer exists is named as such rather than reported as "still in
     # progress".
+    # v=1.8 is the AI panel pass: a long reply opens at its first line, the
+    # reader's place survives minimise and full screen, the header controls are
+    # named and keyboard-reachable, and the collapsed panel leaves the tab order.
+    # It ships with ai-interpret.css v=1.9 and dark.css v=1.45.
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.7", "4a896f5ddaeab31b57a9afceea7d7f6fb5fd6c712e8769c150f21f5b61c5f47c"),
+        "1.8", "9cdf4f870969831e2d367162eaedc3d085f55d411a6a723b779f17c98da92505"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -191,8 +204,9 @@ PUBLISHED = {
     # ships with network-views.css v=2.3, which is where .sw.de and the
     # tooltip's value table live -- a browser keeping the old CSS would show
     # the legend's wedge swatch as a plain hollow circle.
+    # v=2.7 keeps "best at step N" on one line (a no-break space).
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "2.6", "41a98d56055e548d69fb1adc90914059dd1c93665da83fcaab6989509f8fed22"),
+        "2.7", "d59cfe23d0598bbc20a9d9e1cde48a3c40f96c4f408bca5542b7f4c37e8f116e"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
@@ -224,8 +238,9 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/PA_Step4EvidenceOverlay.js": (
         "2.8", "b56c3ce3224ba610e1268b85339eaed7dbfea1eab8d70b6284895cfbade81f86"),
     # The Step 4 Walk column and the renderers the AI panel shares with it.
+    # v=1.4 names the Walk column's icon-only close button for screen readers.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.3", "b7f079f55d6288862c42d9f22cd9a0e65100039b12d6c7e168b0582f1f50c5a6"),
+        "1.4", "be79dd3a8b37b7e0844f93fe374c2a0b509b9a98513aa2c1b3cf05e4b0490108"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is
@@ -243,8 +258,10 @@ PUBLISHED = {
     # leaves the one thing this table exists to catch uncaught: an edit that
     # skips the bump. Recorded as None, an edit to the boot copy or to
     # `this.controllers` passed every check here.
+    # v=0.8 rewords the boot-failure and browser warnings: no empty first line,
+    # the real menu path back to a job, and a plain browser recommendation.
     "app.js": (
-        "0.7", "1e6e3c5400df77af6c6f8ed03721c3d6891e6150d02b4695c61b2b1c9d19a174"),
+        "0.8", "3ed26b1ab6e92fb0b602d893fff4ab4e4b54b93e99b1ee458c860d771f43d710"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

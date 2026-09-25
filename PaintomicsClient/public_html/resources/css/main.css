@@ -439,6 +439,12 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
+/* Form controls do not inherit the page font by default, so the plain selects
+   and the x close buttons outside ExtJS fell back to Arial. Type selectors only:
+   any class (ExtJS's .x-form-field, FontAwesome's .fa) still wins. */
+input, textarea, select, button {
+	font-family: inherit;
+}
 span.helpTip {
 	color: var(--pa-ink-muted);
 }
@@ -909,12 +915,11 @@ ul.submenu {
 .lateralMenu-body > .menuOption {
 	position: relative;
 	display: flex;
-	align-items: center;
-	gap: 5px;
 	/* Tightened from 6px 13px when the step actions joined this row - the nav had
 	   to give back roughly 90px so five Step 4 buttons and the account control
-	   could share the header without colliding. */
-	padding: 6px 10px;
+	   could share the header without colliding. The padding is on .menuPill
+	   (below), so the focusable part fills the whole pill. */
+	padding: 0;
 	border: 0;
 	/* One step inside the track's 8px, because the track insets these by 3px and
 	   a nested corner has to be the outer radius minus the padding or it reads
@@ -933,6 +938,16 @@ ul.submenu {
 	background: #FFFFFF;
 	color: #111111;
 }
+/* The pill's button (MainView.js pillHTML). A span inside the <li>, so the
+   dropdown is not part of the button's name; it carries the padding so its
+   focus ring outlines the whole pill. */
+.lateralMenu-body > .menuOption > .menuPill {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px 10px;
+	border-radius: inherit;
+}
 /* Making room for the step actions ------------------------------------------
    The step actions are `position: fixed` (see .secondTopToolbar), so they take
    part in no layout and the nav has no way to stop before them - it ran
@@ -945,34 +960,49 @@ ul.submenu {
    navHTML names the item while its label is hidden. That is the reason the nav
    compacts instead of clipping: `overflow: hidden` here would also cut off the
    dropdowns, which are absolutely positioned children of these items. */
-.lateralMenu-body.is-compact > .menuOption {
+.lateralMenu-body.is-compact > .menuOption > .menuPill {
 	padding: 6px 7px;
 	gap: 4px;
 }
-.lateralMenu-body.is-iconly > .menuOption {
+.lateralMenu-body.is-iconly > .menuOption > .menuPill {
 	padding: 6px 9px;
 	gap: 0;
 }
-.lateralMenu-body.is-iconly > .menuOption > .menuLabel {
+.lateralMenu-body.is-iconly > .menuOption > .menuPill > .menuLabel {
 	display: none;
 }
+/* The third stage, on the step actions themselves (see fitHeaderNav). font-size
+   0 hides the words without touching the markup, so a label that a handler
+   rewrites still toggles; the icon, and the AI mark sized at 1em, get their
+   size back explicitly. */
+.secondTopToolbar.is-iconly .button {
+	font-size: 0;
+	gap: 0;
+	padding: 0 9px;
+}
+.secondTopToolbar.is-iconly .button > i.fa,
+.secondTopToolbar.is-iconly .button > svg.po-ai-mark {
+	font-size: 13px;
+}
 /* The icon sat above the label in the rail and has to sit beside it here. */
-.lateralMenu-body > .menuOption > i.fa {
+.lateralMenu-body > .menuOption > .menuPill > i.fa {
 	display: inline-block;
 	font-size: 13px;
 	margin: 0;
 	transition: color var(--pa-transition);
 }
 /* The per-section accents survive the move: they were on the rail's left border,
-   then on the icon, and stay on the icon here. */
-.lateralMenu-body > .menuOption:hover > i.fa,
-.lateralMenu-body > .menuOption.selected > i.fa { color: #B02A5B; }
-.lateralMenu-body > .menuOption:nth-child(2):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(2).selected > i.fa { color: #8A7A18; }
-.lateralMenu-body > .menuOption:nth-child(3):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(3).selected > i.fa { color: #2F6FA8; }
-.lateralMenu-body > .menuOption:nth-child(4):hover > i.fa,
-.lateralMenu-body > .menuOption:nth-child(4).selected > i.fa { color: #2E7D3A; }
+   then on the icon, and stay on the icon here. Read through --pa-nav-accent-N,
+   which only dark.css defines: these light inks sit at 1.7-2.5:1 on the dark
+   pill, so the icon under the cursor went dark instead of lighting up. */
+.lateralMenu-body > .menuOption:hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption.selected > .menuPill > i.fa { color: var(--pa-nav-accent-1, #B02A5B); }
+.lateralMenu-body > .menuOption:nth-child(2):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(2).selected > .menuPill > i.fa { color: var(--pa-nav-accent-2, #8A7A18); }
+.lateralMenu-body > .menuOption:nth-child(3):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(3).selected > .menuPill > i.fa { color: var(--pa-nav-accent-3, #2F6FA8); }
+.lateralMenu-body > .menuOption:nth-child(4):hover > .menuPill > i.fa,
+.lateralMenu-body > .menuOption:nth-child(4).selected > .menuPill > i.fa { color: var(--pa-nav-accent-4, #2E7D3A); }
 
 /* Dropdowns. The rail flew these out sideways at `left: 65px` with a negative
    top margin; from a header they drop underneath the item that owns them.
@@ -1044,6 +1074,16 @@ ul.submenu li.menuOption {
 ul.submenu li.menuOption:hover {
 	background-color: var(--pa-surface-quiet);
 }
+/* The guest's Storage row is a note, not an option: it has no handler, so it
+   takes no hover fill and no hand cursor. The extra .lateralMenu-body is what
+   outranks dark.css's `ul.submenu li.menuOption` ink and hover fill. */
+.lateralMenu-body ul.submenu li.menuOption.menuNote {
+	cursor: default;
+	color: var(--pa-ink-muted);
+}
+.lateralMenu-body ul.submenu li.menuOption.menuNote:hover {
+	background-color: transparent;
+}
 ul.submenu a {
 	color: var(--pa-link);
 }
@@ -1103,11 +1143,12 @@ ul.submenu i.fa {
 /* 11px and tracked out: these name the columns, they are not read as content,
    and at body size two of them would compete with the links underneath.
 
-   No left margin: the 10px it carried parked each title between its list's
-   icon edge and its text start - on neither. The list items hang their icons
-   at the column's own edge, and that edge is the one rail the column has. */
+   10px each side because the list items carry 10px of side padding (ul.submenu
+   li.menuOption), so the resource icons and the citation names start 10px
+   inside the column. At 0 the title hung 10px left of everything under it; at
+   10px it shares the edge the reader actually sees. */
 .navPanel-title {
-	margin: 0 0 6px;
+	margin: 0 10px 6px;
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.06em;
@@ -1295,6 +1336,11 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	color: #D22;
 	font-size: 16px;
 }
+/* The Reset password confirmation. Same green as the notice glyph; the class
+   is removed again on failure, so an error after it goes back to red. */
+.formMessage.is-success {
+	color: #1F6B4A;
+}
 
 /* The rule between the sign-in form and the no-account column. It was an
    inline `border-left: 1px solid #E7E7E7` repeated on three divs, which put it
@@ -1450,8 +1496,12 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 /* The framework renders labels bold and nearly black, which made "Email
    Address:" heavier than the heading above it. Medium weight and a step down
    in size: a label names its field, it does not compete with the title. */
+/* font-family too: Neptune sets Helvetica on labels, inputs and the checkbox
+   label, so every other line of this dialog was Source Sans and the field it
+   names was not. */
 .userViewsDialog .x-form-item-label,
 .userViewsDialog .x-form-item-label-inner {
+	font-family: var(--pa-font-sans);
 	font-size: 12.5px;
 	font-weight: 600;
 	color: #3F3F46;
@@ -1468,6 +1518,7 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
    `height` onto the input element inline when it lays the field out; matching
    it here keeps the box the size the layout thinks it is. */
 .userViewsDialog .x-form-text {
+	font-family: var(--pa-font-sans);
 	font-size: 13.5px;
 	height: 38px;
 	padding: 0 12px;
@@ -1491,8 +1542,10 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	border-color: var(--pa-focus-ring);
 	box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.20);
 }
+/* #71717A, not #A1A1AA: the example address is the only hint of which email
+   to use, and #A1A1AA measured 2.56:1 on the white field (now 4.83:1). */
 .userViewsDialog .x-form-text::placeholder {
-	color: #A1A1AA;
+	color: #71717A;
 }
 /* Neptune marks an invalid field with a red wavy background image tiled along
    the bottom edge, which at this border radius is clipped into a smear. A
@@ -1558,6 +1611,12 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 }
 .userViewsDialog .formActionRow {
 	margin-top: 20px;
+}
+/* Body size inside the dialog. At the old 16px the validation line was the
+   largest text after the title; its colour is what makes it stand out. */
+.userViewsDialog .formMessage {
+	font-size: 13px;
+	line-height: 1.45;
 }
 /* Quiet the secondary links under the primary: they were the same weight and
    size as the action itself. */
@@ -1631,9 +1690,11 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	font-weight: 600;
 	color: #3F3F46;
 }
+/* 96, not 112: the paired rows above now carry the 14px field gap, and the
+   form has to fit the fixed-height window without a scrollbar. */
 .po-auth-terms #dataProtection {
 	display: block;
-	height: 112px;
+	height: 96px;
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius-sm);
 	background: var(--pa-surface-quiet, #F7F8FA);
@@ -1650,6 +1711,7 @@ ul.menu li.loggedOption, ul.menu span.loggedOption {
 	width: auto !important;
 	flex: 1 1 auto;
 	margin: 0;
+	font-family: var(--pa-font-sans);
 	font-size: 13px;
 	line-height: 1.45;
 	color: var(--pa-ink-body, #555);
@@ -1824,6 +1886,10 @@ div.contentbox .po-spec-list li,
 	align-items: center;
 	gap: 6px;
 	flex: none;
+	/* On the textarea's left edge, not .button's 5px in; and 16px + btn-small's
+	   2x4px padding + 2px border is the 26px the ghost action beside it matches. */
+	margin: 0;
+	line-height: 16px;
 }
 /* "Draft this for me" asks the model to write the experiment design, which
    makes it the only AI action on this form -- and it was .btn-secondary's
@@ -2466,6 +2532,9 @@ body > .x-mask {
    another one. Measured before the fix: 5px/5px/5px/5px on a header whose rule
    said `0 0 1px`. */
 .x-window-default > .x-window-header {
+	/* Neptune's 5px pressed the title against the frame. 12px on the left is
+	   where the confirm, contact and sharing bodies start their text. */
+	padding: 8px 10px 8px 12px;
 	background-color: #F6F5F0;
 	background-image: none;
 	border-width: 0 0 1px !important;
@@ -2514,6 +2583,12 @@ body > .x-mask {
 }
 #messageDialog > .x-window-body {
 	border-radius: var(--pa-radius);
+}
+/* The footer's inner box is exactly as tall as its buttons and clipped, so a
+   focused Yes/No kept only the left and right of its ring. Unclipped here
+   only: the header's inner box keeps its clip (see the header tools below). */
+.x-window .x-toolbar-footer > .x-box-inner {
+	overflow: visible;
 }
 
 /* Header tools - the close control above all - drawn the way a sheet's close
@@ -2718,8 +2793,15 @@ body > .x-mask {
 }
 #messageDialogBody {
 	text-align: left;
+	line-height: 1.5;   /* dialog text is prose; "normal" packed lines at 1.29 */
 	/*max-height: 125px;*/
 	overflow-y: auto;
+}
+
+/* The UA's 40px list indent put bullets off the rail the title and prose share. */
+#messageDialogBody ul {
+	margin: 8px 0;
+	padding-left: 20px;
 }
 
 #messageDialogSpin {
@@ -3195,19 +3277,19 @@ div.radio input[type='radio'] + label:before {
 .availableOmicsBox {
 	--pa-omic-color: rgb(85, 201, 166);
 }
-.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[title=metabolomics] {
+.omicboxTitle.metabolomicsFileBox, .availableOmicsBox[data-type=metabolomics] {
 	--pa-omic-color: rgb(121, 176, 236);
 }
-.omicboxTitle.proteomicsFileBox, .availableOmicsBox[title=proteomics] {
+.omicboxTitle.proteomicsFileBox, .availableOmicsBox[data-type=proteomics] {
 	--pa-omic-color: rgb(180, 161, 221);
 }
-.omicboxTitle.otherFileBox, .availableOmicsBox[title=otheromic] {
+.omicboxTitle.otherFileBox, .availableOmicsBox[data-type=otheromic] {
 	--pa-omic-color: rgb(214, 127, 107);
 }
-.omicboxTitle.bedbasedFileBox, .availableOmicsBox[title=bedbasedomic] {
+.omicboxTitle.bedbasedFileBox, .availableOmicsBox[data-type=bedbasedomic] {
 	--pa-omic-color: #738B9D;
 }
-.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[title=regulatoryomic] {
+.omicboxTitle.miRNAbasedFileBox, .omicboxTitle.moreBasedFileBox, .availableOmicsBox[data-type=regulatoryomic] {
 	--pa-omic-color: rgb(154, 150, 78);
 }
 .omicboxTitle {
@@ -3300,11 +3382,71 @@ div.availableOmicsBox h4 {
 	display: none;
 	text-align: center !important;
 	color: #6D7075; /* was #8B8E93 - 3.04:1 on this panel's own #F6F6F6 fill */
-	font-size: 22px;
+	/* A drop zone, not a heading: at 22px it was the loudest text in the
+	   section. The dashed edge is what says "drop here". */
+	font-size: 14px;
 	background: #F6F5F0;
-	padding: 10px;
-	border: 1px solid var(--pa-border);
+	padding: 18px 12px;
+	border: 1px dashed rgba(24, 24, 27, 0.24);
 	border-radius: var(--pa-radius);
+}
+
+/* The option rows inside the Region-based and Pairwise cards were inline
+   16px at a 50px inset -- bigger than the card's 13px labels and on neither
+   rail. The container starts 406px in (416 for the correlation row), so these
+   margins put the drawn box on the 571px input rail. */
+div.po-omic-check {
+	margin: 8px 0 8px 165px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+div.po-omic-check-inset {
+	margin-left: 155px;
+}
+
+/* Step 1's prose that promises AI conversion, and its converter-off twin.
+   format-panel.js sets html.pa-converter-off once /ai_provider answers. */
+.po-if-no-converter,
+html.pa-converter-off .po-if-converter {
+	display: none;
+}
+html.pa-converter-off .po-if-no-converter {
+	display: inline;
+}
+
+/* A bare <hr> took the UA's 2px grey inset rule, the brightest line in the
+   card in dark. The card's own hairline, in both themes. */
+.omicbox hr {
+	height: 0;
+	border: 0;
+	border-top: 1px solid var(--pa-border);
+}
+
+/* Combos and spinners: the global ring lands on the <input> alone and cuts
+   between the text and the trigger arrow. Ring the whole control instead;
+   `!important` because the global rule carries it too. */
+.paStep1Form .x-form-trigger-wrap:has(input:focus-visible) {
+	outline: 3px solid var(--pa-focus-ring);
+	outline-offset: 2px;
+	border-radius: var(--pa-radius-sm);
+}
+.paStep1Form .x-form-trigger-wrap input.x-form-field:focus-visible {
+	outline: none !important;
+}
+
+/* MORE's 'Regulatory model' list: the template marks the engines this server
+   cannot run, and the field's help promises they are "shown greyed with the
+   reason". Muted name, and the reason as a caption on its own line rather than
+   run on after the name as if it were part of it. */
+.x-boundlist-item .more-engine-unavailable {
+	color: var(--pa-ink-muted);
+}
+.more-engine-why {
+	display: block;
+	margin-top: 1px;
+	font-size: 11.5px;
+	line-height: 1.35;
+	color: var(--pa-ink-muted);
 }
 
 #additionalInfoContainer {
@@ -3776,7 +3918,7 @@ div.contentbox p > #download_mapping_file {
 .contingencyTable {
 	border-collapse: collapse;
 	text-align: center;
-	font-size: 8px;
+	font-size: 11px;          /* was 8px: these counts are the tip's only content */
 	margin: 2px 15px;
 }
 .contingencyTable tbody tr {
@@ -3882,12 +4024,25 @@ div[id ^= "pathwayClassificationPlot2Box_"] {
 	font-size: 15px;
 	padding-top: 24px;
 }
+/* The pie's percentage labels: Highcharts writes its drilldown default inline
+   (navy, always underlined). Keep the link colour - clicking is the pie's
+   interaction - but underline on hover only, like every other link here.
+   dark.css supplies the dark link colour. */
+div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label > span {
+	color: var(--pa-link) !important;
+	text-decoration: none !important;
+}
+div[id^="pathwayDistributionsContainer_"] .highcharts-drilldown-data-label:hover > span {
+	text-decoration: underline !important;
+}
 
 
 
 span.networkClusterImage{width: 30%;display: inline-block;margin: 3px; cursor: pointer;}
 span.networkClusterImage img {width: 100%;}
-span.networkClusterImage p {margin: 0;text-align: center; font-size: 10px;}
+/* padding: 0 - `div.contentbox p` (same specificity, earlier) gave this 61px
+   caption 26px each side, so "Cluster 1" broke onto three lines. */
+span.networkClusterImage p {margin: 0; padding: 0; text-align: center; font-size: 10px; white-space: nowrap;}
 span.networkClusterImage > i {
 	display: none;
 	position: relative;
@@ -3901,6 +4056,10 @@ span.networkClusterImage > i {
 span.networkClusterImage.disabled > i {display:block;}
 .mainInfoPanel {font-size: 12px;}
 .pathwayPlotwrappers h4{color: #B14C2D;/* was #D16949 - 3.60:1 */font-size: 13px;margin: 0;margin-top: 5px;}
+/* An omic with a chart ends in its legend, ~30px above the next heading; one
+   with no trend ended in a single line of text, 12px above it, so the next
+   omic read as part of it. */
+.pathwayPlotwrappers > .paOmicNoTrend + div {margin-top: 30px;}
 /* Vertical margin only. The horizontal 10px put the "Pathways network" card
    10px right of the "Pathways classification" card stacked directly above it,
    and of every other card on Step 3. It was already being zeroed further down
@@ -3909,6 +4068,10 @@ span.networkClusterImage.disabled > i {display:block;}
    what mmu and most of the example datasets produce. */
 div[id ^= "networkview_"] { max-width:1800px; margin: 5px 0; }
 div[id ^= "networkClustersContainer_"], div[id ^= "patwaysDetailsWrapper_"]{overflow-y:auto; overflow-x: hidden; padding: 2px 10px;}
+/* The overflow makes the details a block formatting context, which sat beside
+   the floated cluster-count Apply above it and shrank to 147px of the 236px
+   rail, clipping every chart. Clear it so the details take the full rail. */
+div[id ^= "patwaysDetailsWrapper_"] { clear: both; }
 
 /* The pathway explorer card ---------------------------------------------------
    One card per database, holding what used to be four: the classification
@@ -4310,10 +4473,12 @@ div[id ^= "pathwayClassificationContainer"] {overflow-y: auto; overflow-x: hidde
 .step3ClassificationsOptions{display: none; margin-left: 10px;font-size: 11px;}
 .step3ClassificationsTitle:hover > .step3ClassificationsOptions{display: inline-block;}
 .step3ClassificationsOptions a {margin: 0px 2px;}
-.step3ClassificationsOptions a {color: #A7A7A7;margin: 0px 2px; display: inline-block;}
-.step3ClassificationsOptions a.hideOption.selected, .step3ClassificationsOptions a.hideOption:hover{color: #E3643D;}
-.step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #23AE89;}
-.step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #BD7E39;}
+/* 11px text: the old #A7A7A7 / #E3643D / #23AE89 / #BD7E39 were 2.4-3.4:1 on
+   white. Same hues, darkened past 4.5:1; dark.css restates the bright ones. */
+.step3ClassificationsOptions a {color: #6B6B66;margin: 0px 2px; display: inline-block;}
+.step3ClassificationsOptions a.hideOption.selected, .step3ClassificationsOptions a.hideOption:hover{color: #B8431F;}
+.step3ClassificationsOptions a.showOption.selected, .step3ClassificationsOptions a.showOption:hover{color: #1B7F63;}
+.step3ClassificationsOptions a.customOption.selected, .step3ClassificationsOptions a.customOption:hover{color: #93602A;}
 .step3ClassificationsOptions a.selected{float: left;font-weight: bold;}
 /* The pathways network toolbar ------------------------------------------------
    The band itself, its status line and the shape of its controls are now
@@ -4819,6 +4984,15 @@ i.masterRegulator:before {
 .externalLinksContainer a {
 	color: var(--pa-link); /* was #0076E2 - 4.48:1, and bypassed the token */
 }
+/* The list kept the UA's 40px indent, which in a 280px tooltip set the links
+   well right of their heading and wrapped "Find related publications". */
+.externalLinksContainer ul {
+	padding-left: 0;
+	margin: 6px 0 0;
+}
+.externalLinksContainer li {
+	margin: 3px 0;
+}
 .step4PathwayBox {
 	display: inline-table;
 	width: 300px;
@@ -4849,6 +5023,24 @@ i.masterRegulator:before {
 	border-bottom: 1px solid var(--pa-border);
 }
 
+/* Step 4's four view toggles sit in the ExtJS box, which is a plain block, so
+   they touched with no gap while Go back and History (in the flex row around
+   it) stood 8px apart. The box becomes the same row. The 2px trimmed from each
+   side pays for the three new gaps, so the header nav keeps its width at 1440. */
+#pathwaysPanelsWrapper .secondTopToolbar .x-component {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+#pathwaysPanelsWrapper .secondTopToolbar .button {
+	padding: 0 11px;
+}
+/* The id above outranks the header's icon-only padding, which is meant for
+   exactly this toolbar at narrow widths; restate it at the same weight. */
+#pathwaysPanelsWrapper .secondTopToolbar.is-iconly .button {
+	padding: 0 9px;
+}
+
 /*PATHWAYS THUMBNAILS FOR HISTORY PANEL*/
 
 /* This panel slides over the pathway diagram, so it has to read as something
@@ -4862,14 +5054,18 @@ i.masterRegulator:before {
    is anchored to starts ~680px in, so -405px slid the panel sideways and left
    all of it on screen, on top of the pathway title. Closing it looked like it
    had done nothing. Visibility is a state now, not a coordinate, so it holds
-   wherever the panel happens to be anchored. */
+   wherever the panel happens to be anchored.
+
+   Anchored by its right edge, under the History button at the end of the row
+   that opens it; from the left it dropped under Settings, 500px away. */
 .step4HistoryBox {
 	max-width: 360px;
 	width: 360px;
 	position: absolute;
 	padding: 0;
 	top: 55px;
-	left: 0;
+	left: auto;
+	right: 0;
 	z-index: 23;
 	background-color: #FFFFFF;
 	border: 1px solid var(--pa-border);
@@ -5182,9 +5378,12 @@ div[id ^= "sliderClusterNumberContainer_"] {
    panel - so the gutter has nothing to separate them from and simply stops each
    one 5px short of the edge every heading and every field in the same panel is
    squared to. Five pixels is small enough to read as sloppiness rather than as
-   spacing, which is the worst size for it to be. */
+   spacing, which is the worst size for it to be. The Apply at the foot of Step
+   4's Visual settings and of its Global heatmap configurator are the same case. */
 div[id ^= "pathwayNetworkToolsBox_"] > a.button.btn-right,
-.findFeaturesContainer a.button {
+.findFeaturesContainer a.button,
+#applyVisualSettingsButton,
+#updateHeatmapButton {
 	margin-right: 0;
 }
 /* The search field and its button share one flex row. `.button` floats right,
@@ -5476,10 +5675,14 @@ ul.ui-menu.ui-widget.ui-widget-content {
 	border: 1px solid #E2E2E2;
 	background: white;
 }
+/* jQuery UI's theme sets its menus in Trebuchet at 1.1em (15.4px here), so the
+   suggestions under a 13px field came out larger and in another face. */
 ul.ui-menu li.ui-menu-item {
 	list-style: none;
 	color: #333;
 	padding: 5px 5px;
+	font-family: var(--pa-font-sans);
+	font-size: 13px;
 }
 ul.ui-menu li.ui-menu-item.ui-state-focus {
 	/* The highlighted row of the organism autocomplete - reached by arrow keys,
@@ -5490,6 +5693,7 @@ ul.ui-menu li.ui-menu-item.ui-state-focus {
 	background: #0078CE;
 }
 .ui-autocomplete {
+	font-family: var(--pa-font-sans);
 	max-height: 100px;
 	overflow-y: auto;
 	/* prevent horizontal scrollbar */
@@ -5504,6 +5708,11 @@ div.omicSelection div.omicPosition {
 	width: 40px;
 	text-align: left;
 	color: #9E3AB3;
+}
+/* The configurator's "Drag and drop" hint, in the purple of the order numbers. */
+.omicDragHint {
+	color: #9E3AB3;
+	font-weight: 600;
 }
 div.omicSelection div.omicPosition:after {
 	content: "\f0dc";
@@ -5786,6 +5995,13 @@ div.mainInfoPanel h3 {
 .findFeaturesContainer .mainInfoPanel {
 	display: inline-block;
 	min-width: 245px;
+}
+/* A search result sits on the panel's rail, full width. It used to be an
+   inline-block inside a 245px column pushed 10px in, and its 275px charts ran
+   past the panel edge, clipping the relevance note and scrolling the body
+   sideways. The pathway details card above keeps the rule before this one. */
+.findFeaturesContainer .resultsContainer .mainInfoPanel {
+	display: block;
 }
 
 /***********************************************************/
@@ -6673,12 +6889,9 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
      part; sharing the token is, because it is what keeps the hero on the rail
      when the token moves. */
   padding: 40px var(--pa-card-inset);
-  /* Was `2px solid #e0e0e0`: a hardcoded light grey at twice the weight of any
-     other rule in the application, and one dark.css never restated - so on the
-     dark theme a bright 2px bar ran the full width under the hero. --pa-border
-     is an alpha of the ink and is redefined per theme, so the one declaration
-     is right on both. */
-  border-bottom: 1px solid var(--pa-border);
+  /* No border-bottom. The hero is its own .contentbox now, so a rule here sat
+     directly on the card's own 1px edge and drew the bottom twice as heavy as
+     every other card edge on the page. */
   /* Anchors the diagram's plate below. */
   position: relative;
 }
@@ -6898,7 +7111,10 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 
 .po-hero-actions .po-btn-outline {
   background: transparent;
-  border: 1px solid var(--pa-border);
+  /* The toolbar ghosts' #878787 (3.59:1, see .mainTopToolbar .button), not
+     --pa-border: that alpha rendered 1.23:1 on white, so the outline step
+     between the filled button and the quiet links was invisible. */
+  border: 1px solid #878787;
   color: var(--pa-ink-body, #555);
 }
 
@@ -6930,6 +7146,12 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   flex: 0 1 460px;
   min-width: 0;
   position: relative;
+  /* Full row height, diagram centred inside. `.po-hero` centres its items, so
+     this box was shorter than the text column and the plate's -40px offsets
+     below stopped short of the card's top and bottom edges. */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
 }
 
 /* The diagram's plate ---------------------------------------------------------
@@ -7074,6 +7296,13 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	font-size: 15px;
 	font-weight: 600;
 }
+/* Neptune's 5px header padding put the title 19px left of the body's rail and
+   the close tool 19px past the cards. 24 = the 22px bodyPadding plus the
+   window border and the body's 1px offset. In the stylesheet, not injected:
+   ExtJS reads header padding when it lays the header out. */
+.po-example-window > .x-window-header {
+	padding: 7px 24px;
+}
 .po-example-intro p {
 	margin: 18px 0 6px;
 	font-size: 13.5px;
@@ -7137,13 +7366,15 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
 	letter-spacing: 0.02em;
 	white-space: nowrap;
 }
+/* Inks darkened on the same hues: #2F73BC and #B4690E were 4.28 and 3.78:1
+   on their tints, under AA at 11px. dark.css restates both. */
 .po-example-badge-sim {
 	background: #E8F1FA;
-	color: #2F73BC;
+	color: #19589E;
 }
 .po-example-badge-real {
 	background: #FDF0E6;
-	color: #B4690E;
+	color: #8F520B;
 }
 .po-example-badge-default {
 	background: var(--pa-surface-quiet);
@@ -7470,12 +7701,17 @@ div.po-step-card p,
      reads is the most expensive place in the product to look faint. */
   color: #3F3F46;
   /* 1.6 gave a 20.8px line box, and the inline buttons sitting in this prose
-     are 22px tall - so every one of them stuck out of its own line and
+     were taller than that - so every one of them stuck out of its own line and
      overlapped the line above. In step 3, where two of them land on
      consecutive lines, the paint control and the AI Interpret pill collided
-     outright. 1.75 is 22.75px, which clears the tallest of them. */
+     outright. 1.75 is 22.75px, which clears the chips' 21px (see the padding
+     on `.po-step-card a.button.btn-inline` below). */
   line-height: 1.75;
   text-align: left;
+  /* The card is a flex column, so the head's 14px margin-bottom no longer
+     collapses with the paragraph's UA margin-top: the two added up to 27px
+     between the step's rule and its first line. */
+  margin-top: 0;
 }
 
 /* The inline buttons in these cards are pictures of real controls, so they
@@ -7495,6 +7731,16 @@ div.po-step-card p,
 .po-step-card a.button.btn-inline {
   border-radius: var(--pa-radius-btn);
   vertical-align: middle;
+  /* 1px, not the base .button's 5px: that margin spaces toolbar buttons, and
+     in prose it pushed "(", ")", "," and "." away from the chip they follow. */
+  margin: 0 1px;
+  /* 21px tall rather than btn-small's 25, so a chip fits the 22.75px line box
+     and two chips on consecutive lines no longer touch. */
+  padding-top: 2px;
+  padding-bottom: 2px;
+  /* Pictures, not controls: they carry no href and do nothing, so they must
+     not hover, show a hand cursor or take focus as if they did. */
+  pointer-events: none;
 }
 
 .po-step-card a.button.btn-secondary.btn-inline {
@@ -7644,7 +7890,9 @@ p.po-aside-title {
   line-height: 18px;
 }
 
-.po-organism-panel .po-aside-title {
+/* Qualified to outrank `div.contentbox p.po-aside-title` above (0,2,2), which
+   otherwise won and left the 0/8px margins this rule exists to replace. */
+div.contentbox .po-organism-panel p.po-aside-title {
   margin-top: 4px;
   /* No bottom margin here, unlike Section 3's copy of this title: what follows
      it is a row of controls that has to sit on the same line as the field in
@@ -7785,6 +8033,16 @@ a.po-ghost-action > i.fa {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Below ~1150px the four columns cannot hold "X not installed" on one line, and
+   the nowrap label pushed the last column outside the panel, leaving a bare
+   checkbox. Wrap there, and only there: wider windows keep the one-line labels
+   argued for in PA_Step1Views.js. */
+@media (max-width: 1150px) {
+  .po-database-group .x-form-cb-wrap > .x-form-cb-label {
+    white-space: normal;
+    min-width: 0;
+  }
+}
 .po-database-group .x-form-cb-wrap > .x-form-checkbox {
   flex: 0 0 auto;
   /* Neptune gives the box `margin: 5px 0 0` to sit it on a text baseline in the
@@ -7913,6 +8171,17 @@ a.po-ghost-action > i.fa {
   opacity: 1;
 }
 
+/* The Regulatory Omic method chooser: its two option panels kept Neptune's
+   blue frame, grey fill and Arial header -- the only such frame on Step 1. */
+.po-method-chooser .x-panel-body {
+  border-color: var(--pa-border);
+  background-color: var(--pa-surface);
+  color: var(--pa-ink-body, #3F3F46);
+}
+.po-method-chooser .x-panel-header-text {
+  font-family: var(--pa-font-sans);
+}
+
 /* The "Request an organism" dialog, opened by the pill above.
 
    One line of introduction and two fields, so the body needs nothing but a
@@ -7926,9 +8195,12 @@ a.po-ghost-action > i.fa {
   line-height: 1.55;
   color: var(--pa-ink-body, #3F3F46);
 }
+/* 13px in body ink, the size of the intro above: at 12px grey the labels
+   read as captions under a paragraph, not as the three questions the form
+   asks. */
 .po-dialog .x-form-item-label {
-  font-size: 12px;
-  color: var(--pa-ink-label);
+  font-size: 13px;
+  color: var(--pa-ink-body, #3F3F46);
 }
 /* One action, one way out. Neptune paints every window button the same filled
    blue, so "Send request" and "Cancel" carried identical weight -- two primary
@@ -8094,6 +8366,18 @@ div.contentbox h2.po-omics-col-title {
    is the visible edge, so the radius belongs on it. */
 .x-form-trigger-wrap {
 	border-radius: var(--pa-radius-sm);
+}
+
+/* Neptune sets its own `font: ... helvetica, arial` on each of these, so the
+   body's Source Sans never reached them: form labels, fields, grid cells and
+   dialog buttons were the last text in the old face, beside Source Sans help.
+   .x-form-display-field is left out on purpose: Ext.MessageBox sizes itself
+   around it, and in Source Sans the confirm text wraps and is clipped. */
+.x-form-item, .x-form-item-label, .x-form-cb-label, .x-form-field,
+.x-form-invalid-under, .x-grid-cell, .x-grid-empty, .x-grid-group-title,
+.x-grid-rowbody, .x-column-header, .x-toolbar-text, .x-tab .x-tab-inner,
+.x-btn .x-btn-inner, .x-mask-msg-inner, .x-fieldset-header-text {
+	font-family: var(--pa-font-sans);
 }
 
 /* Checkboxes and radios ------------------------------------------------------
@@ -8290,6 +8574,13 @@ div.contentbox h2.po-omics-col-title {
   .po-hero {
     gap: 24px;
   }
+  /* The plate reaches back by the gap, so with the gap at 24px its -24px edge
+     met the AI callout's border with no air between them (the wide layout
+     keeps 20px). Half the gap leaves 12px. Must stay in this block: the 900px
+     tier's -14px below still has to win once the row stacks. */
+  .po-hero-visual::before {
+    left: -12px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -8299,6 +8590,9 @@ div.contentbox h2.po-omics-col-title {
   .po-hero-visual {
     flex: 0 0 auto;
     max-width: 460px;
+    /* Undoes the wide layout's stretch, which in a column would pin the
+       diagram to the left instead of centring it under the text. */
+    align-self: center;
   }
   /* The plate stops bleeding once the row stacks. Its offsets are the hero's
      own padding, which is right when the diagram is the right-hand column and
@@ -8881,7 +9175,7 @@ div.repDetectionCard h3 {
 	transition: background-color var(--pa-transition), border-color var(--pa-transition);
 }
 .paGridBar a.downloadXLS:hover,
-.paGridBar #configureButton:not(.x-item-disabled):hover {
+.paGridBar #configureButton:not(.x-item-disabled):not(.x-masked):hover {
 	background-color: #F4F4F5;
 	border-color: var(--pa-border);
 }
@@ -8889,9 +9183,19 @@ div.repDetectionCard h3 {
 	background-color: #FCEEEC;
 	border-color: #E0BFBC;
 }
+/* The anchor itself carries `fa fa-cog`, so its label inherited FontAwesome,
+   which has no Latin glyphs: "Configure" fell back to a serif. Only the cog
+   (the ::before) is set in the icon font. */
+.paGridBar #configureButton { font-family: var(--pa-font-sans); }
+.paGridBar #configureButton::before { font-family: FontAwesome; margin-right: 3px; }
 /* Disabled Configure - the method is not Stouffer - should read as unavailable
-   rather than as a link that ignores you. */
-.paGridBar #configureButton.x-item-disabled {
+   rather than as a link that ignores you. ExtJS disables this component by
+   masking it (x-masked) rather than with x-item-disabled, so both are matched,
+   and the mask, which boxed the word in a scrim, is hidden: the click handler
+   checks isDisabled() itself. */
+.paGridBar #configureButton > .x-mask { display: none; }
+.paGridBar #configureButton.x-item-disabled,
+.paGridBar #configureButton.x-masked {
 	opacity: 1;
 	color: #9A9AA0;
 	cursor: default;
@@ -9037,6 +9341,10 @@ div.repDetectionCard h3 {
 .po-hero-viz .po-viz-cite {
   --po-viz-on-opacity: 1;
   transform: scaleX(0);
+  /* fill-box for the same reason as the agent rings above: these are plain
+     <rect>s with their own x, and without it scaleX grows each line out of
+     the SVG's x=0, across the network, instead of from the line's own edge. */
+  transform-box: fill-box;
   transform-origin: left center;
   opacity: 0;
   animation-duration: 9s;
@@ -9227,8 +9535,9 @@ div.repDetectionCard h3 {
 /* ==========================================================================
    Step 2 - "Choose for me" (AI compound disambiguation)
 
-   Built entirely from tokens dark.css already redefines, so the theme follows
-   without a single [data-theme] rule here.
+   Built entirely from tokens dark.css already redefines, so the colours follow
+   the theme; the one [data-theme] rule it needs (the label, which dark.css's
+   card-heading ink outranks) lives in dark.css section 9.
 
    The one idea this styling has to carry: after the button runs, you should be
    able to tell at a glance WHAT touched each card. Three states, three colours,
@@ -9284,6 +9593,12 @@ div.repDetectionCard h3 {
 .compoundsIntroText {
 	flex: 0 1 49%;
 	min-width: 0;
+}
+/* ...unless there is no offer: without AI or consent the panel is rendered
+   display:none (renderAIActions), and the header stopped at half the card.
+   Keyed on that inline style, which jQuery .show() clears. */
+.compoundsIntroText:has(+ .aiSuggestActions[style*="none"]) {
+	flex-basis: 100%;
 }
 
 /* ---- The AI offer ------------------------------------------------------- */
@@ -9563,9 +9878,11 @@ div.repDetectionCard h3 {
 /* Fewer than 3 members: drawn, labelled, but visibly not a class result. */
 .paClassMapMark.paIsDesc .paClassMapLabel, .paClassMapMark.paIsDesc .paClassMapCount,
 .paClassMapMark.paIsDesc .paClassRankFdr { fill: #8A98A8; }
-.paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
-.paClassMapTick { fill: #78879A; font-size: 10.5px; }
-.paClassMapAxis { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+/* The label is text, so it takes a darker ochre than the line and tick it
+   names (#B5761F is 3.8:1 on white, fine for a stroke, not for 11px type). */
+.paClassMapSigLabel { fill: #8C5A14; font-size: 11px; font-weight: 600; }
+.paClassMapTick { fill: #5F6F82; font-size: 10.5px; }
+.paClassMapAxis { fill: #5F6F82; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .paClassMapLabel { fill: #141E2B; font-size: 11.5px; }
 /* A halo in the page colour: the count sits on the stem when the reading is at the axis end. */
 .paClassMapCount { fill: #44556A; font-size: 10px; paint-order: stroke; stroke: #FFFFFF; stroke-width: 3px; stroke-linejoin: round; }
@@ -9573,7 +9890,7 @@ div.repDetectionCard h3 {
 .paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
 .paClassMapSummary { position: relative; margin: 2px 0 10px; color: #44556A; font-size: 13px; }
 .paClassMapWarn { color: #A51F1E; }
-.paClassMapMuted { color: #78879A; }
+.paClassMapMuted { color: #5F6F82; }
 /* Legend. A list, not a run-on sentence: each item is one nowrap flex child,
    so a narrow card wraps BETWEEN keys instead of mid-phrase. */
 /* Aligned to the plot area by drawClassMap, which sets padding-left from the
@@ -9634,10 +9951,10 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapControls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
                       margin: 4px 0 12px; }
 .paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-                          color: #78879A; font-weight: 600; }
+                          color: #5F6F82; font-weight: 600; }
 .paClassMapSelect { height: 32px; padding: 0 8px; border: 1px solid #B5C1CE; border-radius: 6px;
                     background: #FFFFFF; color: #141E2B; font-size: 13px; }
-.paClassMapControlNote { color: #78879A; font-size: 12px; }
+.paClassMapControlNote { color: #5F6F82; font-size: 12px; }
 
 /* The class ranking (drawClassMap): one row per class. The whole row is the
    hover/click target; the selected row stays tinted while its compounds are
@@ -9646,12 +9963,12 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassMapMark:hover .paClassRankHit { fill: #F1F5F8; }
 .paClassMapMark.paIsSelected .paClassRankHit { fill: #E9F1F9; }
 .paClassMapMark.paIsSelected .paClassMapLabel { font-weight: 600; }
-.paClassRankHead { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
-.paClassMapParent { fill: #78879A; font-size: 9.5px; }
+.paClassRankHead { fill: #5F6F82; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.paClassMapParent { fill: #5F6F82; font-size: 9.5px; }
 .paClassRankStem { stroke: #4A6785; stroke-width: 3; stroke-linecap: round; }
 .paClassRankStemBelow { stroke: #C4CFDA; }
 .paClassRankDot { fill: #141E2B; stroke: #FFFFFF; stroke-width: 1.5; }
-.paClassRankFdr { fill: #78879A; font-size: 11px; font-variant-numeric: tabular-nums; }
+.paClassRankFdr { fill: #5F6F82; font-size: 11px; font-variant-numeric: tabular-nums; }
 .paClassRankFdr.paIsSig { fill: #141E2B; font-weight: 600; }
 
 /* The selected class's compounds, inside the same card as the ranking. */
@@ -9662,15 +9979,15 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassDetail.paIsOpen { display: block; margin-top: 16px; padding: 14px 26px 0; border-top: 1px solid #E3E9EF; }
 .paClassDetailHead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .paClassDetailHead h4 { margin: 0; font-size: 15px; font-weight: 600; color: #141E2B; }
-.paClassDetailStats { color: #78879A; font-size: 12.5px; }
+.paClassDetailStats { color: #5F6F82; font-size: 12.5px; }
 .paClassDetailTools { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: #44556A; }
 .paClassDetailToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .paClassDetailToggle input { margin: 0; }
-.paClassDetailClose { border: 0; background: transparent; color: #78879A; font-size: 20px; line-height: 1;
+.paClassDetailClose { border: 0; background: transparent; color: #5F6F82; font-size: 20px; line-height: 1;
                       padding: 0 2px; cursor: pointer; }
 .paClassDetailClose:hover { color: #141E2B; }
 .paClassDetailScale { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 8px;
-                      color: #78879A; font-size: 12px; }
+                      color: #5F6F82; font-size: 12px; }
 /* Heatmap and chart are one figure: the strip is fixed, the chart takes the
    rest, and on a class with many rows the chart stays in view while the
    strip scrolls past. */
@@ -9690,6 +10007,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    and (24px + border) the ladder's first column. */
 .paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; padding: 0 26px; }
 .paLadderBar .paClassMapControlLabel { margin-right: 2px; }
+.paLadderField { display: inline-flex; align-items: center; gap: 10px; }
 /* Three equal cells on one line, the height of the select beside them: a
    segmented control reads as one control only when its parts match. */
 .paLadderSeg { display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #B5C1CE;
@@ -9701,7 +10019,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 /* color: inherit -- the card paints every <b> in the accent blue, which on the
    pressed (blue) segment made the level number vanish. */
 .paLadderSeg button b { font-weight: 600; color: inherit; }
-.paLadderSeg button small { font-size: 11px; line-height: 1; color: #78879A; }
+.paLadderSeg button small { font-size: 11px; line-height: 1; color: #5F6F82; }
 .paLadderSeg button b { line-height: 1; }
 .paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
 .paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }
@@ -9714,11 +10032,11 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
 .paLadderExcluded li { padding: 1px 0; }
 .paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
-/* Under the design field, on the input's rail: the label column is 150px
-   (the panel's labelWidth) and the generic paragraph inset is cancelled --
+/* Under the design field, on the input's rail: the label column is 155px
+   (the panel's labelWidth 150 + labelPad 5) and the generic paragraph inset is cancelled --
    with it the note started 26px right of the input it annotates. The
    parent selector outranks `div.contentbox p`. */
-.x-box-item > p.paDesignNote { margin: 0 0 6px 150px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
+.x-box-item > p.paDesignNote { margin: 0 0 6px 155px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
 
 /* ==========================================================================
    Step 2 · the compound cards, redrawn (2026-08-29)
@@ -10076,7 +10394,9 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	padding-bottom: 12px;
 	border-bottom: 1px solid var(--pa-border);
 }
-#threshold_box .paClassHowTitle { color: var(--pa-fig-faint); }
+/* Muted ink, not --pa-fig-faint: that is the figure/icon grey, 2.47:1 on the
+   band, and it made the band's own title the faintest text on the step. */
+#threshold_box .paClassHowTitle { color: var(--pa-ink-muted); }
 #threshold_box .paClassHowCol > i { font-size: 12px; color: var(--pa-fig-faint); }
 #threshold_box .paClassHowRow { padding: 20px 0; }
 #threshold_box .paClassHowRow + .paClassHowRow { border-top: 1px solid var(--pa-border); }
@@ -10130,10 +10450,12 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	color: var(--pa-ink-muted);
 	text-wrap: pretty;
 }
+/* The rule above the footnote sits on the last row, not on the <p>: the p's
+   measure capped its border at two thirds of the band's width. */
+#threshold_box .paClassHowRow:last-of-type { border-bottom: 1px solid var(--pa-border); }
 #threshold_box .paClassHowFoot {
 	margin: 0;
 	padding: 14px 0 0;
-	border-top: 1px solid var(--pa-border);
 	font-size: 12.5px;
 	line-height: 1.45;
 	color: var(--pa-ink-muted);

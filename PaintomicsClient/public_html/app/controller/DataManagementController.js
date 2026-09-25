@@ -159,7 +159,7 @@ function DataManagementController() {
 
 this.deleteFilesHandler = function (myDataFileListView, fileName) {
 	var me = this;
-	Ext.MessageBox.confirm('Delete selected files?', 'Are you sure you want to do delete the selected files?', function (btn) {
+	Ext.MessageBox.confirm('Delete selected files?', 'Are you sure you want to delete the selected files?', function (btn) {
 		if (btn !== 'yes') {
 			return;
 		}
@@ -200,11 +200,11 @@ this.loadMyJobsDataHandler = function (myDataJobsListView) {
 this.deleteJobsHandler = function (myDataJobsListView, jobID, jobType) {
 	var me = this;
 
-	Ext.MessageBox.confirm('Delete selected Jobs?', 'Are you sure you want to do delete the selected Jobs?', function (btn) {
+	Ext.MessageBox.confirm('Delete selected jobs?', 'Are you sure you want to delete the selected jobs?', function (btn) {
 		if (btn !== 'yes') {
 			return;
 		}
-		showInfoMessage("Deleting Jobs...", {logMessage: "Deleting Jobs...", showSpin: true, icon: "clock-o"});
+		showInfoMessage("Deleting jobs...", {logMessage: "Deleting jobs...", showSpin: true, icon: "clock-o"});
 		$.ajax({
 			type: "POST",
 			url: SERVER_URL_DM_DELETE_JOB,
@@ -215,7 +215,7 @@ this.deleteJobsHandler = function (myDataJobsListView, jobID, jobType) {
 				} else {
 					myDataJobsListView.updateContent();
 				}
-				showSuccessMessage("Done", {logMessage: "Deleting Jobs...DONE", closeTimeout: 0.5});
+				showSuccessMessage("Done", {logMessage: "Deleting jobs...DONE", closeTimeout: 0.5});
 			},
 			error: ajaxErrorHandler
 		});
@@ -440,7 +440,10 @@ this.requestNewSpecieHandler = function(){
 this.sendReportHandler = function(){
 	var messageDialog = Ext.create('Ext.window.Window', {
 		title: "Contact form",
-		height: 400, width: 600,modal: true, bodyPadding:10,
+		/* No height, as in the organism dialog above: without the repeated
+		   <h2> a fixed 400px left a band of empty body under the message. */
+		width: 600, modal: true, bodyPadding:10,
+		cls: "po-dialog",
 		defaults: {
 			labelAlign: "right",
 			border: false
@@ -448,16 +451,18 @@ this.sendReportHandler = function(){
 		items: [
 			{
 				xtype:"box", html:
-				"<h2>Contact form</h2>"+
-				"<div style='margin-bottom:10px;'>We would love to hear from you! Please use this form if you have any question or suggestion about the application and we'll get back with you soon.<br><b>Note: </b>If you are using a guest account, please provide a valid email address that we can use to contact you if needed.</div>"
+				"<div style='margin-bottom:10px;'>Questions or suggestions about PaintOmics? Send us a message and we will get back to you. If you are using a guest account, give an email address we can reply to.</div>"
 			},
-			{xtype: 'textfield', itemId : 'nameTextField', fieldLabel: 'Your name', value: Ext.util.Cookies.get("userName")},
-			{xtype: 'textfield', itemId : 'emailTextField', fieldLabel: 'Your email',  value: (Ext.util.Cookies.get("lastEmail") == null || Ext.util.Cookies.get("lastEmail").indexOf("guest") !== -1?"":Ext.util.Cookies.get("lastEmail"))},
+			/* width 500, as the message: at the default 150px input the three
+			   fields ended on two different right edges. */
+			{xtype: 'textfield', itemId : 'nameTextField', fieldLabel: 'Your name', width: 500, value: Ext.util.Cookies.get("userName")},
+			{xtype: 'textfield', itemId : 'emailTextField', fieldLabel: 'Your email', width: 500, value: (Ext.util.Cookies.get("lastEmail") == null || Ext.util.Cookies.get("lastEmail").indexOf("guest") !== -1?"":Ext.util.Cookies.get("lastEmail"))},
 			{xtype: 'textareafield', itemId : 'commentsTextArea', fieldLabel: 'Message', width: 500, height:100}
 		],
 		buttons: [
 			{
-				text: 'Send request',
+				text: 'Send message',
+				cls: 'po-dialog-primary',
 				handler : function() {
 					var type = "other";
 					var userName = messageDialog.queryById('nameTextField').getValue();
@@ -477,7 +482,7 @@ this.sendReportHandler = function(){
 					sendReportMessage(type, message, userEmail, userName);
 				}
 			},
-			{text: 'Close', handler : function() {messageDialog.close();}}
+			{text: 'Cancel', handler : function() {messageDialog.close();}}
 		]
 	});
 

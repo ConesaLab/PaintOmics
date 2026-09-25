@@ -105,10 +105,14 @@
   --pa-btn-secondary-border: #2E9A78;
   --pa-btn-secondary-bg-hover: #38AC87;
   --pa-btn-secondary-border-hover: #38AC87;
-  --pa-btn-success-bg: #3F9A3F;
-  --pa-btn-success-border: #3F9A3F;
-  --pa-btn-success-bg-hover: #4BAE4B;
-  --pa-btn-success-border-hover: #4BAE4B;
+  /* The same mistake as the primary above: #3F9A3F carried the white label at
+     3.56:1 and its hover #4BAE4B at about 2.9:1. The light pair is used in both
+     themes (4.62:1, hover darkening to about 6:1) - Next step, Run PaintOmics,
+     the step-card chips and acceptButton all read these. */
+  --pa-btn-success-bg: #3A843A;
+  --pa-btn-success-border: #3A843A;
+  --pa-btn-success-bg-hover: #31702F;
+  --pa-btn-success-border-hover: #31702F;
   --pa-btn-danger-bg: #DB4B47;
   --pa-btn-danger-border: #DB4B47;
   --pa-btn-danger-bg-hover: #E75D59;
@@ -326,6 +330,21 @@
 	background-color: var(--pa-btn-ghost-danger-bg-hover);
 	color: var(--pa-btn-ghost-danger-ink-hover);
 }
+/* Step 4's Show Pathway carries .btn-primary. In light the header ghost wins
+   on specificity; here section 13's `.button.btn-primary` ties with the ghost
+   and wins on source order, so dark alone painted it as a filled blue primary.
+   Restated one step more specific, for the real toolbar and its miniature. */
+[data-theme="dark"] .secondTopToolbar .button.btn-primary,
+[data-theme="dark"] .paToolbarMiniature .button.btn-primary {
+	background-color: var(--pa-btn-default-bg);
+	color: var(--pa-btn-default-ink);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .secondTopToolbar .button.btn-primary:hover {
+	background-color: var(--pa-btn-default-bg-hover);
+	color: var(--pa-ink-strong);
+	border-color: var(--pa-border-control-hover);
+}
 /* The account control keeps a filled treatment in dark too (HeaderButton
    tone="account"), but the neutral fill is only 1.42:1 against the #212227
    toolbar, so unlike the light theme the boundary has to stay on the border -
@@ -446,6 +465,25 @@
 	background-color: var(--pa-surface);
 	color: var(--pa-ink-body);
 	border-color: var(--pa-border);
+}
+/* Two places the blanket fill above paints a second surface over the first.
+   A window's title band and footer toolbar have their own fill, and their
+   .x-box-inner drew a darker box inside it, behind the title and the buttons.
+   And each view's root container laid a --pa-surface slab over the page
+   ground, which in light is transparent: the cards merged into it, and it
+   ended in a hard edge that lines up with nothing. */
+[data-theme="dark"] .x-window-header .x-box-inner,
+[data-theme="dark"] .x-toolbar .x-box-inner,
+[data-theme="dark"] #mainViewCenterPanel-innerCt > .x-container {
+	background-color: transparent;
+}
+/* Step 4 nests its panels three containers deeper (vbox, fit, hbox), and
+   each drew the same slab; the panels themselves keep their surface. */
+[data-theme="dark"] #pathwaysPanelsWrapper-innerCt,
+[data-theme="dark"] .paStep4Panels,
+[data-theme="dark"] .paStep4Panels .x-fit-item,
+[data-theme="dark"] .paStep4Panels .x-fit-item > .x-box-inner {
+	background-color: transparent;
 }
 [data-theme="dark"] .x-panel-header,
 [data-theme="dark"] .x-panel-header-default {
@@ -594,6 +632,11 @@
 [data-theme="dark"] .paExploreCard h4 {
 	color: var(--pa-ink-label);
 }
+/* The same bare h4, on the Regions2Genes / miRNA2Genes intro card: the one-line
+   summary of what each tool does measured 1.11:1. */
+[data-theme="dark"] .po-tool-intro > h4 {
+	color: var(--pa-ink-title);
+}
 
 /* Form fields.
 
@@ -617,6 +660,9 @@
 [data-theme="dark"] .x-form-item-label,
 [data-theme="dark"] .x-form-item-label-default,
 [data-theme="dark"] .x-form-cb-label { color: var(--pa-ink-label); }
+/* The contact and organism dialogs set their labels in body ink (main.css);
+   the generic rule above is as specific and loads later, so restate it. */
+[data-theme="dark"] .po-dialog .x-form-item-label { color: var(--pa-ink-body); }
 [data-theme="dark"] .x-form-invalid-field {
 	background-color: var(--pa-invalid-bg) !important;
 	border-color: var(--pa-invalid-border) !important;
@@ -786,6 +832,25 @@
 	background-color: #FFFFFF;
 }
 [data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
+/* A disabled block inside a card fades into the card, as it does in light;
+   the scrim above is for modals. */
+[data-theme="dark"] .omicbox .x-mask { background-color: var(--pa-surface); }
+/* The "Loading..." chip on that scrim (sign-in, My files) kept Neptune's light
+   grey fill and #666 text. Only background-color is set, so the spinner GIF
+   in .x-mask-msg-text survives. */
+[data-theme="dark"] .x-mask-msg {
+	background-color: var(--pa-surface-quiet);
+	border-color: var(--pa-border);
+}
+[data-theme="dark"] .x-mask-msg-inner,
+[data-theme="dark"] .x-mask-msg-text {
+	background-color: transparent;
+	color: var(--pa-ink-body);
+}
+/* main.css gives these two titles light inks (#0076D6, #AC6304) that measure
+   about 3.6:1 on the dark dialog; error and success already read tokens. */
+[data-theme="dark"] #messageDialog.infoDialog h4 { color: var(--pa-status-info-ink); }
+[data-theme="dark"] #messageDialog.warningDialog h4 { color: var(--pa-status-warning-ink); }
 [data-theme="dark"] .x-tip,
 [data-theme="dark"] .x-tip-body {
 	background-color: var(--pa-surface-quiet) !important;
@@ -798,16 +863,22 @@
    4. AI interpretation surfaces (ai-interpret.css owns these, untokenised)
    --------------------------------------------------------------------------- */
 
+/* A whole border, not border-color: the light panel has none, so the colour
+   alone drew nothing, and the panel sat on a card of the same #1A1B1E with
+   only a shadow for an edge. */
 [data-theme="dark"] .ai-widget-panel {
 	background: var(--pa-ai-panel-bg);
-	border-color: var(--pa-border);
+	border: 1px solid var(--pa-border);
 	box-shadow: var(--pa-shadow-ai-panel);
 }
-[data-theme="dark"] .ai-widget-header { background: var(--pa-ai-blue); }
+/* The action fill, as in the light theme: white on --pa-ai-blue is 3.34:1. */
+[data-theme="dark"] .ai-widget-header { background: var(--pa-ai-action-bg); }
 [data-theme="dark"] .ai-widget-messages { background: var(--pa-ai-panel-bg); }
+/* border-color too: the assistant bubble's #e0e0e0 frame is 11.5:1 here. */
 [data-theme="dark"] .ai-msg-bubble {
 	background: var(--pa-ai-bubble-bg);
 	color: var(--pa-ink-body);
+	border-color: var(--pa-border);
 }
 [data-theme="dark"] .ai-msg-user .ai-msg-bubble {
 	background: var(--pa-ai-user-bubble);
@@ -936,9 +1007,9 @@
    "Data Uploading" headings were the worst, at 2.2 and 1.0.
    --------------------------------------------------------------------------- */
 
-[data-theme="dark"] .po-hero,
-[data-theme="dark"] .po-hero-section,
-[data-theme="dark"] .po-about-section { background: var(--pa-surface-page); }
+/* No background on the hero or the About section: both sit in (or are) a
+   .contentbox, which already takes --pa-surface. Painting them the page colour
+   made the first two cards read as holes, and the About card two-toned. */
 [data-theme="dark"] .po-hero h1 { color: var(--pa-ink-title); }
 [data-theme="dark"] .po-hero-desc { color: var(--pa-ink-body); }
 
@@ -948,6 +1019,9 @@
 }
 [data-theme="dark"] .po-step-card li,
 [data-theme="dark"] .po-step-card p { color: var(--pa-ink-body); }
+/* Dark ink on the disc: white on the dark theme's lighter orange is 2.61:1 at
+   13px bold; the page colour on it is 6.8:1. */
+[data-theme="dark"] .po-step-number { color: var(--pa-surface-page); }
 /* The diagram plate. Its light fill is one of the warm literals main.css lists
    as untokenised, so it cannot follow a token here and has to be restated - the
    same reason the surfaces around it are restated by selector rather than by
@@ -1147,6 +1221,9 @@
 [data-theme="dark"] #mainViewCenterPanel .content i,
 [data-theme="dark"] #mainViewCenterPanel .content span { color: var(--pa-ink-body); }
 [data-theme="dark"] #mainViewCenterPanel .content h5 { color: var(--pa-ink-title); }
+/* The span rule above also caught the Help legend's asterisk and greyed it;
+   a legend has to match the red mark it explains in the field labels. */
+[data-theme="dark"] #mainViewCenterPanel .content .po-required-mark { color: var(--pa-status-error-ink); }
 
 /* ---------------------------------------------------------------------------
    7. Prose that has no class of its own
@@ -1353,6 +1430,12 @@
    they are secondary counts over the checkbox lists that carry the content. */
 [data-theme="dark"] .metaboliteBox h4 { color: var(--pa-ink-label); }
 
+/* The AI offer's label. `#mainViewCenterPanel h3` above inks every card heading
+   --pa-ink-title at (1,1,1), which outranks main.css's AI-blue rule and left
+   the one AI-coloured label on the step grey. Dark --pa-ai-blue measures about
+   4.5:1 on the panel's tint, as it does on .aiBadge-ai. */
+[data-theme="dark"] #mainViewCenterPanel .aiSuggestActionsBody > .aiSuggestActionsTitle { color: var(--pa-ai-blue); }
+
 /* ---------------------------------------------------------------------------
    10. Highcharts
 
@@ -1377,8 +1460,11 @@
    and leaves it unstroked, so on a chart with axes the rule above turns it into
    the frame the axes hang off - and on the classification pie, which has no
    axes, it turns it into a bare 513x215 rectangle floating around the slices.
-   That box is in every dark screenshot of Step 3 and belongs to nothing. */
-[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border {
+   That box is in every dark screenshot of Step 3 and belongs to nothing.
+   The mapped/unmapped donuts (Step 2's cards, Step 3's Show mapping) are pies
+   too and drew the same box, so any chart with a pie series is caught. */
+[data-theme="dark"] div[id ^= "pathwayDistributionsContainer_"] .highcharts-plot-border,
+[data-theme="dark"] .highcharts-container:has(.highcharts-pie-series) .highcharts-plot-border {
 	stroke: none;
 }
 [data-theme="dark"] .highcharts-axis-labels text,
@@ -1389,7 +1475,13 @@
 /* The box plot's box is drawn white so the median line and whiskers read
    through it; on a dark chart the equivalent is the chart ground, not white. */
 [data-theme="dark"] .highcharts-boxplot-box { fill: var(--pa-surface-quiet); }
-[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft); }
+/* !important because Highcharts writes the label colour inline (style="fill:
+   ..."), so without it this rule never applied. The p10/p90 lines keep a
+   #001dff attribute, 2.05:1 on the chart ground; CSS outranks it. */
+[data-theme="dark"] .highcharts-plot-line-label { fill: var(--pa-chart-ink-soft) !important; }
+[data-theme="dark"] .omicSummaryBox .highcharts-plot-line { stroke: #6E8BFF; }
+/* The clipped-scale band label is written inline (#71717A, for white). */
+[data-theme="dark"] .highcharts-plot-band-label { fill: var(--pa-chart-ink-soft) !important; }
 [data-theme="dark"] .highcharts-tooltip > span {
 	background: var(--pa-surface-quiet) !important;
 	color: var(--pa-ink-body) !important;
@@ -1430,6 +1522,11 @@
 	border-color: var(--pa-border);
 }
 [data-theme="dark"] .paGridBar-filters { background: var(--pa-surface-subtle); }
+/* main.css inks these labels #52525B, 2.1:1 on this bar. They are toolbar
+   text, not .x-form-cb-label, so the dark checkbox-label rule never reached
+   them; the group-label spans carry an inline weight but no inline colour. */
+[data-theme="dark"] .paGridBar .x-toolbar-text,
+[data-theme="dark"] .paGridBar .x-toolbar-text span[style] { color: var(--pa-ink-label); }
 /* Checkboxes, radios and sliders --------------------------------------------
    main.css draws all four of these in CSS now rather than from sprites, so the
    dark theme has real properties to move instead of an image it could only
@@ -1481,9 +1578,11 @@
    file, which is later and therefore wins; it is left as the one place that
    describes a jQuery UI thumb. */
 [data-theme="dark"] .paGridBar a.downloadXLS:hover,
-[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):hover {
+[data-theme="dark"] .paGridBar #configureButton:not(.x-item-disabled):not(.x-masked):hover {
 	background-color: var(--pa-surface-quiet);
 }
+[data-theme="dark"] .paGridBar #configureButton.x-item-disabled,
+[data-theme="dark"] .paGridBar #configureButton.x-masked { color: var(--pa-ink-muted); }
 [data-theme="dark"] .paGridBar a.multiDelete:hover { background-color: var(--pa-btn-ghost-danger-bg-hover); }
 [data-theme="dark"] .paWeightsTip { background-color: var(--pa-surface); }
 [data-theme="dark"] .paWeightsTip .x-tip-header,
@@ -1516,9 +1615,36 @@
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool { color: var(--pa-ink-control); }
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool:hover,
 [data-theme="dark"] .pa-net-toolbar .pa-net-tool:focus { color: var(--pa-ink-strong); }
+/* Same trap for the hub list: its metabolite names are <a>, so they came out
+   link-blue (and green under the cursor) instead of the ink light uses. */
+[data-theme="dark"] .pa-hub-item,
+[data-theme="dark"] .pa-hub-item:hover { color: var(--pa-ink); }
+/* The hub rings' light literal (#e7e7e4) is the brightest line on the dark
+   plot; a quiet step keeps them a guide, not a strike-through. */
+[data-theme="dark"] .pa-hub-net { --hub-ring: #3A3C43; }
 [data-theme="dark"] div[id ^= "step3-network-toolbar_"] div[id ^= "reorderOptions"] {
 	background: var(--pa-surface) !important;
 }
+/* The node hover card floats on <body>, outside every container that answers
+   main.css's bare `h4 { color: #27272A }`, so its pathway title was 1.1:1.
+   Its Paint button keeps the inline var(--pa-link) fill, which is a light blue
+   in this theme: the neutral button ink on it was 1.75:1, so it takes the same
+   dark ink as .pa-convert-composer-send on the accent blue (8:1). */
+[data-theme="dark"] #sigmaTooltip h4 { color: var(--pa-ink-title); }
+/* The per-omic headings keep their orange accent (main.css #B14C2D, ~3:1
+   here), lifted to this theme's orange; the ID keeps it above the rule above. */
+[data-theme="dark"] .pathwayPlotwrappers h4,
+[data-theme="dark"] #sigmaTooltip .pathwayPlotwrappers h4 { color: var(--pa-accent-orange); }
+[data-theme="dark"] #step3TooltipPaintButton { color: #0F1A2B; }
+/* Category tree Hide/Show/Custom: main.css darkens these for white, too dark
+   here, and the bare `a` rule would otherwise paint the idle ones link blue. */
+[data-theme="dark"] .step3ClassificationsOptions a { color: var(--pa-ink-muted); }
+[data-theme="dark"] .step3ClassificationsOptions a.hideOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.hideOption:hover { color: #E3643D; }
+[data-theme="dark"] .step3ClassificationsOptions a.showOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.showOption:hover { color: #23AE89; }
+[data-theme="dark"] .step3ClassificationsOptions a.customOption.selected,
+[data-theme="dark"] .step3ClassificationsOptions a.customOption:hover { color: #BD7E39; }
 
 /* ---------------------------------------------------------------------------
    12. Step 4
@@ -1567,6 +1693,10 @@
 	background: var(--pa-surface-sunken);
 	border-color: var(--pa-border);
 }
+/* The configurator's purple: #9E3AB3 is 2.74:1 on the sunken surface, under
+   even the 3:1 large-text floor for the 40px numerals. #C77DDB is 5.45:1. */
+[data-theme="dark"] .omicDragHint,
+[data-theme="dark"] div.omicSelection div.omicPosition { color: #C77DDB; }
 [data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer {
 	background: var(--pa-toast-warning-bg);
 	border-color: var(--pa-toast-warning-border);
@@ -1574,7 +1704,32 @@
 }
 [data-theme="dark"] div.lateralOptionsPanel div.updateMessageContainer h3 { color: var(--pa-ink-title); }
 [data-theme="dark"] .step4PathwayThumbnailHover { background-color: rgba(23, 24, 27, 0.67); }
+/* The History overlay: main.css states its card, thumbnails and captions in
+   literal white, so under the dark heading it was a white slab, and the veil's
+   'Open' kept its dark ink on the dark veil above. */
+[data-theme="dark"] .step4HistoryBox,
+[data-theme="dark"] .step4HistoryBox .step4ThumbContainer,
+[data-theme="dark"] .step4HistoryBox .step4ThumbTitleContainer {
+	background-color: var(--pa-surface);
+	color: var(--pa-ink-body);
+}
+[data-theme="dark"] .step4HistoryBox .step4PathwayThumbnailHover { color: var(--pa-ink-title); }
+/* An <a>, so `[data-theme="dark"] a` painted the close X link blue. */
+[data-theme="dark"] .step4HistoryClose { color: var(--pa-ink-muted); }
+[data-theme="dark"] .step4HistoryClose:hover {
+	background-color: rgba(255, 255, 255, 0.08);
+	color: var(--pa-ink-title);
+}
 [data-theme="dark"] td.whiteBackground { background: var(--pa-surface); }
+/* Step 4's charts (the panels and the node tooltip, an .x-window) draw their
+   reference lines in light neutrals picked for a white card (#dedede for the
+   +/-1 and 0 lines), and Highcharts paints a 'No data' heatmap cell #f7f7f7.
+   On a dark chart both became the brightest marks in it, brighter than the
+   data. A CSS fill/stroke outranks the attribute, as with the grid lines. */
+[data-theme="dark"] #pathwaysPanelsWrapper .highcharts-plot-line,
+[data-theme="dark"] .x-window .highcharts-plot-line { stroke: var(--pa-chart-grid); }
+[data-theme="dark"] #pathwaysPanelsWrapper .highcharts-null-point,
+[data-theme="dark"] .x-window .highcharts-null-point { fill: var(--pa-surface-sunken); }
 /* The Heatmap/Line-chart and Genes/Metagenes segmented control (twoOptionsButton,
    main.css) is built entirely from surface and ink tokens now, so it themes
    itself - no dark override needed here any more. */
@@ -1643,6 +1798,7 @@
 /* The sign-in dialog's validation line. main.css states it as #D22, which is
    4.51:1 on white but only about 3.4:1 on the dark panel. */
 [data-theme="dark"] .formMessage { color: var(--pa-status-error-ink); }
+[data-theme="dark"] .formMessage.is-success { color: var(--pa-status-success-ink); }
 
 /* The rule that divides the sign-in panel's two columns. It was an inline
    `border-left: 1px solid #E7E7E7` on three separate divs, which no stylesheet
@@ -1744,6 +1900,7 @@
 [data-theme="dark"] .ai-widget-progress {
 	background: var(--pa-ai-progress-bg);
 	color: var(--pa-ai-progress-ink);
+	border-bottom-color: var(--pa-border);
 }
 [data-theme="dark"] .ai-widget-progress.is-done { background: var(--pa-toast-success-bg); }
 [data-theme="dark"] .ai-widget-progress.is-error { background: var(--pa-toast-error-bg); }
@@ -1846,6 +2003,40 @@
 }
 [data-theme="dark"] .userViewsDialog .x-form-text:hover {
 	border-color: var(--pa-border-control-hover) !important;
+}
+/* One surface, as main.css intends. The section-3 blanket paints every panel,
+   container and box-inner --pa-surface at (0,2,0) after main.css's transparent
+   rule, so the form sat in a darker box that stopped short of the window's
+   bottom edge. */
+[data-theme="dark"] .userViewsDialog .x-panel,
+[data-theme="dark"] .userViewsDialog .x-panel-body,
+[data-theme="dark"] .userViewsDialog .x-panel-body-default,
+[data-theme="dark"] .userViewsDialog .x-container,
+[data-theme="dark"] .userViewsDialog .x-box-inner {
+	background-color: transparent;
+}
+/* main.css's #71717A placeholder (0,2,1) outranks this file's own
+   `input::placeholder` rule, and on the dark field it is too dim to read; the
+   soft ink token reads clearly and still sits apart from typed text. */
+[data-theme="dark"] .userViewsDialog .x-form-text::placeholder {
+	color: var(--pa-ink-soft);
+}
+/* main.css's .po-dialog pair (organism request, contact form, file pickers).
+   Its --pa-accent-blue fill turns pale in dark (2:1 under the button ink) and
+   the outline's rgba(24,24,27,.2) border disappears, so both are restated. */
+[data-theme="dark"] .po-dialog .po-dialog-primary.x-btn-default-small {
+	background-color: var(--pa-btn-primary-bg);
+	border-color: var(--pa-btn-primary-border);
+}
+[data-theme="dark"] .po-dialog .po-dialog-primary.x-btn-default-small .x-btn-inner {
+	color: #FFFFFF;
+}
+[data-theme="dark"] .po-dialog .x-btn-default-small:not(.po-dialog-primary) {
+	background-color: var(--pa-btn-default-bg);
+	border-color: var(--pa-border-control);
+}
+[data-theme="dark"] .po-dialog .x-btn-default-small:not(.po-dialog-primary):hover {
+	background-color: var(--pa-btn-default-bg-hover);
 }
 [data-theme="dark"] .po-exp-design-hint,
 [data-theme="dark"] .po-exp-design-draft-note {
@@ -1969,6 +2160,17 @@
 	background-color: rgba(255, 255, 255, 0.08);
 }
 [data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.hideOption { color: var(--pa-ink-muted); }
+/* The Step 4 panel-header discs (close, shrink, expand, configure). main.css's
+   #5F5F66 glyph on a 16% grey disc composites to 2.16:1 here, under the 3:1 a
+   control's glyph needs; a light disc and the muted ink make 3.7:1. */
+[data-theme="dark"] div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool) {
+	background-color: rgba(255, 255, 255, 0.10);
+	color: var(--pa-ink-muted);
+}
+[data-theme="dark"] div.lateralOptionsPanel-header .toolbarOption:not(.downloadTool):hover {
+	background-color: rgba(255, 255, 255, 0.18);
+	color: var(--pa-ink-title);
+}
 [data-theme="dark"] .lateralOptionsPanel-toolbar .toolbarOption.downloadTool {
 	background: var(--pa-btn-default-bg);
 	border-color: var(--pa-border-control);
@@ -2008,6 +2210,10 @@
 }
 [data-theme="dark"] .po-example:hover { border-color: var(--pa-border-hover); }
 [data-theme="dark"] .po-example-title { color: var(--pa-ink-title); }
+/* The counts inherit the grey facts line, as in light. The global dark `b`
+   rule ties main.css's `.po-example-facts b` and wins on load order, which
+   turned them the link-like bold blue. */
+[data-theme="dark"] .po-example-facts b { color: inherit; }
 [data-theme="dark"] .po-example-tests { border-top-color: var(--pa-border); }
 [data-theme="dark"] .po-example-dot { color: var(--pa-border-control); }
 /* The two badges are 8%-ish tints mixed against white in main.css. Same hues,
@@ -2022,7 +2228,8 @@
 }
 [data-theme="dark"] .po-example-badge-default {
 	background: var(--pa-surface-quiet);
-	color: var(--pa-ink-muted);
+	/* --pa-ink-muted was 4.26:1 on this fill at 11px; the label ink is 5.9. */
+	color: var(--pa-ink-label);
 }
 
 /* The AI conversion sheet and the Step 1 upload strips. The sheet declares
@@ -2075,7 +2282,7 @@
 :root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapSummary,
 :root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
-:root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapMuted { color: #8A99A9; }
 :root[data-theme="dark"] .paKeyUp { background: #4A8CD2; }
 :root[data-theme="dark"] .paKeyDown { background: #C9524D; }
 :root[data-theme="dark"] .paKeyNeutral { background: #7C93AD; }
@@ -2086,7 +2293,7 @@
 :root[data-theme="dark"] .paClassMapKeys { color: #A1B0C0; }
 
 :root[data-theme="dark"] .paClassMapControlLabel,
-:root[data-theme="dark"] .paClassMapControlNote { color: #6F7F8E; }
+:root[data-theme="dark"] .paClassMapControlNote { color: #8A99A9; }
 :root[data-theme="dark"] .paClassMapSummary.paIsFocused { color: #E3EAF2; }
 :root[data-theme="dark"] .paDirUp { color: #4A8CD2; }
 :root[data-theme="dark"] .paDirDown { color: #C9524D; }
@@ -2112,15 +2319,17 @@
 :root[data-theme="dark"] .paLadderSeg { background: #151D26; border-color: #3A4754; }
 :root[data-theme="dark"] .paLadderSeg button { color: #A1B0C0; border-right-color: #28333F; }
 :root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] { background: #4A8CD2; color: #0F1E30; }
-:root[data-theme="dark"] .paLadderSeg button small { color: #6F7F8E; }
+:root[data-theme="dark"] .paLadderSeg button small { color: #8A99A9; }
 /* The pressed segment is a light blue with dark ink; its small text was still
    the grey above (2.0:1 on that blue), so "class · 8" vanished. */
-:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: rgba(15, 30, 48, 0.82); }
+:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: #0F1E30; }
 :root[data-theme="dark"] .paLadderSwitch, :root[data-theme="dark"] .paLadderExcluded,
 :root[data-theme="dark"] .paLadderExcluded summary { color: #A1B0C0; }
 :root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
 :root[data-theme="dark"] .paLadderExcluded li.paIsSig { color: #E3EAF2; }
-:root[data-theme="dark"] .paDesignNote { color: #A1B0C0; }
+/* Scoped like the Step 1 form's `p` rule, which outranked the bare class and
+   painted the note in body ink. */
+[data-theme="dark"] #mainViewCenterPanel .paStep1Form p.paDesignNote { color: var(--pa-ink-label); }
 :root[data-theme="dark"] {
   --pa-fig-bar: #3A4756;
   --pa-fig-bar-strong: #55657A;
