@@ -1570,8 +1570,11 @@ function PA_Step1JobView() {
 							   (required)" - the server adds it regardless. Telling someone to
 							   untick a box that cannot be unticked sends them looking for a
 							   broken control, so the sentence below is careful to say which
-							   databases can actually be unticked. */
-							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Optionally, describe your experiment design for the AI interpretation. Then upload your multi-omic data — or load an example <span class="po-nowrap">(<a class="button btn-secondary btn-inline btn-small"><i class="fa fa-file-text-o"></i> Load example</a>)</span> to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
+							   databases can actually be unticked.
+
+							   No brackets round the Load example chip: against its rounded
+							   border they read as a doubled "((" and "))". */
+							'<p>Choose your organism, then check the pathway databases: KEGG is always included, and every other database installed for it is ticked by default, so untick any of <em>those</em> you want to leave out. Optionally, describe your experiment design for the AI interpretation. Then upload your multi-omic data — or load an example <a class="button btn-secondary btn-inline btn-small"><i class="fa fa-file-text-o"></i> Load example</a> to explore PaintOmics with a ready-made dataset — and click <a class="button btn-success btn-inline btn-small"><i class="fa fa-play"></i> Run PaintOmics</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_UPLOAD + '</div>' +
 						'</div>' +
 						'<div class="po-step-card">' +

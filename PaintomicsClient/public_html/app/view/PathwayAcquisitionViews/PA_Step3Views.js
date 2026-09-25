@@ -4476,9 +4476,10 @@ function PA_Step3PathwayDetailsView() {
 					);
 				}else if (metagenes.length === 0){
 					/* An omic with no trend here: say so, rather than drawing a
-					   Heatmap/Line chart toggle over two empty charts. */
+					   Heatmap/Line chart toggle over two empty charts. The class
+					   gives the next omic the air a chart would have left. */
 					pathwayPlotwrappers.append(
-						"<div>" +
+						"<div class='paOmicNoTrend'>" +
 						"  <h4>" + omicDataType[i] + "</h4>" +
 						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> No major trends in this pathway.</span>" +
 						"</div>"
