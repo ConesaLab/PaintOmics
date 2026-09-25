@@ -8191,9 +8191,12 @@ a.po-ghost-action > i.fa {
   line-height: 1.55;
   color: var(--pa-ink-body, #3F3F46);
 }
+/* 13px in body ink, the size of the intro above: at 12px grey the labels
+   read as captions under a paragraph, not as the three questions the form
+   asks. */
 .po-dialog .x-form-item-label {
-  font-size: 12px;
-  color: var(--pa-ink-label);
+  font-size: 13px;
+  color: var(--pa-ink-body, #3F3F46);
 }
 /* One action, one way out. Neptune paints every window button the same filled
    blue, so "Send request" and "Cancel" carried identical weight -- two primary

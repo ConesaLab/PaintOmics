@@ -652,6 +652,9 @@
 [data-theme="dark"] .x-form-item-label,
 [data-theme="dark"] .x-form-item-label-default,
 [data-theme="dark"] .x-form-cb-label { color: var(--pa-ink-label); }
+/* The contact and organism dialogs set their labels in body ink (main.css);
+   the generic rule above is as specific and loads later, so restate it. */
+[data-theme="dark"] .po-dialog .x-form-item-label { color: var(--pa-ink-body); }
 [data-theme="dark"] .x-form-invalid-field {
 	background-color: var(--pa-invalid-bg) !important;
 	border-color: var(--pa-invalid-border) !important;

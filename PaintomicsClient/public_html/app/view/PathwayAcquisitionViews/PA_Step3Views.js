@@ -3811,10 +3811,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'  <div class="slider-ui" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +
 				'  <h5><span class="helpTip" style="float:right;" title="Only pathways with a p-value at or below this cutoff are drawn; among them, a lower p-value draws a bigger node."></span>Max p-value (<span id="minPValue_' + me.dbid + '">0.05</span>)</h5>' +
 				'  <div class="slider-ui" id="minPValueSlider_' + me.dbid + '"></div>' +
-				/* nowrap: with the help mark now floated on the first line, the label
-				   wraps, and it broke at the hyphen into "p-" / "value". */
+				/* The help mark floats on the first line, which leaves the label 160px:
+				   "Always use combined p-value" (172px) wrapped to an orphaned "p-value".
+				   "Use combined p-value" fits; the help says when it applies. nowrap
+				   keeps "p-value" from breaking at its hyphen if the rail narrows. */
 				'  <div class="checkbox"><input type="checkbox" id="use-combined-pval-check_' + me.dbid + '" name="useCombinedPvalCheckbox">' +
-				'    <label for="use-combined-pval-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."></span>Always use combined <span style="white-space:nowrap;">p-value</span></label>' +
+				'    <label for="use-combined-pval-check_' + me.dbid + '"><span class="helpTip" style="float:right;" title="When coloring for one omic, use always the combined p-value for filtering if enabled, otherwise rely on the omic p-value."></span>Use combined <span style="white-space:nowrap;">p-value</span></label>' +
 				'  </div>'+
 				'  <h5><span class="helpTip" style="float:right;" title="Select which adjust method to choose the p-values from."></span>P-value selection criteria:</h5>' +
 				'  <div id="pvaluemethod_' + me.dbid + '"></div>' +
