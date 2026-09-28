@@ -67,7 +67,7 @@ uWSGI==2.0.31
 # pymongo 4 is required, not optional: the deployment runs MongoDB 7, and
 # pymongo 3.11 speaks wire-protocol opcodes MongoDB removed in 5.1. See
 # src/tests/test_pymongo4_compat.py.
-pymongo==4.18.1
+pymongo==4.18.2
 
 # --- Scientific stack ---
 numpy==2.4.6
@@ -132,7 +132,7 @@ requests==2.34.2
 chardet==5.2.0
 
 # --- AI interpretation pipeline (src/classes/AIInterpret/) ---
-openai==3.15.0
+openai==3.19.2
 openai-agents==0.22.3
 # Imported directly by AIInterpret/agent.py (Timeout for the SDK client,
 # HTTPError while iterating a completion stream -- openai wraps only the
@@ -145,7 +145,7 @@ openai-agents==0.22.3
 # it by name; httpx2 is pinned because it is now the one openai actually
 # raises from, and nothing else in the manifest would hold it still.
 httpx==0.28.1
-httpx2==2.13.0
+httpx2==2.13.1
 # No longer strictly required, and kept deliberately. openai-agents' models use
 # PEP 604 annotations ("float | None"), which pydantic cannot evaluate before
 # 3.10 without this backport -- on 3.9, `import agents` raised TypeError at
@@ -172,7 +172,7 @@ setuptools<85
 APScheduler==3.11.3
 psutil==7.2.2
 python-dateutil==2.9.0.post0
-pytz==2026.3.post1
+pytz==2026.4
 # Moves as a pair with APScheduler: 3.11.3 requires tzlocal>=3.0, and tzlocal 3
 # returns a zoneinfo where 2.x returned a pytz tzinfo. Safe here because the
 # tree never calls .localize() or get_localzone() itself -- it hands APScheduler

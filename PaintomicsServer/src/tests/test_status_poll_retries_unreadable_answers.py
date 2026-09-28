@@ -111,6 +111,10 @@ const console = {info() {}, warn() {}, error() {}, log: globalThis.console.log};
 // The module-level helpers lifted from JobController.js resolve `$` at module
 // scope, as they do in the browser; drive() installs a fresh stub per case.
 let $ = null;
+// checkJobStatus sends through ajaxWithStallTimeout (Util.js), which has its
+// own test (test_status_poll_timeout_counts_from_the_last_byte). Here it is
+// the plain $.ajax it wraps, so this harness still sees opts.timeout.
+function ajaxWithStallTimeout(opts) { return $.ajax(opts); }
 
 %(util)s
 %(controller_helpers)s

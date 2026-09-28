@@ -689,6 +689,27 @@ def _handOver(target, slot, items):
         target[slot] = items
 
 
+def stripOrganismPrefix(featureList, organism):
+    """
+    Rename, in place, every feature whose name is KEGG's "<organism>:<gene>"
+    form to the bare "<gene>". Only the job's own organism code is stripped
+    (case-insensitive), and never down to an empty name, so any other name
+    that happens to contain a colon is left exactly as uploaded.
+
+    @returns {Integer} how many features were renamed
+    """
+    if not organism:
+        return 0
+    prefix = organism.lower() + ":"
+    renamed = 0
+    for feature in featureList:
+        name = feature.getName()
+        if isinstance(name, str) and len(name) > len(prefix) and name[:len(prefix)].lower() == prefix:
+            feature.setName(name[len(prefix):])
+            renamed += 1
+    return renamed
+
+
 def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
     """
     This function is used to query the database in different threads.
@@ -750,6 +771,17 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     try:
         # Save found features for each database, plus the unique between them
         matches = {db: set() for db in databases + ["Total"]}
+
+        # KEGG writes its own gene identifiers as "<organism>:<gene>" (fox:FOXG_00001,
+        # hsa:7157), and a list copied from KEGG carries the prefix. The xref
+        # stores the bare gene (FOXG_00001), so the exact lookup below matched
+        # none of them: on 2026-09-16 a fox job of 16,248 such identifiers was
+        # refused with "matched 0". Drop the prefix for THIS organism only.
+        # Only the lookup key loses it: the match count and the unmatched list
+        # keep the name as uploaded, which is what Job counts input features
+        # by, or "mmu:14679" beside "14679" counted one mapped gene as unmapped.
+        uploadedNames = [feature.getName() for feature in featureList]
+        stripOrganismPrefix(featureList, organism)
 
         # Extract names from features
         featureNames = set(map(attrgetter('name'), featureList))
@@ -877,7 +909,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         localMatched = []
         localNotMatched = []
 
-        for feature in featureList:
+        for feature, uploadedName in zip(featureList, uploadedNames):
             originalName = feature.getName()
             featureMatchedInAnyDB = False
             # Track featureIDs already cloned for THIS feature across the database
@@ -901,10 +933,9 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                     # Increase the counter on the matching database, and keep track of the total
                     # counting only once the features. In this scenario the feature will only have one omic value
                     # containing the original name.
-                    matches[databaseConvertion_name].add(
-                        feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
-                    matches["Total"].add(
-                        feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
+                    matchKey = feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else uploadedName
+                    matches[databaseConvertion_name].add(matchKey)
+                    matches["Total"].add(matchKey)
 
                     for featureID in set(featureIDs):
                         if featureID in seenIDs:
@@ -938,6 +969,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
 
             # Only add to notMatchedFeatures if it didn't match in ANY database
             if not featureMatchedInAnyDB:
+                feature.setName(uploadedName)   # _unmatched.txt shows what was uploaded
                 localNotMatched.append(feature)
             else:
                 # Track that this feature was matched (for deduplication if needed)
