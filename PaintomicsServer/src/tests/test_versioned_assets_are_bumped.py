@@ -136,8 +136,11 @@ PUBLISHED = {
     # v=3.3 adds ajaxWithStallTimeout on top of v=3.2: the job status poll's
     # 65 s limit counts from the last byte received, so a large answer on a
     # slow link finishes (PR #183).
+    # v=3.4 shows the server's refusal of the uploaded files (InputFileError) as
+    # "Please check your input files" with no Report button, and an organism
+    # request that names no organism as a warning.
     "app/view/common/Util.js": (
-        "3.3", "581b1b1e1a9da9761842ecd5d23974e8c157a326a4c8c0ba89d6c33f7f82cb25"),
+        "3.4", "4d8b96d34f7798d312c928e389429d14a7ac80bfe518659e4ff81dad5c1c173b"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
