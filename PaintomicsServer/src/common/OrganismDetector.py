@@ -154,10 +154,12 @@ _PATTERN_TABLE = [
     (r"Glyma\.?\d{2}[Gg]\d{6}", ("gmx",), "Glycine max"),
     (r"Potri\.\d{3}G\d{6}", ("pop",), "Populus trichocarpa"),
     # Phytozome gene ids the mapper renames to their locus tags
-    # (FeatureNamesToKeggIDsMapper.PHYTOZOME_LOCUS_TAGS).
-    (r"Sobic\.\d{3}G\d{6}", ("sbi",), "Sorghum bicolor"),
-    (r"Prupe\.\dG\d{6}", ("pper",), "Prunus persica"),
-    (r"Pahal\.\dG\d{6}", ("phai",), "Panicum hallii"),
+    # (FeatureNamesToKeggIDsMapper.PHYTOZOME_LOCUS_TAGS). Any case (Mercator
+    # writes them in lower case) and any suffix: a transcript or a versioned
+    # id names the organism as surely as the gene does.
+    (r"(?i:Sobic\.\d{3}G\d{6})(?:\.[0-9A-Za-z.]+)?", ("sbi",), "Sorghum bicolor"),
+    (r"(?i:Prupe\.\dG\d{6})(?:\.[0-9A-Za-z.]+)?", ("pper",), "Prunus persica"),
+    (r"(?i:Pahal\.\dG\d{6})(?:\.[0-9A-Za-z.]+)?", ("phai",), "Panicum hallii"),
     (r"Cre\d{2}\.g\d{6}", ("cre",), "Chlamydomonas reinhardtii"),
     (r"FOXG_\d{5}", ("fox",), "Fusarium oxysporum"),
     (r"FGSG_\d{5}", ("fgr",), "Fusarium graminearum"),

@@ -101,6 +101,9 @@ class PatternLayerTest(unittest.TestCase):
             # The sorghum DESeq2 table of 2026-09-26 (Phytozome gene ids).
             ("Sobic.001G215100", "Sobic.001G262200", "Sobic.007G085966", "Sobic.007G070300",
              "Sobic.009G242200"): ("sbi",),
+            # Mercator's lower case, a download tag and a transcript still name it.
+            ("sobic.001g215100", "sobic.001g262200", "Sobic.007G085966.v3.2", "Sobic.007G070300.1",
+             "sobic.009g242200"): ("sbi",),
             ("Prupe.1G000100", "Prupe.1G000200", "Prupe.2G123400", "Prupe.8G000500",
              "Prupe.3G100900"): ("pper",),
             ("Pahal.1G000100", "Pahal.2G000200", "Pahal.9G123400", "Pahal.5G000500",

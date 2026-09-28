@@ -70,6 +70,11 @@ class PhytozomeToLocusTags(unittest.TestCase):
                                      "Sobic.001G215100.v3"], "sbi"),
                          (["SORBI_3001G215100"] * 4, 4))
 
+    def test_each_genomes_own_download_tag_is_read(self):
+        # The gene ids of Phytozome's GFF downloads carry the annotation tag.
+        self.assertEqual(self.names(["Glyma.01G000100.Wm82.a2.v1"], "gmx"), (["GLYMA_01G000100"], 1))
+        self.assertEqual(self.names(["Prupe.1G000100.v2.0.a1"], "pper"), (["PRUPE_1G000100"], 1))
+
     def test_the_organism_code_is_matched_case_insensitively(self):
         self.assertEqual(self.names(["Sobic.001G215100"], "SBI"), (["SORBI_3001G215100"], 1))
 
@@ -78,6 +83,8 @@ class PhytozomeToLocusTags(unittest.TestCase):
         # a guess about which isoform the user meant, so it stays unmatched.
         names = ["Sobic.001G215100.1", "Sobic.001G215100.1.p", "Sobic.001G215100.1.v3.2"]
         self.assertEqual(self.names(names, "sbi"), (names, 0))
+        names = ["Glyma.01G000100.1.Wm82.a2.v1", "Glyma.01G000100.Wm82.a2"]   # no v<version>
+        self.assertEqual(self.names(names, "gmx"), (names, 0))
 
     def test_another_organisms_ids_are_left_alone(self):
         # Soybean ids in a sorghum job must still fail to map, visibly.

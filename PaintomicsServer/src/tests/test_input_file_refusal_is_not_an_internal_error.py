@@ -39,6 +39,7 @@ from src.tests import fake_omics
 
 SERVER_SRC = os.path.join(REPO, "PaintomicsServer", "src")
 UTIL_JS = os.path.join(REPO, "PaintomicsClient", "public_html", "app", "view", "common", "Util.js")
+JOB_CONTROLLER_JS = os.path.join(REPO, "PaintomicsClient", "public_html", "app", "controller", "JobController.js")
 
 
 class _Response(object):
@@ -154,6 +155,30 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         self.assertIn('"Please check your input files"', branch)
         self.assertIn("showReportButton: false", branch)
         self.assertNotIn("retrying in the browser", branch)
+
+
+class ThePreparationDialogWordsItToo(unittest.TestCase):
+    """Region and miRNA files are prepared by their own jobs in Step 1; a refusal
+    of those files reaches showStep1PreparationFailure, not ajaxErrorHandler."""
+
+    def setUp(self):
+        with io.open(JOB_CONTROLLER_JS, encoding="utf-8") as handle:
+            self.source = handle.read()
+
+    def test_a_refused_preparation_is_counted(self):
+        self.assertRegex(self.source, r"function step1FailureIsInputRefusal\(response\)")
+        self.assertRegex(self.source, r"extra\.input_error === true")
+        self.assertRegex(self.source, r"if \(step1FailureIsInputRefusal\(response\)\) \{\s*"
+                                      r"jobView\.step1InputRefusals = ")
+        self.assertRegex(self.source, r"jobView\.failedRequests = 0;\s*jobView\.step1InputRefusals = 0;")
+
+    def test_all_failures_refused_means_no_report_button(self):
+        match = re.search(r"function showStep1PreparationFailure\(jobView\) \{.*?\n\}", self.source, re.S)
+        self.assertTrue(match, "showStep1PreparationFailure is gone")
+        dialog = match.group(0)
+        self.assertIn('"Please check your input files"', dialog)
+        self.assertIn("showReportButton: !refusedInput", dialog)
+        self.assertRegex(dialog, r"refusedInput = .*step1InputRefusals.*>= failed")
 
 
 if __name__ == "__main__":

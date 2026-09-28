@@ -725,10 +725,13 @@ PHYTOZOME_LOCUS_TAGS = {
     "phai": ("pahal.", "PAHAL_"),      # Panicum hallii
 }
 # The gene part of a Phytozome gene id: one token, optionally followed by the
-# annotation version Phytozome appends in its downloads (Sobic.001G215100.v3.2).
-# A transcript (Sobic.001G215100.1) or a protein (.1.p) is a different id and is
+# annotation tag Phytozome appends in its downloads -- Sobic.001G215100.v3.2,
+# Glyma.01G000100.Wm82.a2.v1, Prupe.1G000100.v2.0.a1: tokens that start with a
+# letter, then v<version>. A transcript (Sobic.001G215100.1, .1.v3.2) or a
+# protein (.1.p) is a different id -- its first token is a number -- and is
 # left as uploaded.
-_PHYTOZOME_GENE = re.compile(r"([0-9A-Za-z]+)(?:\.v\d+(?:\.\d+)*)?")
+_PHYTOZOME_GENE = re.compile(
+    r"([0-9A-Za-z]+)(?:(?:\.[A-Za-z][0-9A-Za-z]*)*\.v\d+(?:\.[0-9A-Za-z]+)*)?")
 
 
 def phytozomeToLocusTags(featureList, organism):

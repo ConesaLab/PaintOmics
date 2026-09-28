@@ -100,6 +100,21 @@ function step1FailureReason(response) {
 		.replace(/\n\s*-\s+/g, "<br/>");
 }
 
+/* Whether a pre-processing job was refused for its input files.
+ *
+ * The server marks a refusal of the uploaded files -- its InputFileError, as
+ * opposed to a fault of its own -- with extra.input_error (ServerErrorManager.py).
+ * A body that is not JSON is never one.
+ */
+function step1FailureIsInputRefusal(response) {
+	try {
+		var extra = JSON.parse(response && response.responseText).extra;
+		return !!(extra && extra.input_error === true);
+	} catch (notJson) {
+		return false;
+	}
+}
+
 /* The dialog shown when one or more files could not be prepared.
  *
  * It used to say "Please check the form for more information" and carry none of
@@ -119,10 +134,15 @@ function showStep1PreparationFailure(jobView) {
 	   height follows the text: a 700-character explanation in a 320px box
 	   was clipped (see "a panel clips revealed messages"). */
 	var failed = Math.max(reasons.length, (jobView && jobView.failedRequests) || 0, 1);
-	if (jobView) { jobView.step1FailureReasons = []; }
-	showErrorMessage("Ops!... Something went wrong while preparing your files.", {
+	/* Every failure a refusal of the user's own files: say so, and offer no
+	   Report button -- as ajaxErrorHandler does for the main Step 1 job. */
+	var refusedInput = !!jobView && (jobView.step1InputRefusals || 0) >= failed;
+	if (jobView) { jobView.step1FailureReasons = []; jobView.step1InputRefusals = 0; }
+	showErrorMessage(refusedInput ? "Please check your input files"
+	                              : "Ops!... Something went wrong while preparing your files.", {
 		message: failed + " file(s) could not be prepared.</br></br>" + detail,
-		width: 620, height: Math.min(620, 200 + Math.ceil(detail.replace(/<[^>]*>/g, "").length / 85) * 22)
+		width: 620, height: Math.min(620, 200 + Math.ceil(detail.replace(/<[^>]*>/g, "").length / 85) * 22),
+		showReportButton: !refusedInput
 	});
 }
 
@@ -430,6 +450,7 @@ function JobController() {
 		jobView.pendingRequests = 0;
 		jobView.runningRequests = 0;
 		jobView.failedRequests = 0;
+		jobView.step1InputRefusals = 0;
 
 		var me = this;
 
@@ -585,6 +606,9 @@ function JobController() {
 							//WHAT TO DO IN CASE OF ERROR
 							jobView.failedRequests++;
 							jobView.pendingRequests--;
+							if (step1FailureIsInputRefusal(response)) {
+								jobView.step1InputRefusals = (jobView.step1InputRefusals || 0) + 1;
+							}
 
 							var parsedMessage = step1FailureReason(response);
 							if (parsedMessage) {
