@@ -143,11 +143,14 @@ function resetPaintomicsSession() {
 function showBootFailureMessage(error) {
     console.error(Date.logFormat() + "app.js : the application failed to start.", error);
 
-    showErrorMessage("Oops..Internal error!", {
-        message: "</br>PaintOmics AI could not start with the analysis stored in this browser." +
+    // No leading </br> (it drew an empty first line), and the pointer names the
+    // real menu path; a guest has no storage, so the job link comes first.
+    showErrorMessage("PaintOmics AI could not start", {
+        message: "The analysis stored in this browser could not be restored." +
             "</br><a href='#' onclick='resetPaintomicsSession(); return false;'>Discard the stored analysis and reload</a>" +
-            " - your jobs are kept on the server, so you can reopen them from [b]My Jobs[/b]." +
-            "</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'>administrator</a>.",
+            " &ndash; your jobs are kept on the server, so you can reopen them from their job link or, when signed in," +
+            " from [b]Storage &rsaquo; My files and Jobs[/b]." +
+            "</br>If the error persists, contact us at <a href='mailto:paintomicsai@gmail.com'>paintomicsai@gmail.com</a>.",
         showButton: true
     });
 }
@@ -306,9 +309,9 @@ function Application() {
             console.log("Message already shown, ignoring.");
         } else {
             if (Ext.isIE) {
-                showWarningMessage("Using Internet Explorer?", {message: "PaintOmics AI was developed to work on Internet Explorer, however some features could not work properly.</br>We recommend to work with Chrome or Firefox.", closeTimeout: 5, showButton: true});
+                showWarningMessage("Using Internet Explorer?", {message: "Some features of PaintOmics AI do not work in Internet Explorer.<br>Please use Chrome, Firefox or Edge.", closeTimeout: 5, showButton: true});
             } else if (Ext.isSafari) {
-                showWarningMessage("Using Safari?", {message: "PaintOmics AI was developed to work in Safari, however some features could not work properly.<br>We recommend to work with Chrome or Firefox.", closeTimeout: 5, showButton: true});
+                showWarningMessage("Using Safari?", {message: "Some features of PaintOmics AI may not work as expected in Safari.<br>For the best experience, use Chrome or Firefox.", closeTimeout: 5, showButton: true});
             }
 
             //ADD A COOKIE WITH 2 HOURS EXPIRATION

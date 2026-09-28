@@ -434,9 +434,15 @@
      * file will do -- and nothing else. No tint, no border: a promise is not a
      * verdict.
      */
-    function renderIdle(strip) {
+    function renderIdle(strip, converterOn) {
         strip.className = "pa-format-strip pa-format-idle";
         strip.innerHTML = "";
+        if (converterOn === false) {
+            // No converter on this server, so no offer to make: the section
+            // lead already says each file is checked, and repeating it in
+            // every card put the sentence on screen six times. Empty is hidden.
+            return;
+        }
         var icon = el("span", "pa-format-icon pa-format-icon-ai");
         icon.innerHTML = typeof window.getAIMark === "function" ? window.getAIMark() : "✦";
         strip.appendChild(icon);
@@ -464,7 +470,13 @@
             converterPromise = fetch("ai_provider", { credentials: "same-origin" })
                 .then(function (r) { return r.json(); })
                 .then(function (p) { return !(p && p.success && p.inputConverter === false); })
-                .catch(function () { return true; });
+                .catch(function () { return true; })
+                .then(function (available) {
+                    // Step 1's lead and Help make the same offer in prose; this
+                    // class swaps them to the converter-off wording (main.css).
+                    if (!available) document.documentElement.classList.add("pa-converter-off");
+                    return available;
+                });
         }
         return converterPromise;
     }
@@ -959,6 +971,9 @@
         };
         var strip = hostFor(input);
         if (!strip) return;
+        // Numbers this pick. The verdicts below that wait on converterAvailable()
+        // render only if no later pick of the same slot has started since.
+        var checkSeq = strip.__checkSeq = (strip.__checkSeq || 0) + 1;
         // Whatever this slot used to hold no longer counts against the other
         // cards' widths; the new file is counted once it has passed.
         forgetConditions(input);
@@ -1013,9 +1028,18 @@
             if (read.decodeError) {
                 markBlocked(fieldName, { fieldName: fieldName, fileName: file.name,
                                          input: input, omic: strip.__omic, fixable: false });
-                renderProblem(strip, "err", "The file is not saved as UTF-8.",
-                    "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let the PaintOmics AI agent convert it. " + AI_EXPLAINER,
-                    aiActions(input, file, fieldName));
+                // No offer to convert on a server that would refuse it.
+                converterAvailable().then(function (available) {
+                    if (strip.__checkSeq !== checkSeq) return;
+                    renderProblem(strip, "err", "The file is not saved as UTF-8.",
+                        available
+                            ? "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8), or let the PaintOmics AI agent convert it. " + AI_EXPLAINER
+                            // Not MANUAL_ADVICE: Excel's "Text (Tab delimited)" writes the
+                            // system code page, so following it would fail this check again.
+                            : "Re-save it as UTF-8 (in Excel: Save As → CSV UTF-8, or Unicode Text). " +
+                              "Or ask the server's administrator to switch the converter on.",
+                        available ? aiActions(input, file, fieldName) : []);
+                });
                 return;
             }
 
@@ -1089,9 +1113,14 @@
                     omic: strip.__omic, fixable: false
                 });
             }
-            renderProblem(strip, "err", describeProblems(result),
-                (partial ? "Checked the first few megabytes of a large file. " : "") + aiExplainer(),
-                aiActions(input, file, fieldName));
+            // As above: the manual advice, not a button the server will refuse.
+            converterAvailable().then(function (available) {
+                if (strip.__checkSeq !== checkSeq) return;
+                renderProblem(strip, "err", describeProblems(result),
+                    (partial ? "Checked the first few megabytes of a large file. " : "") +
+                    (available ? aiExplainer() : MANUAL_ADVICE),
+                    available ? aiActions(input, file, fieldName) : []);
+            });
         };
         reader.readAsArrayBuffer(slice);
     }
@@ -1589,8 +1618,14 @@
             if (component.isDestroyed || component.down("[itemId=paFormatHost]")) return;
             var strip = hostForComponent(component);
             if (!strip) return;
-            renderIdle(strip);
-            syncCardHeightFor(component);
+            // Asks first, as check()'s spreadsheet branch does: with the
+            // converter off, "the AI agent converts it here" is a promise the
+            // strip cannot keep. A file picked meanwhile owns the strip.
+            converterAvailable().then(function (available) {
+                if (component.isDestroyed || strip.className !== "pa-format-strip") return;
+                renderIdle(strip, available);
+                syncCardHeightFor(component);
+            });
         };
         if (component.rendered) prime();
         else component.on("afterlayout", prime, null, { single: true, delay: 30 });

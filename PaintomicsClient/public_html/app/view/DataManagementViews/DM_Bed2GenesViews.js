@@ -91,13 +91,13 @@ function DM_Bed2GenesJobView() {
 				xtype: 'box', style: "margin-top:50px;", html:
 				'<div id="about" class="contentbox">' +
 				'   <h2>From Regions to Genes</h2>' +
-				'   <img alt="logorgmatch.png" src="resources/images/logo_rgmatch.png" style="width: 300px;margin:20px;">' +
+				'   <img alt="RGmatch" src="resources/images/logo_rgmatch.png" style="width: 300px;margin:20px;">' +
 				'   <div class="po-tool-intro">' +
 				'       <h4>Match genomic regions to the closest gene </h4> ' +
 				'       <p>This tool is based on RGmatch, a flexible and easy-to-use tool to match genomic regions to the closest gene ' +
 				'       (also transcript or exon), which provides the area of the gene where the region overlaps. The algorithm can ' +
-				'       be applied to any organism as long as the genome annotation is available.</br>' +
-				'       The original tool from developed by P. Furio and S. Tarazona, was adapted to accept quantification values for each genomic region, ' +
+				'       be applied to any organism as long as the genome annotation is available.</p>' +
+				'       <p>The original tool, developed by P. Furio and S. Tarazona, was adapted to accept quantification values for each genomic region, ' +
 				'       so the resulting gene list includes quantification values at gene level. See below for more information about input format.</p>' +
 				'       <p><b>More info:</b></p>'+
 				'       <ul><li><a href="https://conesalab.github.io/PaintOmics/2_1_accepted_input/#matching-regions-to-genes-rgmatch" target="_blank">Matching regions to genes</a></li>' +
@@ -110,22 +110,22 @@ function DM_Bed2GenesJobView() {
 				'   <ul>' +
 				'       <li>A <b>GTF</b> annotation file containing the chromosome positions of all the features to be considered (genes, transcripts and exons).<br>This GTF file must be sorted and should include annotations at exon level, that is, the 3rd column of the GTF must contain "exon" tag.</li>' +
 				'       <li>A <i>modified</i> BED format file containing the regions of interest to be associated to features, followed by quantification values for each region (Figure 1. A). </li>' +
-				'       <li>A list of all the regions which are specially relevant for our experiment (Figure 1. B).</li>' +
+				'       <li>A list of all the regions which are especially relevant to your experiment (Figure 1. B).</li>' +
 				'   </ul>' + 
-				'   <img alt="paintomics_input_figure2.png" src="resources/images/paintomics_input_figure2.png" style="max-width: 700px;margin: auto;display: block;">' +
+				'   <img alt="Figure 1: A, regions file (BED columns plus one value per condition); B, relevant regions file" src="resources/images/paintomics_input_figure2.png" style="max-width: 700px;margin: auto;display: block;">' +
 				// This page's own datasets, matching its "Load example". The
 				// rgmatch zip it replaced is RGmatch's standalone example, not
 				// the region data this converter loads.
-				'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-success btn-right" target="_blank" style="float: none;" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '?pipeline=regions2genes"><i class="fa fa-play"></i> Download example data</a></div>' +
+				'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-default btn-right" target="_blank" style="float: none;" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '?pipeline=regions2genes"><i class="fa fa-download" aria-hidden="true"></i> Download example data</a></div>' +
 				'   <h3>About gene regions</h3>' +
 				'   <p>By default, the region to gene associations will be computed as follows:</p>' +
 				'   <ul>' +
 				'      <li>All possible associations and areas will be reported (aggregation at exon level). This means that if a region overlaps several areas of a given gene, all of them will be returned.</li>' +
 				'      <li>The maximum distance of feature associations will be of 10 kb upstream or downstream.</li>' +
-				'      <li>The TSS area will start 200 nucleotides upstream the TSS and will end at the TSS (see Figure below).</li>' +
-				'      <li>The Promoter area will have a length of 1300 nucleotides. Thus, it will start at 1500 nucleotides upstream the TSS and end at 200 nucleotides upstream the TSS (see Figure below).</li>' +
+				'      <li>The TSS area will start 200 nucleotides upstream of the TSS and will end at the TSS (see Figure below).</li>' +
+				'      <li>The Promoter area will have a length of 1300 nucleotides. Thus, it will start at 1500 nucleotides upstream of the TSS and end at 200 nucleotides upstream of the TSS (see Figure below).</li>' +
 				'   </ul>' +
-				'   <img alt="paintomics_input_figure5.png" src="resources/images/paintomics_input_figure5.png" style="max-width: 625px;margin: auto;display: block;">'+
+				'   <img alt="RGmatch workflow and the gene areas it reports: upstream, promoter, TSS, first exon, intron, gene body, downstream" src="resources/images/paintomics_input_figure5.png" style="max-width: 625px;margin: auto;display: block;">'+
 				'</div>'
 			},{
 				xtype: 'form', bodyCls: "contentbox", cls: "paToolForm", itemId: "omicSubmittingForm",

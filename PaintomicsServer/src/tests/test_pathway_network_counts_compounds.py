@@ -523,8 +523,13 @@ class ClientWiringTest(unittest.TestCase):
     def test_the_help_no_longer_promises_something_it_does_not_do(self):
         with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:
             source = handle.read()
-        start = source.index("Min features in pathway")
-        tip = source[start:start + 900]
+        # The helpTip span now opens the <h5> (so its float lands on the
+        # label's first line), so the tip sits BEFORE the label text. The
+        # "</span>" anchor skips the doc comments that name the slider.
+        end = source.index("</span>Min features in pathway (")
+        start = source.rindex("<h5>", 0, end)
+        tip = source[start:end]
+        self.assertIn('class="helpTip"', tip)
         self.assertNotIn("(genes + compounds) of a pathway found at the input", tip)
 
 

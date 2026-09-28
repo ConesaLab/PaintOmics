@@ -99,7 +99,7 @@ function DM_miRNA2GenesJobView() {
 						xtype: 'box', html:
 						'<div id="about" class="contentbox">' +
 						'   <h2>From miRNAs to Genes</h2>' +
-						'   <img alt="logo_mirna2genes.png" src="resources/images/logo_mirna2genes.png" style="width: 300px;margin:20px;">' +
+						'   <img alt="miRNA2Genes" src="resources/images/logo_mirna2genes.png" style="width: 300px;margin:20px;">' +
 						'   <div class="po-tool-intro">' +
 						'       <h4>Match miRNAs to their target protein-coding genes</h4> ' +
 						'       <p>This tool processes your input miRNA quantification data and assigns the expression values to the known list of target genes for each miRNA. The tool includes many options to customize the resulting gene list. See below for more information.</p>' +
@@ -110,28 +110,28 @@ function DM_miRNA2GenesJobView() {
 						'<div class="contentbox">' +
 						'   <h3>About input data</h3>' +
 						'   <p>In order to compute the associations, <strong>miRNA2Genes</strong> needs the following input data:</p>' +
-						'   <p>Note that there is not any limitation in the identifiers or names for miRNAs or target gene. <br>The only requirement for the input data is that both input files use the same convention for miRNAs ID/names (e.g. if quantification file uses "mmu-miR-XXX" as naming convention, then the miRNA->targets file must use the same names.</p>' +
 						'   <ul>' +
 						'     <li>A <strong>tabulated</strong> file containing the quantification values for all the miRNAs (Figure 1.A).</li>' +
-						'     <li>A <strong>tabulated</strong> file containing the list of <i>miRNA --> target gene</i> associations  (Figure 1.C)</li>' +
+						'     <li>A <strong>tabulated</strong> file containing the list of <i>miRNA &rarr; target gene</i> associations (Figure 1.C).</li>' +
 						'   </ul>' +
-						'   <p>Additionally, two secondary files can be provided for a more accurate results.</p>' +
+						'   <p>Two optional files can be added for more accurate results.</p>' +
 						'   <ul>' +
-						'     <li>A list of relevant miRNAs, usually the differentially expressed miRNAs (Figure 1.C).</li>' +
-						'     <li>A mRNA-Seq quantification file that will be used for filtering the matched targets based on the correlation between gene expression and miRNA expression.<br>Naming convention must be the same that the used in the miRNA--> target gene file (Figure 1.D).</li>' +
+						'     <li>A list of relevant miRNAs, usually the differentially expressed miRNAs (Figure 1.B).</li>' +
+						'     <li>A mRNA-Seq quantification file that will be used for filtering the matched targets based on the correlation between gene expression and miRNA expression.<br>Its gene names must match those in the miRNA &rarr; target file (Figure 1.D).</li>' +
 						'   </ul>' +
-						'   <img alt="paintomics_input_figure5b.png" src="resources/images/paintomics_input_figure5b.png" style="max-width: 800px;margin: auto;display: block;">' +
+						'   <p>Identifiers are not restricted: any miRNA and gene naming works, as long as the quantification and miRNA &rarr; target files use the same convention (for example, if the quantification file uses "mmu-miR-XXX", the miRNA &rarr; target file must use the same names).</p>' +
+						'   <img alt="Figure 1: A, miRNA quantification; B, relevant miRNAs; C, miRNA-to-target associations; D, gene expression" src="resources/images/paintomics_input_figure5b.png" style="max-width: 800px;margin: auto;display: block;">' +
 						// Scoped to this converter's own datasets, which is what the
 						// "Load example" button beside it runs. Previously a static
 						// zip that no longer matched either.
-						'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-success btn-right" target="_blank" style="float: none;" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '?pipeline=mirna2genes"><i class="fa fa-play"></i> Download example data</a></div>' +
+						'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-default btn-right" target="_blank" style="float: none;" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '?pipeline=mirna2genes"><i class="fa fa-download" aria-hidden="true"></i> Download example data</a></div>' +
 						'   <h3>About multiple target genes</h3>' +
 						'   <p>Usually, for each miRNA there are numerous known target genes. However, the presence of a miRNA does not mean that a certain target gene is being regulated for that miRNA. Hence, it is necessary to discriminate those genes that may be affected by the action of a miRNA from the complete list of potential target genes for that miRNA. Assuming that all files explained above are provided, miRNA2Genes includes the following selection strategies.</p>' +
 						'   <ul>' +
 						'     <li>If the list of relevant miRNAs is provided, you can choose between reporting the target genes for all miRNAs in the input files, or reporting only the target genes for the relevant miRNAs (e.g. the DE miRNAs), ignoring the rest.</li>' +
 						'     <li>If the transcriptomics quantification file is provided, reported target genes can be discriminated based on the existing correlation between the quantification for a miRNA and the codified by target genes. Usually, it is expected a negative correlation between miRNA and target genes being regulated, and the usage of a cutoff for correlation value determines the selection of the genes that are finally reported.</li>' +
 						'   </ul>' +
-						'   <img alt="figure1apng.png" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+
+						'   <img alt="Worked example: targets kept or dropped by the Kendall correlation between miRNA and target expression against a cutoff" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+
 						'</div>'
 					},{
 						xtype: 'form', bodyCls: "contentbox", cls: "paToolForm", itemId: "omicSubmittingForm",
