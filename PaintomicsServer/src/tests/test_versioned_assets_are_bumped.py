@@ -133,8 +133,11 @@ PUBLISHED = {
     # error get an href so they take focus, focus starts on Close, and Tab is kept
     # inside the dialog by a capture-phase handler -- ExtJS's own modal wrap calls
     # focus() on a raw DOM node, throws, and never wraps.
+    # v=3.3 adds ajaxWithStallTimeout on top of v=3.2: the job status poll's
+    # 65 s limit counts from the last byte received, so a large answer on a
+    # slow link finishes (PR #183).
     "app/view/common/Util.js": (
-        "3.2", "5ed35d928c2754572a21c03d77ded0d644e017e22c40cb387df1673327267b67"),
+        "3.3", "581b1b1e1a9da9761842ecd5d23974e8c157a326a4c8c0ba89d6c33f7f82cb25"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
