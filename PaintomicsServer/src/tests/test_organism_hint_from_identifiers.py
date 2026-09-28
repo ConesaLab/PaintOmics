@@ -98,6 +98,13 @@ class PatternLayerTest(unittest.TestCase):
             ("FOXG_00881", "FOXG_02128", "FOXG_11296", "FOXG_02529", "FOXG_08326"): ("fox",),
             ("FGSG_00903", "FGSG_01417", "FGSG_09042", "FGSG_03981", "FGSG_09739"): ("fgr",),
             ("SPBC15C4.01c", "SPAC23C4.06c", "SPAC227.15", "SPBPB2B2.19c", "SPBC6B1.02"): ("spo",),
+            # The sorghum DESeq2 table of 2026-09-26 (Phytozome gene ids).
+            ("Sobic.001G215100", "Sobic.001G262200", "Sobic.007G085966", "Sobic.007G070300",
+             "Sobic.009G242200"): ("sbi",),
+            ("Prupe.1G000100", "Prupe.1G000200", "Prupe.2G123400", "Prupe.8G000500",
+             "Prupe.3G100900"): ("pper",),
+            ("Pahal.1G000100", "Pahal.2G000200", "Pahal.9G123400", "Pahal.5G000500",
+             "Pahal.3G100900"): ("phai",),
         }
         for identifiers, codes in cases.items():
             match = od.matchPattern(list(identifiers))

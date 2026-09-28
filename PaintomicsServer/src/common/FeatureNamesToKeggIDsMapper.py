@@ -710,6 +710,52 @@ def stripOrganismPrefix(featureList, organism):
     return renamed
 
 
+# Phytozome and Ensembl Plants publish these genomes' gene models under two
+# names: JGI's own (Sobic.001G215100) and the ENA locus tag the same model was
+# submitted under (SORBI_3001G215100). The species databases hold the Ensembl
+# name, so a table straight out of a Phytozome pipeline mapped none of its genes:
+# 2026-09-26, paintomics.org, a sorghum DESeq2 table of Sobic.* ids on sbi found
+# 0 of 20 in the xref, and 20 of 20 once written as SORBI_3*. Listed only where
+# the species database was checked to hold the locus-tag form (2026-09-29), with
+# the Phytozome prefix in lower case.
+PHYTOZOME_LOCUS_TAGS = {
+    "sbi": ("sobic.", "SORBI_3"),      # Sorghum bicolor v3
+    "gmx": ("glyma.", "GLYMA_"),       # Glycine max Wm82.a2
+    "pper": ("prupe.", "PRUPE_"),      # Prunus persica v2
+    "phai": ("pahal.", "PAHAL_"),      # Panicum hallii
+}
+# The gene part of a Phytozome gene id: one token, optionally followed by the
+# annotation version Phytozome appends in its downloads (Sobic.001G215100.v3.2).
+# A transcript (Sobic.001G215100.1) or a protein (.1.p) is a different id and is
+# left as uploaded.
+_PHYTOZOME_GENE = re.compile(r"([0-9A-Za-z]+)(?:\.v\d+(?:\.\d+)*)?")
+
+
+def phytozomeToLocusTags(featureList, organism):
+    """
+    Rename, in place, every feature whose name is a Phytozome gene id of this
+    organism (see PHYTOZOME_LOCUS_TAGS) to the locus tag the species database
+    stores. Matched case-insensitively -- Mercator writes the ids in lower
+    case -- and written in the database's upper case. Anything else, including
+    another organism's Phytozome ids, is left exactly as uploaded.
+
+    @returns {Integer} how many features were renamed
+    """
+    prefix, locusTag = PHYTOZOME_LOCUS_TAGS.get((organism or "").lower(), (None, None))
+    if prefix is None:
+        return 0
+    renamed = 0
+    for feature in featureList:
+        name = feature.getName()
+        if not isinstance(name, str) or name[:len(prefix)].lower() != prefix:
+            continue
+        gene = _PHYTOZOME_GENE.fullmatch(name[len(prefix):])
+        if gene:
+            feature.setName(locusTag + gene.group(1).upper())
+            renamed += 1
+    return renamed
+
+
 def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
     """
     This function is used to query the database in different threads.
@@ -780,8 +826,10 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # Only the lookup key loses it: the match count and the unmatched list
         # keep the name as uploaded, which is what Job counts input features
         # by, or "mmu:14679" beside "14679" counted one mapped gene as unmapped.
+        # Phytozome gene ids are renamed the same way, for the same reason.
         uploadedNames = [feature.getName() for feature in featureList]
         stripOrganismPrefix(featureList, organism)
+        phytozomeToLocusTags(featureList, organism)
 
         # Extract names from features
         featureNames = set(map(attrgetter('name'), featureList))
@@ -956,12 +1004,15 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                         # aborted the whole mapping. Databases redirected to a borrowed
                         # symbol table fall back to the input name's own symbol (its xref
                         # group carries one even when the feature ID's does not), and only
-                        # then to the raw input name.
+                        # then to the raw input name -- as uploaded, not the lookup key a
+                        # rename above made of it: sbi has KEGG symbols for 164 genes, so
+                        # a sorghum table would otherwise show SORBI_3001G212000 where the
+                        # user's file says Sobic.001G212000.
                         cachedSymbols = cacheSymbolsIDS.get(featureID)
                         if not cachedSymbols and databaseConvertion_name in nameKeyedSymbolDatabases:
                             cachedSymbols = cacheSymbolsIDS.get(originalName)
                         if not cachedSymbols:
-                            cachedSymbols = [featureClone.getName()]
+                            cachedSymbols = [uploadedName]
                         featureName = cachedSymbols[0]
 
                         featureClone.setName(featureName)

@@ -87,8 +87,11 @@ class _Response(object):
 
 def _runHandler(mailBehaviour, calls, form=None):
     """Drive the real handler with a stubbed DAO and a stubbed mailer."""
+    # Named the way the dialog names it: a request without an organism is
+    # refused before it is stored (test_organism_request_rejects_installed).
     form = form or {"type": "specie_request",
                     "message": "Please add Fusarium oxysporum",
+                    "specie": "Fusarium oxysporum", "specieCode": "fox",
                     "fromEmail": "requester@example.org",
                     "fromName": "A Researcher"}
 

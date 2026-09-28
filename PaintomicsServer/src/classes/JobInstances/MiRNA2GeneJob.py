@@ -29,6 +29,7 @@ from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
 from src.servlets.DataManagementServlet import copyFile
 from src.common.Util import ensure_utf8
+from src.common.ServerErrorManager import InputFileError
 from src.common.bioscripts.miRNA2Target import run as run_miRNA2Target
 
 from os import path as os_path, mkdir as os_mkdir
@@ -244,7 +245,7 @@ class MiRNA2GeneJob(Job):
                 nConditions, error = self.validateFile(RNAdataInput, nConditions, error)
 
         if error != "":
-            raise Exception("Errors detected in input files, please fix the following issues and try again:" + error)
+            raise InputFileError("Errors detected in input files, please fix the following issues and try again:" + error)
 
         return True
 

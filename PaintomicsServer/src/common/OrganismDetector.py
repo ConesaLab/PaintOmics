@@ -153,6 +153,11 @@ _PATTERN_TABLE = [
     (r"Solyc\d{2}g\d{6}(?:\.\d+)?", ("sly",), "Solanum lycopersicum"),
     (r"Glyma\.?\d{2}[Gg]\d{6}", ("gmx",), "Glycine max"),
     (r"Potri\.\d{3}G\d{6}", ("pop",), "Populus trichocarpa"),
+    # Phytozome gene ids the mapper renames to their locus tags
+    # (FeatureNamesToKeggIDsMapper.PHYTOZOME_LOCUS_TAGS).
+    (r"Sobic\.\d{3}G\d{6}", ("sbi",), "Sorghum bicolor"),
+    (r"Prupe\.\dG\d{6}", ("pper",), "Prunus persica"),
+    (r"Pahal\.\dG\d{6}", ("phai",), "Panicum hallii"),
     (r"Cre\d{2}\.g\d{6}", ("cre",), "Chlamydomonas reinhardtii"),
     (r"FOXG_\d{5}", ("fox",), "Fusarium oxysporum"),
     (r"FGSG_\d{5}", ("fgr",), "Fusarium graminearum"),

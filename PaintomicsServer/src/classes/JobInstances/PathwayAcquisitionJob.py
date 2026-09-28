@@ -31,6 +31,7 @@ from zipfile import ZipFile as zipFile
 from subprocess import STDOUT, CalledProcessError
 
 from src.common.Util import unifyAndSort
+from src.common.ServerErrorManager import InputFileError
 
 from collections import defaultdict, Counter
 from itertools import chain
@@ -577,7 +578,7 @@ class PathwayAcquisitionJob(Job):
 
         if error != "":
             logging.info("VALIDATING ERRORS. RAISING EXCEPTION. Error: " + error)
-            raise Exception(
+            raise InputFileError(
                 "[b]Errors detected in input files, please fix the following issues and try again:[/b][br]" + error)
 
         return True

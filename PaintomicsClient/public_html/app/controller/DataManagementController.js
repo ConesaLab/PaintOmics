@@ -404,7 +404,16 @@ this.requestNewSpecieHandler = function(){
 				cls: 'po-dialog-primary',
 				handler : function() {
 					var combo = messageDialog.queryById('speciesCombobox');
-					var specie = combo.getValue();
+					/* allowBlank alone never stopped the button: two requests of
+					   2026-09-26 reached us as "Specie: null", comments and no
+					   organism, so there was nothing to install or answer. The raw
+					   text covers a name typed and not yet committed as the value. */
+					var specie = String(combo.getValue() || combo.getRawValue() || "").trim();
+					if (specie === "") {
+						combo.markInvalid("Choose or type the organism you need.");
+						combo.focus();
+						return;
+					}
 					/* valueField is the name, so the code comes from the row --
 					   when there is one: the field is free text for organisms
 					   KEGG lists under a name the file does not. */
@@ -413,8 +422,14 @@ this.requestNewSpecieHandler = function(){
 					var already = installedOrganismFor(specie, specieCode);
 					if (already !== null) {
 						var hint = messageDialog.queryById('installedHint');
+						/* The second sentence is for the visitor whose organism is
+						   here but whose identifiers are not: the sorghum user of
+						   2026-09-26 had Phytozome ids for an installed sbi, found no
+						   way to say so here, and sent the request with no organism. */
 						hint.update('<i class="fa fa-info-circle"></i> ' + Ext.String.htmlEncode(already.name) +
-							' is already installed &mdash; choose it in the Organism field of the form. No request is needed.');
+							' is already installed &mdash; choose it in the Organism field of the form. No request is needed. ' +
+							'If your identifiers do not map to it, tell us which ones your files use through ' +
+							'<b>Contact by email</b> in the menu.');
 						hint.show();
 						return;
 					}

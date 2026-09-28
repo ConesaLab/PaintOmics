@@ -25,7 +25,7 @@ from time import time
 
 from collections import defaultdict
 
-from src.common.ServerErrorManager import handleException
+from src.common.ServerErrorManager import handleException, InputFileError
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common import JobProgress
@@ -394,7 +394,7 @@ def pathwayAcquisitionStep1_PART2(jobInstance, userID, exampleMode, RESPONSE):
         # advice about their file, not as a bare codec error.
         handleException(
             RESPONSE,
-            Exception("[b]One of the uploaded files is not UTF-8 encoded[/b]"
+            InputFileError("[b]One of the uploaded files is not UTF-8 encoded[/b]"
                       "[br]Please save your files as UTF-8 text (in Excel: "
                       "Save As → CSV UTF-8, then convert to tab-delimited) "
                       "and submit again. (" + str(ex) + ")"),
