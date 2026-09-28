@@ -777,6 +777,10 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         # stores the bare gene (FOXG_00001), so the exact lookup below matched
         # none of them: on 2026-09-16 a fox job of 16,248 such identifiers was
         # refused with "matched 0". Drop the prefix for THIS organism only.
+        # Only the lookup key loses it: the match count and the unmatched list
+        # keep the name as uploaded, which is what Job counts input features
+        # by, or "mmu:14679" beside "14679" counted one mapped gene as unmapped.
+        uploadedNames = [feature.getName() for feature in featureList]
         stripOrganismPrefix(featureList, organism)
 
         # Extract names from features
@@ -905,7 +909,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
         localMatched = []
         localNotMatched = []
 
-        for feature in featureList:
+        for feature, uploadedName in zip(featureList, uploadedNames):
             originalName = feature.getName()
             featureMatchedInAnyDB = False
             # Track featureIDs already cloned for THIS feature across the database
@@ -929,10 +933,9 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                     # Increase the counter on the matching database, and keep track of the total
                     # counting only once the features. In this scenario the feature will only have one omic value
                     # containing the original name.
-                    matches[databaseConvertion_name].add(
-                        feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
-                    matches["Total"].add(
-                        feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else feature.getName())
+                    matchKey = feature.getOmicsValues()[0].getOriginalName() if featureEnrichment else uploadedName
+                    matches[databaseConvertion_name].add(matchKey)
+                    matches["Total"].add(matchKey)
 
                     for featureID in set(featureIDs):
                         if featureID in seenIDs:
@@ -966,6 +969,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
 
             # Only add to notMatchedFeatures if it didn't match in ANY database
             if not featureMatchedInAnyDB:
+                feature.setName(uploadedName)   # _unmatched.txt shows what was uploaded
                 localNotMatched.append(feature)
             else:
                 # Track that this feature was matched (for deduplication if needed)

@@ -86,12 +86,21 @@ def mongoAvailable():
 @unittest.skipUnless(mongoAvailable(), "local MongoDB with mmu not available")
 class PrefixedIdsMapLikeBareIds(unittest.TestCase):
 
-    def mapNames(self, names):
-        matched, notMatched, found = [], [], []
+    def mapNames(self, names, found=None):
+        matched, notMatched, found = [], [], found if found is not None else []
         mapFeatureIdentifiers("TEST" + uuid.uuid4().hex[:8], ORGANISM, ["KEGG"],
                               genes(names), matched, notMatched, found, "genes")
         flatten = lambda slots: [f for slot in slots for f in (slot if isinstance(slot, list) else [slot])]
         return flatten(matched), flatten(notMatched)
+
+    def test_counts_and_the_unmatched_list_keep_the_uploaded_names(self):
+        # Job counts input features by the name as uploaded; counting matches
+        # by the stripped name made "mmu:14679" beside "14679" one mapped gene
+        # short, and _unmatched.txt listed ids the user never uploaded.
+        found = []
+        _, notMatched = self.mapNames(["mmu:14679", "14679", "mmu:99999999"], found)
+        self.assertEqual(sorted(found[0]["KEGG"]), ["14679", "mmu:14679"])
+        self.assertEqual([f.getName() for f in notMatched], ["mmu:99999999"])
 
     def test_kegg_notation_maps_to_the_same_genes_as_the_bare_ids(self):
         bareMatched, bareNotMatched = self.mapNames(["14679", "12544"])
