@@ -165,7 +165,7 @@ function PA_Step2JobView() {
 			html: '<div id="about">' +
 			// Was title=" ": the icon rendered, invited a hover, and showed an
 			// empty tooltip.
-			'  <h2 >Data distribution summary <span class="helpTip" title="How each omic\'s values are spread across your samples. The box is the interquartile range, the red line the median, and the whiskers reach the 10th and 90th percentiles - the same two percentiles the heatmap colour scale uses by default."></h2>' +
+			'  <h2 >Data distribution summary <span class="helpTip" title="How each omic\'s values are spread across your samples. The box is the interquartile range, the red line the median, the whiskers reach the lowest and highest values within 1.5 × IQR of the box, and the two vertical lines mark the 10th and 90th percentiles - the same two the heatmap colour scale uses by default."></h2>' +
 			'  <p>' +
 			'    By default, percentiles 10 and 90 set the reference range for the heatmap colours. You can change this in the pathway view: open <b>Settings</b> in the toolbar and edit <b>Reference values</b>.<br>' +
 			// This figure replaces settingsbutton.png, a 2022 screenshot of the
@@ -177,7 +177,7 @@ function PA_Step2JobView() {
 			// Order matches PA_Step4Views' secondTopToolbar; the ring marks the
 			// Settings button the caption above is pointing at.
 			'		 <div class="paToolbarMiniature" aria-hidden="true">' +
-			'			<span class="button btn-danger paMiniatureTarget"><i class="fa fa-wrench"></i> Settings</span>' +
+			'			<span class="button paMiniatureTarget"><i class="fa fa-wrench"></i> Settings</span>' +
 			'			<span class="button btn-info"><i class="fa fa-search"></i> Search</span>' +
 			'			<span class="button btn-secondary"><i class="fa fa-th"></i> Show Heatmap</span>' +
 			'			<span class="button btn-primary"><i class="fa fa-sitemap"></i> Show Pathway</span>' +
@@ -210,12 +210,18 @@ function PA_Step2JobView() {
 
 			databases.forEach(function(dbname) {
 				var matchedCount = matched.perDatabase[dbname];
+				// An omic with no input features must not divide by zero.
+				var pct = (totalFeatures > 0) ? Math.round(matchedCount / totalFeatures * 100) : 0;
 
 				matchingPerDB[dbname] = $.extend(matchingPerDB[dbname] || {}, {
 					[omicName]: {
 						"matched": matchedCount,
-						// An omic with no input features must not divide by zero.
-						"percentage": (totalFeatures > 0) ? Math.ceil(matchedCount / totalFeatures * 100) : 0
+						"percentage": pct,
+						// Rounded, not Math.ceil'd: ceil printed 2,363 of 2,384 as
+						// 100% beside a caption reading 99%. The two ends say <1 / >99
+						// so a partial count never reads as none or as all.
+						"label": (matchedCount > 0 && pct === 0) ? "&lt;1"
+							: (matchedCount < totalFeatures && pct === 100) ? "&gt;99" : pct
 					}});
 			});
 
@@ -294,7 +300,7 @@ function PA_Step2JobView() {
 				items: [{
 					html: '<h2 style="width: 100%;">Configure the number of clusters</h2>'
 				}, {
-					html: '<p>In the next step PaintOmics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.<br><br></p>'
+					html: '<p>In the next step PaintOmics will calculate the clusters present in the data provided for each omic, using k-means with either an automatically calculated number of clusters or the ones you define here. You will also be able to modify them there by selecting individual omics in the network.</p>'
 				},{
 					xtype: 'form',
 					maxWidth: 600,
@@ -361,14 +367,15 @@ function PA_Step2JobView() {
 					   at a glance and gives the card's width something to do. The
 					   figures stay - the bar is the second reading, not the only one.
 
-					   Clamped: the percentage is Math.ceil'd upstream, so a fully
+					   Clamped: the percentage is rounded upstream, so a fully
 					   matched omic can arrive as 100 and nothing above it should
-					   ever draw past the track. */
+					   ever draw past the track. The bar reads `percentage`; the
+					   figure reads `label`, which says <1 / >99 at the ends. */
 					var share = Math.max(0, Math.min(100, Number(cell.percentage) || 0));
 					return '<td><span class="paDbCell">' +
 					'<span class="paDbBar"><i style="width:' + share + '%"></i></span>' +
 					'<span class="paDbCount">' + Number(cell.matched || 0).toLocaleString() + '</span>' +
-					'<span class="paDbPct">' + cell.percentage + '%</span>' +
+					'<span class="paDbPct">' + (cell.label !== undefined ? cell.label : cell.percentage) + '%</span>' +
 					'</span></td>';
 				}).join('') + '</tr>';
 			}).join('');
@@ -576,6 +583,11 @@ function PA_Step2JobView() {
 					$('#download_mapping_file').click(function() {
 						application.getController("DataManagementController").downloadFilesHandler(me, "mapping_results_" + me.getModel().getJobID() + ".zip", "job_result", me.getModel().getJobID());
 					});
+					// The centre panel is one scroller for every step, so without
+					// this Step 2 opened at Step 1's offset (1207 px after the
+					// example), on the per-omic charts rather than its first card.
+					// Step 1 resets itself the same way.
+					$("#mainViewCenterPanel").scrollTop(0);
 					me.initAISuggestButton();
 					initializeTooltips(".helpTip");
 					me.initCompoundsPanelHandlers(this.queryById("compoundsPanelsContainer"));
@@ -1103,7 +1115,7 @@ function PA_Step2JobView() {
 				message += "</ul>";
 
 				showWarningMessage("Compound already selected", {
-					message : "This compound has been already selected in other box. Duplicated compounds may affect to the results in next stages.<br>" + message,
+					message : "This compound is already ticked on another card. Counting it twice can skew the results of the next steps.<br>" + message,
 					showButton : true
 				});
 			}
@@ -1150,10 +1162,10 @@ function PA_Step2JobView() {
 				otherCompoundsPanel.html(this.items[setIndex].renderOtherCompounds());
 			}
 			card.addClass("expandedBox");
-			button.addClass("visible").html('<i class="fa fa-chevron-down"></i> ' + button.attr("data-label"));
+			button.attr("aria-expanded", "true").addClass("visible").html('<i class="fa fa-chevron-down"></i> ' + button.attr("data-label"));
 		} else {
 			card.removeClass("expandedBox");
-			button.removeClass("visible").html('<i class="fa fa-chevron-right"></i> ' + button.attr("data-label"));
+			button.attr("aria-expanded", "false").removeClass("visible").html('<i class="fa fa-chevron-right"></i> ' + button.attr("data-label"));
 		}
 
 		otherCompoundsPanel.toggle(!isVisible);
@@ -1929,6 +1941,13 @@ function renderCompoundCandidate(compound, aiPickedID) {
 	var compoundID = compound.getID();
 	var safeID = Ext.String.htmlEncode(compoundID);
 	var safeName = Ext.String.htmlEncode(compound.getName());
+	// KEGG's name list repeats synonyms ("Adenosine, Adenosine"), which pushed
+	// long names into an ellipsis. Shown once each; data-compound-name keeps
+	// the raw list the selection logic matches on. Plain JS: the test stub
+	// provides only Ext.String.
+	var safeDisplayName = Ext.String.htmlEncode(String(compound.getName()).split(", ").filter(function (part, i, all) {
+		return all.indexOf(part) === i;
+	}).join(", "));
 	// Marks the one candidate the AI chose, so a card with four ticked-looking
 	// rows still says WHICH row the machine is responsible for.
 	var picked = (aiPickedID && compoundID === aiPickedID) ? " aiPickedCandidate" : "";
@@ -1938,8 +1957,8 @@ function renderCompoundCandidate(compound, aiPickedID) {
 	// which one they are ticking.
 	return '' +
 	'<div class="metaboliteCompound' + picked + '" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '">' +
-	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '">' +
-	'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + encodeURIComponent(compoundID) + '" target="_blank">' + safeName + '</a>' +
+	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '" aria-label="' + safeDisplayName + ' (' + safeID + ')">' +
+	'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + encodeURIComponent(compoundID) + '" target="_blank">' + safeDisplayName + '</a>' +
 	'  <code class="metaboliteId">' + safeID + '</code>' +
 	'</div>';
 }
@@ -2123,7 +2142,7 @@ function PA_Step2CompoundSetView() {
 		if (otherCompounds.length > 0) {
 			var more = countLabel(otherCompounds.length, "more match", "more matches");
 			html +=
-			'  <a class="showOtherCompoundsButton" href="javascript:void(0)" data-label="' + more + '">' +
+			'  <a class="showOtherCompoundsButton" href="javascript:void(0)" role="button" aria-expanded="false" data-label="' + more + '">' +
 			'<i class="fa fa-chevron-right"></i> ' + more + '</a>' +
 			'  <div class="otherCompoundsPanel" style="display: none;"></div>';
 		}
@@ -2167,8 +2186,22 @@ function mappingSummaryCaption(mappedFeatures, unmappedFeatures) {
 	var total = mapped + unmapped;
 
 	// An omic with no input features at all must not divide by zero.
-	var mappedPct = (total > 0) ? Math.round(mapped / total * 100) : 0;
-	var unmappedPct = (total > 0) ? (100 - mappedPct) : 0;
+	var p = (total > 0) ? Math.round(mapped / total * 100) : 0;
+	var q = (total > 0) ? (100 - p) : 0;
+	// 33 of 8,618 rounds to 0%, and printed "33 unmapped (0%)" under
+	// "8,585 mapped (100%)". A count that is neither none nor all says <1 / >99;
+	// the unmapped share stays the complement, so the pair still sums to 100.
+	var guard = function(n, pct) {
+		if (n > 0 && pct === 0) {
+			return "&lt;1";
+		}
+		if (n < total && pct === 100) {
+			return "&gt;99";
+		}
+		return String(pct);
+	};
+	var mappedPct = guard(mapped, p);
+	var unmappedPct = guard(unmapped, q);
 
 	var row = function(color, count, label, percentage) {
 		return '<div>' +
@@ -2204,14 +2237,21 @@ function mappingSummaryCaption(mappedFeatures, unmappedFeatures) {
 */
 function renderMappingDonut(divName, omicName, mapped, unmapped, note) {
 	$('#' + divName + 'mapping_summary_plot').highcharts({
-		chart: {type: 'pie', height: 195},
+		// Highcharts defaults to Lucida Grande, a wider face than the card
+		// title and the HTML caption directly around the chart.
+		chart: {type: 'pie', height: 195, style: {fontFamily: 'inherit'}},
 		title: {
 			text: "Mapped/Unmapped features",
 			style: {"fontSize": "13px"}
 		},
 		credits: {enabled: false},
 		tooltip: {
-			pointFormat: '{series.name}: <b>{point.y}</b><br/><br/>{point.options.note}<br/>'
+			// Grouped like the caption under the ring ("11,296"), not with
+			// Highcharts' default space; no blank lines when there is no note.
+			pointFormatter: function () {
+				return Ext.String.htmlEncode(this.series.name) + ': <b>' + this.y.toLocaleString() + '</b>' +
+					(this.options.note ? '<br/><br/>' + this.options.note : '');
+			}
 		},
 		plotOptions: {
 			pie: {
@@ -2264,7 +2304,7 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 		this.component = Ext.widget({
 			xtype: "box",
 			cls: "contentbox omicSummaryBox",
-			html: '<h3 class = "metaboliteTitle" style="display:inline-block;margin-right: 20px;">' + this.omicName + '</h3>' +
+			html: '<h3 class = "metaboliteTitle" style="display:inline-block;margin-right: 20px;">' + Ext.String.htmlEncode(this.omicName) + '</h3>' +
 			'<div>' +
 			'  <div style="height:195px; overflow:hidden; width:50%; float: right;" id="' + divName + 'data_dstribution_plot"></div>' +
 			// The chart keeps its fixed height; the caption sits below it inside
@@ -2294,8 +2334,11 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							if ("Total" in mappedInfo) {
 								mappedFeatures = mappedInfo["Total"];
 
-								added_info = Object.keys(mappedInfo).map(function(db) {
-									return("• " + db + ": " + mappedInfo[db]);
+								// "Total" is the headline number already; list databases only.
+								added_info = Object.keys(mappedInfo).filter(function(db) {
+									return db !== "Total";
+								}).map(function(db) {
+									return("• " + db + ": " + Number(mappedInfo[db]).toLocaleString());
 								}).join('<br />');
 							} else {
 								mappedFeatures = mappedInfo[Object.keys(mappedInfo)[0]];
@@ -2343,7 +2386,8 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 						chart: {
 							type: 'boxplot',
 							height: 195,
-							inverted: true
+							inverted: true,
+							style: {fontFamily: 'inherit'}
 						},
 						credits: {enabled: false},
 						title: {
@@ -2362,19 +2406,21 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 							labels: {
 								enabled: false
 							},
+							// No labels on this axis, so its tick was a stub pointing at nothing.
+							tickLength: 0,
 							title: null
 						},
 						tooltip: {
 							formatter: function() {
-								var text = '<span style="font-size:9px; text-align: right;"><em>' + me.omicName + '</em><br/>';
+								var text = '<span style="font-size:9px; text-align: right;"><em>' + Ext.String.htmlEncode(me.omicName) + '</em><br/>';
 								text += "<b>Min (outliers inc.): </b>" + (me.dataDistribution[2]).toFixed(4) + '<br/>';
-								text += "<b>Min value    : </b>" + (this.point.low / 10).toFixed(4) + '<br/>';
+								text += "<b>Lower whisker: </b>" + (this.point.low / 10).toFixed(4) + '<br/>';
 								text += "<b>Percentile 10: </b>" + (me.dataDistribution[3]).toFixed(4) + '<br/>';
 								text += "<b>Q1           : </b>" + (this.point.q1 / 10).toFixed(4) + '<br/>';
 								text += "<b>Median       : </b>" + (this.point.median / 10).toFixed(4) + '<br/>';
 								text += "<b>Q3           : </b>" + (this.point.q3 / 10).toFixed(4) + '<br/>';
 								text += "<b>Percentile 90: </b>" + (me.dataDistribution[7]).toFixed(4) + '<br/>';
-								text += "<b>Max value    : </b>" + (this.point.high / 10).toFixed(4) + '<br/>';
+								text += "<b>Upper whisker: </b>" + (this.point.high / 10).toFixed(4) + '<br/>';
 								text += "<b>Max (outliers inc.): </b>" + (me.dataDistribution[8]).toFixed(4) + '<br/></span>';
 
 								return text;
@@ -2391,20 +2437,31 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 								value: me.dataDistribution[3] * 10,
 								color: '#001dff',
 								width: 1,
-								dashstyle: "DashDot",
+								dashStyle: "DashDot",
+								// Level and beside the line rather than the default
+								// rotated along it; #595959 is 7:1 on white, where
+								// 'gray' was 3.95:1. dark.css restates the ink.
 								label: {
 									text: 'p10',
-									align: 'center',
-									style: {
-										color: 'gray'
-									}
+									rotation: 0,
+									textAlign: 'right',
+									x: -4,
+									y: 12,
+									style: {color: '#595959', fontSize: '11px'}
 								}
 							}, {
 								value: me.dataDistribution[7] * 10,
 								color: '#001dff',
 								width: 1,
-								dashstyle: "DashDot",
-								label: {text: 'p90',align: 'center', style: {color: 'gray'}}
+								dashStyle: "DashDot",
+								label: {
+									text: 'p90',
+									rotation: 0,
+									textAlign: 'left',
+									x: 4,
+									y: 12,
+									style: {color: '#595959', fontSize: '11px'}
+								}
 							}]
 						},
 						//   0        1       2    3    4    5     6,   7   8      9        10
@@ -2418,7 +2475,18 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 						}],
 					});
 
-
+					// Both charts were sized before the card reached its final
+					// flex width, and Highcharts only reflows on window resize,
+					// so each SVG ran 20-45 px past its overflow:hidden column
+					// and clipped the right-hand axis labels.
+					setTimeout(function() {
+						['mapping_summary_plot', 'data_dstribution_plot'].forEach(function(s) {
+							var c = $('#' + divName + s).highcharts();
+							if (c) {
+								c.reflow();
+							}
+						});
+					}, 0);
 				}
 			}
 		});

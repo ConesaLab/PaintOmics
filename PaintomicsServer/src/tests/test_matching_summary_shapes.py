@@ -161,7 +161,7 @@ class HelperBehaviourTest(unittest.TestCase):
         for dbname, matched in result["perDatabase"].items():
             with self.subTest(database=dbname):
                 total = unmapped + result["totalMapped"]
-                percentage = -(-matched * 100 // total)  # Math.ceil
+                percentage = int(matched * 100 / total + 0.5)  # Math.round
                 self.assertEqual(matched, 51)
                 self.assertEqual(percentage, 88)
 

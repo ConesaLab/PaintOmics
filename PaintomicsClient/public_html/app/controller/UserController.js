@@ -251,7 +251,7 @@ function UserController() {
                 data: signInForm.getForm().getValues(),
                 success: function (response) {
                     if (response.success === false) {
-                        $("#invalidEmailMessage").html(response.message.split("ERROR MESSAGE:")[1]);
+                        $("#invalidEmailMessage").removeClass('is-success').html(response.message.split("ERROR MESSAGE:")[1]);
                         /* Was #invalidUserPainvalidEmailMessagessMessage - the id of the
                            sign-in panel's message box with this panel's id spliced into
                            the middle of it by a search-and-replace. It matched nothing,
@@ -265,7 +265,10 @@ function UserController() {
                         return;
                     }
 					
-					$("#invalidEmailMessage").html('E-mail sent, please check your inbox for instructions.').css('color', 'green').fadeIn();
+					/* A class, not an inline colour: the inline green was never
+					   removed, so a later failure in the same div also read as
+					   success, and dark.css could not reach it. */
+					$("#invalidEmailMessage").html('Email sent. Check your inbox for instructions.').addClass('is-success').fadeIn();
 					/* Same re-measure as the failure branch above: the panel was laid
 					   out before this line existed. */
 					poRelayout(userView.getComponent());

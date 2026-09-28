@@ -1132,7 +1132,7 @@ function PA_Step4WalkView() {
 				xtype: "box", html:
 				"<div class='lateralOptionsPanel-header' data-guides='ignore'>" +
 				'  <div class="lateralOptionsPanel-toolbar">' +
-				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip pa-walk-close" title="Close this panel"><i class="fa fa-times"></i></a>' +
+				'    <a href="javascript:void(0)" class="toolbarOption btn-info helpTip pa-walk-close" title="Close this panel" aria-label="Close this panel"><i class="fa fa-times"></i></a>' +
 				'  </div>' +
 				"  <h2>" + getAIMark(18) + " Graph walk</h2>" +
 				"</div>" +

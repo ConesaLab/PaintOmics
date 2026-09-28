@@ -434,11 +434,11 @@
    no colour; the hue is spent on DE direction, which is what the panel exists
    to show.
 
-   NOTE: this application ships light-only -- there is no prefers-color-scheme
-   rule anywhere in resources/css. The validated dark steps are recorded here
-   for whenever a theme lands: up #e66767, down #3987e5 on surface #1a1a19
-   (CVD dE 19.2, normal-vision 29.0). Do not add a dark block for this one
-   component; it would be the only one in the app. */
+   Dark theme: dark.css restates --hub-ring (the dashed rings and the tip
+   border both read it); the literal below is too bright on the dark plot and
+   struck through the ring labels. Validated dark direction steps, should they
+   be needed: up #e66767, down #3987e5 on surface #1a1a19 (CVD dE 19.2,
+   normal-vision 29.0). */
 .pa-hub-net {
 	--hub-accent:    #e34948;   /* significance accent, NOT a direction.   */
 	--hub-link:      #2a78d6;   /* the clear-filter link, NOT a direction.  */
@@ -573,6 +573,12 @@
 	font-size: 10px;
 	fill: var(--hub-muted, #595959);
 	opacity: 0.75;
+	/* A halo in the plot's own colour, so a dashed ring never strikes
+	   through the label that names it. */
+	paint-order: stroke;
+	stroke: var(--pa-surface-sunken, #F5F4EF);
+	stroke-width: 3px;
+	stroke-linejoin: round;
 }
 .pa-hub-ring-label.is-current { opacity: 1; font-weight: 600; }
 
@@ -635,7 +641,9 @@
 	gap: 6px;
 	margin-top: 6px;
 }
-.pa-hub-railcount {
+/* `div.contentbox p` in main.css is (0,1,2), so a bare class lost to it and
+   the padding: 0 below never applied: the line sat 26px off the rail. */
+div.contentbox p.pa-hub-railcount {
 	/* Same double-inset as the intro: this <p> is inside a 12px-padded rail
 	   head, and main.css adds another 26px on top of that. */
 	margin: 7px 0 0;
@@ -709,7 +717,7 @@
 	color: var(--pa-ink-muted, #595959);
 	font-variant-numeric: tabular-nums;
 }
-.pa-hub-list-empty {
+div.contentbox p.pa-hub-list-empty {   /* outranks `div.contentbox p`, as above */
 	margin: 12px;
 	padding: 0;              /* see .pa-hub-intro */
 	font-size: 12px;

@@ -154,6 +154,12 @@ function MainView() {
 
 		me.currentView = aView;
 
+		// Name the tab after the job, so several open jobs (and their history
+		// entries) can be told apart. Views without a job restore the plain name.
+		var model = (aView.getModel && aView.getModel()) || null;
+		var jobID = (model && model.getJobID) ? model.getJobID() : null;
+		document.title = jobID ? "Job " + jobID + " \u00b7 PaintOmics AI" : "PaintOmics AI";
+
 		me.getComponent().queryById("mainViewCenterPanel").add(aView.getComponent());
 
 		// The contents rail belongs to the centre panel, not to the view that
@@ -242,22 +248,33 @@ function MainView() {
 				"<a class='navPanel-cite-bib' href='resources/images/" + bib + "' target='_blank'>BibTeX</a></li>";
 		};
 
+		// The pill's button is an inner span, not the <li>: the <li> also holds
+		// the dropdown, and a button takes its name from all its content, so the
+		// Tools pill was read as "Tools From Regions to Genes From miRNA to Genes"
+		// and its options were nested inside a button. title names the pill while
+		// fitHeaderNav() hides its label.
+		var pillHTML = function(icon, label, title, hasPopup) {
+			return "<span class='menuPill' tabindex='0' role='button' title='" + title + "'" +
+				(hasPopup ? " aria-haspopup='true' aria-expanded='false'" : "") + ">" +
+				"<i aria-hidden='true' class='fa " + icon + "'></i><span class='menuLabel'>" + label + "</span></span>";
+		};
+
 		var navHTML = "<ul class='lateralMenu-body'>" +
-				" <li class='menuOption' id='homeButton' title='Job view'><i class='fa fa-paint-brush'></i><span class='menuLabel'>Job view</span></li>" +
-				" <li class='menuOption loggedOption' title='Personal storage'><i class='fa fa-cloud'></i><span class='menuLabel'>Storage</span>" +
+				" <li class='menuOption' id='homeButton'>" + pillHTML("fa-paint-brush", "Job view", "Job view", false) + "</li>" +
+				" <li class='menuOption loggedOption'>" + pillHTML("fa-cloud", "Storage", "Personal storage", true) +
 				"  <ul class='submenu loggedOption'>" +
 				(noLogin != true ?
-					"     <li class='menuOption' data-name='DM_MyDataListView'><i class='fa fa-file-text'></i>  My files and Jobs</li>" +
-					"     <li class='menuOption' data-name='DM_MyDataUploadFilesPanel'><i class='fa fa-cloud-upload'></i>   Upload new files</li>"
+					"     <li class='menuOption' data-name='DM_MyDataListView' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-file-text'></i>  My files and Jobs</li>" +
+					"     <li class='menuOption' data-name='DM_MyDataUploadFilesPanel' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-cloud-upload'></i>   Upload new files</li>"
 					:
-					"     <li class='menuOption externalOption'><i class='fa fa-file-text'></i>  Only available for registered accounts.</li>"
+					"     <li class='menuOption externalOption menuNote'><i aria-hidden='true' class='fa fa-file-text'></i>  Only available for registered accounts.</li>"
 				) +
 				// "     <li class='menuOption' data-name='fileEdition'><i class='fa fa-cloud-upload'></i>   File edition</li>"+
 				" </ul></li>" +
-				" <li class='menuOption loggedOption' title='Supporting tools'><i class='fa fa-rocket'></i><span class='menuLabel'>Tools</span>" +
+				" <li class='menuOption loggedOption'>" + pillHTML("fa-rocket", "Tools", "Supporting tools", true) +
 				" <ul class='submenu loggedOption'>" +
-				"     <li class='menuOption' data-name='fromBEDtoGenes'><i class='fa fa-align-center'></i>   From Regions to Genes</li>" +
-				"     <li class='menuOption' data-name='fromMiRNAtoGenes'><i class='fa fa-link'></i>   From miRNA to Genes</li>"+
+				"     <li class='menuOption' data-name='fromBEDtoGenes' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-align-center'></i>   From Regions to Genes</li>" +
+				"     <li class='menuOption' data-name='fromMiRNAtoGenes' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-link'></i>   From miRNA to Genes</li>"+
 				" </ul></li>" +
 				/* One panel rather than three nested menus. Resources and the
 				   citations are two lists of very different shape, so they get a
@@ -268,10 +285,10 @@ function MainView() {
 				   `.navPanel-inner` carries the grid, not the <ul>: jQuery's
 				   fadeIn() writes `display: block` inline on the submenu itself,
 				   which would beat any display the stylesheet set on it. */
-				" <li class='menuOption' title='Resources, publications and contact'><i class='fa fa-ellipsis-h'></i><span class='menuLabel'>More</span>" +
+				" <li class='menuOption'>" + pillHTML("fa-ellipsis-h", "More", "Resources, publications and contact", true) +
 				" <ul class='submenu navPanel'><li class='navPanel-inner'>" +
 				"  <div class='navPanel-col'><h2 class='navPanel-title'>Resources</h2><ul class='navPanel-list'>" +
-				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
+				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i aria-hidden=\"true\" class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
 				/* The published site, not paintomics.readthedocs.io. That Read the
 				   Docs project last built in July 2022 -- it has no webhook and
 				   still points at the pre-rename repository -- so every one of the
@@ -279,7 +296,7 @@ function MainView() {
 				   copy of the guide, on which the pages for both AI features 404.
 				   The guide is now published from this repository by
 				   .github/workflows/docs.yml on every push to master. */
-				"     <li class='menuOption externalOption'><a href='https://conesalab.github.io/PaintOmics/' target='_blank' rel='noopener'><i class='fa fa-book'></i>Documentation</a></li>" +
+				"     <li class='menuOption externalOption'><a href='https://conesalab.github.io/PaintOmics/' target='_blank' rel='noopener'><i aria-hidden='true' class='fa fa-book'></i>Documentation</a></li>" +
 				// The "PaintOmics 3" entry pointed at http://188.166.42.44/, a bare IP
 				// that no longer answers at all (connection failure, not an error
 				// page). Removed rather than repointed: there is no live PaintOmics 3
@@ -290,7 +307,7 @@ function MainView() {
 				// This server's own examples, not another instance's copy of a
 				// 2017 archive: a deployment with its own datasets installed was
 				// sending people elsewhere for data it does not use.
-				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i class='fa fa-download'></i>PaintOmics example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "'><i aria-hidden='true' class='fa fa-download'></i>PaintOmics example data</a></li>" +
 				// "RGmatch example data" stood here, linking
 				// paintomics.uv.es/resources/rgmatch_example_data.zip. The archive
 				// left the repository in #170 and neither paintomics.org nor
@@ -299,7 +316,7 @@ function MainView() {
 				// PaintOmics 3 entry above; RGmatch's own repository is linked from
 				// the Regions-to-Genes tool. miRNA2Genes is ours, so it comes from
 				// the manifest.
-				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i class='fa fa-download'></i>miRNA2Genes example data</a></li>" +
+				"	  <li class='menuOption externalOption'><a href='" + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + "?pipeline=mirna2genes'><i aria-hidden='true' class='fa fa-download'></i>miRNA2Genes example data</a></li>" +
 				"  </ul></div>" +
 				/* The four entries used to be full citations set at `font-size:
 				   9px` with a white heading inline - illegible on the dark rail
@@ -323,7 +340,7 @@ function MainView() {
 				   selected, both of which still resolve through the extra wrappers
 				   to the More pill. */
 				"  <div class='navPanel-foot'><ul class='navPanel-list'>" +
-				"     <li class='menuOption' data-name='contactForm'><i class='fa fa-envelope-o'></i>Contact by email</li>" +
+				"     <li class='menuOption' data-name='contactForm' tabindex='0' role='button'><i aria-hidden='true' class='fa fa-envelope-o'></i>Contact by email</li>" +
 				"  </ul></div>" +
 				" </li></ul></li>" +
 				"</ul>";
@@ -338,8 +355,11 @@ function MainView() {
 				cls: "toolbar mainTopToolbar",
 				region: 'north',
 				html:
-				'<div id="header">'+
-				'  <img src="resources/images/paintomics-mark.svg" alt="PaintOmics AI">' +
+				// The mark is decorative (the h1 beside it says the name), and the
+				// title names what clicking the wordmark does. No role="button": it
+				// would flatten the h1, and every step toolbar has a keyboard Reset.
+				'<div id="header" title="Start a new analysis">'+
+				'  <img src="resources/images/paintomics-mark.svg" alt="">' +
 				/* No version chip beside the wordmark. The header is the one row
 				   in the application where two groups grow towards each other -
 				   the nav pills from the left, the step actions from the right -
@@ -363,7 +383,7 @@ function MainView() {
 				   readable zones: brand and navigation, the actions for this step,
 				   and the controls that are not about the analysis at all. */
 				'<div class="headerUtilities">' +
-				'  <button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-pressed="false"><i class="fa fa-moon-o"></i></button>' +
+				'  <button class="themeToggle" id="themeToggle" type="button" title="Switch between light and dark" aria-label="Dark theme" aria-pressed="false"><i class="fa fa-moon-o" aria-hidden="true"></i></button>' +
 				'  <a class="button btn-sm btn-right loggedOption" data-name="logout" id="logoutButton" href="javascript:void(0)">' + (noLogin !== true ? '<i class="fa fa-sign-out" aria-hidden="true"></i> Log out' : '<i class="fa fa-sign-in" aria-hidden="true"></i> Sign in') + '</a>' +
 				'</div>'
 			}, {
@@ -391,12 +411,56 @@ function MainView() {
 						me.changeMainView(this.getAttribute("data-name"));
 					});
 
+					// The keyboard way in. The dropdowns only opened on hover, so Tools and
+					// Contact were mouse-only. Focus opens a pill's dropdown, Tab walks into
+					// it, Enter/Space activates, Escape closes. Focus goes back to the pill
+					// before the click, so a dialog it opens keeps focus. setOpen() keeps
+					// aria-expanded true to what is on screen, whichever way it opened.
 					$(".lateralMenu-body").children(".menuOption").each(function() {
-						var me = this;
-						$(this).hover(function() {
-							$(this).children(".submenu").fadeIn(100);
+						var pill = this;
+						var button = $(pill).children(".menuPill");
+						var dropdown = $(pill).children(".submenu");
+						var setOpen = function(open, fade) {
+							if (!dropdown.length) {
+								return;
+							}
+							if (fade) {
+								dropdown[open ? "fadeIn" : "fadeOut"](open ? 100 : 0);
+							} else {
+								dropdown.toggle(open);
+							}
+							button.attr("aria-expanded", open ? "true" : "false");
+						};
+						$(pill).hover(function() {
+							setOpen(true, true);
 						}, function() {
-							$(this).children(".submenu").fadeOut(0);
+							setOpen(false, true);
+						});
+						$(pill).on("focusin", function() {
+							setOpen(true);
+						}).on("focusout", function(e) {
+							if (!pill.contains(e.relatedTarget)) {
+								setOpen(false);
+							}
+						});
+						$(pill).on("keydown", function(e) {
+							// Escape from anywhere inside, the More panel's links included.
+							if (e.key === "Escape" && dropdown.is(":visible")) {
+								button.focus();
+								setOpen(false);
+								return;
+							}
+							// The pill's button or an option; the links answer Enter themselves.
+							if ((e.key === "Enter" || e.key === " ") && $(e.target).is("[tabindex]")) {
+								e.preventDefault();
+								if (e.target === button[0] && dropdown.length) {
+									setOpen(true);
+									return;
+								}
+								button.focus();
+								setOpen(false);
+								$(e.target).trigger("click");
+							}
 						});
 					});
 
@@ -464,7 +528,9 @@ function MainView() {
 			var dark = root.getAttribute("data-theme") === "dark";
 			button.setAttribute("aria-pressed", dark ? "true" : "false");
 			button.setAttribute("title", dark ? "Switch to light" : "Switch to dark");
-			button.innerHTML = '<i class="fa ' + (dark ? "fa-sun-o" : "fa-moon-o") + '"></i>';
+			// The name stays "Dark theme" (aria-label) and aria-pressed carries the
+			// state; the flipping title is only the sighted tooltip.
+			button.innerHTML = '<i class="fa ' + (dark ? "fa-sun-o" : "fa-moon-o") + '" aria-hidden="true"></i>';
 		};
 
 		button.addEventListener("click", function () {
@@ -522,11 +588,12 @@ function MainView() {
 	 * Interpret button, which is what put that button on top of "Contact".
 	 *
 	 * Measuring is the only option while they are out of flow, so this measures.
-	 * Two stages, in order, and never more than needed: tighten the pill padding
-	 * first, and only drop the labels for the icons if that was not enough. Every
-	 * item stays present and clickable in both states -- the title attribute set
-	 * in navHTML above names it while the label is hidden -- which is the reason
-	 * to compact the nav rather than clip it. Clipping cannot work here anyway:
+	 * Three stages, in order, and never more than needed: tighten the pill
+	 * padding first, then drop the nav's labels for its icons, and only if that
+	 * still collides drop the step actions' labels too. Every item stays present
+	 * and clickable in every state -- a title names it while its label is hidden
+	 * (navHTML's for the pills; the step actions get one written here) -- which
+	 * is the reason to compact rather than clip. Clipping cannot work here anyway:
 	 * `overflow: hidden` on this list would cut off the dropdowns, which are
 	 * absolutely positioned children of the items.
 	 */
@@ -545,6 +612,15 @@ function MainView() {
 		// so it read as hidden on the very screens this needs to measure.
 		var actions = document.querySelector(".secondTopToolbar");
 		var hasActions = !!(actions && actions.getClientRects().length > 0);
+		// Undo the third stage before measuring, titles included: only the ones
+		// written here carry data-pa-auto-title, so a button's own title survives.
+		if (actions) {
+			actions.classList.remove("is-iconly");
+			Array.prototype.forEach.call(actions.querySelectorAll("[data-pa-auto-title]"), function (b) {
+				b.removeAttribute("title");
+				b.removeAttribute("data-pa-auto-title");
+			});
+		}
 
 		/* Tell the stylesheet where the utility group starts.
 		 *
@@ -594,6 +670,27 @@ function MainView() {
 		}
 
 		nav.classList.add("is-iconly");
+		if (nav.getBoundingClientRect().right <= limit) {
+			return;
+		}
+
+		// Third stage. At 1024px Step 4's six actions alone reach past the
+		// wordmark, so the fixed band painted over the icon-only nav and half the
+		// product name. The actions keep their icons and name themselves in
+		// title while the words are gone; the header buttons carry none of their own.
+		actions.classList.add("is-iconly");
+		Array.prototype.forEach.call(actions.querySelectorAll(".button"), function (b) {
+			if (!b.getAttribute("title")) {
+				b.setAttribute("title", b.textContent.trim());
+				b.setAttribute("data-pa-auto-title", "");
+			}
+		});
+		// The room the actions gave back may be enough for the nav's labels.
+		limit = actions.getBoundingClientRect().left - 12;
+		nav.classList.remove("is-iconly");
+		if (nav.getBoundingClientRect().right > limit) {
+			nav.classList.add("is-iconly");
+		}
 	};
 
 	/* The step actions are built and torn down by each view as the user moves
