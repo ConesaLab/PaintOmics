@@ -20,6 +20,7 @@ import time
 
 from src.conf.serverconf import (AI_LLM_PROVIDER, AI_PROVIDERS, KEGG_DATA_DIR, MONGODB_HOST,
                                  MONGODB_PORT)
+from src.classes.AIInterpret.llm_client import MIN_CALL_SECONDS
 from src.classes.AIInterpret.walker import anchor as anchor_mod
 from src.classes.AIInterpret.walker import card as card_mod
 from src.classes.AIInterpret.walker import direction as direction_mod
@@ -63,6 +64,9 @@ WORDS_PER_STATEMENT = 50
 # checks["results"] when there was no time for a Results section; the page
 # tells this apart from a section that failed its checks by "time budget".
 RESULTS_OUT_OF_TIME = "no Results section: the time budget was spent"
+# ... and when the gateway refused the Narrator's every retry with time left;
+# the page tells this apart by "rate-limiting".
+RESULTS_RATE_LIMITED = "no Results section: the AI service was rate-limiting the Narrator's requests"
 
 HEARTBEAT_SECONDS = 60
 # Seconds the direction check needs after the Writers stop (three short
@@ -586,7 +590,7 @@ def attach_evidence(statements, papers):
 def _due(deadline):
     """True when `deadline` leaves too little time for a model call; the
     call is then not made rather than sent with a budget it cannot meet."""
-    return deadline is not None and deadline - time.time() < direction_mod.CALL_MIN_SECONDS
+    return deadline is not None and deadline - time.time() < MIN_CALL_SECONDS
 
 
 def _left(deadline):
@@ -745,9 +749,9 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
 
     try:
         results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, deadline=deadline)
-    except narrate_mod.OutOfTime:
+    except (narrate_mod.OutOfTime, narrate_mod.RateLimited) as exc:
         # Not "no results": the page would say the section failed its checks.
-        checks["results"] = [RESULTS_OUT_OF_TIME]
+        checks["results"] = [RESULTS_OUT_OF_TIME if isinstance(exc, narrate_mod.OutOfTime) else RESULTS_RATE_LIMITED]
         checks["gates"]["title"] = {"pass": True, "not_applicable": True, "why": "no Results section to check"}
         return None
     problems, title_problems = checked(results)
@@ -762,11 +766,12 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
                                           objections=problems + title_problems, deadline=deadline)
             problems, title_problems = checked(results)
             title_gate["rewritten"] = True
-        except narrate_mod.OutOfTime:
-            # The draft failed its checks; the time to repair it ran out. A
+        except (narrate_mod.OutOfTime, narrate_mod.RateLimited) as exc:
+            # The draft failed its checks; the repair could not be had. A
             # title that outran the body is still repaired in code below.
             if problems:
-                problems = problems + ["no time was left to repair it"]
+                problems = problems + ["no time was left to repair it" if isinstance(exc, narrate_mod.OutOfTime)
+                                       else "the AI service was rate-limiting the repair"]
     if title_problems and results is not None and not problems:
         # Check 2's last word: the title code writes, and the summary without
         # the sentences that still outran the body.

@@ -24,6 +24,8 @@ import time
 import unicodedata
 from dataclasses import dataclass, field
 
+from src.classes.AIInterpret import llm_client
+
 logger = logging.getLogger(__name__)
 
 # A passage shorter than this is a phrase, not evidence; a longer one than
@@ -245,8 +247,11 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
             # nor asyncio.run's cleanup can stop: asyncio.run waits for it. On
             # 2026-09-15 a 429 asked for an 84 s wait just before that deadline,
             # the pipeline returned 54 s late, and the walk sealed with no
-            # Results section. The budget makes the call give up in time.
-            budget = None if deadline is None else max(1.0, deadline - time.time())
+            # Results section. The budget makes the call give up in time; a
+            # slot that came free too late for a call is not used for one.
+            budget = None if deadline is None else deadline - time.time()
+            if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
+                return {"supported": False, "why": "there was no time left to read the paper", "transient": True}
             out = await asyncio.to_thread(
                 client.complete_json,
                 [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],

@@ -51,6 +51,40 @@ class StubClient(object):
         raise AssertionError(name)
 
 
+class Clock(object):
+    """A clock the test moves: every model call can cost seconds of it."""
+
+    def __init__(self, t=10000.0):
+        self.t = t
+
+    def time(self):
+        return self.t
+
+
+class SlowStub(StubClient):
+    """StubClient whose calls each take `costs` seconds of `clock`."""
+
+    def __init__(self, claimed, clock, costs):
+        StubClient.__init__(self, claimed)
+        self.clock, self.costs = clock, list(costs)
+
+    def complete_json(self, *args, **kwargs):
+        out = StubClient.complete_json(self, *args, **kwargs)
+        self.clock.t += self.costs.pop(0) if self.costs else 0
+        return out
+
+
+class Throttled(object):
+    """requests.Response double: a 429 asking for a long wait."""
+    status_code, text, headers = 429, "rate limited", {"Retry-After": "84"}
+
+    def raise_for_status(self):
+        import requests
+        err = requests.exceptions.HTTPError("HTTP 429")
+        err.response = self
+        raise err
+
+
 class DirectionTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -200,20 +234,13 @@ class DirectionTest(unittest.TestCase):
         self.assertEqual(objections, {})
         self.assertEqual(verdicts[1][0]["unchecked"], direction.UNCHECKED_OUT_OF_TIME)
 
-    def test_a_rate_limited_gateway_gives_up_by_the_deadline(self):
+    def test_a_rate_limited_gateway_gives_up_by_the_deadline_and_the_verdict_says_so(self):
         # The real client and its real retry loop: a 429 asking for 84 s may
-        # not be slept through when the stage has 30 s.
-        import requests
+        # not be slept through when the stage has 30 s, and a call that gave
+        # up on the deadline is "not asked", never "no objection" -- a
+        # statement sent back for contradicting its regulator would otherwise
+        # stand once the re-check gave up.
         from src.classes.AIInterpret import llm_client as lc
-
-        class Throttled(object):
-            status_code, text, headers = 429, "rate limited", {"Retry-After": "84"}
-
-            def raise_for_status(self):
-                err = requests.exceptions.HTTPError("HTTP 429")
-                err.response = self
-                raise err
-
         symbol = self.feedback["symbol"]
         walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
         sleeps, real_post, real_sleep = [], lc.requests.post, lc.time.sleep
@@ -222,10 +249,62 @@ class DirectionTest(unittest.TestCase):
         try:
             client = lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
                                    "fallback_models": []})
-            direction.direction_check(client, [self.statement(symbol, "x fell")], walker, deadline=time.time() + 30)
+            verdicts, objections = direction.direction_check(
+                client, [self.statement(symbol, "Cish fell, derepressing the pathway")], walker,
+                deadline=time.time() + 30)
         finally:
             lc.requests.post, lc.time.sleep = real_post, real_sleep
         self.assertFalse([s for s in sleeps if s >= 30], "a retry slept past the stage's deadline: %s" % sleeps)
+        self.assertEqual(objections, {})
+        self.assertEqual(verdicts[1][0]["unchecked"], direction.UNCHECKED_OUT_OF_TIME)
+
+    def _mid_hit(self, costs, left=10.0):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        clock = Clock()
+        client = SlowStub("down", clock, costs)
+        real_time = direction.time
+        direction.time = clock
+        try:
+            verdicts, _ = direction.direction_check(client, [self.statement(symbol, "x fell")], walker,
+                                                    deadline=clock.t + left)
+        finally:
+            direction.time = real_time
+        return client.calls, verdicts[1][0]
+
+    def test_the_deadline_passing_after_the_claim_skips_both_fits(self):
+        calls, verdict = self._mid_hit([8])
+        self.assertEqual(calls, ["direction_claim"])
+        self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_the_deadline_passing_after_the_fit_skips_the_flipped_fit(self):
+        calls, verdict = self._mid_hit([2, 6])
+        self.assertEqual(calls, ["direction_claim", "direction_fit"])
+        self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_under_the_call_minimum_but_over_the_old_one_second_floor_nothing_is_sent(self):
+        calls, verdict = self._mid_hit([], left=2.5)
+        self.assertEqual(calls, [])
+        self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_the_gate_does_not_count_an_unasked_regulator_as_checked(self):
+        def row(**kw):
+            v = {"gene": "Cish", "pathway": "JAK-STAT", "class": "feedback", "implied": "down",
+                 "claimed": None, "consistent": True, "insensitive": False}
+            v.update(kw)
+            return v
+        unasked = row(unchecked=direction.UNCHECKED_OUT_OF_TIME)
+        gate = direction.gate({1: [unasked]}, 0)
+        self.assertTrue(gate["not_applicable"])
+        self.assertEqual((gate["checked"], gate["consistent"], gate["unchecked"]), (0, 0, 1))
+        gate = direction.gate({1: [row(claimed="down"), unasked]}, 0)
+        self.assertTrue(gate["pass"])
+        self.assertEqual((gate["checked"], gate["consistent"], gate["unchecked"]), (1, 1, 1))
+        self.assertIn("1 not checked", gate["why"])
+        # An objection raised before time ran out still counts against the gate.
+        gate = direction.gate({1: [row(claimed="up", consistent=False, unchecked=direction.UNCHECKED_OUT_OF_TIME)]}, 0)
+        self.assertFalse(gate["pass"])
+        self.assertEqual((gate["checked"], gate["unchecked"]), (1, 0))
 
 
 if __name__ == "__main__":

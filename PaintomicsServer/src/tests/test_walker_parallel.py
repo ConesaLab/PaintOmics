@@ -27,7 +27,9 @@ import os
 import shutil
 import sys
 import time
+import types
 import unittest
+from contextlib import contextmanager
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -43,6 +45,29 @@ from src.classes.AIInterpret.walker.walk import Walker, params_for    # noqa: E4
 from src.tests import walker_fixture as fx                            # noqa: E402
 
 PLAN = dict(parallel.PLANS["pathway"], seed_steps=(2, 4), walkers=2)
+
+
+class Clock(object):
+    """A clock the test moves, standing in for a module's `time`."""
+
+    def __init__(self, t=10000.0):
+        self.t = t
+
+    def time(self):
+        return self.t
+
+
+@contextmanager
+def patched(*triples):
+    """Set (object, attribute, value) for the block, then put each back."""
+    saved = [(obj, name, getattr(obj, name)) for obj, name, _ in triples]
+    try:
+        for obj, name, value in triples:
+            setattr(obj, name, value)
+        yield
+    finally:
+        for obj, name, value in saved:
+            setattr(obj, name, value)
 
 
 class ScriptedRunner(object):
@@ -397,8 +422,8 @@ class StageBudgetTest(unittest.TestCase):
         soon = time.time() + 30
         self.assertEqual(reason(requests.exceptions.Timeout("exceeded its budget"), soon), [service.RESULTS_OUT_OF_TIME])
         self.assertEqual(reason(throttled, soon), [service.RESULTS_OUT_OF_TIME])
-        self.assertEqual(reason(refused, time.time() + 400), ["no results"],
-                         "a gateway that kept refusing is not the clock running out")
+        self.assertEqual(reason(refused, time.time() + 400), [service.RESULTS_RATE_LIMITED],
+                         "a gateway that kept refusing is neither the clock nor a failed check")
         self.assertEqual(reason(ValueError("unreadable"), soon), ["no results"],
                          "a broken answer is not the clock running out")
         self.assertEqual(reason(requests.exceptions.Timeout("slow"), None), ["no results"],
@@ -422,16 +447,70 @@ class StageBudgetTest(unittest.TestCase):
         finally:
             lc.requests.post, lc.time.sleep = real_post, real_sleep
 
+    def test_a_throttled_narrator_is_reported_as_rate_limited_on_the_real_client(self):
+        # Every request answered 429 with a short Retry-After: the retries fit
+        # the budget, run out, and the page must not blame the checks.
+        from src.classes.AIInterpret import llm_client as lc
+        from src.classes.AIInterpret.walker import service
+        real_post, real_sleep = lc.requests.post, lc.time.sleep
+        lc.requests.post = lambda *args, **kwargs: _Throttled(2)
+        lc.time.sleep = lambda seconds: None
+        try:
+            client = lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+                                   "fallback_models": []})
+            checks = {"gates": {}}
+            service._narrate(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, {}, "pathway:x", checks,
+                             (100, 200), deadline=time.time() + 400)
+        finally:
+            lc.requests.post, lc.time.sleep = real_post, real_sleep
+        self.assertEqual(checks["results"], [service.RESULTS_RATE_LIMITED])
+
     def test_a_call_with_no_time_to_answer_is_not_sent(self):
         # Flooring the budget at 1 s sent calls that could only time out, each
-        # pushing the stage further past its deadline.
+        # pushing the stage further past its deadline; 2.5 s is under the
+        # minimum a call is sent with, and over the old floor.
         from src.classes.AIInterpret.walker import service
-        client = _Budgets()
-        checks = {}
-        service._sense_pass(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, None, set(), checks,
-                            deadline=time.time() + 1)
-        self.assertEqual(client.budgets, [], "the sense check was asked with no time to answer")
-        self.assertEqual(checks["sense"], "unavailable")
+        for left in (1, 2.5):
+            client = _Budgets()
+            checks = {}
+            service._sense_pass(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, None, set(), checks,
+                                deadline=time.time() + left)
+            self.assertEqual(client.budgets, [], "the sense check was asked with %s s left" % left)
+            self.assertEqual(checks["sense"], "unavailable")
+
+    def test_a_rewrite_with_no_time_left_is_not_sent(self):
+        from src.classes.AIInterpret.walker import service
+        sent = []
+        walker = types.SimpleNamespace(record=lambda: {"chain": []}, overlay=None)
+        store = types.SimpleNamespace(papers={}, verdict=lambda *a: None)
+        with patched((service, "rewrite_once", lambda *a, **k: sent.append(k) or {}),
+                     (service.verify, "verify_statement", lambda *a, **k: [])):
+            service._rewrite_and_recheck(None, "card", "chain", [{"n": 1, "claim": "c"}],
+                                         {1: {"direction": "x"}}, walker, store, set(),
+                                         deadline=time.time() + 2.5)
+        self.assertEqual(sent, [], "the rewrite was sent with no time to answer")
+
+    def test_a_sense_recheck_with_no_time_left_is_not_sent_and_the_statement_drops(self):
+        from src.classes.AIInterpret.walker import service
+        clock = Clock()
+        asked = []
+        failing = {f: {"ok": True, "note": ""} for f in service.sense_mod.FIELDS}
+        failing["timing"] = {"ok": False, "note": "no timing"}
+
+        def sense_check(client, card, statements, chain, budget_seconds=None):
+            asked.append(budget_seconds)
+            clock.t += 8
+            return {s["n"]: dict(failing) for s in statements}
+
+        statements, dropped = [{"n": 1, "claim": "c"}], []
+        with patched((service, "time", clock),
+                     (service.sense_mod, "sense_check", sense_check),
+                     (service, "_rewrite_and_recheck", lambda client, card, chain, bad, *a, **k: {
+                         s["n"]: [] for s in bad})):
+            service._sense_pass(None, "card", "chain", statements, dropped, None, None, set(), {},
+                                deadline=clock.t + 10)
+        self.assertEqual(len(asked), 1, "the re-check was sent with no time to answer")
+        self.assertEqual([d["n"] for d in dropped], [1])
 
     def test_a_statement_the_direction_recheck_never_reached_is_dropped(self):
         # Sent back for contradicting its regulator, rewritten (or not) with no
@@ -444,7 +523,9 @@ class StageBudgetTest(unittest.TestCase):
             calls.append(deadline)
             if len(calls) == 1:
                 return {1: [{"consistent": False}]}, {1: ["Cish is a reporter: its fall reports the pathway down"]}
-            return {1: [{"consistent": True, "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}]}, {}
+            # Two regulators: the re-check reached one and not the other.
+            return {1: [{"consistent": True},
+                        {"consistent": True, "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}]}, {}
 
         real_check, real_rewrite = direction_mod.direction_check, service._rewrite_and_recheck
         direction_mod.direction_check = check
@@ -461,6 +542,105 @@ class StageBudgetTest(unittest.TestCase):
         self.assertEqual(statements, [])
         self.assertEqual([d["n"] for d in dropped], [1])
         self.assertIn("no time was left to check the rewrite", dropped[0]["why"])
+        self.assertIn("Cish is a reporter", dropped[0]["why"], "the objection that stands was lost")
+
+    def test_a_slot_that_frees_too_late_is_not_used_for_a_call(self):
+        # The paper agent checks the time before waiting for a slot; one that
+        # frees with under a call's worth left must not send a doomed call.
+        clock = Clock()
+
+        class LateSlot(object):
+            async def __aenter__(self):
+                clock.t += 24
+
+            async def __aexit__(self, *exc):
+                return False
+
+        client = _Client({})
+        with patched((literature, "time", clock)):
+            verdict = asyncio.run(literature.check_citation(
+                PaperAgentTest.store(None), client, _PubMed(), 1, "Aaa is a kinase", LateSlot(), clock.t + 26))
+        self.assertEqual(client.budgets, [], "a call was sent with %s s left" % 2)
+        self.assertTrue(verdict.get("transient"))
+
+
+class ResultsNoteWiringTest(unittest.TestCase):
+    """The note under a missing Results section names "Walk again" only where
+    that button is drawn: the Step 4 column for a user who may edit, never
+    the AI panel, which has no such control."""
+    VIEWS = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../PaintomicsClient/public_html/app/view/"
+                                                                    "PathwayAcquisitionViews"))
+
+    def source(self, name):
+        with open(os.path.join(self.VIEWS, name), encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_hint_follows_the_button(self):
+        walk = self.source("PA_Step4WalkView.js")
+        self.assertIn('(rerun ? "; Walk again to try for one." : ".")', walk)
+        self.assertIn("var rerun = !!(options && options.canRerun);", walk)
+        self.assertIn("paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()})", walk)
+        self.assertIn("if (this.canEdit()) {\n\t\t\tvar again = paWalkEl(\"a\", \"button btn-default pa-walk-again\"",
+                      walk, "the button and the hint no longer share one condition")
+        panel = self.source("PA_AIInterpretView.js")
+        calls = [line for line in panel.splitlines() if "paWalkResultsNode(" in line and "typeof" not in line]
+        self.assertTrue(calls)
+        self.assertFalse([line for line in calls if "canRerun" in line], "the AI panel has no Walk again button")
+
+
+class ModelWalkStagesTest(unittest.TestCase):
+    """The gates between the stages after the Writers, on a clock the test
+    moves: each stage runs only on time it was given, and a stage that uses
+    all of its budget still leaves the next one its turn."""
+
+    def walk(self, left_after_writers, sense_overrun=1.0):
+        from src.classes.AIInterpret import agent
+        from src.classes.AIInterpret.walker import service
+        clock = Clock()
+        run_deadline = clock.t + parallel.plan_for("network")["run_seconds"]
+        seen = {"direction": [], "sense": [], "narrate": 0}
+        walker = types.SimpleNamespace(params={}, anchor=None, record=lambda: {"chain": []}, overlay=None)
+        store = types.SimpleNamespace(papers={}, checks=0, trace=[])
+        context = types.SimpleNamespace(loop_error=None, trace=[], legs=[], read=set())
+        statements = [{"n": 1, "claim": "c", "prose": "p", "legs": []}]
+
+        def run_pipeline(coro):
+            coro.close()
+            clock.t = run_deadline - left_after_writers
+            return walker, (statements, [], store, [context])
+
+        def direction_pass(*args, **kwargs):
+            seen["direction"].append(kwargs["deadline"])
+            args[8]["gates"]["direction"] = {"pass": True}
+
+        def sense_pass(*args, **kwargs):
+            seen["sense"].append(kwargs["deadline"])
+            clock.t = kwargs["deadline"] + sense_overrun      # a call cut at its budget returns a little late
+
+        def narrate(*args, **kwargs):
+            seen["narrate"] += 1
+
+        checks = {"gates": {}}
+        with patched((parallel, "run_pipeline", run_pipeline),
+                     (agent, "set_run_deadline", lambda when: None),
+                     (writer_mod, "chain_text", lambda w: "chain"),
+                     (service, "time", clock),
+                     (service, "_direction_pass", direction_pass),
+                     (service, "_sense_pass", sense_pass),
+                     (service, "_narrate", narrate)):
+            service._model_walk(walker, "network", {}, "card", None, True, lambda *a, **k: None,
+                                lambda: None, lambda: False, {}, checks)
+        return seen, checks
+
+    def test_the_direction_stage_is_skipped_when_its_own_deadline_has_passed(self):
+        seen, checks = self.walk(left_after_writers=105)
+        self.assertEqual(seen["direction"], [], "the direction check ran past its own deadline")
+        self.assertIn("time budget", checks["gates"]["direction"]["why"])
+
+    def test_a_sense_call_cut_at_its_budget_still_leaves_the_narrator_its_turn(self):
+        seen, checks = self.walk(left_after_writers=200)
+        self.assertEqual(len(seen["sense"]), 1)
+        self.assertEqual(seen["narrate"], 1, "the Narrator was skipped: %s" % checks.get("results"))
 
 
 class WriterTest(_Fixture):

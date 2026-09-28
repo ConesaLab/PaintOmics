@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import time
 
-import requests
+from src.classes.AIInterpret import llm_client
 
 RESULTS_SCHEMA = {
     "type": "object",
@@ -94,19 +94,16 @@ class OutOfTime(Exception):
     """The Narrator's time ran out before it had a readable answer."""
 
 
-def _ran_out(exc):
-    """Under a deadline the client gives up with a timeout, or with the error
-    whose retry wait would not fit in the time left (LLMClient marks it): the
-    budget, not a bad answer. A 429 raised after every retry, with time still
-    left, is the gateway refusing, not the clock."""
-    return (isinstance(exc, requests.exceptions.Timeout)
-            or bool(getattr(exc, "gave_up_at_deadline", False)))
+class RateLimited(Exception):
+    """The gateway refused every retry with a 429 while time was left: not
+    the clock, and not an answer that failed its checks."""
 
 
 def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
             objections=None, temperature=0.3, deadline=None):
     """The Results dict, or None when the call fails. Raises OutOfTime when
-    `deadline` passed, or the call gave up on it, before a readable answer.
+    `deadline` passed, or the call gave up on it, before a readable answer,
+    and RateLimited when the gateway refused every retry with time left.
 
     The token budget follows the word budget: a network Results section of up to
     900 words is about 1,300 tokens of prose plus the JSON around it, and the
@@ -122,21 +119,23 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         prompt += "\n\nYOUR PREVIOUS DRAFT FAILED THESE CHECKS; fix every one:\n- " + "\n- ".join(objections)
     max_tokens = max(2500, int(words[1] * 5))
     brief = BRIEF % (len(kept), max(0, len(kept) - 1), words[0], words[1])
-    ran_out = False
+    failure = None
     for _attempt in range(2):                 # one more try when the reply is unreadable
         budget = None if deadline is None else deadline - time.time()
-        if budget is not None and budget <= 0:
+        if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
             raise OutOfTime("the run was due before the Narrator could answer")
         try:
             out = client.complete_json(
                 [{"role": "system", "content": brief}, {"role": "user", "content": prompt}],
                 "results_section", RESULTS_SCHEMA, _embedded_json, max_tokens=max_tokens,
                 temperature=temperature, budget_seconds=budget)
-            ran_out = False
+            failure = None
         except Exception as exc:                                      # noqa: BLE001
-            out, ran_out = None, deadline is not None and _ran_out(exc)
+            out, failure = None, exc
         if isinstance(out, dict) and isinstance(out.get("paragraphs"), list):
             return out
-    if ran_out:
+    if failure is not None and deadline is not None and llm_client.ran_out_of_budget(failure):
         raise OutOfTime("the Narrator's call gave up at the run's deadline")
+    if failure is not None and llm_client.rate_limited(failure):
+        raise RateLimited("the gateway refused the Narrator's retries: %s" % failure)
     return None

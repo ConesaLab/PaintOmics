@@ -15,6 +15,27 @@ logger = logging.getLogger(__name__)
 # - read: 180s per chunk — if the API hasn't sent any data in 3 min, it's hung
 DEFAULT_TIMEOUT = (15, 180)
 
+# The least budget worth sending a call with: a shorter one only times out,
+# and a timeout marks the model down for the calls after it. A caller with
+# less time left than this skips the call. Never pass 0 as budget_seconds:
+# complete() reads a falsy budget as no budget at all.
+MIN_CALL_SECONDS = 3
+
+
+def ran_out_of_budget(exc):
+    """True when a call made with budget_seconds gave up on that budget: a
+    timeout, or the error whose retry wait the budget refused (_backoff marks
+    it). Only meaningful for a call that had a budget; without one a timeout
+    is the gateway's, not the caller's clock. A 429 raised after every retry,
+    with time still left, is the gateway refusing: see rate_limited."""
+    return isinstance(exc, requests.exceptions.Timeout) or bool(getattr(exc, "gave_up_at_deadline", False))
+
+
+def rate_limited(exc):
+    """True for the gateway's own 429, as raised once the retries ran out."""
+    response = getattr(exc, "response", None)
+    return isinstance(exc, requests.exceptions.HTTPError) and getattr(response, "status_code", None) == 429
+
 # Not every OpenAI-compatible gateway implements response_format. Verified
 # working on the CSIC gateway (vLLM 0.26.0, guided decoding) on 2026-08-07;
 # a self-hosted server behind the same API can still reject it with a 400.

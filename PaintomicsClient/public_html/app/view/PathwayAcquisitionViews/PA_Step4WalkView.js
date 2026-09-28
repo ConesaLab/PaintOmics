@@ -269,7 +269,8 @@ function paWalkGateTitle(name, gate, state) {
 	}
 	case "direction":
 		return paWalkCount(gate.checked, "regulator claim") + " checked, " + paWalkNumber(gate.consistent) +
-			" consistent, " + paWalkNumber(gate.insensitive) + " insensitive, " + paWalkNumber(gate.dropped) + " dropped";
+			" consistent, " + paWalkNumber(gate.insensitive) + " insensitive, " + paWalkNumber(gate.dropped) + " dropped" +
+			(Number(gate.unchecked) > 0 ? "; " + paWalkNumber(gate.unchecked) + " not checked: the time budget was spent" : "");
 	case "context":
 		return paWalkCount(gate.cited, "citation") + ", " + paWalkNumber(gate.in_context) + " in context, " +
 			paWalkNumber(gate.qualified) + " qualified as from another system, " +
@@ -366,11 +367,13 @@ function paWalkResultsNode(view, options) {
 		// canRerun: the caller shows a "Walk again" button; the AI panel and a
 		// read-only viewer do not, and must not be told to press one.
 		var reasons = (view && view.checks && view.checks.results) || [];
-		var outOfTime = reasons.some(function (reason) { return /time budget/.test(String(reason)); });
+		var said = function (pattern) { return reasons.some(function (reason) { return pattern.test(String(reason)); }); };
 		var rerun = !!(options && options.canRerun);
-		var why = outOfTime
-			? "No Results section was written: the walk ran out of time before it could be. The statements below stand alone" +
-				(rerun ? "; Walk again to try for one." : ".")
+		var standAlone = " The statements below stand alone" + (rerun ? "; Walk again to try for one." : ".");
+		var why = said(/time budget/)
+			? "No Results section was written: the walk ran out of time before it could be." + standAlone
+			: said(/rate-limiting/)
+			? "No Results section was written: the AI service was rate-limiting its requests." + standAlone
 			: reasons.length
 				? "The Results section did not pass its checks, so the statements below stand alone."
 				: "No Results section was written: no statement survived its checks.";
@@ -496,7 +499,8 @@ function paWalkStatementsNode(view, options) {
 				: (verdict.claimed === "none" ? "the statement claims no direction"
 				: "the statement claims " + String(verdict.claimed));
 			var note = verdict.insensitive ? " · reads the same with the values reversed"
-				: (verdict.consistent === false ? " · inconsistent" : "");
+				: (verdict.consistent === false ? " · inconsistent"
+				: (verdict.unchecked ? " · not checked: the time budget was spent" : ""));
 			item.appendChild(paWalkEl("p", "pa-walk-meta", "Direction check: " + String(verdict.gene) + " (" +
 				(verdict.pathway ? String(verdict.pathway) + ", " : "") + role + "): the values imply " +
 				String(verdict.implied || "no direction") + ", " + claimed + note));
