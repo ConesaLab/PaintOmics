@@ -94,16 +94,21 @@ class OutOfTime(Exception):
     """The Narrator's time ran out before it had a readable answer."""
 
 
-class RateLimited(Exception):
-    """The gateway refused every retry with a 429 while time was left: not
-    the clock, and not an answer that failed its checks."""
+class Unanswered(Exception):
+    """The Narrator's call failed with time left -- the gateway refused every
+    retry (rate_limited), errored, or timed out on its own: not the clock,
+    and not an answer that failed its checks."""
+
+    def __init__(self, message, rate_limited=False):
+        super().__init__(message)
+        self.rate_limited = rate_limited
 
 
 def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
             objections=None, temperature=0.3, deadline=None):
     """The Results dict, or None when the call fails. Raises OutOfTime when
     `deadline` passed, or the call gave up on it, before a readable answer,
-    and RateLimited when the gateway refused every retry with time left.
+    and Unanswered when the last attempt's call failed with time left.
 
     The token budget follows the word budget: a network Results section of up to
     900 words is about 1,300 tokens of prose plus the JSON around it, and the
@@ -136,6 +141,6 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
             return out
     if failure is not None and deadline is not None and llm_client.ran_out_of_budget(failure):
         raise OutOfTime("the Narrator's call gave up at the run's deadline")
-    if failure is not None and llm_client.rate_limited(failure):
-        raise RateLimited("the gateway refused the Narrator's retries: %s" % failure)
+    if failure is not None:
+        raise Unanswered("the Narrator's call failed: %s" % failure, rate_limited=llm_client.rate_limited(failure))
     return None

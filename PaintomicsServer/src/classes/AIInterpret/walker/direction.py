@@ -51,9 +51,11 @@ FIT_BRIEF = (
     "values do not show. One line of note."
 )
 TEMPERATURE = 0.1
-# verdict["unchecked"] for a hit the stage's deadline left no time to ask
-# about, or whose call gave up on that deadline.
+# verdict["unchecked"]: why a regulator's check has no answer -- the stage's
+# deadline left no time for a call or the call gave up on it, or the AI
+# service answered with an error or with nothing readable.
 UNCHECKED_OUT_OF_TIME = "the direction check's time budget was spent"
+UNCHECKED_NO_ANSWER = "the AI service did not answer the direction check"
 
 
 class OutOfTime(Exception):
@@ -173,13 +175,14 @@ def direction_check(client, statements, walker, deadline=None):
     verdicts[n] = [{gene, pathway, class, data_sign, implied, claimed, quote,
     fits, fits_flipped, consistent, insensitive}]; objections[n] = the
     sentences sent back to the Writer. A statement with no panel gene has no
-    entry. A model call that fails leaves that verdict unchecked (no objection).
+    entry. A call that is not answered raises no objection, and its verdict
+    carries `unchecked` with the reason, so a caller can tell "no objection"
+    from "not answered".
 
     Every call gives up by `deadline`, a 429's wait included. A call the
-    deadline leaves under llm_client.MIN_CALL_SECONDS for is not made; the
-    verdict of a hit with a call not made, or given up on the deadline,
-    carries unchecked=UNCHECKED_OUT_OF_TIME, so a caller can tell "no
-    objection" from "not asked"."""
+    deadline leaves under llm_client.MIN_CALL_SECONDS for is not made, nor
+    any after it (UNCHECKED_OUT_OF_TIME); one that fails or answers nothing
+    readable is UNCHECKED_NO_ANSWER."""
     def budget():
         """Seconds left for the next call; OutOfTime when too few."""
         if deadline is None:
@@ -203,6 +206,8 @@ def direction_check(client, statements, walker, deadline=None):
                 claim = claimed_direction(client, stmt, hit, budget_seconds=budget())
                 fit = fits_values(client, stmt, hit, text, budget_seconds=budget())
                 flipped = fits_values(client, stmt, hit, flipped_text(text), budget_seconds=budget())
+                if claim is None or fit is None or flipped is None:
+                    verdict["unchecked"] = UNCHECKED_NO_ANSWER
             except OutOfTime:
                 verdict["unchecked"] = UNCHECKED_OUT_OF_TIME
             if claim is not None:
@@ -247,14 +252,18 @@ def gate(verdicts, dropped):
     rows = [v for group in verdicts.values() for v in group]
     if not rows:
         return {"pass": True, "not_applicable": True, "checked": 0, "consistent": 0, "insensitive": 0,
-                "unchecked": 0, "dropped": 0, "why": "no statement cites a regulator of the panel"}
-    # A regulator the deadline left unasked is neither checked nor consistent;
-    # one that objected before time ran out still counts against the gate.
+                "unchecked": 0, "dropped": dropped,
+                "why": "the check dropped every statement that cited a regulator of the panel" if dropped
+                else "no statement cites a regulator of the panel"}
+    # A regulator whose check went unanswered is neither checked nor
+    # consistent; one that objected before that still counts against the gate.
+    unanswered = [v for v in rows if v.get("unchecked") and v["consistent"] and not v["insensitive"]]
     asked = [v for v in rows if not (v.get("unchecked") and v["consistent"] and not v["insensitive"])]
-    unasked = len(rows) - len(asked)
+    unasked = len(unanswered)
+    why_unasked = "; ".join(sorted({v["unchecked"] for v in unanswered}))
     if not asked:
         return {"pass": True, "not_applicable": True, "checked": 0, "consistent": 0, "insensitive": 0,
-                "unchecked": unasked, "dropped": dropped, "why": UNCHECKED_OUT_OF_TIME}
+                "unchecked": unasked, "dropped": dropped, "why": why_unasked}
     consistent = sum(1 for v in asked if v["consistent"] and not v["insensitive"])
     insensitive = sum(1 for v in asked if v["insensitive"])
     out = {"pass": consistent == len(asked), "not_applicable": False, "checked": len(asked), "consistent": consistent,
@@ -264,6 +273,6 @@ def gate(verdicts, dropped):
         bad = [v for v in asked if not v["consistent"] or v["insensitive"]]
         reasons.append("; ".join("%s (%s): %s" % (v["gene"], v["pathway"], _reason(v)) for v in bad))
     if unasked:
-        reasons.append("%d not checked: %s" % (unasked, UNCHECKED_OUT_OF_TIME))
+        reasons.append("%d not checked: %s" % (unasked, why_unasked))
     out["why"] = "; ".join(reasons)
     return out

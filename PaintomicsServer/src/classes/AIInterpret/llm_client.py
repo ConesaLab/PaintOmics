@@ -23,12 +23,12 @@ MIN_CALL_SECONDS = 3
 
 
 def ran_out_of_budget(exc):
-    """True when a call made with budget_seconds gave up on that budget: a
-    timeout, or the error whose retry wait the budget refused (_backoff marks
-    it). Only meaningful for a call that had a budget; without one a timeout
-    is the gateway's, not the caller's clock. A 429 raised after every retry,
+    """True when a call made with budget_seconds gave up on that budget:
+    complete() marks the error raised with under MIN_CALL_SECONDS left, and
+    the one whose retry wait the budget refused. Never true without a budget,
+    nor for a gateway timeout with time left; a 429 raised after every retry,
     with time still left, is the gateway refusing: see rate_limited."""
-    return isinstance(exc, requests.exceptions.Timeout) or bool(getattr(exc, "gave_up_at_deadline", False))
+    return bool(getattr(exc, "gave_up_at_deadline", False))
 
 
 def rate_limited(exc):
@@ -236,7 +236,13 @@ class LLMClient:
                     model, messages, max_tokens, temperature, response_format,
                     timeout, stream, attempts, deadline, fail_fast=bool(remaining))
             except Exception as e:
-                if model_fallback.falls_back(e):
+                # The budget, not the gateway, ended the call when it has no
+                # time left for another: decided by the clock, since a timeout
+                # with most of the budget left is the gateway's own. A model the
+                # budget cut off is not down, and no rung has time to try.
+                if deadline is not None and deadline - time.monotonic() < MIN_CALL_SECONDS:
+                    e.gave_up_at_deadline = True
+                if model_fallback.falls_back(e) and not getattr(e, "gave_up_at_deadline", False):
                     # Remembered even for the last rung: the next call's
                     # ordering, and the probe's verdict, read this.
                     model_fallback.mark_down(self.api_base, model, e)
@@ -262,8 +268,9 @@ class LLMClient:
 
         def _backoff(seconds, err):
             # A retry that cannot finish inside the budget only delays an
-            # answer nobody will be there to read. Stop here instead.
-            if deadline is not None and time.monotonic() + seconds >= deadline:
+            # answer nobody will be there to read. Stop here instead -- and a
+            # wait that would leave the retry under MIN_CALL_SECONDS is one.
+            if deadline is not None and time.monotonic() + seconds + MIN_CALL_SECONDS >= deadline:
                 # Same type as before (model fallback reads it); the mark
                 # tells "the budget refused the wait" from "every retry
                 # was refused" for a caller that reports running out of time.

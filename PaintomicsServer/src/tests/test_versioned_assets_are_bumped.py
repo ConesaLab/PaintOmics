@@ -243,7 +243,7 @@ PUBLISHED = {
     # note that says a walk ran out of time instead of blaming its checks
     # (PR #172).
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.5", "ba763451a5b3ca680a6cb48fbb2966840cffc32180d792a50245d897a6f4026d"),
+        "1.5", "9aa6f92678e367ea27f52e87b90b1212a670c5d8a2c66909521143ef0de5c675"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

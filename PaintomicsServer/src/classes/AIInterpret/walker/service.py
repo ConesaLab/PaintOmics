@@ -64,9 +64,11 @@ WORDS_PER_STATEMENT = 50
 # checks["results"] when there was no time for a Results section; the page
 # tells this apart from a section that failed its checks by "time budget".
 RESULTS_OUT_OF_TIME = "no Results section: the time budget was spent"
-# ... and when the gateway refused the Narrator's every retry with time left;
-# the page tells this apart by "rate-limiting".
+# ... and when the Narrator's call failed with time left: rate-limited on
+# every retry, or no answer at all. The page reads a reason that starts
+# "no Results section: " and tells the three apart by the rest.
 RESULTS_RATE_LIMITED = "no Results section: the AI service was rate-limiting the Narrator's requests"
+RESULTS_NO_ANSWER = "no Results section: the AI service did not answer the Narrator"
 
 HEARTBEAT_SECONDS = 60
 # Seconds the direction check needs after the Writers stop (three short
@@ -643,16 +645,21 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
         s["direction"] = verdicts.get(s["n"])
     failing = [s for s in statements if objections.get(s["n"])]
     if failing:
+        objected = {s["n"]: {v.get("gene") for v in verdicts.get(s["n"], [])
+                             if not v.get("consistent", True) or v.get("insensitive")} for s in failing}
         problems = _rewrite_and_recheck(client, card_text, chain, failing,
                                         {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
                                         walker, store, read, deadline=deadline)
         again, again_objections = direction_mod.direction_check(client, failing, walker, deadline=deadline)
         _refresh_direction(failing, again, verdicts)
         for s in failing:
-            # A statement sent back keeps its objection until a re-check
-            # clears it: one the deadline left unasked is not cleared.
-            unasked = any(v.get("unchecked") for v in again.get(s["n"], []))
-            stands = objections[s["n"]] + ["no time was left to check the rewrite"] if unasked else []
+            # A statement sent back keeps a regulator's objection until the
+            # re-check answers for that regulator: one left unanswered (no
+            # time, or no answer from the AI service) has not cleared it.
+            unanswered = [v for v in again.get(s["n"], [])
+                          if v.get("unchecked") and v.get("gene") in objected[s["n"]]]
+            stands = [o for o in objections[s["n"]] if any(str(v.get("gene")) in o for v in unanswered)] + [
+                "%s was not checked again: %s" % (v.get("gene"), v["unchecked"]) for v in unanswered]
             if problems[s["n"]] or again_objections.get(s["n"]) or stands:
                 statements.remove(s)
                 dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
@@ -707,6 +714,13 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
                             "by": "sense check"})
 
 
+def _no_results_reason(exc):
+    """checks["results"] for a Narrator whose call was not answered."""
+    if isinstance(exc, narrate_mod.OutOfTime):
+        return RESULTS_OUT_OF_TIME
+    return RESULTS_RATE_LIMITED if getattr(exc, "rate_limited", False) else RESULTS_NO_ANSWER
+
+
 def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None,
              anchor=None, card=None, scope_name="Results"):
     kind = "network" if tag == "network" else "pathway"
@@ -749,9 +763,9 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
 
     try:
         results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words, deadline=deadline)
-    except (narrate_mod.OutOfTime, narrate_mod.RateLimited) as exc:
+    except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
         # Not "no results": the page would say the section failed its checks.
-        checks["results"] = [RESULTS_OUT_OF_TIME if isinstance(exc, narrate_mod.OutOfTime) else RESULTS_RATE_LIMITED]
+        checks["results"] = [_no_results_reason(exc)]
         checks["gates"]["title"] = {"pass": True, "not_applicable": True, "why": "no Results section to check"}
         return None
     problems, title_problems = checked(results)
@@ -766,12 +780,12 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
                                           objections=problems + title_problems, deadline=deadline)
             problems, title_problems = checked(results)
             title_gate["rewritten"] = True
-        except (narrate_mod.OutOfTime, narrate_mod.RateLimited) as exc:
+        except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
             # The draft failed its checks; the repair could not be had. A
             # title that outran the body is still repaired in code below.
             if problems:
-                problems = problems + ["no time was left to repair it" if isinstance(exc, narrate_mod.OutOfTime)
-                                       else "the AI service was rate-limiting the repair"]
+                problems = problems + ["the repair was not made: %s"
+                                       % _no_results_reason(exc)[len("no Results section: "):]]
     if title_problems and results is not None and not problems:
         # Check 2's last word: the title code writes, and the summary without
         # the sentences that still outran the body.

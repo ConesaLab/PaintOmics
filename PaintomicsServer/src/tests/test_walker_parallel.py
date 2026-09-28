@@ -414,20 +414,35 @@ class StageBudgetTest(unittest.TestCase):
             self.assertIsNone(out)
             return checks["results"]
 
-        throttled = requests.exceptions.HTTPError("HTTP 429")
-        throttled.response = _Throttled(80)
-        throttled.gave_up_at_deadline = True          # LLMClient: the budget refused the wait
-        refused = requests.exceptions.HTTPError("HTTP 429")
-        refused.response = _Throttled(2)              # every retry throttled, time still left
+        def http_error(status, retry_after=2, gave_up=False):
+            err = requests.exceptions.HTTPError("HTTP %d" % status)
+            err.response = _Throttled(retry_after)
+            err.response.status_code = status
+            if gave_up:
+                err.gave_up_at_deadline = True    # LLMClient: the budget ended the call
+            return err
+
+        budget_timeout = requests.exceptions.Timeout("exceeded its budget")
+        budget_timeout.gave_up_at_deadline = True
         soon = time.time() + 30
-        self.assertEqual(reason(requests.exceptions.Timeout("exceeded its budget"), soon), [service.RESULTS_OUT_OF_TIME])
-        self.assertEqual(reason(throttled, soon), [service.RESULTS_OUT_OF_TIME])
-        self.assertEqual(reason(refused, time.time() + 400), [service.RESULTS_RATE_LIMITED],
+        self.assertEqual(reason(budget_timeout, soon), [service.RESULTS_OUT_OF_TIME])
+        self.assertEqual(reason(http_error(429, 80, gave_up=True), soon), [service.RESULTS_OUT_OF_TIME])
+        self.assertEqual(reason(http_error(429), time.time() + 400), [service.RESULTS_RATE_LIMITED],
                          "a gateway that kept refusing is neither the clock nor a failed check")
-        self.assertEqual(reason(ValueError("unreadable"), soon), ["no results"],
-                         "a broken answer is not the clock running out")
-        self.assertEqual(reason(requests.exceptions.Timeout("slow"), None), ["no results"],
+        self.assertEqual(reason(http_error(500), time.time() + 400), [service.RESULTS_NO_ANSWER],
+                         "a server error is not rate limiting")
+        self.assertEqual(reason(requests.exceptions.Timeout("gateway hung"), time.time() + 400),
+                         [service.RESULTS_NO_ANSWER], "a gateway's own timeout with time left is not the clock")
+        self.assertEqual(reason(requests.exceptions.Timeout("slow"), None), [service.RESULTS_NO_ANSWER],
                          "without a deadline a timeout is the gateway's, not the run's")
+
+        class Unreadable(object):
+            def complete_json(self, *args, **kwargs):
+                return {}
+        checks = {"gates": {}}
+        service._narrate(Unreadable(), "card", "chain", [{"n": 1, "claim": "c"}], [], None, {}, "pathway:x", checks,
+                         (100, 200), deadline=soon)
+        self.assertEqual(checks["results"], ["no results"], "an unreadable answer is an answer, not a silent AI")
 
     def test_the_client_marks_only_the_wait_the_budget_refused(self):
         # The mark narrate reads: set when the retry wait would pass the
@@ -512,9 +527,9 @@ class StageBudgetTest(unittest.TestCase):
         self.assertEqual(len(asked), 1, "the re-check was sent with no time to answer")
         self.assertEqual([d["n"] for d in dropped], [1])
 
-    def test_a_statement_the_direction_recheck_never_reached_is_dropped(self):
-        # Sent back for contradicting its regulator, rewritten (or not) with no
-        # time left to check again: the objection stands, the statement goes.
+    def recheck(self, again):
+        """_direction_pass on a stub check: the first pass objects to Cish, the
+        re-check returns `again`; the rewrite answers nothing."""
         from src.classes.AIInterpret.walker import direction as direction_mod
         from src.classes.AIInterpret.walker import service
         calls = []
@@ -522,27 +537,40 @@ class StageBudgetTest(unittest.TestCase):
         def check(client, statements, walker, deadline=None):
             calls.append(deadline)
             if len(calls) == 1:
-                return {1: [{"consistent": False}]}, {1: ["Cish is a reporter: its fall reports the pathway down"]}
-            # Two regulators: the re-check reached one and not the other.
-            return {1: [{"consistent": True},
-                        {"consistent": True, "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}]}, {}
+                return ({1: [{"gene": "Cish", "consistent": False, "insensitive": False},
+                             {"gene": "Pten", "consistent": True, "insensitive": False}]},
+                        {1: ["Cish is a reporter: its fall reports the pathway down"]})
+            return {1: again}, {}
 
-        real_check, real_rewrite = direction_mod.direction_check, service._rewrite_and_recheck
-        direction_mod.direction_check = check
-        service._rewrite_and_recheck = lambda client, card, chain, failing, *args, **kwargs: {
-            s["n"]: [] for s in failing}
-        try:
-            statements, dropped, checks = [{"n": 1, "claim": "c"}], [], {"gates": {}}
-            deadline = time.time() + 30
+        statements, dropped, checks = [{"n": 1, "claim": "c"}], [], {"gates": {}}
+        deadline = time.time() + 30
+        with patched((direction_mod, "direction_check", check),
+                     (service, "_rewrite_and_recheck", lambda client, card, chain, failing, *a, **k: {
+                         s["n"]: [] for s in failing})):
             service._direction_pass(None, "card", "chain", statements, dropped, None, None, set(), checks,
                                     deadline=deadline)
-        finally:
-            direction_mod.direction_check, service._rewrite_and_recheck = real_check, real_rewrite
         self.assertEqual(calls, [deadline, deadline], "a direction check ran without the stage's deadline")
-        self.assertEqual(statements, [])
-        self.assertEqual([d["n"] for d in dropped], [1])
-        self.assertIn("no time was left to check the rewrite", dropped[0]["why"])
-        self.assertIn("Cish is a reporter", dropped[0]["why"], "the objection that stands was lost")
+        return statements, dropped
+
+    def test_a_statement_the_direction_recheck_did_not_answer_for_is_dropped(self):
+        # Sent back for contradicting Cish, and the re-check got no answer for
+        # Cish -- no time, or none from the AI service: the objection stands.
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        for reason in (direction_mod.UNCHECKED_OUT_OF_TIME, direction_mod.UNCHECKED_NO_ANSWER):
+            statements, dropped = self.recheck([{"gene": "Pten", "consistent": True, "insensitive": False},
+                                                {"gene": "Cish", "consistent": True, "insensitive": False, "unchecked": reason}])
+            self.assertEqual(statements, [], reason)
+            self.assertIn("Cish was not checked again: " + reason, dropped[0]["why"])
+            self.assertIn("Cish is a reporter", dropped[0]["why"], "the objection that stands was lost")
+
+    def test_a_recheck_that_cleared_the_objection_keeps_the_statement(self):
+        # Cish answered and agreed; Pten, which never objected, went unanswered.
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        statements, dropped = self.recheck([{"gene": "Cish", "consistent": True, "insensitive": False},
+                                            {"gene": "Pten", "consistent": True, "insensitive": False,
+                                             "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}])
+        self.assertEqual([s["n"] for s in statements], [1])
+        self.assertEqual(dropped, [])
 
     def test_a_slot_that_frees_too_late_is_not_used_for_a_call(self):
         # The paper agent checks the time before waiting for a slot; one that
@@ -564,6 +592,119 @@ class StageBudgetTest(unittest.TestCase):
         self.assertTrue(verdict.get("transient"))
 
 
+class BudgetEdgesTest(unittest.TestCase):
+    """Where the budget ends: decided by the clock, never below a call's worth
+    of time, and never blamed for what the gateway did with time to spare."""
+
+    def client(self):
+        from src.classes.AIInterpret import llm_client as lc
+        return lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+                             "fallback_models": []})
+
+    def test_a_gateway_timeout_with_time_left_is_not_the_budget(self):
+        from src.classes.AIInterpret import llm_client as lc
+
+        def hung(*args, **kwargs):
+            raise lc.requests.exceptions.ConnectTimeout("gateway unreachable")
+        with patched((lc.requests, "post", hung), (lc.time, "sleep", lambda seconds: None)):
+            for budget, marked in ((400, False), (2, True)):
+                with self.assertRaises(lc.requests.exceptions.Timeout) as raised:
+                    self.client().complete([{"role": "user", "content": "x"}], budget_seconds=budget)
+                self.assertEqual(lc.ran_out_of_budget(raised.exception), marked, "budget %s" % budget)
+
+    def test_a_backoff_that_leaves_no_time_for_the_retry_is_refused(self):
+        # A wait ending 0.5 s before the deadline used to be slept through,
+        # and the retry sent with half a second to answer.
+        from src.classes.AIInterpret import llm_client as lc
+        sleeps = []
+        with patched((lc.requests, "post", lambda *a, **k: _Throttled(9)), (lc.time, "sleep", sleeps.append),
+                     (lc.random, "uniform", lambda a, b: 0.0)):
+            with self.assertRaises(lc.requests.exceptions.HTTPError) as raised:
+                self.client().complete([{"role": "user", "content": "x"}], budget_seconds=10)
+        self.assertEqual(sleeps, [], "slept into the last seconds of the budget")
+        self.assertTrue(lc.ran_out_of_budget(raised.exception))
+
+    def test_the_narrator_is_not_asked_with_under_a_calls_worth(self):
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        client = _Budgets()
+        with self.assertRaises(narrate_mod.OutOfTime):
+            narrate_mod.narrate(client, "card", [{"n": 1}], "chain", "", deadline=time.time() + 2.5)
+        self.assertEqual(client.budgets, [])
+
+    def test_an_unreadable_second_answer_is_not_blamed_on_the_first_failure(self):
+        import requests
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+
+        class Client(object):
+            calls = 0
+
+            def complete_json(self, *args, **kwargs):
+                Client.calls += 1
+                if Client.calls == 1:
+                    err = requests.exceptions.HTTPError("HTTP 429")
+                    err.response = _Throttled(2)
+                    raise err
+                return {}
+        self.assertIsNone(narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "",
+                                              deadline=time.time() + 400))
+
+    def test_the_rewrite_and_the_sense_recheck_are_given_the_time_left(self):
+        from src.classes.AIInterpret.walker import service
+        sent = []
+        walker = types.SimpleNamespace(record=lambda: {"chain": []}, overlay=None)
+        store = types.SimpleNamespace(papers={}, verdict=lambda *a: None)
+        with patched((service, "rewrite_once", lambda *a, **k: sent.append(k["budget_seconds"]) or {}),
+                     (service.verify, "verify_statement", lambda *a, **k: [])):
+            service._rewrite_and_recheck(None, "card", "chain", [{"n": 1, "claim": "c"}], {1: {"direction": "x"}},
+                                         walker, store, set(), deadline=time.time() + 30)
+        self.assertTrue(len(sent) == 1 and 20 < sent[0] <= 30, sent)
+
+        clock = Clock()
+        asked = []
+        failing = {f: {"ok": True, "note": ""} for f in service.sense_mod.FIELDS}
+        failing["timing"] = {"ok": False, "note": "no timing"}
+
+        def sense_check(client, card, statements, chain, budget_seconds=None):
+            asked.append(budget_seconds)
+            clock.t += 1
+            return {s["n"]: dict(failing) for s in statements}
+        with patched((service, "time", clock), (service.sense_mod, "sense_check", sense_check),
+                     (service, "_rewrite_and_recheck", lambda client, card, chain, bad, *a, **k: {
+                         s["n"]: [] for s in bad})):
+            service._sense_pass(None, "card", "chain", [{"n": 1, "claim": "c"}], [], None, None, set(), {},
+                                deadline=clock.t + 30)
+        self.assertEqual(asked, [30, 29], "the sense check and its re-check each get the time left")
+
+
+class NarratorRepairTest(_Fixture):
+    def test_a_repair_the_ai_service_refused_keeps_the_draft_and_its_failed_checks(self):
+        # The draft was written and failed its checks; the repair was refused.
+        # The page must say the section failed, not that none was written.
+        import requests
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+
+        class Client(object):
+            calls = 0
+
+            def complete_json(self, *args, **kwargs):
+                Client.calls += 1
+                if Client.calls == 1:
+                    return {"title": "Results", "summary": "s.", "paragraphs": [{"text": "Too short.", "legs": [1]}]}
+                err = requests.exceptions.HTTPError("HTTP 429")
+                err.response = _Throttled(2)
+                raise err
+        checks = {"gates": {}}
+        out = service._narrate(Client(), "card", "chain", [{"n": 1, "claim": "c", "prose": "p", "legs": [1]}], [],
+                               walker, {}, "pathway:x", checks, (100, 200), deadline=time.time() + 400)
+        self.assertIsNone(out)
+        self.assertIsNotNone(checks.get("results_dropped"))
+        self.assertEqual(checks["results"][-1],
+                         "the repair was not made: the AI service was rate-limiting the Narrator's requests")
+        self.assertFalse([r for r in checks["results"] if r.startswith("no Results section: ")],
+                         "a draft that was written is not 'no Results section'")
+
+
 class ResultsNoteWiringTest(unittest.TestCase):
     """The note under a missing Results section names "Walk again" only where
     that button is drawn: the Step 4 column for a user who may edit, never
@@ -582,10 +723,24 @@ class ResultsNoteWiringTest(unittest.TestCase):
         self.assertIn("paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()})", walk)
         self.assertIn("if (this.canEdit()) {\n\t\t\tvar again = paWalkEl(\"a\", \"button btn-default pa-walk-again\"",
                       walk, "the button and the hint no longer share one condition")
+        self.assertEqual(walk.count("Walk again to try for one"), 1, "the hint is built once, under canRerun")
+        self.assertEqual(walk.count("+ standAlone"), 3, "every no-section note ends with the same rerun hint")
         panel = self.source("PA_AIInterpretView.js")
         calls = [line for line in panel.splitlines() if "paWalkResultsNode(" in line and "typeof" not in line]
         self.assertTrue(calls)
         self.assertFalse([line for line in calls if "canRerun" in line], "the AI panel has no Walk again button")
+
+    def test_the_notes_read_the_servers_reasons(self):
+        from src.classes.AIInterpret.walker import service
+        walk = self.source("PA_Step4WalkView.js")
+        for reason, pattern in ((service.RESULTS_OUT_OF_TIME, "/^no Results section: .*time budget/"),
+                                (service.RESULTS_RATE_LIMITED, "/^no Results section: .*rate-limiting/"),
+                                (service.RESULTS_NO_ANSWER, "/^no Results section: .*did not answer/")):
+            self.assertIn("said(%s)" % pattern, walk)
+            self.assertRegex(reason, pattern.strip("/"))
+        # The regulators the direction check did not answer for say so.
+        self.assertIn('" not checked" : ""', walk)
+        self.assertIn('" · not checked: " + String(verdict.unchecked)', walk)
 
 
 class ModelWalkStagesTest(unittest.TestCase):
@@ -638,9 +793,15 @@ class ModelWalkStagesTest(unittest.TestCase):
         self.assertIn("time budget", checks["gates"]["direction"]["why"])
 
     def test_a_sense_call_cut_at_its_budget_still_leaves_the_narrator_its_turn(self):
-        seen, checks = self.walk(left_after_writers=200)
-        self.assertEqual(len(seen["sense"]), 1)
-        self.assertEqual(seen["narrate"], 1, "the Narrator was skipped: %s" % checks.get("results"))
+        from src.classes.AIInterpret.walker import service
+        for overrun in (1.0, 4.0):
+            seen, checks = self.walk(left_after_writers=200, sense_overrun=overrun)
+            self.assertEqual(len(seen["sense"]), 1)
+            self.assertEqual(seen["narrate"], 1, "the Narrator was skipped after a %s s overrun: %s"
+                             % (overrun, checks.get("results")))
+        run_deadline = 10000.0 + parallel.plan_for("network")["run_seconds"]
+        self.assertEqual(seen["direction"], [run_deadline - service.SENSE_MIN_SECONDS - service.NARRATE_MIN_SECONDS],
+                         "the direction check was given time kept for the sense check or the Narrator")
 
 
 class WriterTest(_Fixture):
