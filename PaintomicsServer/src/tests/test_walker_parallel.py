@@ -391,13 +391,76 @@ class StageBudgetTest(unittest.TestCase):
 
         throttled = requests.exceptions.HTTPError("HTTP 429")
         throttled.response = _Throttled(80)
+        throttled.gave_up_at_deadline = True          # LLMClient: the budget refused the wait
+        refused = requests.exceptions.HTTPError("HTTP 429")
+        refused.response = _Throttled(2)              # every retry throttled, time still left
         soon = time.time() + 30
         self.assertEqual(reason(requests.exceptions.Timeout("exceeded its budget"), soon), [service.RESULTS_OUT_OF_TIME])
         self.assertEqual(reason(throttled, soon), [service.RESULTS_OUT_OF_TIME])
+        self.assertEqual(reason(refused, time.time() + 400), ["no results"],
+                         "a gateway that kept refusing is not the clock running out")
         self.assertEqual(reason(ValueError("unreadable"), soon), ["no results"],
                          "a broken answer is not the clock running out")
         self.assertEqual(reason(requests.exceptions.Timeout("slow"), None), ["no results"],
                          "without a deadline a timeout is the gateway's, not the run's")
+
+    def test_the_client_marks_only_the_wait_the_budget_refused(self):
+        # The mark narrate reads: set when the retry wait would pass the
+        # deadline, absent when the retries simply ran out with time left.
+        from src.classes.AIInterpret import llm_client as lc
+        real_post, real_sleep = lc.requests.post, lc.time.sleep
+        lc.time.sleep = lambda seconds: None
+        client = lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+                               "fallback_models": []})
+        try:
+            for retry_after, budget, marked in ((80, 30, True), (2, 400, False)):
+                lc.requests.post = lambda *args, **kwargs: _Throttled(retry_after)
+                with self.assertRaises(lc.requests.exceptions.HTTPError) as raised:
+                    client.complete([{"role": "user", "content": "x"}], budget_seconds=budget)
+                self.assertEqual(bool(getattr(raised.exception, "gave_up_at_deadline", False)), marked,
+                                 "Retry-After %s under a %s s budget" % (retry_after, budget))
+        finally:
+            lc.requests.post, lc.time.sleep = real_post, real_sleep
+
+    def test_a_call_with_no_time_to_answer_is_not_sent(self):
+        # Flooring the budget at 1 s sent calls that could only time out, each
+        # pushing the stage further past its deadline.
+        from src.classes.AIInterpret.walker import service
+        client = _Budgets()
+        checks = {}
+        service._sense_pass(client, "card", "chain", [{"n": 1, "claim": "c"}], [], None, None, set(), checks,
+                            deadline=time.time() + 1)
+        self.assertEqual(client.budgets, [], "the sense check was asked with no time to answer")
+        self.assertEqual(checks["sense"], "unavailable")
+
+    def test_a_statement_the_direction_recheck_never_reached_is_dropped(self):
+        # Sent back for contradicting its regulator, rewritten (or not) with no
+        # time left to check again: the objection stands, the statement goes.
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        from src.classes.AIInterpret.walker import service
+        calls = []
+
+        def check(client, statements, walker, deadline=None):
+            calls.append(deadline)
+            if len(calls) == 1:
+                return {1: [{"consistent": False}]}, {1: ["Cish is a reporter: its fall reports the pathway down"]}
+            return {1: [{"consistent": True, "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}]}, {}
+
+        real_check, real_rewrite = direction_mod.direction_check, service._rewrite_and_recheck
+        direction_mod.direction_check = check
+        service._rewrite_and_recheck = lambda client, card, chain, failing, *args, **kwargs: {
+            s["n"]: [] for s in failing}
+        try:
+            statements, dropped, checks = [{"n": 1, "claim": "c"}], [], {"gates": {}}
+            deadline = time.time() + 30
+            service._direction_pass(None, "card", "chain", statements, dropped, None, None, set(), checks,
+                                    deadline=deadline)
+        finally:
+            direction_mod.direction_check, service._rewrite_and_recheck = real_check, real_rewrite
+        self.assertEqual(calls, [deadline, deadline], "a direction check ran without the stage's deadline")
+        self.assertEqual(statements, [])
+        self.assertEqual([d["n"] for d in dropped], [1])
+        self.assertIn("no time was left to check the rewrite", dropped[0]["why"])
 
 
 class WriterTest(_Fixture):

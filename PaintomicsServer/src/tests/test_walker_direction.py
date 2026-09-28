@@ -6,6 +6,7 @@ flagged, and the gate sums it up. The model is a stub. Offline."""
 import os
 import shutil
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -27,8 +28,9 @@ class StubClient(object):
         self.claimed = claimed
         self.calls = []
 
-    def complete_json(self, messages, name, schema, fallback, max_tokens=0, temperature=0.0):
+    def complete_json(self, messages, name, schema, fallback, max_tokens=0, temperature=0.0, budget_seconds=None):
         self.calls.append(name)
+        self.budgets = getattr(self, "budgets", []) + [budget_seconds]
         user = messages[1]["content"]
         if name == "direction_claim":
             return {"claimed": self.claimed, "quote": "the words"}
@@ -177,6 +179,53 @@ class DirectionTest(unittest.TestCase):
         self.assertEqual(objections, {})
         self.assertIsNone(verdicts[1][0]["claimed"])
         self.assertTrue(direction.gate(verdicts, 0)["pass"])
+
+    # The stage runs first after the Writers, when the 2026-09-15 throttling
+    # hit: its calls must give up by its deadline like every other stage's.
+    def test_every_call_is_given_the_time_left(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        client = StubClient("down")
+        direction.direction_check(client, [self.statement(symbol, "x fell")], walker, deadline=time.time() + 30)
+        self.assertEqual(len(client.budgets), 3, client.budgets)
+        self.assertTrue(all(b is not None and 20 < b <= 30 for b in client.budgets), client.budgets)
+
+    def test_a_due_deadline_asks_nothing_and_says_so(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        client = StubClient("up")
+        verdicts, objections = direction.direction_check(client, [self.statement(symbol, "x fell")], walker,
+                                                         deadline=time.time() + 1)
+        self.assertEqual(client.calls, [], "a call was sent with no time to answer")
+        self.assertEqual(objections, {})
+        self.assertEqual(verdicts[1][0]["unchecked"], direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_a_rate_limited_gateway_gives_up_by_the_deadline(self):
+        # The real client and its real retry loop: a 429 asking for 84 s may
+        # not be slept through when the stage has 30 s.
+        import requests
+        from src.classes.AIInterpret import llm_client as lc
+
+        class Throttled(object):
+            status_code, text, headers = 429, "rate limited", {"Retry-After": "84"}
+
+            def raise_for_status(self):
+                err = requests.exceptions.HTTPError("HTTP 429")
+                err.response = self
+                raise err
+
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        sleeps, real_post, real_sleep = [], lc.requests.post, lc.time.sleep
+        lc.requests.post = lambda *args, **kwargs: Throttled()
+        lc.time.sleep = sleeps.append
+        try:
+            client = lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+                                   "fallback_models": []})
+            direction.direction_check(client, [self.statement(symbol, "x fell")], walker, deadline=time.time() + 30)
+        finally:
+            lc.requests.post, lc.time.sleep = real_post, real_sleep
+        self.assertFalse([s for s in sleeps if s >= 30], "a retry slept past the stage's deadline: %s" % sleeps)
 
 
 if __name__ == "__main__":

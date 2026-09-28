@@ -363,10 +363,14 @@ function paWalkResultsNode(view, options) {
 		// checks.results holds the server's reason; a walk that ran out of time
 		// never had a section to check, and saying it failed its checks sent
 		// the reader looking for a fault in the statements.
+		// canRerun: the caller shows a "Walk again" button; the AI panel and a
+		// read-only viewer do not, and must not be told to press one.
 		var reasons = (view && view.checks && view.checks.results) || [];
 		var outOfTime = reasons.some(function (reason) { return /time budget/.test(String(reason)); });
+		var rerun = !!(options && options.canRerun);
 		var why = outOfTime
-			? "No Results section was written: the walk ran out of time before it could be. The statements below stand alone; Walk again to try for one."
+			? "No Results section was written: the walk ran out of time before it could be. The statements below stand alone" +
+				(rerun ? "; Walk again to try for one." : ".")
 			: reasons.length
 				? "The Results section did not pass its checks, so the statements below stand alone."
 				: "No Results section was written: no statement survived its checks.";
@@ -913,7 +917,7 @@ function PA_Step4WalkView() {
 		if (gates) { root.appendChild(gates); }
 		var shown = paWalkTextShown(view);
 		if (shown) {
-			root.appendChild(paWalkResultsNode(view, {onLeg: onLeg}));
+			root.appendChild(paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()}));
 			var references = paWalkReferencesNode(view);
 			if (references) { root.appendChild(references); }
 			if ((view.statements || []).length || (view.dropped || []).length) {

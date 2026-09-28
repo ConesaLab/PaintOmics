@@ -95,12 +95,12 @@ class OutOfTime(Exception):
 
 
 def _ran_out(exc):
-    """Under a deadline the client gives up with a timeout, or with the 429
-    whose wait would not fit in the time left: the budget, not a bad answer."""
-    if isinstance(exc, requests.exceptions.Timeout):
-        return True
-    response = getattr(exc, "response", None)
-    return isinstance(exc, requests.exceptions.HTTPError) and getattr(response, "status_code", None) == 429
+    """Under a deadline the client gives up with a timeout, or with the error
+    whose retry wait would not fit in the time left (LLMClient marks it): the
+    budget, not a bad answer. A 429 raised after every retry, with time still
+    left, is the gateway refusing, not the clock."""
+    return (isinstance(exc, requests.exceptions.Timeout)
+            or bool(getattr(exc, "gave_up_at_deadline", False)))
 
 
 def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),

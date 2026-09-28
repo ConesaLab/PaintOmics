@@ -243,6 +243,10 @@ class LLMClient:
             # A retry that cannot finish inside the budget only delays an
             # answer nobody will be there to read. Stop here instead.
             if deadline is not None and time.monotonic() + seconds >= deadline:
+                # Same type as before (model fallback reads it); the mark
+                # tells "the budget refused the wait" from "every retry
+                # was refused" for a caller that reports running out of time.
+                err.gave_up_at_deadline = True
                 raise err
             time.sleep(seconds)
 

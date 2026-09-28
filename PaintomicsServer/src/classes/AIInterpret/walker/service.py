@@ -53,6 +53,10 @@ STAGE_PERCENT = {"network": 5, "card": 10, "walk": 15, "writer": 60, "sense": 80
 # Seconds the sense check and the Narrator need after the Writers stop.
 SENSE_MIN_SECONDS = 70
 NARRATE_MIN_SECONDS = 45
+# Between the sense stage's deadline and the Narrator's gate: a call cut off
+# at its budget returns a little after it (the connect precedes the read
+# timer), and with no margin that little skipped the Narrator.
+STAGE_SLACK_SECONDS = 5
 # The least a Results section must say per kept statement when the scope's
 # own floor would ask for more than the statements hold.
 WORDS_PER_STATEMENT = 50
@@ -464,12 +468,15 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         s["tier"] = tiers.statement_tier(s, chain_record, discordant)
         s["discordant_legs"] = sorted(n for n in (s.get("legs") or []) if n in discordant)
     results = None
-    if statements and run_deadline - time.time() >= SENSE_MIN_SECONDS + DIRECTION_MIN_SECONDS:
+    # The stage is entered only when its own deadline leaves time for a call:
+    # the sense check's and the Narrator's time is not the direction check's.
+    direction_deadline = run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS
+    if statements and not _due(direction_deadline):
         report("sense", "Checking the direction of every regulator the statements lean on", walker)
         t0 = time.time()
         try:
             _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks,
-                            deadline=run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS)
+                            deadline=direction_deadline)
         except Exception:                                             # noqa: BLE001
             logger.warning("[walker] the direction check failed", exc_info=True)
             gates["direction"] = {"pass": True, "not_applicable": True, "why": "the direction check could not run"}
@@ -483,7 +490,7 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         t0 = time.time()
         try:
             _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks,
-                        deadline=run_deadline - NARRATE_MIN_SECONDS)
+                        deadline=run_deadline - NARRATE_MIN_SECONDS - STAGE_SLACK_SECONDS)
         except Exception:                                             # noqa: BLE001
             # A malformed model answer drops this stage, not the walk: the
             # statements it rewrote are set aside, the rest stay as the Writers
@@ -576,9 +583,16 @@ def attach_evidence(statements, papers):
         paper["evidence"] = evidence
 
 
+def _due(deadline):
+    """True when `deadline` leaves too little time for a model call; the
+    call is then not made rather than sent with a budget it cannot meet."""
+    return deadline is not None and deadline - time.time() < direction_mod.CALL_MIN_SECONDS
+
+
 def _left(deadline):
-    """Seconds until `deadline` (at least 1), or None when there is none."""
-    return None if deadline is None else max(1.0, deadline - time.time())
+    """Seconds until `deadline`, or None when there is none. Ask only once
+    _due is False: complete() reads a budget of 0 as no budget at all."""
+    return None if deadline is None else deadline - time.time()
 
 
 def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store, read, deadline=None):
@@ -588,7 +602,8 @@ def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store
     The rewrite gives up by ``deadline``."""
     verdicts = {n: {field: {"ok": False, "note": note} for field, note in fields.items()}
                 for n, fields in notes.items()}
-    rewritten = rewrite_once(client, card_text, chain, failing, verdicts, budget_seconds=_left(deadline))
+    rewritten = {} if _due(deadline) else rewrite_once(client, card_text, chain, failing, verdicts,
+                                                       budget_seconds=_left(deadline))
     for s in failing:
         new = rewritten.get(s["n"])
         if new:
@@ -619,7 +634,7 @@ def _rewrite_and_recheck(client, card_text, chain, failing, notes, walker, store
 def _direction_pass(client, card_text, chain, statements, dropped, walker, store, read, checks, deadline=None):
     """Check 3 on the kept statements: objections go back to the Writer once,
     then the statement drops. Fills checks["gates"]["direction"]."""
-    verdicts, objections = direction_mod.direction_check(client, statements, walker)
+    verdicts, objections = direction_mod.direction_check(client, statements, walker, deadline=deadline)
     for s in statements:
         s["direction"] = verdicts.get(s["n"])
     failing = [s for s in statements if objections.get(s["n"])]
@@ -627,13 +642,17 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
         problems = _rewrite_and_recheck(client, card_text, chain, failing,
                                         {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
                                         walker, store, read, deadline=deadline)
-        again, again_objections = direction_mod.direction_check(client, failing, walker)
+        again, again_objections = direction_mod.direction_check(client, failing, walker, deadline=deadline)
         _refresh_direction(failing, again, verdicts)
         for s in failing:
-            if problems[s["n"]] or again_objections.get(s["n"]):
+            # A statement sent back keeps its objection until a re-check
+            # clears it: one the deadline left unasked is not cleared.
+            unasked = any(v.get("unchecked") for v in again.get(s["n"], []))
+            stands = objections[s["n"]] + ["no time was left to check the rewrite"] if unasked else []
+            if problems[s["n"]] or again_objections.get(s["n"]) or stands:
                 statements.remove(s)
                 dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
-                                "why": "; ".join(problems[s["n"]] + again_objections.get(s["n"], [])),
+                                "why": "; ".join(problems[s["n"]] + again_objections.get(s["n"], []) + stands),
                                 "by": "direction check"})
     # The gate judges what the reader will see: a contradiction that was
     # dropped is the check working, not the check failing.
@@ -655,7 +674,8 @@ def _refresh_direction(failing, again, verdicts):
 def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks, deadline=None):
     # Each call gives up by `deadline`: a rate-limited sense check that slept
     # through its retries used to take the time the Narrator was promised.
-    verdicts = sense_mod.sense_check(client, card_text, statements, chain, budget_seconds=_left(deadline))
+    verdicts = None if _due(deadline) else sense_mod.sense_check(client, card_text, statements, chain,
+                                                                 budget_seconds=_left(deadline))
     if verdicts is None:
         for s in statements:
             s["sense"] = None
@@ -670,7 +690,9 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
         client, card_text, chain, failing,
         {s["n"]: {k: verdicts[s["n"]][k]["note"] for k in sense_mod.failed_fields(s["sense"])} for s in failing},
         walker, store, read, deadline=deadline)
-    again = sense_mod.sense_check(client, card_text, failing, chain, budget_seconds=_left(deadline)) or {}
+    # Unasked, each failing statement keeps the verdict it failed and drops.
+    again = {} if _due(deadline) else sense_mod.sense_check(client, card_text, failing, chain,
+                                                            budget_seconds=_left(deadline)) or {}
     for s in failing:
         s["sense"] = again.get(s["n"], s["sense"])
         if problems[s["n"]] or sense_mod.failed_fields(s.get("sense")):

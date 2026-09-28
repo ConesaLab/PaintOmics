@@ -46,8 +46,8 @@ A model walk runs as a team inside one time budget:
 | time budget | 10 minutes | 8 minutes |
 
 Every stage has a deadline. A walker past it is stopped at its next turn, a Writer past it
-keeps the statements that passed on its latest submission, and the sense check and the
-Narrator run only when there is time left for them. Every model call gives up by its stage's
+keeps the statements that passed on its latest submission, and the direction check, the
+sense check and the Narrator run only when there is time left for them. Every model call gives up by its stage's
 deadline, retries and rate-limit waits included, and nothing waits for a paper agent or a
 PubMed fetch still running when its stage ends, so the time kept for the Narrator is still
 there when its turn comes. A walk that ran out of time says so above its statements. On the STATegra example the network
