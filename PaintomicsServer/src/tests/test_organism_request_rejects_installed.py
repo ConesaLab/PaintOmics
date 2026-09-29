@@ -201,7 +201,35 @@ class OrganismRequestTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("bounded", result.stdout)
 
+    def test_a_request_that_names_no_organism_is_refused_stored_nowhere(self):
+        """2026-09-26: two requests reached the maintainer as "Specie: null"."""
+        for specie, code, message in (
+                ("", "", "Specie: null\n\nComments: My gene IDs are Phytozome"),   # the reported shape
+                (None, None, None),
+                ("null", "", "Specie: null"),
+                ("  undefined ", " ", ""),
+                ("", "", "<p><b>Specie:</b> null</p><p><b>Comments:</b>x</p>")):  # a cached old client
+            form = {"type": "specie_request", "fromEmail": "r@example.org", "fromName": "R",
+                    "specie": specie, "specieCode": code, "message": message}
+            response = _Response()
+            AdminServlet.adminServletSendReport(_Request(form), response, self.keggDataDir)
+            self.assertIs(False, response.content["success"], repr((specie, code, message)))
+            self.assertIs(True, response.content["missingOrganism"])
+            self.assertIn("Organism", response.content["errorMessage"])
+        self.assertEqual([], self._stored())
+        self.assertEqual([], self._mailed())
+
     # -- allowed -------------------------------------------------------------
+
+    def test_an_organism_named_only_by_its_code_or_an_old_message_goes_through(self):
+        for fields in ({"specie": "", "specieCode": "fox"},
+                       {"message": "<p><b>Specie:</b> Fusarium oxysporum</p><p><b>Comments:</b></p>"}):
+            form = {"type": "specie_request", "fromEmail": "r@example.org", "fromName": "R"}
+            form.update(fields)
+            response = _Response()
+            AdminServlet.adminServletSendReport(_Request(form), response, self.keggDataDir)
+            self.assertIs(True, response.content["success"], fields)
+        self.assertEqual(2, len(self._stored()))
 
     def test_an_organism_that_is_not_installed_goes_through(self):
         content = self._request(specie="Fusarium oxysporum", specieCode="fox")
@@ -285,6 +313,18 @@ class DialogWiringTest(unittest.TestCase):
         self.assertIn("already installed", self.dialog)
         self.assertNotIn("sendReportMessage(type, message);", self.dialog,
                          "the request is sent without the organism fields")
+
+    def test_an_empty_organism_field_stops_the_send(self):
+        """allowBlank never stopped the button; the handler has to check."""
+        send = self.dialog[self.dialog.index("text: 'Send request'"):]
+        check = send.index("markInvalid(")
+        self.assertLess(check, send.index("sendReportMessage("))
+        self.assertRegex(send[:check], r"getRawValue\(\)")
+
+    def test_an_installed_organism_points_unmapped_identifiers_to_contact(self):
+        self.assertIn("Contact by email", self.dialog)
+        mainView = _read("app", "view", "MainView.js")
+        self.assertIn("</i>Contact by email</li>", mainView, "the menu entry the hint names is gone")
 
     def test_the_sender_shows_the_servlet_refusal_as_a_hint_not_a_crash(self):
         """success=false used to mean showErrorMessage, whose dialog carries a

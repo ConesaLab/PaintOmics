@@ -24,6 +24,7 @@ from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
 from src.servlets.DataManagementServlet import copyFile
 from src.common.Util import ensure_utf8
+from src.common.ServerErrorManager import InputFileError
 from src.common.bioscripts.DHS_exon_association import run as run_DHS_exon_association
 from src.conf.serverconf import MAX_WAIT_THREADS #MULTITHREADING
 # Aliased: this class's __init__ takes a parameter literally named
@@ -196,7 +197,7 @@ class Bed2GeneJob(Job):
                               encodingError + ".\n")
 
         if error != "":
-            raise Exception("Errors detected in input files, please fix the following issues and try again:" + error)
+            raise InputFileError("Errors detected in input files, please fix the following issues and try again:" + error)
 
         return True
 

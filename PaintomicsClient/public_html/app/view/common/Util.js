@@ -966,6 +966,21 @@ function ajaxErrorHandler(responseObj) {
     var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
     var halves = splitServerError(err.message);
 
+    // The server refused the uploaded files and said why (InputFileError in
+    // ServerErrorManager.py). Titled "Internal error", with "retrying will not
+    // help" and a Report button, both reports of 2026-09-23 and 2026-09-26 were
+    // users sending us their own files' problems -- six condition columns beside
+    // ten, a DESeq2 table with an up/down column -- as a fault of ours. The
+    // message already says what to fix; the log half is for the log.
+    if (err.extra && err.extra.input_error === true) {
+        showErrorMessage("Please check your input files", {
+            message: halves.readable,
+            showButton: true,
+            showReportButton: false
+        });
+        return;
+    }
+
     showErrorMessage("Oops..Internal error!", {
         message: halves.readable + "</br>" + (serverSide
             ? "This happened on the server, so retrying in the browser will not help. " + adminLink
@@ -1163,6 +1178,13 @@ function sendReportMessage(type, message, fromEmail, fromName, extra) {
                 showWarningMessage(response.organism + " is already installed", {
                     message: response.errorMessage, showButton: true,
                     logMessage: "Organism request refused: " + response.organism + " is installed"
+                });
+                return;
+            }
+            if (response.success === false && response.missingOrganism === true) {
+                showWarningMessage("Which organism?", {
+                    message: response.errorMessage, showButton: true,
+                    logMessage: "Organism request refused: no organism named"
                 });
                 return;
             }

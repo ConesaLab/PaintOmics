@@ -59,7 +59,22 @@ def handleException(responseInstance, exceptionInstance, filename, function, res
     logging.error(responseMessage)
 
     responseInstance.setStatus(responseStatus)
-    responseInstance.setContent({"success": False, "message" :responseMessage, "extra": {"exc_type": str(exc_type), "file_name": str(file_name), "exc_line": str(exc_tb.tb_lineno)}})
+    responseInstance.setContent({"success": False, "message" :responseMessage, "extra": {
+        "exc_type": str(exc_type), "file_name": str(file_name), "exc_line": str(exc_tb.tb_lineno),
+        # Tells the client a refusal of the user's files from a fault of ours
+        # (see InputFileError); ajaxErrorHandler words the two differently.
+        "input_error": isinstance(exceptionInstance, InputFileError)}})
 
 class CredentialException(Exception):
+    pass
+
+class InputFileError(Exception):
+    """The uploaded files cannot be analysed as they are, and the message says why.
+
+    Raised by the input validation of each job. It was a plain Exception, so the
+    browser titled it "Oops..Internal error!", said retrying would not help and
+    offered to report it: both error reports of 2026-09-23 and 2026-09-26 were
+    users reporting their own files (six condition columns beside ten; a DESeq2
+    table with an up/down column) as a fault of ours.
+    """
     pass

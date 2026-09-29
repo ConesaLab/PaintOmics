@@ -879,6 +879,25 @@ def _installedOrganism(specieName, specieCode, message):
     return None
 
 
+#: What a request carries when the organism field was left empty: nothing, or
+#: what JavaScript writes for a missing value ("Specie: " + null).
+_NO_ORGANISM = ("", "null", "undefined")
+
+
+def _namesAnOrganism(specieName, specieCode, message):
+    """Whether an organism request says which organism it is for.
+
+    2026-09-26: two requests reached the maintainer as "Specie: null" -- the
+    dialog never enforced its required field -- with comments and nothing to
+    install. The dialog now refuses to send; this refuses what a client cached
+    from before that still sends.
+    """
+    for value in (specieName, specieCode, _specieFromMessage(message)):
+        if str(value or "").strip().lower() not in _NO_ORGANISM:
+            return True
+    return False
+
+
 def adminServletSendReport(request, response, ROOT_DIRECTORY):
     """
     This function...
@@ -913,6 +932,13 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
         _message = formFields.get("message")
 
         if request_type == "specie_request":
+            if not _namesAnOrganism(formFields.get("specie"), formFields.get("specieCode"), _message):
+                logging.info("Organism request refused: it names no organism")
+                response.setContent({
+                    "success": False, "missingOrganism": True,
+                    "errorMessage": "Choose or type the organism you need in the Organism "
+                    "field. A request that does not name one cannot be acted on."})
+                return response
             installed = _installedOrganism(formFields.get("specie"),
                                            formFields.get("specieCode"), _message)
             if installed is not None:
