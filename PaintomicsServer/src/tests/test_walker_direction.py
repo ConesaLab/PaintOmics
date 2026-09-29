@@ -6,6 +6,7 @@ flagged, and the gate sums it up. The model is a stub. Offline."""
 import os
 import shutil
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -27,8 +28,9 @@ class StubClient(object):
         self.claimed = claimed
         self.calls = []
 
-    def complete_json(self, messages, name, schema, fallback, max_tokens=0, temperature=0.0):
+    def complete_json(self, messages, name, schema, fallback, max_tokens=0, temperature=0.0, budget_seconds=None):
         self.calls.append(name)
+        self.budgets = getattr(self, "budgets", []) + [budget_seconds]
         user = messages[1]["content"]
         if name == "direction_claim":
             return {"claimed": self.claimed, "quote": "the words"}
@@ -47,6 +49,40 @@ class StubClient(object):
                 return {"consistent": not shown_negative, "note": "rose vs values"}
             return {"consistent": True, "note": "no direction"}
         raise AssertionError(name)
+
+
+class Clock(object):
+    """A clock the test moves: every model call can cost seconds of it."""
+
+    def __init__(self, t=10000.0):
+        self.t = t
+
+    def time(self):
+        return self.t
+
+
+class SlowStub(StubClient):
+    """StubClient whose calls each take `costs` seconds of `clock`."""
+
+    def __init__(self, claimed, clock, costs):
+        StubClient.__init__(self, claimed)
+        self.clock, self.costs = clock, list(costs)
+
+    def complete_json(self, *args, **kwargs):
+        out = StubClient.complete_json(self, *args, **kwargs)
+        self.clock.t += self.costs.pop(0) if self.costs else 0
+        return out
+
+
+class Throttled(object):
+    """requests.Response double: a 429 asking for a long wait."""
+    status_code, text, headers = 429, "rate limited", {"Retry-After": "84"}
+
+    def raise_for_status(self):
+        import requests
+        err = requests.exceptions.HTTPError("HTTP 429")
+        err.response = self
+        raise err
 
 
 class DirectionTest(unittest.TestCase):
@@ -177,6 +213,231 @@ class DirectionTest(unittest.TestCase):
         self.assertEqual(objections, {})
         self.assertIsNone(verdicts[1][0]["claimed"])
         self.assertTrue(direction.gate(verdicts, 0)["pass"])
+
+    # The stage runs first after the Writers, when the 2026-09-15 throttling
+    # hit: its calls must give up by its deadline like every other stage's.
+    def test_every_call_is_given_the_time_left(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        client = StubClient("down")
+        direction.direction_check(client, [self.statement(symbol, "x fell")], walker, deadline=time.time() + 30)
+        self.assertEqual(len(client.budgets), 3, client.budgets)
+        self.assertTrue(all(b is not None and 20 < b <= 30 for b in client.budgets), client.budgets)
+
+    def test_a_due_deadline_asks_nothing_and_says_so(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        client = StubClient("up")
+        verdicts, objections = direction.direction_check(client, [self.statement(symbol, "x fell")], walker,
+                                                         deadline=time.time() + 1)
+        self.assertEqual(client.calls, [], "a call was sent with no time to answer")
+        self.assertEqual(objections, {})
+        self.assertEqual(verdicts[1][0]["unchecked"], direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_a_rate_limited_gateway_gives_up_by_the_deadline_and_the_verdict_says_so(self):
+        # The real client and its real retry loop: a 429 asking for 84 s may
+        # not be slept through when the stage has 30 s, and a call that gave
+        # up on the deadline is "not asked", never "no objection" -- a
+        # statement sent back for contradicting its regulator would otherwise
+        # stand once the re-check gave up.
+        from src.classes.AIInterpret import llm_client as lc
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        sleeps, real_post, real_sleep = [], lc.requests.post, lc.time.sleep
+        lc.requests.post = lambda *args, **kwargs: Throttled()
+        lc.time.sleep = sleeps.append
+        try:
+            client = lc.LLMClient({"api_base": "https://gateway.example/v1", "api_key": "k", "model": "m",
+                                   "fallback_models": []})
+            verdicts, objections = direction.direction_check(
+                client, [self.statement(symbol, "Cish fell, derepressing the pathway")], walker,
+                deadline=time.time() + 30)
+        finally:
+            lc.requests.post, lc.time.sleep = real_post, real_sleep
+        self.assertFalse([s for s in sleeps if s >= 30], "a retry slept past the stage's deadline: %s" % sleeps)
+        self.assertEqual(objections, {})
+        self.assertEqual(verdicts[1][0]["unchecked"], direction.UNCHECKED_OUT_OF_TIME)
+
+    def _mid_hit(self, costs, left=10.0):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        clock = Clock()
+        client = SlowStub("down", clock, costs)
+        real_time = direction.time
+        direction.time = clock
+        try:
+            verdicts, _ = direction.direction_check(client, [self.statement(symbol, "x fell")], walker,
+                                                    deadline=clock.t + left)
+        finally:
+            direction.time = real_time
+        return client.calls, verdicts[1][0]
+
+    def test_the_deadline_passing_after_the_claim_skips_both_fits(self):
+        calls, verdict = self._mid_hit([8])
+        self.assertEqual(calls, ["direction_claim"])
+        self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_the_deadline_passing_after_the_fit_skips_the_flipped_fit(self):
+        calls, verdict = self._mid_hit([2, 6])
+        self.assertEqual(calls, ["direction_claim", "direction_fit"])
+        self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_under_the_call_minimum_but_over_the_old_one_second_floor_nothing_is_sent(self):
+        calls, verdict = self._mid_hit([], left=2.5)
+        self.assertEqual(calls, [])
+        self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME)
+
+    def test_a_call_is_sent_with_just_over_the_minimum(self):
+        calls, verdict = self._mid_hit([], left=3.5)
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("unchecked", verdict)
+
+    def test_an_answer_that_arrived_before_time_ran_out_still_counts(self):
+        # The claim contradicts the implied direction, then the deadline passes:
+        # the objection it raised stands although the fits were never asked.
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        for claimed, prose, costs, calls in (("up", "x fell", [8], ["direction_claim"]),
+                                             ("down", "x rose", [2, 6], ["direction_claim", "direction_fit"])):
+            clock = Clock()
+            client = SlowStub(claimed, clock, costs)
+            real_time = direction.time
+            direction.time = clock
+            try:
+                verdicts, objections = direction.direction_check(client, [self.statement(symbol, prose)], walker,
+                                                                 deadline=clock.t + 10)
+            finally:
+                direction.time = real_time
+            verdict = verdicts[1][0]
+            self.assertEqual(client.calls, calls)
+            self.assertFalse(verdict["consistent"], prose)
+            self.assertEqual(verdict["unchecked"], direction.UNCHECKED_OUT_OF_TIME)
+            self.assertTrue(objections.get(1), "an objection received before the deadline was lost (%s)" % prose)
+
+    def _one_call_fails(self, which, exc):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+
+        class Stub(StubClient):
+            def complete_json(self, messages, name, *args, **kwargs):
+                if name == which:
+                    raise exc
+                return StubClient.complete_json(self, messages, name, *args, **kwargs)
+        verdicts, objections = direction.direction_check(Stub("down"), [self.statement(symbol, "x fell")], walker,
+                                                         deadline=time.time() + 30)
+        return verdicts[1][0], objections
+
+    def test_a_call_the_budget_ended_or_the_service_did_not_answer_leaves_the_verdict_unchecked(self):
+        import requests
+        ended = requests.exceptions.HTTPError("HTTP 429")
+        ended.response, ended.gave_up_at_deadline = Throttled(), True
+        refused = requests.exceptions.HTTPError("HTTP 429")    # every retry refused, time still left
+        refused.response = Throttled()
+        for which in ("direction_claim", "direction_fit"):
+            verdict, objections = self._one_call_fails(which, ended)
+            self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_OUT_OF_TIME, which)
+            verdict, objections = self._one_call_fails(which, refused)
+            self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_NO_ANSWER, which)
+            verdict, objections = self._one_call_fails(which, RuntimeError("502"))
+            self.assertEqual(verdict.get("unchecked"), direction.UNCHECKED_NO_ANSWER, which)
+            self.assertEqual(objections, {})
+
+    def test_without_a_budget_a_timeout_is_a_failed_call_not_out_of_time(self):
+        import requests
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        hit = direction.panel_hits(self.statement(symbol, "x fell"), walker)[0]
+
+        class Slow(object):
+            def complete_json(self, *args, **kwargs):
+                raise requests.exceptions.Timeout("gateway read timeout")
+        self.assertIsNone(direction.claimed_direction(Slow(), self.statement(symbol, "x fell"), hit))
+
+    def test_each_call_gets_exactly_the_time_left(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        clock = Clock()
+        client = SlowStub("down", clock, [])
+        real_time = direction.time
+        direction.time = clock
+        try:
+            direction.direction_check(client, [self.statement(symbol, "x fell")], walker, deadline=clock.t + 10)
+        finally:
+            direction.time = real_time
+        self.assertEqual(client.budgets, [10.0, 10.0, 10.0])
+
+    def test_one_fit_left_unanswered_leaves_the_verdict_unchecked(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        for failing_fit in (1, 2):
+            class Stub(StubClient):
+                fits = 0
+
+                def complete_json(self, messages, name, *args, **kwargs):
+                    if name == "direction_fit":
+                        Stub.fits += 1
+                        if Stub.fits == failing_fit:
+                            raise RuntimeError("502")
+                    return StubClient.complete_json(self, messages, name, *args, **kwargs)
+            verdicts, _ = direction.direction_check(Stub("down"), [self.statement(symbol, "x fell")], walker,
+                                                    deadline=time.time() + 30)
+            self.assertEqual(verdicts[1][0].get("unchecked"), direction.UNCHECKED_NO_ANSWER,
+                             "fit call %d unanswered" % failing_fit)
+
+    def test_each_objection_is_kept_on_its_regulators_verdict(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        verdicts, objections = direction.direction_check(StubClient("up"), [self.statement(symbol, "x fell")],
+                                                         walker, deadline=time.time() + 30)
+        self.assertTrue(objections[1])
+        self.assertEqual(verdicts[1][0]["objections"], objections[1])
+
+    def test_the_gate_names_every_reason_and_keeps_the_drops(self):
+        def row(**kw):
+            v = {"gene": "Cish", "pathway": "JAK-STAT", "class": "feedback", "implied": "down",
+                 "claimed": None, "consistent": True, "insensitive": False}
+            v.update(kw)
+            return v
+        # The claim went unanswered and both fits said true: still insensitive.
+        gate = direction.gate({1: [row(insensitive=True, unchecked=direction.UNCHECKED_NO_ANSWER)]}, 0)
+        self.assertFalse(gate["pass"])
+        self.assertEqual((gate["checked"], gate["insensitive"], gate["unchecked"]), (1, 1, 0))
+        # Every kept regulator unanswered, but the check dropped two statements.
+        gate = direction.gate({1: [row(unchecked=direction.UNCHECKED_OUT_OF_TIME)]}, 2)
+        self.assertEqual((gate["dropped"], gate["not_applicable"], gate["pass"]), (2, False, True))
+        self.assertIn("1 not checked: " + direction.UNCHECKED_OUT_OF_TIME, gate["why"])
+        gate = direction.gate({1: [row(unchecked=direction.UNCHECKED_OUT_OF_TIME)],
+                               2: [row(gene="Socs3", unchecked=direction.UNCHECKED_NO_ANSWER)]}, 0)
+        self.assertIn(direction.UNCHECKED_OUT_OF_TIME, gate["why"])
+        self.assertIn(direction.UNCHECKED_NO_ANSWER, gate["why"])
+        gate = direction.gate({1: [row(claimed="down"), row(gene="Socs3", unchecked=direction.UNCHECKED_NO_ANSWER)]}, 0)
+        self.assertIn("1 not checked: " + direction.UNCHECKED_NO_ANSWER, gate["why"])
+
+    def test_the_gate_does_not_count_an_unasked_regulator_as_checked(self):
+        def row(**kw):
+            v = {"gene": "Cish", "pathway": "JAK-STAT", "class": "feedback", "implied": "down",
+                 "claimed": None, "consistent": True, "insensitive": False}
+            v.update(kw)
+            return v
+        unasked = row(unchecked=direction.UNCHECKED_OUT_OF_TIME)
+        gate = direction.gate({1: [unasked]}, 0)
+        self.assertTrue(gate["not_applicable"])
+        self.assertEqual((gate["checked"], gate["consistent"], gate["unchecked"]), (0, 0, 1))
+        self.assertEqual(gate["why"], direction.UNCHECKED_OUT_OF_TIME, "the page shows why nothing was checked")
+        gate = direction.gate({1: [row(unchecked=direction.UNCHECKED_NO_ANSWER)]}, 0)
+        self.assertEqual((gate["checked"], gate["unchecked"], gate["why"]), (0, 1, direction.UNCHECKED_NO_ANSWER))
+        # Every statement that cited a panel gene was dropped by the check.
+        gate = direction.gate({}, 2)
+        self.assertEqual(gate["dropped"], 2)
+        self.assertIn("dropped every statement", gate["why"])
+        gate = direction.gate({1: [row(claimed="down"), unasked]}, 0)
+        self.assertTrue(gate["pass"])
+        self.assertEqual((gate["checked"], gate["consistent"], gate["unchecked"]), (1, 1, 1))
+        self.assertIn("1 not checked", gate["why"])
+        # An objection raised before time ran out still counts against the gate.
+        gate = direction.gate({1: [row(claimed="up", consistent=False, unchecked=direction.UNCHECKED_OUT_OF_TIME)]}, 0)
+        self.assertFalse(gate["pass"])
+        self.assertEqual((gate["checked"], gate["unchecked"]), (1, 0))
 
 
 if __name__ == "__main__":

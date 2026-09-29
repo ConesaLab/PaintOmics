@@ -269,7 +269,8 @@ function paWalkGateTitle(name, gate, state) {
 	}
 	case "direction":
 		return paWalkCount(gate.checked, "regulator claim") + " checked, " + paWalkNumber(gate.consistent) +
-			" consistent, " + paWalkNumber(gate.insensitive) + " insensitive, " + paWalkNumber(gate.dropped) + " dropped";
+			" consistent, " + paWalkNumber(gate.insensitive) + " insensitive, " + paWalkNumber(gate.dropped) + " dropped" +
+			(Number(gate.unchecked) > 0 ? "; " + paWalkNumber(gate.unchecked) + " not checked" : "");
 	case "context":
 		return paWalkCount(gate.cited, "citation") + ", " + paWalkNumber(gate.in_context) + " in context, " +
 			paWalkNumber(gate.qualified) + " qualified as from another system, " +
@@ -360,9 +361,26 @@ function paWalkResultsNode(view, options) {
 	var results = view && view.results;
 	var box = paWalkEl("section", "pa-walk-results");
 	if (!results || !results.paragraphs || !results.paragraphs.length) {
-		var why = (view && view.checks && view.checks.results && view.checks.results.length)
-			? "The Results section did not pass its checks, so the statements below stand alone."
-			: "No Results section was written: no statement survived its checks.";
+		// checks.results holds the server's reason; a walk that ran out of time
+		// never had a section to check, and saying it failed its checks sent
+		// the reader looking for a fault in the statements. The reasons for no
+		// section at all start "no Results section: "; a repair note that
+		// mentions the clock or the AI service is a draft that failed.
+		// canRerun: the caller shows a "Walk again" button; the AI panel and a
+		// read-only viewer do not, and must not be told to press one.
+		var reasons = (view && view.checks && view.checks.results) || [];
+		var said = function (pattern) { return reasons.some(function (reason) { return pattern.test(String(reason)); }); };
+		var rerun = !!(options && options.canRerun);
+		var standAlone = " The statements below stand alone" + (rerun ? "; Walk again to try for one." : ".");
+		var why = said(/^no Results section: .*time budget/)
+			? "No Results section was written: the walk ran out of time before it could be." + standAlone
+			: said(/^no Results section: .*rate-limiting/)
+			? "No Results section was written: the AI service was rate-limiting its requests." + standAlone
+			: said(/^no Results section: .*did not answer/)
+			? "No Results section was written: the AI service did not answer." + standAlone
+			: reasons.length
+				? "The Results section did not pass its checks, so the statements below stand alone."
+				: "No Results section was written: no statement survived its checks.";
 		box.appendChild(paWalkEl("p", "pa-walk-note", why));
 		return box;
 	}
@@ -485,7 +503,8 @@ function paWalkStatementsNode(view, options) {
 				: (verdict.claimed === "none" ? "the statement claims no direction"
 				: "the statement claims " + String(verdict.claimed));
 			var note = verdict.insensitive ? " · reads the same with the values reversed"
-				: (verdict.consistent === false ? " · inconsistent" : "");
+				: (verdict.consistent === false ? " · inconsistent"
+				: (verdict.unchecked ? " · not checked: " + String(verdict.unchecked) : ""));
 			item.appendChild(paWalkEl("p", "pa-walk-meta", "Direction check: " + String(verdict.gene) + " (" +
 				(verdict.pathway ? String(verdict.pathway) + ", " : "") + role + "): the values imply " +
 				String(verdict.implied || "no direction") + ", " + claimed + note));
@@ -906,7 +925,7 @@ function PA_Step4WalkView() {
 		if (gates) { root.appendChild(gates); }
 		var shown = paWalkTextShown(view);
 		if (shown) {
-			root.appendChild(paWalkResultsNode(view, {onLeg: onLeg}));
+			root.appendChild(paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()}));
 			var references = paWalkReferencesNode(view);
 			if (references) { root.appendChild(references); }
 			if ((view.statements || []).length || (view.dropped || []).length) {

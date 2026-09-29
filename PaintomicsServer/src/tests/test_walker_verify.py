@@ -334,5 +334,26 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertIsNone(out["pass"])
 
 
+
+class WalkJargonFormsTest(unittest.TestCase):
+    """Each form the wording check learned refuses a sentence on its own, not
+    only alongside "seed miRNA miR-" in the one fixture that used to cover
+    them all."""
+
+    def dropped(self, sentence):
+        return verify.drop_jargon_sentences({"title": "Results", "paragraphs": [], "summary": sentence + " Foxo1 rose."})
+
+    def test_each_new_form_is_refused_on_its_own(self):
+        for sentence in ("A graph walk from Syk reached Foxo1.",
+                         "A pathway walk from Syk reached Foxo1.",
+                         "This network walk reached Foxo1.",
+                         "Our graph walker reached Foxo1.",
+                         "The network walks converged on Foxo1.",
+                         "Syk was the seed node of the module.",
+                         "The seed nodes were Syk and Lyn.",
+                         "The seed miRNA let-7a falls.",
+                         "The seed miRNA hsa-let-7a falls."):
+            self.assertEqual(self.dropped(sentence), 1, sentence)
+
 if __name__ == "__main__":
     unittest.main()

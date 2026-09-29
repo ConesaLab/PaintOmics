@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
+from src.classes.AIInterpret import llm_client
 from src.classes.AIInterpret.walker import regulators
 from src.classes.AIInterpret.walker import verify
 
@@ -49,6 +51,16 @@ FIT_BRIEF = (
     "values do not show. One line of note."
 )
 TEMPERATURE = 0.1
+# verdict["unchecked"]: why a regulator's check has no answer -- the stage's
+# deadline left no time for a call or the call gave up on it, or the AI
+# service answered with an error or with nothing readable.
+UNCHECKED_OUT_OF_TIME = "the direction check's time budget was spent"
+UNCHECKED_NO_ANSWER = "the AI service did not answer the direction check"
+
+
+class OutOfTime(Exception):
+    """A direction call was not made, or gave up, because the stage's
+    deadline had no time left for it."""
 
 _SIGN_RE = re.compile(r"(?<=\s)([+−-])(?=\d)")
 
@@ -114,15 +126,24 @@ def _role(row):
             "an upstream inhibitor of %s (a brake; its change reads AGAINST the pathway)") % row["pathway"]
 
 
-def claimed_direction(client, stmt, hit, temperature=TEMPERATURE):
-    """{claimed: up|down|none, quote}; None when the call fails."""
+def _gave_up(exc, budget_seconds):
+    """Raise OutOfTime when a budgeted call gave up on its budget: that is not
+    a failed call (no objection) but one that was never answered."""
+    if budget_seconds is not None and llm_client.ran_out_of_budget(exc):
+        raise OutOfTime(str(exc)) from exc
+
+
+def claimed_direction(client, stmt, hit, temperature=TEMPERATURE, budget_seconds=None):
+    """{claimed: up|down|none, quote}; None when the call fails. Raises
+    OutOfTime when the call gave up on `budget_seconds`."""
     prompt = ("PATHWAY: %s\nREGULATOR NAMED IN THE STATEMENT: %s, %s\n\nSTATEMENT\n%s" % (
         hit["row"]["pathway"], hit["gene"], _role(hit["row"]), _statement_text(stmt)))
     try:
         out = client.complete_json([{"role": "system", "content": CLAIM_BRIEF}, {"role": "user", "content": prompt}],
                                    "direction_claim", CLAIM_SCHEMA, lambda text: None, max_tokens=200,
-                                   temperature=temperature)
-    except Exception:                                                 # noqa: BLE001
+                                   temperature=temperature, budget_seconds=budget_seconds)
+    except Exception as exc:                                          # noqa: BLE001
+        _gave_up(exc, budget_seconds)
         logger.warning("[direction] the claim call failed", exc_info=True)
         return None
     if not isinstance(out, dict) or out.get("claimed") not in ("up", "down", "none"):
@@ -130,15 +151,17 @@ def claimed_direction(client, stmt, hit, temperature=TEMPERATURE):
     return {"claimed": out["claimed"], "quote": str(out.get("quote") or "")[:200]}
 
 
-def fits_values(client, stmt, hit, layer_text, temperature=TEMPERATURE):
-    """{consistent: bool, note}; None when the call fails."""
+def fits_values(client, stmt, hit, layer_text, temperature=TEMPERATURE, budget_seconds=None):
+    """{consistent: bool, note}; None when the call fails. Raises OutOfTime
+    when the call gave up on `budget_seconds`."""
     prompt = ("GENE: %s, %s\nVALUES OF %s (%s; the user's column labels):\n%s\n\nSTATEMENT\n%s" % (
         hit["gene"], _role(hit["row"]), hit["gene"], hit["layer"]["omic"], layer_text, _statement_text(stmt)))
     try:
         out = client.complete_json([{"role": "system", "content": FIT_BRIEF}, {"role": "user", "content": prompt}],
                                    "direction_fit", FIT_SCHEMA, lambda text: None, max_tokens=200,
-                                   temperature=temperature)
-    except Exception:                                                 # noqa: BLE001
+                                   temperature=temperature, budget_seconds=budget_seconds)
+    except Exception as exc:                                          # noqa: BLE001
+        _gave_up(exc, budget_seconds)
         logger.warning("[direction] the fit call failed", exc_info=True)
         return None
     if not isinstance(out, dict) or not isinstance(out.get("consistent"), bool):
@@ -146,14 +169,36 @@ def fits_values(client, stmt, hit, layer_text, temperature=TEMPERATURE):
     return {"consistent": out["consistent"], "note": str(out.get("note") or "")[:200]}
 
 
-def direction_check(client, statements, walker):
+def direction_check(client, statements, walker, deadline=None):
     """(verdicts, objections) over the statements that cite a panel regulator.
 
     verdicts[n] = [{gene, pathway, class, data_sign, implied, claimed, quote,
-    fits, fits_flipped, consistent, insensitive}]; objections[n] = the
-    sentences sent back to the Writer. A statement with no panel gene has no
-    entry. A model call that fails leaves that verdict unchecked (no objection)."""
+    fits, fits_flipped, consistent, insensitive, objections}]; objections[n] =
+    the sentences sent back to the Writer, each also on the verdict of the
+    regulator it is about. A statement with no panel gene has no
+    entry. A call that is not answered raises no objection, and its verdict
+    carries `unchecked` with the reason, so a caller can tell "no objection"
+    from "not answered".
+
+    Every call gives up by `deadline`, a 429's wait included. A call the
+    deadline leaves under llm_client.MIN_CALL_SECONDS for is not made, nor
+    any after it (UNCHECKED_OUT_OF_TIME); one that fails or answers nothing
+    readable is UNCHECKED_NO_ANSWER."""
+    def budget():
+        """Seconds left for the next call; OutOfTime when too few."""
+        if deadline is None:
+            return None
+        left = deadline - time.time()
+        if left < llm_client.MIN_CALL_SECONDS:
+            raise OutOfTime("no time left for the call")
+        return left
+
     verdicts, objections = {}, {}
+
+    def object_to(stmt, verdict, sentence):
+        objections.setdefault(stmt["n"], []).append(sentence)
+        verdict.setdefault("objections", []).append(sentence)
+
     for stmt in statements:
         for hit in panel_hits(stmt, walker):
             row = hit["row"]
@@ -161,31 +206,34 @@ def direction_check(client, statements, walker):
             verdict = {"gene": hit["gene"], "pathway": row["pathway"], "class": row["class"],
                        "data_sign": hit["sign"], "implied": implied, "claimed": None, "quote": "",
                        "fits": None, "fits_flipped": None, "consistent": True, "insensitive": False}
-            claim = claimed_direction(client, stmt, hit)
+            claim = fit = flipped = None
+            text = walker.overlay.layer_text(hit["node"])
+            try:
+                claim = claimed_direction(client, stmt, hit, budget_seconds=budget())
+                fit = fits_values(client, stmt, hit, text, budget_seconds=budget())
+                flipped = fits_values(client, stmt, hit, flipped_text(text), budget_seconds=budget())
+                if claim is None or fit is None or flipped is None:
+                    verdict["unchecked"] = UNCHECKED_NO_ANSWER
+            except OutOfTime:
+                verdict["unchecked"] = UNCHECKED_OUT_OF_TIME
             if claim is not None:
                 verdict["claimed"], verdict["quote"] = claim["claimed"], claim["quote"]
                 if claim["claimed"] != "none" and claim["claimed"] != implied:
                     verdict["consistent"] = False
-                    objections.setdefault(stmt["n"], []).append(
-                        "%s is %s: its %s reports the pathway %s, not %s" % (
+                    object_to(stmt, verdict, "%s is %s: its %s reports the pathway %s, not %s" % (
                             hit["gene"], _role(row), "fall" if hit["sign"] < 0 else "rise", implied, claim["claimed"]))
-            text = walker.overlay.layer_text(hit["node"])
-            fit = fits_values(client, stmt, hit, text)
-            flipped = fits_values(client, stmt, hit, flipped_text(text))
             if fit is not None:
                 verdict["fits"] = fit["consistent"]
             if flipped is not None:
                 verdict["fits_flipped"] = flipped["consistent"]
             if fit is not None and flipped is not None and fit["consistent"] and flipped["consistent"]:
                 verdict["insensitive"] = True
-                objections.setdefault(stmt["n"], []).append(
-                    "the statement reads the same with %s's values reversed: state what the values show and "
-                    "which way they point" % hit["gene"])
+                object_to(stmt, verdict, "the statement reads the same with %s's values reversed: state what the "
+                                         "values show and which way they point" % hit["gene"])
             if fit is not None and not fit["consistent"] and verdict["consistent"]:
                 verdict["consistent"] = False
                 verdict["fit_note"] = fit.get("note") or ""
-                objections.setdefault(stmt["n"], []).append(
-                    "the statement does not follow from %s's values: %s" % (hit["gene"], fit["note"]))
+                object_to(stmt, verdict, "the statement does not follow from %s's values: %s" % (hit["gene"], fit["note"]))
             verdicts.setdefault(stmt["n"], []).append(verdict)
     return verdicts, objections
 
@@ -207,12 +255,29 @@ def gate(verdicts, dropped):
     rows = [v for group in verdicts.values() for v in group]
     if not rows:
         return {"pass": True, "not_applicable": True, "checked": 0, "consistent": 0, "insensitive": 0,
-                "dropped": 0, "why": "no statement cites a regulator of the panel"}
-    consistent = sum(1 for v in rows if v["consistent"] and not v["insensitive"])
-    insensitive = sum(1 for v in rows if v["insensitive"])
-    out = {"pass": consistent == len(rows), "not_applicable": False, "checked": len(rows), "consistent": consistent,
-           "insensitive": insensitive, "dropped": dropped, "why": ""}
+                "unchecked": 0, "dropped": dropped,
+                "why": "the check dropped every statement that cited a regulator of the panel" if dropped
+                else "no statement cites a regulator of the panel"}
+    # A regulator whose check went unanswered is neither checked nor
+    # consistent; one that objected before that still counts against the gate.
+    unanswered = [v for v in rows if v.get("unchecked") and v["consistent"] and not v["insensitive"]]
+    asked = [v for v in rows if not (v.get("unchecked") and v["consistent"] and not v["insensitive"])]
+    unasked = len(unanswered)
+    why_unasked = "; ".join(sorted({v["unchecked"] for v in unanswered}))
+    if not asked:
+        # Statements it dropped are the check at work: not "not applicable".
+        return {"pass": True, "not_applicable": not dropped, "checked": 0, "consistent": 0, "insensitive": 0,
+                "unchecked": unasked, "dropped": dropped,
+                "why": ("%d not checked: %s" % (unasked, why_unasked)) if dropped else why_unasked}
+    consistent = sum(1 for v in asked if v["consistent"] and not v["insensitive"])
+    insensitive = sum(1 for v in asked if v["insensitive"])
+    out = {"pass": consistent == len(asked), "not_applicable": False, "checked": len(asked), "consistent": consistent,
+           "insensitive": insensitive, "unchecked": unasked, "dropped": dropped, "why": ""}
+    reasons = []
     if not out["pass"]:
-        bad = [v for v in rows if not v["consistent"] or v["insensitive"]]
-        out["why"] = "; ".join("%s (%s): %s" % (v["gene"], v["pathway"], _reason(v)) for v in bad)
+        bad = [v for v in asked if not v["consistent"] or v["insensitive"]]
+        reasons.append("; ".join("%s (%s): %s" % (v["gene"], v["pathway"], _reason(v)) for v in bad))
+    if unasked:
+        reasons.append("%d not checked: %s" % (unasked, why_unasked))
+    out["why"] = "; ".join(reasons)
     return out

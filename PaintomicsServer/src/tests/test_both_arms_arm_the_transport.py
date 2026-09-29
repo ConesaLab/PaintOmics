@@ -37,7 +37,7 @@ def test_the_walk_arms_the_deadline_before_its_model_loop():
     and the Writer and the checks run on the same armed context."""
     src = inspect.getsource(service._model_walk)
     armed = src.find("set_run_deadline(")
-    started = src.find("asyncio.run(")
+    started = src.find("run_pipeline(")
     assert armed != -1, "service._model_walk never arms the transport's deadline"
     assert started != -1, "service._model_walk no longer runs the model walk; update this test"
     assert armed < started, "the deadline is armed after the model walk starts"

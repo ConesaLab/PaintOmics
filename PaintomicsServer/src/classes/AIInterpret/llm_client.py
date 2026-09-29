@@ -15,6 +15,27 @@ logger = logging.getLogger(__name__)
 # - read: 180s per chunk — if the API hasn't sent any data in 3 min, it's hung
 DEFAULT_TIMEOUT = (15, 180)
 
+# The least budget worth sending a call with: a shorter one only times out,
+# and a timeout marks the model down for the calls after it. A caller with
+# less time left than this skips the call. Never pass 0 as budget_seconds:
+# complete() reads a falsy budget as no budget at all.
+MIN_CALL_SECONDS = 3
+
+
+def ran_out_of_budget(exc):
+    """True when a call made with budget_seconds gave up on that budget:
+    complete() marks the error raised with under MIN_CALL_SECONDS left, and
+    the one whose retry wait the budget refused. Never true without a budget,
+    nor for a gateway timeout with time left; a 429 raised after every retry,
+    with time still left, is the gateway refusing: see rate_limited."""
+    return bool(getattr(exc, "gave_up_at_deadline", False))
+
+
+def rate_limited(exc):
+    """True for the gateway's own 429, as raised once the retries ran out."""
+    response = getattr(exc, "response", None)
+    return isinstance(exc, requests.exceptions.HTTPError) and getattr(response, "status_code", None) == 429
+
 # Not every OpenAI-compatible gateway implements response_format. Verified
 # working on the CSIC gateway (vLLM 0.26.0, guided decoding) on 2026-08-07;
 # a self-hosted server behind the same API can still reject it with a 400.
@@ -215,11 +236,21 @@ class LLMClient:
                     model, messages, max_tokens, temperature, response_format,
                     timeout, stream, attempts, deadline, fail_fast=bool(remaining))
             except Exception as e:
+                # The budget, not the gateway, ended the call when it has no
+                # time left for another: decided by the clock, since a timeout
+                # with most of the budget left is the gateway's own. Then no
+                # rung has time to try.
+                if deadline is not None and deadline - time.monotonic() < MIN_CALL_SECONDS:
+                    e.gave_up_at_deadline = True
+                ended_by_budget = getattr(e, "gave_up_at_deadline", False)
                 if model_fallback.falls_back(e):
                     # Remembered even for the last rung: the next call's
-                    # ordering, and the probe's verdict, read this.
-                    model_fallback.mark_down(self.api_base, model, e)
-                    if remaining:
+                    # ordering, and the probe's verdict, read this. A timeout
+                    # the budget cut short says nothing about the model; an
+                    # error the gateway answered does, whatever the clock.
+                    if not (ended_by_budget and isinstance(e, requests.exceptions.Timeout)):
+                        model_fallback.mark_down(self.api_base, model, e)
+                    if remaining and not ended_by_budget:
                         logger.warning("LLM model %s failed (%s); asking %s instead",
                                        model, type(e).__name__, remaining[0])
                         continue
@@ -239,10 +270,22 @@ class LLMClient:
         so a failure that would move to it is raised at once instead of being
         retried here with a backoff."""
 
+        def _retry_now(err):
+            # The retries that go straight to the next attempt (the schema
+            # demotion, the streamed escalation) obey the same floor.
+            if deadline is not None and deadline - time.monotonic() < MIN_CALL_SECONDS:
+                err.gave_up_at_deadline = True
+                raise err
+
         def _backoff(seconds, err):
             # A retry that cannot finish inside the budget only delays an
-            # answer nobody will be there to read. Stop here instead.
-            if deadline is not None and time.monotonic() + seconds >= deadline:
+            # answer nobody will be there to read. Stop here instead -- and a
+            # wait that would leave the retry under MIN_CALL_SECONDS is one.
+            if deadline is not None and time.monotonic() + seconds + MIN_CALL_SECONDS >= deadline:
+                # Same type as before (model fallback reads it); the mark
+                # tells "the budget refused the wait" from "every retry
+                # was refused" for a caller that reports running out of time.
+                err.gave_up_at_deadline = True
                 raise err
             time.sleep(seconds)
 
@@ -311,6 +354,7 @@ class LLMClient:
                         and response_format is not None):
                     self._demote_schema()
                     response_format = None
+                    _retry_now(e)
                     continue
                 # 429 is the one 4xx that DOES self-heal. It was being lumped in
                 # with auth/bad-request and raised immediately, so a moment of
@@ -346,6 +390,7 @@ class LLMClient:
                     retried_streamed = True
                     stream = True
                     logger.warning("LLM retrying the same request to %s streamed", model)
+                    _retry_now(e)
                     continue
                 if fail_fast:
                     raise
@@ -410,7 +455,7 @@ class LLMClient:
         return "".join(parts)
 
     def complete_json(self, messages, schema_name, schema, fallback_parser,
-                      max_tokens=4096, temperature=0.3, timeout=None):
+                      max_tokens=4096, temperature=0.3, timeout=None, budget_seconds=None):
         """Schema-enforced JSON with the hand-rolled parser as a safety net.
 
         Returns the parsed dict. The schema does the work wherever the gateway
@@ -418,11 +463,13 @@ class LLMClient:
         residual case of a model emitting valid-but-unexpected JSON.
 
         This is deliberately additive: every caller keeps its parser, so the
-        worst case is exactly today's behaviour.
+        worst case is exactly today's behaviour. ``budget_seconds`` is
+        ``complete``'s wall clock over the whole call, backoffs included.
         """
         text = self.complete(
             messages, max_tokens=max_tokens, temperature=temperature,
-            response_format=json_schema_format(schema_name, schema), timeout=timeout)
+            response_format=json_schema_format(schema_name, schema), timeout=timeout,
+            budget_seconds=budget_seconds)
         try:
             parsed = json.loads(text)
             if isinstance(parsed, dict):

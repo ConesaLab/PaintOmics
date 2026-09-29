@@ -245,8 +245,11 @@ PUBLISHED = {
         "2.8", "b56c3ce3224ba610e1268b85339eaed7dbfea1eab8d70b6284895cfbade81f86"),
     # The Step 4 Walk column and the renderers the AI panel shares with it.
     # v=1.4 names the Walk column's icon-only close button for screen readers.
+    # v=1.5 carries both v=1.4s: the close button's name (PR #184) and the
+    # note that says a walk ran out of time instead of blaming its checks
+    # (PR #172).
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.4", "be79dd3a8b37b7e0844f93fe374c2a0b509b9a98513aa2c1b3cf05e4b0490108"),
+        "1.5", "9aa6f92678e367ea27f52e87b90b1212a670c5d8a2c66909521143ef0de5c675"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is
