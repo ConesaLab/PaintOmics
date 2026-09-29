@@ -173,8 +173,9 @@ def direction_check(client, statements, walker, deadline=None):
     """(verdicts, objections) over the statements that cite a panel regulator.
 
     verdicts[n] = [{gene, pathway, class, data_sign, implied, claimed, quote,
-    fits, fits_flipped, consistent, insensitive}]; objections[n] = the
-    sentences sent back to the Writer. A statement with no panel gene has no
+    fits, fits_flipped, consistent, insensitive, objections}]; objections[n] =
+    the sentences sent back to the Writer, each also on the verdict of the
+    regulator it is about. A statement with no panel gene has no
     entry. A call that is not answered raises no objection, and its verdict
     carries `unchecked` with the reason, so a caller can tell "no objection"
     from "not answered".
@@ -193,6 +194,11 @@ def direction_check(client, statements, walker, deadline=None):
         return left
 
     verdicts, objections = {}, {}
+
+    def object_to(stmt, verdict, sentence):
+        objections.setdefault(stmt["n"], []).append(sentence)
+        verdict.setdefault("objections", []).append(sentence)
+
     for stmt in statements:
         for hit in panel_hits(stmt, walker):
             row = hit["row"]
@@ -214,8 +220,7 @@ def direction_check(client, statements, walker, deadline=None):
                 verdict["claimed"], verdict["quote"] = claim["claimed"], claim["quote"]
                 if claim["claimed"] != "none" and claim["claimed"] != implied:
                     verdict["consistent"] = False
-                    objections.setdefault(stmt["n"], []).append(
-                        "%s is %s: its %s reports the pathway %s, not %s" % (
+                    object_to(stmt, verdict, "%s is %s: its %s reports the pathway %s, not %s" % (
                             hit["gene"], _role(row), "fall" if hit["sign"] < 0 else "rise", implied, claim["claimed"]))
             if fit is not None:
                 verdict["fits"] = fit["consistent"]
@@ -223,14 +228,12 @@ def direction_check(client, statements, walker, deadline=None):
                 verdict["fits_flipped"] = flipped["consistent"]
             if fit is not None and flipped is not None and fit["consistent"] and flipped["consistent"]:
                 verdict["insensitive"] = True
-                objections.setdefault(stmt["n"], []).append(
-                    "the statement reads the same with %s's values reversed: state what the values show and "
-                    "which way they point" % hit["gene"])
+                object_to(stmt, verdict, "the statement reads the same with %s's values reversed: state what the "
+                                         "values show and which way they point" % hit["gene"])
             if fit is not None and not fit["consistent"] and verdict["consistent"]:
                 verdict["consistent"] = False
                 verdict["fit_note"] = fit.get("note") or ""
-                objections.setdefault(stmt["n"], []).append(
-                    "the statement does not follow from %s's values: %s" % (hit["gene"], fit["note"]))
+                object_to(stmt, verdict, "the statement does not follow from %s's values: %s" % (hit["gene"], fit["note"]))
             verdicts.setdefault(stmt["n"], []).append(verdict)
     return verdicts, objections
 
@@ -262,8 +265,10 @@ def gate(verdicts, dropped):
     unasked = len(unanswered)
     why_unasked = "; ".join(sorted({v["unchecked"] for v in unanswered}))
     if not asked:
-        return {"pass": True, "not_applicable": True, "checked": 0, "consistent": 0, "insensitive": 0,
-                "unchecked": unasked, "dropped": dropped, "why": why_unasked}
+        # Statements it dropped are the check at work: not "not applicable".
+        return {"pass": True, "not_applicable": not dropped, "checked": 0, "consistent": 0, "insensitive": 0,
+                "unchecked": unasked, "dropped": dropped,
+                "why": ("%d not checked: %s" % (unasked, why_unasked)) if dropped else why_unasked}
     consistent = sum(1 for v in asked if v["consistent"] and not v["insensitive"])
     insensitive = sum(1 for v in asked if v["insensitive"])
     out = {"pass": consistent == len(asked), "not_applicable": False, "checked": len(asked), "consistent": consistent,

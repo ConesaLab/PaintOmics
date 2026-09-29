@@ -28,6 +28,9 @@ from src.classes.AIInterpret import llm_client
 
 logger = logging.getLogger(__name__)
 
+# What a paper agent's call returns when its thread starts with no time left.
+_NO_TIME = object()
+
 # A passage shorter than this is a phrase, not evidence; a longer one than
 # the maximum is a paragraph the reader cannot check at a glance.
 QUOTE_MIN_CHARS = 40
@@ -247,15 +250,20 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
             # nor asyncio.run's cleanup can stop: asyncio.run waits for it. On
             # 2026-09-15 a 429 asked for an 84 s wait just before that deadline,
             # the pipeline returned 54 s late, and the walk sealed with no
-            # Results section. The budget makes the call give up in time; a
-            # slot that came free too late for a call is not used for one.
-            budget = None if deadline is None else deadline - time.time()
-            if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
+            # Results section. The budget makes the call give up in time. It
+            # is read when the thread starts: a call that waited for a free
+            # worker, or a slot that came free too late, has less time left
+            # than when it was queued, and none is not a call worth sending.
+            def ask():
+                budget = None if deadline is None else deadline - time.time()
+                if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
+                    return _NO_TIME
+                return client.complete_json(
+                    [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],
+                    "citation_check", QUOTE_SCHEMA, _embedded_json, 900, 0.0, budget_seconds=budget)
+            out = await asyncio.to_thread(ask)
+            if out is _NO_TIME:
                 return {"supported": False, "why": "there was no time left to read the paper", "transient": True}
-            out = await asyncio.to_thread(
-                client.complete_json,
-                [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],
-                "citation_check", QUOTE_SCHEMA, _embedded_json, 900, 0.0, budget_seconds=budget)
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[literature] paper agent for [%s] failed: %s", ref, exc)
         return {"supported": False, "why": "the paper could not be checked (%s)" % type(exc).__name__,

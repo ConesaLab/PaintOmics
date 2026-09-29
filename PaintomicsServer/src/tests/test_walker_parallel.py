@@ -527,29 +527,36 @@ class StageBudgetTest(unittest.TestCase):
         self.assertEqual(len(asked), 1, "the re-check was sent with no time to answer")
         self.assertEqual([d["n"] for d in dropped], [1])
 
-    def recheck(self, again):
-        """_direction_pass on a stub check: the first pass objects to Cish, the
-        re-check returns `again`; the rewrite answers nothing."""
+    CISH = "Cish is a reporter: its fall reports the pathway down"
+
+    def recheck(self, again, first=None):
+        """_direction_pass on a stub check: the first pass (`first`, by default
+        Cish objecting and Pten not) is sent back, the re-check returns
+        `again`; the rewrite answers nothing. Returns the kept and dropped
+        statements and the deadline the rewrite was given."""
         from src.classes.AIInterpret.walker import direction as direction_mod
         from src.classes.AIInterpret.walker import service
-        calls = []
+        first = first or [{"gene": "Cish", "consistent": False, "insensitive": False, "objections": [self.CISH]},
+                          {"gene": "Pten", "consistent": True, "insensitive": False}]
+        calls, rewrites = [], []
 
         def check(client, statements, walker, deadline=None):
             calls.append(deadline)
             if len(calls) == 1:
-                return ({1: [{"gene": "Cish", "consistent": False, "insensitive": False},
-                             {"gene": "Pten", "consistent": True, "insensitive": False}]},
-                        {1: ["Cish is a reporter: its fall reports the pathway down"]})
+                return {1: first}, {1: [o for v in first for o in v.get("objections", [])]}
             return {1: again}, {}
+
+        def rewrite(client, card, chain, failing, *args, **kwargs):
+            rewrites.append(kwargs.get("deadline"))
+            return {s["n"]: [] for s in failing}
 
         statements, dropped, checks = [{"n": 1, "claim": "c"}], [], {"gates": {}}
         deadline = time.time() + 30
-        with patched((direction_mod, "direction_check", check),
-                     (service, "_rewrite_and_recheck", lambda client, card, chain, failing, *a, **k: {
-                         s["n"]: [] for s in failing})):
+        with patched((direction_mod, "direction_check", check), (service, "_rewrite_and_recheck", rewrite)):
             service._direction_pass(None, "card", "chain", statements, dropped, None, None, set(), checks,
                                     deadline=deadline)
         self.assertEqual(calls, [deadline, deadline], "a direction check ran without the stage's deadline")
+        self.assertEqual(rewrites, [deadline], "the rewrite ran without the stage's deadline")
         return statements, dropped
 
     def test_a_statement_the_direction_recheck_did_not_answer_for_is_dropped(self):
@@ -571,6 +578,30 @@ class StageBudgetTest(unittest.TestCase):
                                              "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}])
         self.assertEqual([s["n"] for s in statements], [1])
         self.assertEqual(dropped, [])
+
+    def test_an_insensitivity_objection_stands_until_the_recheck_answers(self):
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        reads_the_same = "the statement reads the same with Cish's values reversed"
+        statements, dropped = self.recheck(
+            [{"gene": "Cish", "consistent": True, "insensitive": False, "unchecked": direction_mod.UNCHECKED_OUT_OF_TIME}],
+            first=[{"gene": "Cish", "consistent": True, "insensitive": True, "objections": [reads_the_same]}])
+        self.assertEqual(statements, [], "an unanswered re-check cleared an insensitivity objection")
+        self.assertIn(reads_the_same, dropped[0]["why"])
+
+    def test_the_drop_restates_only_the_unanswered_regulators_objection(self):
+        # Cbl and Cblb both object; the re-check clears Cblb and leaves Cbl
+        # unanswered. "Cbl" is in "Cblb": the reason must not restate Cblb's.
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        cbl = "Cbl is an upstream inhibitor of RTK: its fall reports the pathway up, not down"
+        cblb = "Cblb is an upstream inhibitor of TCR: its fall reports the pathway up, not down"
+        statements, dropped = self.recheck(
+            [{"gene": "Cbl", "consistent": True, "insensitive": False, "unchecked": direction_mod.UNCHECKED_NO_ANSWER},
+             {"gene": "Cblb", "consistent": True, "insensitive": False}],
+            first=[{"gene": "Cbl", "consistent": False, "insensitive": False, "objections": [cbl]},
+                   {"gene": "Cblb", "consistent": False, "insensitive": False, "objections": [cblb]}])
+        self.assertEqual(statements, [])
+        self.assertIn(cbl, dropped[0]["why"])
+        self.assertNotIn("Cblb", dropped[0]["why"], "the re-check cleared Cblb's objection")
 
     def test_a_slot_that_frees_too_late_is_not_used_for_a_call(self):
         # The paper agent checks the time before waiting for a slot; one that
@@ -623,6 +654,139 @@ class BudgetEdgesTest(unittest.TestCase):
                 self.client().complete([{"role": "user", "content": "x"}], budget_seconds=10)
         self.assertEqual(sleeps, [], "slept into the last seconds of the budget")
         self.assertTrue(lc.ran_out_of_budget(raised.exception))
+
+    def fake_clock(self):
+        clock = types.SimpleNamespace(t=1000.0)
+        clock.monotonic = clock.time = lambda: clock.t
+        clock.sleep = lambda seconds: setattr(clock, "t", clock.t + seconds)
+        return clock
+
+    def response(self, status, retry_after=None):
+        response = _Throttled(retry_after if retry_after is not None else 0)
+        response.status_code = status
+        if retry_after is None:
+            response.headers = {}
+        return response
+
+    def test_a_rung_that_fails_with_under_a_calls_worth_left_ends_the_call(self):
+        # Model m answers 404 after 28 s of a 30 s budget: no second rung is
+        # sent a 2 s call, the error carries the clock's mark -- and m is
+        # marked down all the same, because the gateway said it is not served.
+        from src.classes.AIInterpret import llm_client as lc
+        from src.classes.AIInterpret import model_fallback
+        clock, posts = self.fake_clock(), []
+
+        def post(url, json=None, **kwargs):
+            posts.append(json["model"])
+            clock.t += 28
+            return self.response(404)
+        client = lc.LLMClient({"api_base": "https://gw.example/v1", "api_key": "k", "model": "m",
+                               "fallback_models": ["m2"]})
+        model_fallback.reset()
+        try:
+            with patched((lc.requests, "post", post), (lc, "time", clock), (model_fallback, "time", clock)):
+                with self.assertRaises(lc.requests.exceptions.HTTPError) as raised:
+                    client.complete([{"role": "user", "content": "x"}], budget_seconds=30)
+                down = model_fallback.is_down("https://gw.example/v1", "m")
+        finally:
+            model_fallback.reset()
+        self.assertEqual(posts, ["m"], "a rung was sent a call with 2 s left")
+        self.assertTrue(lc.ran_out_of_budget(raised.exception))
+        self.assertTrue(down, "a model the gateway reported as not served was not marked down")
+
+    def test_a_timeout_the_budget_cut_short_does_not_mark_the_model_down(self):
+        from src.classes.AIInterpret import llm_client as lc
+        from src.classes.AIInterpret import model_fallback
+        clock = self.fake_clock()
+
+        def post(url, json=None, **kwargs):
+            clock.t += kwargs["timeout"][1]            # the read runs to the budget
+            raise lc.requests.exceptions.ReadTimeout("read timed out")
+        model_fallback.reset()
+        try:
+            with patched((lc.requests, "post", post), (lc, "time", clock), (model_fallback, "time", clock)):
+                with self.assertRaises(lc.requests.exceptions.Timeout) as raised:
+                    self.client().complete([{"role": "user", "content": "x"}], budget_seconds=20)
+                down = model_fallback.is_down("https://gateway.example/v1", "m")
+        finally:
+            model_fallback.reset()
+        self.assertTrue(lc.ran_out_of_budget(raised.exception))
+        self.assertFalse(down, "the budget, not the model, ended the call")
+
+    def test_a_last_retry_that_fails_with_under_a_calls_worth_left_is_the_budgets(self):
+        # 429 on every attempt; the waits fit, and the last answer comes with
+        # 2 s left: the clock decides, so the Narrator reports running out of
+        # time rather than rate limiting.
+        from src.classes.AIInterpret import llm_client as lc
+        clock = self.fake_clock()
+
+        def post(url, json=None, **kwargs):
+            clock.t += 5 if clock.t < 1024 else 3
+            return self.response(429, 2)
+        with patched((lc.requests, "post", post), (lc, "time", clock), (lc.random, "uniform", lambda a, b: 0.0)):
+            with self.assertRaises(lc.requests.exceptions.HTTPError) as raised:
+                self.client().complete([{"role": "user", "content": "x"}], budget_seconds=30)
+        self.assertLess(1030 - clock.t, lc.MIN_CALL_SECONDS)
+        self.assertTrue(lc.ran_out_of_budget(raised.exception))
+
+    def test_the_immediate_retries_obey_the_call_minimum(self):
+        # A 500 (retried streamed) or a 400 to a schema (retried without it)
+        # after 8.5 s of a 10 s budget: the retry would have 1.5 s. Not sent.
+        from src.classes.AIInterpret import llm_client as lc
+        for status in (500, 400):
+            clock, posts = self.fake_clock(), []
+
+            def post(url, json=None, **kwargs):
+                posts.append(kwargs["timeout"])
+                clock.t += 8.5
+                return self.response(status)
+            client = self.client()
+            with patched((lc.requests, "post", post), (lc, "time", clock),
+                         (lc.LLMClient, "supports_schema", lambda self: True),
+                         (lc.LLMClient, "_demote_schema", lambda self: None)):
+                with self.assertRaises(lc.requests.exceptions.HTTPError) as raised:
+                    client.complete([{"role": "user", "content": "x"}], budget_seconds=10,
+                                    response_format={"type": "json_object"})
+            self.assertEqual(len(posts), 1, "HTTP %d: a retry went out with 1.5 s left" % status)
+            self.assertTrue(lc.ran_out_of_budget(raised.exception))
+
+    def test_rewrite_once_forwards_its_budget(self):
+        from src.classes.AIInterpret.walker import service
+        client = _Budgets()
+        service.rewrite_once(client, "card", "chain", [{"n": 1, "claim": "c"}],
+                             {1: {"direction": {"ok": False, "note": "x"}}}, budget_seconds=12.5)
+        self.assertEqual(client.budgets, [12.5])
+
+    def test_the_sense_rewrite_gets_the_stage_deadline(self):
+        from src.classes.AIInterpret.walker import service
+        failing = {f: {"ok": True, "note": ""} for f in service.sense_mod.FIELDS}
+        failing["timing"] = {"ok": False, "note": "no timing"}
+        seen, deadline = [], time.time() + 30
+        with patched((service.sense_mod, "sense_check", lambda client, card, statements, chain, budget_seconds=None: {
+                          s["n"]: dict(failing) for s in statements}),
+                     (service, "_rewrite_and_recheck", lambda client, card, chain, bad, *a, **k: seen.append(
+                         k.get("deadline")) or {s["n"]: [] for s in bad})):
+            service._sense_pass(None, "card", "chain", [{"n": 1, "claim": "c"}], [], None, None, set(), {},
+                                deadline=deadline)
+        self.assertEqual(seen, [deadline])
+
+    def test_a_paper_agent_call_that_waited_for_a_thread_gets_only_the_time_left(self):
+        # PubMed fetches share the executor; a call queued behind them starts
+        # late, and its budget is read when it starts, not when it was queued.
+        clock = Clock()
+        real_to_thread = asyncio.to_thread
+
+        async def late_thread(fn, *args, **kwargs):
+            if not isinstance(getattr(fn, "__self__", None), _PubMed):
+                clock.t += 24                          # the paper agent waited 24 s for a free worker
+            return await real_to_thread(fn, *args, **kwargs)
+        client = _Client({})
+        with patched((literature, "time", clock), (literature.asyncio, "to_thread", late_thread)):
+            verdict = asyncio.run(literature.check_citation(
+                PaperAgentTest.store(None), client, _PubMed(), 1, "Aaa is a kinase", asyncio.Semaphore(1),
+                clock.t + 26))
+        self.assertEqual(client.budgets, [], "a call was sent with 2 s left")
+        self.assertTrue(verdict.get("transient"))
 
     def test_the_narrator_is_not_asked_with_under_a_calls_worth(self):
         from src.classes.AIInterpret.walker import narrate as narrate_mod
@@ -703,6 +867,132 @@ class NarratorRepairTest(_Fixture):
                          "the repair was not made: the AI service was rate-limiting the Narrator's requests")
         self.assertFalse([r for r in checks["results"] if r.startswith("no Results section: ")],
                          "a draft that was written is not 'no Results section'")
+
+
+class NarratorRepairCasesTest(_Fixture):
+    """The Narrator's one repair: given the run's deadline, refused or out of
+    time without losing the draft's own verdict, and marked when made."""
+    STATEMENT = [{"n": 1, "claim": "c", "prose": "p", "legs": [1]}]
+    SHORT = {"title": "Results", "summary": "s.", "paragraphs": [{"text": "Too short.", "legs": [1]}]}
+
+    def narrate(self, answers, patches=()):
+        import requests
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        budgets = []
+
+        class Client(object):
+            def complete_json(self, *args, **kwargs):
+                budgets.append(kwargs.get("budget_seconds"))
+                answer = answers[min(len(budgets), len(answers)) - 1]
+                if isinstance(answer, requests.exceptions.RequestException):
+                    raise answer
+                return answer
+        checks = {"gates": {}}
+        with patched(*patches):
+            out = service._narrate(Client(), "card", "chain", self.STATEMENT, [], walker, {}, "pathway:x", checks,
+                                   (100, 200), deadline=time.time() + 400)
+        return out, checks, budgets
+
+    def throttled(self, retry_after=2, gave_up=False):
+        import requests
+        err = requests.exceptions.HTTPError("HTTP 429")
+        err.response = _Throttled(retry_after)
+        if gave_up:
+            err.gave_up_at_deadline = True
+        return err
+
+    def test_the_repair_is_given_the_run_deadline(self):
+        out, checks, budgets = self.narrate([self.SHORT, {}])
+        self.assertGreater(len(budgets), 1, "no repair was asked")
+        self.assertTrue(all(b is not None and b <= 400 for b in budgets), budgets)
+
+    def test_a_repair_that_ran_out_of_time_keeps_the_drafts_objections(self):
+        out, checks, _ = self.narrate([self.SHORT, self.throttled(80, gave_up=True)])
+        self.assertIsNone(out)
+        self.assertIsNotNone(checks.get("results_dropped"))
+        self.assertEqual(checks["results"][-1], "the repair was not made: the time budget was spent")
+
+    def test_a_title_only_draft_keeps_its_section_when_the_repair_is_refused(self):
+        from src.classes.AIInterpret.walker import service
+        titles = iter([["the title claims a mechanism"]] + [[]] * 10)
+        draft = {"title": "X activates Y", "summary": "s.",
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, _ = self.narrate(
+            [draft, self.throttled()],
+            [(service.verify, "verify_results", lambda *a, **k: []),
+             (service.tiers, "title_outruns_body", lambda *a, **k: next(titles)),
+             (service.tiers, "drop_mechanistic_sentences", lambda results: 0)])
+        self.assertIsNotNone(out, "a draft whose only fault was its title lost its section: %s" % checks.get("results"))
+        self.assertTrue(checks["gates"]["title"].get("fallback"))
+
+    def test_a_repaired_section_says_it_was_rewritten(self):
+        from src.classes.AIInterpret.walker import service
+        verdicts = iter([["paragraph 1 is too short"], [], [], []])
+        draft = {"title": "Results", "summary": "s.",
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, _ = self.narrate(
+            [draft],
+            [(service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+             (service.tiers, "title_outruns_body", lambda *a, **k: [])])
+        self.assertIsNotNone(out)
+        self.assertTrue(checks["gates"]["title"]["rewritten"])
+
+
+class PipelineCleanupTest(unittest.TestCase):
+    """run_pipeline returns at once, yet leaves nothing half-unwound."""
+
+    def test_a_task_left_pending_is_cancelled_not_awaited(self):
+        async def pipeline():
+            asyncio.ensure_future(asyncio.sleep(3))
+            return "sealed"
+        started = time.time()
+        self.assertEqual(parallel.run_pipeline(pipeline()), "sealed")
+        self.assertLess(time.time() - started, 1.5)
+
+    def test_a_cancelled_task_finishes_unwinding(self):
+        cleaned = []
+
+        async def straggler():
+            try:
+                await asyncio.sleep(30)
+            finally:
+                await asyncio.sleep(0.01)          # an unwind of more than one step (closing a stream)
+                cleaned.append(True)
+
+        async def pipeline():
+            asyncio.ensure_future(straggler())
+            await asyncio.sleep(0)
+            return "sealed"
+        parallel.run_pipeline(pipeline())
+        self.assertEqual(cleaned, [True])
+
+    def test_an_unfinished_async_generator_is_closed(self):
+        closed = []
+
+        async def gen():
+            try:
+                yield 1
+                yield 2
+            finally:
+                closed.append(True)
+
+        async def pipeline():
+            agen = gen()
+            await agen.__anext__()
+            pipeline.agen = agen                   # alive past the loop
+            return "sealed"
+        parallel.run_pipeline(pipeline())
+        self.assertEqual(closed, [True])
+
+    def test_the_loop_is_closed(self):
+        loops = []
+
+        async def pipeline():
+            loops.append(asyncio.get_running_loop())
+            return "sealed"
+        parallel.run_pipeline(pipeline())
+        self.assertTrue(loops[0].is_closed())
 
 
 class ResultsNoteWiringTest(unittest.TestCase):
@@ -802,6 +1092,20 @@ class ModelWalkStagesTest(unittest.TestCase):
         run_deadline = 10000.0 + parallel.plan_for("network")["run_seconds"]
         self.assertEqual(seen["direction"], [run_deadline - service.SENSE_MIN_SECONDS - service.NARRATE_MIN_SECONDS],
                          "the direction check was given time kept for the sense check or the Narrator")
+        seen, checks = self.walk(left_after_writers=200, sense_overrun=4.5)
+        self.assertEqual(seen["narrate"], 1, "a 4.5 s overrun, inside the 5 s slack, skipped the Narrator")
+
+    def test_the_direction_stage_needs_a_calls_worth_past_its_own_deadline(self):
+        from src.classes.AIInterpret.walker import service
+        seen, checks = self.walk(left_after_writers=service.SENSE_MIN_SECONDS + service.NARRATE_MIN_SECONDS + 2)
+        self.assertEqual(seen["direction"], [])
+        self.assertIn("time budget", checks["gates"]["direction"]["why"])
+
+    def test_a_skipped_narrator_is_reported_as_out_of_time(self):
+        from src.classes.AIInterpret.walker import service
+        seen, checks = self.walk(left_after_writers=40)
+        self.assertEqual(seen["narrate"], 0)
+        self.assertEqual(checks["results"], [service.RESULTS_OUT_OF_TIME])
 
 
 class WriterTest(_Fixture):

@@ -238,15 +238,19 @@ class LLMClient:
             except Exception as e:
                 # The budget, not the gateway, ended the call when it has no
                 # time left for another: decided by the clock, since a timeout
-                # with most of the budget left is the gateway's own. A model the
-                # budget cut off is not down, and no rung has time to try.
+                # with most of the budget left is the gateway's own. Then no
+                # rung has time to try.
                 if deadline is not None and deadline - time.monotonic() < MIN_CALL_SECONDS:
                     e.gave_up_at_deadline = True
-                if model_fallback.falls_back(e) and not getattr(e, "gave_up_at_deadline", False):
+                ended_by_budget = getattr(e, "gave_up_at_deadline", False)
+                if model_fallback.falls_back(e):
                     # Remembered even for the last rung: the next call's
-                    # ordering, and the probe's verdict, read this.
-                    model_fallback.mark_down(self.api_base, model, e)
-                    if remaining:
+                    # ordering, and the probe's verdict, read this. A timeout
+                    # the budget cut short says nothing about the model; an
+                    # error the gateway answered does, whatever the clock.
+                    if not (ended_by_budget and isinstance(e, requests.exceptions.Timeout)):
+                        model_fallback.mark_down(self.api_base, model, e)
+                    if remaining and not ended_by_budget:
                         logger.warning("LLM model %s failed (%s); asking %s instead",
                                        model, type(e).__name__, remaining[0])
                         continue
@@ -265,6 +269,13 @@ class LLMClient:
         """The retry loop for ONE model. `fail_fast`: another rung is waiting,
         so a failure that would move to it is raised at once instead of being
         retried here with a backoff."""
+
+        def _retry_now(err):
+            # The retries that go straight to the next attempt (the schema
+            # demotion, the streamed escalation) obey the same floor.
+            if deadline is not None and deadline - time.monotonic() < MIN_CALL_SECONDS:
+                err.gave_up_at_deadline = True
+                raise err
 
         def _backoff(seconds, err):
             # A retry that cannot finish inside the budget only delays an
@@ -343,6 +354,7 @@ class LLMClient:
                         and response_format is not None):
                     self._demote_schema()
                     response_format = None
+                    _retry_now(e)
                     continue
                 # 429 is the one 4xx that DOES self-heal. It was being lumped in
                 # with auth/bad-request and raised immediately, so a moment of
@@ -378,6 +390,7 @@ class LLMClient:
                     retried_streamed = True
                     stream = True
                     logger.warning("LLM retrying the same request to %s streamed", model)
+                    _retry_now(e)
                     continue
                 if fail_fast:
                     raise

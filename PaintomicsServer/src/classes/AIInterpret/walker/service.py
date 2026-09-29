@@ -645,8 +645,14 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
         s["direction"] = verdicts.get(s["n"])
     failing = [s for s in statements if objections.get(s["n"])]
     if failing:
-        objected = {s["n"]: {v.get("gene") for v in verdicts.get(s["n"], [])
-                             if not v.get("consistent", True) or v.get("insensitive")} for s in failing}
+        # Each regulator that objected, with its own objections, before the
+        # re-check's verdicts replace the first ones.
+        objected = {}
+        for s in failing:
+            genes = objected[s["n"]] = {}
+            for v in verdicts.get(s["n"], []):
+                if not v.get("consistent", True) or v.get("insensitive"):
+                    genes.setdefault(v.get("gene"), []).extend(v.get("objections") or [])
         problems = _rewrite_and_recheck(client, card_text, chain, failing,
                                         {s["n"]: {"direction": "; ".join(objections[s["n"]])} for s in failing},
                                         walker, store, read, deadline=deadline)
@@ -656,10 +662,12 @@ def _direction_pass(client, card_text, chain, statements, dropped, walker, store
             # A statement sent back keeps a regulator's objection until the
             # re-check answers for that regulator: one left unanswered (no
             # time, or no answer from the AI service) has not cleared it.
-            unanswered = [v for v in again.get(s["n"], [])
-                          if v.get("unchecked") and v.get("gene") in objected[s["n"]]]
-            stands = [o for o in objections[s["n"]] if any(str(v.get("gene")) in o for v in unanswered)] + [
-                "%s was not checked again: %s" % (v.get("gene"), v["unchecked"]) for v in unanswered]
+            unanswered = {}
+            for v in again.get(s["n"], []):
+                if v.get("unchecked") and v.get("gene") in objected[s["n"]]:
+                    unanswered.setdefault(v.get("gene"), v["unchecked"])
+            stands = [o for gene in unanswered for o in objected[s["n"]][gene]] + [
+                "%s was not checked again: %s" % (gene, why) for gene, why in unanswered.items()]
             if problems[s["n"]] or again_objections.get(s["n"]) or stands:
                 statements.remove(s)
                 dropped.append({"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
