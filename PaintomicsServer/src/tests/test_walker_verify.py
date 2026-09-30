@@ -65,6 +65,35 @@ class WalkerVerifyTest(unittest.TestCase):
         stmt["grounded_in"] = [{"leg": 2, "db": "KEGG"}]
         self.assertTrue(any("grounded_in" in p for p in verify.verify_statement(stmt, self.walker, {})))
 
+    def test_a_leg_written_as_the_chain_labels_it_is_that_leg(self):
+        """default/llm wrote "legs": ["e1"] where DeepSeek wrote [1]; every
+        statement of a walk was refused as naming a leg "ee1" (2026-09-30)."""
+        base = self.good_statement()
+        if not self.ov.layers[self.chain[0]["to"]][0]["relevant"]:
+            base["prose"] += " (not relevant)"
+        for written in ("e1", "E1", " e1 ", "1", 1.0):
+            stmt = dict(base, legs=[written], grounded_in=[{"leg": written, "db": "KEGG"}])
+            self.assertEqual(verify.verify_statement(stmt, self.walker, {}), [], written)
+            self.assertEqual(stmt["legs"], [1], "downstream code reads legs as numbers")
+            self.assertEqual(stmt["grounded_in"][0]["leg"], 1)
+        for junk in ("e1b", "leg one", None, True, [1]):
+            stmt = dict(base, legs=[junk], grounded_in=[])
+            self.assertTrue(any("not on the chain" in p for p in verify.verify_statement(stmt, self.walker, {})),
+                            junk)
+
+    def test_a_node_cited_by_position_is_told_how_to_name_it(self):
+        """default/llm cited [[0, layer], [1, layer]] -- nodes by position --
+        and resubmitted the same three times against an objection that only
+        said "not a node on the chain" (2026-09-30)."""
+        stmt = self.good_statement()
+        layer = stmt["cites"][0][1]
+        stmt["cites"] = [[0, layer]]
+        problems = [p for p in verify.verify_statement(stmt, self.walker, {}) if "cite 0" in p]
+        self.assertEqual(len(problems), 1, problems)
+        first = self.walker.label(verify.chain_nodes(self.chain)[0])
+        self.assertIn(repr(first), problems[0], "the objection names a node the way the chain writes it")
+        self.assertIn("never by a number", problems[0])
+
     def test_a_non_relevant_layer_must_be_called_not_relevant(self):
         # Ccc is measured and not relevant; find it on the chain if the walk passed it
         node = next((n for n in verify.chain_nodes(self.chain) if not self.ov.r.get(n)), None)
@@ -93,6 +122,30 @@ class WalkerVerifyTest(unittest.TestCase):
         stmt["papers"] = []
         stmt["beyond"] = [{"claim": "x", "paper": "[3]", "hypothesis": False}]
         self.assertEqual([p for p in verify.verify_statement(stmt, self.walker, {3: {}}) if "beyond" in p], [])
+
+    def test_a_retrieved_paper_named_by_its_pmid_is_its_reference(self):
+        """default/llm wrote {"pmid": p} in every beyond entry instead of the
+        [N] its search returned, was refused each time, and flagged every claim
+        a hypothesis to pass: no reference reached the Results (2026-09-30)."""
+        papers = {3: {"pmid": "21849978", "title": "Fumarase"}, 21849978 % 97: {"pmid": "1"}}
+        stmt = self.good_statement()
+        stmt["beyond"] = [{"claim": "FH hydrates fumarate", "pmid": 21849978, "hypothesis": False},
+                          {"claim": "unknown", "pmid": 99999999, "hypothesis": False}]
+        stmt["papers"] = ["PMID 21849978", 3]
+        stmt["prose"] += " as FH does [21849978], (PMID 21849978) and [3]."
+        problems = verify.verify_statement(stmt, self.walker, papers)
+        self.assertEqual(stmt["beyond"][0]["paper"], 3)
+        self.assertEqual(stmt["papers"], [3, 3])
+        self.assertTrue(stmt["prose"].endswith(" as FH does [3], [3] and [3]."), stmt["prose"])
+        refused = [p for p in problems if "neither a retrieved paper" in p]
+        self.assertEqual(len(refused), 1, "a PMID that was never retrieved is still refused")
+        self.assertIn("unknown", refused[0])
+        self.assertEqual([p for p in problems if "never retrieved" in p and "beyond" not in p], [])
+        # A value that already is an [N] on the list is never read as a PMID.
+        stmt = self.good_statement()
+        stmt["papers"] = [1]
+        verify.verify_statement(stmt, self.walker, {1: {"pmid": "3"}, 3: {"pmid": "1"}})
+        self.assertEqual(stmt["papers"], [1])
 
     def test_region_scene_keeps_the_seen_nodes_measured(self):
         from src.classes.AIInterpret.walker import record as record_mod

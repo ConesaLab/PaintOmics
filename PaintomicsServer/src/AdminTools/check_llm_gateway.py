@@ -3,7 +3,7 @@
 
     python src/AdminTools/check_llm_gateway.py [--timeout 60] [--json]
 
-Exit status:  0  the pinned model answered
+Exit status:  0  the configured model answered
               3  only a fallback model answered (features work, on another model)
               1  nothing answered (refused, timed out, unreachable, or junk)
               2  nothing to ask: no API key, or AI interpretation is off
@@ -23,9 +23,9 @@ after every deploy (deploy/smoke-test.sh), every night (the CI job that holds
 the key as a secret), and by hand when someone says the AI is down. It uses
 the same LLMClient the features use, against the same configuration, so it
 answers for them and not for some simpler path. Every model on the ladder is
-asked -- the pinned one and each fallback -- because "the site works" and
-"the site works on the model the paper names" are different facts, and the
-verdict line says which one is true.
+asked -- the configured one and each fallback -- because "the site works" and
+"the site works on the model the configuration names" are different facts, and
+the verdict line says which one is true.
 
 Streamed, like the features: on 2026-09-08 the gateway answered a plain
 request with a 500 and the same request streamed with the answer.
@@ -50,7 +50,7 @@ if SERVER_ROOT not in sys.path:
 # with no serverconf.py at all. Kept minimal on purpose: a provider that is not
 # here is configured through serverconf, where it belongs.
 _ENV_DEFAULTS = {
-    "csic": ("https://llm.iiia.es/v1", "deepseek-ai/DeepSeek-V4-Flash-0731"),
+    "csic": ("https://llm.iiia.es/v1", "default/llm"),
     "dashscope": ("https://coding-intl.dashscope.aliyuncs.com/v1", "qwen3.5-plus"),
     "openrouter": ("https://openrouter.ai/api/v1", "anthropic/claude-3.5-sonnet"),
 }
@@ -128,7 +128,7 @@ def probe(config, provider_name="csic", timeout=60):
 
 
 def probe_ladder(config, provider_name="csic", timeout=60):
-    """One probe per model on the ladder, pinned model first.
+    """One probe per model on the ladder, configured model first.
 
     Cooldowns are cleared first: this measures each model as it is now, not
     what an earlier call in this process concluded about it.
@@ -154,7 +154,7 @@ def verdict(results):
     answering = [r for r in results[1:] if r["ok"]]
     if answering:
         return EXIT_DEGRADED, (
-            "%s: the pinned model %s is not answering (%s); %s is, so features run "
+            "%s: the configured model %s is not answering (%s); %s is, so features run "
             "on it until %s recovers" % (where, primary["model"], primary["error"],
                                          answering[0]["model"], primary["model"]))
     return EXIT_FAIL, "%s: no model answered -- %s" % (
@@ -190,7 +190,7 @@ def main(argv=None):
         print(json.dumps({"status": status, "verdict": line, "models": results}, sort_keys=True))
         return status
     for index, r in enumerate(results):
-        role = "pinned  " if index == 0 else "fallback"
+        role = "model   " if index == 0 else "fallback"
         if r["ok"]:
             print("  %s %s: OK in %s s (%r)" % (role, r["model"], r["seconds"], r["reply"]))
         elif not r.get("configured", True):
