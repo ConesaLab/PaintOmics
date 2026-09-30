@@ -85,7 +85,7 @@ jobs:
           python-version: "3.11"
       - name: requests
         run: python -m pip install --quiet requests
-      # Exit 0 = the pinned model answered, 3 = only a fallback did, 1 = none
+      # Exit 0 = the configured model answered, 3 = only a fallback did, 1 = none
       # did, 2 = no key. Everything but 0 fails the job on purpose: a missing
       # secret is a misconfiguration on the main repository, and the pinned
       # model being down is exactly the alert this job exists to raise, even

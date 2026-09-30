@@ -192,6 +192,84 @@ def _paper_names_any(paper, genes):
     return any(re.search(_names_re(g), blob, re.I) for g in genes)
 
 
+# A leg as the chain text labels it: "e3" for a step, "J3" for a jump.
+LEG_LABEL_RE = re.compile(r"^\s*[eEjJ]?(\d+)\s*$")
+
+
+def leg_number(value):
+    """A leg as a model wrote it -- 3, "3", "e3" or "J3", the chain text's own
+    labels -- as its number; anything else unchanged, for the check to object
+    to. default/llm (2026-09-30) wrote "legs": ["e1", "e2"] where DeepSeek
+    wrote [1, 2], and every statement of the walk was refused as naming legs
+    "ee1" and "ee2" that are not on the chain."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        match = LEG_LABEL_RE.match(value)
+        if match:
+            return int(match.group(1))
+    return value
+
+
+def normalise_legs(item):
+    """In place: an object's "legs" and each grounded_in "leg" as numbers, so
+    the checks and everything downstream of them read one form."""
+    if isinstance(item.get("legs"), (list, tuple)):
+        item["legs"] = [leg_number(leg) for leg in item["legs"]]
+    if isinstance(item.get("grounded_in"), (list, tuple)):
+        for ground in item["grounded_in"]:
+            if isinstance(ground, dict) and "leg" in ground:
+                ground["leg"] = leg_number(ground["leg"])
+    return item
+
+
+# A paper named by its PubMed id in prose: "[21849978]", "(PMID 21849978)", "PMID: 21849978".
+PMID_MENTION_RE = re.compile(r"\[\s*(\d{5,9})\s*\]|\(?\bPMID:?\s*(\d{5,9})\)?")
+
+
+def normalise_papers(stmt, papers):
+    """In place: a retrieved paper named by its PMID becomes its [N].
+
+    The Writer's search results list each paper as "[N] title ... PMID p", and
+    the schema asks for N. default/llm (2026-09-30) wrote {"pmid": p} in every
+    beyond entry instead; the Verifier refused each as "neither a retrieved
+    paper nor the hypothesis flag", and the Writer flagged every claim a
+    hypothesis to pass -- a Results section with no reference in it. A value
+    that already is an N on the list is never read as a PMID."""
+    by_pmid = {str(paper.get("pmid")): ref for ref, paper in (papers or {}).items() if paper.get("pmid")}
+    if not by_pmid:
+        return stmt
+
+    def ref_of(value):
+        ref = paper_ref(value)
+        if ref is not None and ref in papers:
+            return ref
+        digits = re.sub(r"(?i)^\s*\[?\s*(pmid:?\s*)?|\s*\]?\s*$", "", str(value if value is not None else ""))
+        return by_pmid.get(digits)
+
+    if isinstance(stmt.get("beyond"), (list, tuple)):
+        for beyond in stmt["beyond"]:
+            if isinstance(beyond, dict):
+                ref = ref_of(beyond.get("paper")) or ref_of(beyond.get("pmid"))
+                if ref is not None:
+                    beyond["paper"] = ref
+    if isinstance(stmt.get("papers"), (list, tuple)):
+        stmt["papers"] = [ref_of(value) or value for value in stmt["papers"]]
+
+    def cite(match):
+        pmid = match.group(1) or match.group(2)
+        if match.group(1) and int(pmid) in papers:
+            return match.group(0)
+        return "[%d]" % by_pmid[pmid] if pmid in by_pmid else match.group(0)
+
+    for key in ("claim", "prose"):
+        if isinstance(stmt.get(key), str):
+            stmt[key] = PMID_MENTION_RE.sub(cite, stmt[key])
+    return stmt
+
+
 def _as_list(stmt, key, problems):
     """A statement field the model should have sent as a list; anything else is
     an objection, never an exception (a rewrite once sent "papers": 3)."""
@@ -217,6 +295,8 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
     problems = []
     chain = walker.record()["chain"]
     n_legs = len(chain)
+    normalise_legs(stmt)
+    normalise_papers(stmt, papers)
     legs = _as_list(stmt, "legs", problems)
     if not legs:
         problems.append("names no leg")
@@ -239,7 +319,13 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
             continue
         node_id = resolve_node(cite[0], walker)
         if node_id is None:
-            problems.append("cite %r is not a node on the chain" % (cite[0],))
+            # default/llm (2026-09-30) cited nodes by their position on the
+            # chain, [[0, "Metabolomics"], [1, ...]], and resubmitted the same
+            # three times against an objection that did not say what to write.
+            mine = [leg for leg in chain if part is None or part[0] <= leg["n"] <= part[1]] or chain
+            names = [walker.label(n) for n in chain_nodes(mine)[:3]]
+            problems.append("cite %r is not a node on the chain; name the node as the chain writes it "
+                            "(for example %s), never by a number" % (cite[0], ", ".join(repr(n) for n in names)))
             continue
         layers = [l for l in walker.overlay.layers.get(node_id, [])
                   if l["omic"].lower() == str(cite[1]).lower()]
@@ -571,6 +657,7 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
         for leg in cited_legs(text):
             if int(leg) < 1 or int(leg) > len(chain):
                 problems.append("paragraph %d cites leg e%s, not on the chain" % (i, leg))
+        normalise_legs(para)
         para_legs = para.get("legs") if isinstance(para.get("legs"), (list, tuple)) else []
         for leg in para_legs:
             if not isinstance(leg, int) or leg < 1 or leg > len(chain):

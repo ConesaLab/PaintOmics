@@ -1166,6 +1166,182 @@ class WriterTest(_Fixture):
         self.assertEqual(covered[0][0], 1)
         self.assertEqual(covered[-1][1], len(self.merged.chain))
 
+    def test_a_writer_is_never_asked_for_more_papers_than_statements(self):
+        """A one-part walk once briefed its only Writer "3 to 5 statements,
+        citing about 24 papers" -- the whole network quota. On default/llm
+        (2026-09-30) that Writer searched 48 times in 30 turns and never
+        submitted, and the walk failed with MaxTurnsExceeded."""
+        async def write_one(c):
+            return None
+
+        def briefed(plan, parts):
+            real = parallel.writer_parts
+            parallel.writer_parts = lambda segments, n_legs, _parts: parts
+            try:
+                return asyncio.run(parallel.write_in_parallel(
+                    self.merged, "card", _PubMed(), None, plan, time.time() + 60, write_one=write_one))[3]
+            finally:
+                parallel.writer_parts = real
+
+        network = dict(parallel.PLANS["network"], writers=6)
+        n = len(self.merged.chain)
+        one = briefed(network, [(1, n)])
+        self.assertEqual([c.citations for c in one], [network["statements"][1]])
+        # The split the plan is sized for keeps its share: 24 papers over 6 parts.
+        six = briefed(network, [(i, i) for i in range(1, 7)])
+        self.assertEqual([c.citations for c in six], [4] * 6)
+
+    def test_a_writer_that_never_submits_is_asked_to_when_its_turns_run_out(self):
+        """default/llm (2026-09-30) searched and read for all 30 turns of every
+        Writer and never submitted, so every walk failed with MaxTurnsExceeded
+        and lost what it had read. The conversation now goes on without tools:
+        the Writer answers with its statements, code submits them, and the
+        Verifier's objections come back until it accepts."""
+        from agents.items import ModelResponse
+        from agents.models.interface import Model
+        from agents.usage import Usage
+        from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
+
+        layer = self.ov.layers[self.leg["to"]][0]["omic"]
+        passing = [{"claim": "%s moves" % self.label, "prose": "%s moves, not relevant" % self.label,
+                    "cites": [[self.label, layer]], "legs": [self.leg["n"]], "grounded_in": [],
+                    "beyond": [], "papers": []}]
+        # The walker's own word: the Verifier objects, and the Writer must answer again.
+        objected = [dict(passing[0], claim="The %s cluster moves" % self.label)]
+
+        class Stubborn(Model):
+            """Searches on every turn it has tools for. Without them it answers
+            as the gateway let default/llm answer (2026-09-30): with tool calls
+            it was not offered -- check_my_citations on a draft that is no
+            array, then on one carrying a statement the Verifier objects to,
+            submit_statements with the same -- and at last with text, inside a
+            fence and a sentence, carrying one it accepts."""
+            def __init__(self):
+                self.calls = []
+
+            async def get_response(self, *_args, **kwargs):          # the SDK passes keywords
+                tools = kwargs["tools"]
+                self.calls.append({"tools": sorted(t.name for t in tools), "input": kwargs["input"]})
+                n = len(self.calls)
+                if tools:
+                    item = ResponseFunctionToolCall(
+                        arguments=json.dumps({"query": "q%d" % n, "topic_tag": "t"}), call_id="c%d" % n,
+                        name="search_literature", type="function_call", id="f%d" % n)
+                elif sum(1 for call in self.calls if not call["tools"]) < 4:
+                    name, args = [("check_my_citations", {"draft": "x"}),
+                                  ("check_my_citations", {"draft": json.dumps(objected)}),
+                                  ("submit_statements", {"statements_json": json.dumps(objected)})][
+                        sum(1 for call in self.calls if not call["tools"]) - 1]
+                    item = ResponseFunctionToolCall(arguments=json.dumps(args), call_id="c%d" % n, name=name,
+                                                    type="function_call", id="f%d" % n)
+                else:
+                    text = "Here are my statements:\n```json\n%s\n```" % json.dumps(passing)
+                    item = ResponseOutputMessage(
+                        id="m%d" % n, role="assistant", status="completed", type="message",
+                        content=[ResponseOutputText(text=text, type="output_text", annotations=[])])
+                return ModelResponse(output=[item], usage=Usage(), response_id=None)
+
+            def stream_response(self, *args, **kwargs):
+                raise NotImplementedError
+
+        model = Stubborn()
+        c = writer_mod.WriterContext(walker=self.merged, card="card", pubmed=_PubMed(), count=(1, 4),
+                                     legs=(1, len(self.merged.chain)), deadline=time.time() + 60)
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=3, model=model))
+
+        self.assertTrue(c.done, c.loop_error)
+        self.assertIsNone(c.loop_error)
+        self.assertEqual(len(c.kept), 1)
+        self.assertEqual(c.submits, 3, "a draft with no array is no submission; a draft or a submit "
+                                       "call with one is")
+        self.assertEqual([bool(call["tools"]) for call in model.calls], [True] * 3 + [False] * 4)
+        # The same conversation, not a fresh one: the three searches are in it,
+        # then the request for the statements.
+        finish = model.calls[3]["input"]
+        self.assertEqual([item.get("name") for item in finish if item.get("type") == "function_call"],
+                         ["search_literature"] * 3)
+        self.assertEqual(finish[-1], {"role": "user", "content": writer_mod.FINISH_NOW})
+        # An answer with no array is asked again; an objection comes back to be fixed.
+        self.assertIn("needs a JSON array", str(model.calls[4]["input"][-1].get("content")))
+        self.assertIn("The Verifier objects", str(model.calls[5]["input"][-1].get("content")))
+        self.assertIn("The Verifier objects", str(model.calls[6]["input"][-1].get("content")))
+
+
+
+    def _replying(self, replies):
+        """A model that answers turn by turn from ``replies``: ("text", str) or
+        ("calls", [(name, args), ...], trailing text or None)."""
+        from agents.items import ModelResponse
+        from agents.models.interface import Model
+        from agents.usage import Usage
+        from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
+
+        def message(text, n):
+            return ResponseOutputMessage(id="m%d" % n, role="assistant", status="completed", type="message",
+                                         content=[ResponseOutputText(text=text, type="output_text",
+                                                                     annotations=[])])
+
+        class Replying(Model):
+            def __init__(self):
+                self.calls = []
+
+            async def get_response(self, *_args, **kwargs):          # the SDK passes keywords
+                self.calls.append(sorted(tool.name for tool in kwargs["tools"]))
+                n = len(self.calls)
+                reply = replies[min(n, len(replies)) - 1]
+                if reply[0] == "text":
+                    output = [message(reply[1], n)]
+                else:
+                    output = [ResponseFunctionToolCall(arguments=json.dumps(args), call_id="c%d%d" % (n, i),
+                                                       name=name, type="function_call", id="f%d%d" % (n, i))
+                              for i, (name, args) in enumerate(reply[1])]
+                    if reply[2]:
+                        output.append(message(reply[2], n))
+                return ModelResponse(output=output, usage=Usage(), response_id=None)
+
+            def stream_response(self, *args, **kwargs):
+                raise NotImplementedError
+
+        return Replying()
+
+    def _passing(self):
+        layer = self.ov.layers[self.leg["to"]][0]["omic"]
+        return [{"claim": "%s moves" % self.label, "prose": "%s moves, not relevant" % self.label,
+                 "cites": [[self.label, layer]], "legs": [self.leg["n"]], "grounded_in": [],
+                 "beyond": [], "papers": []}]
+
+    def _writer(self, deadline=60):
+        return writer_mod.WriterContext(walker=self.merged, card="card", pubmed=_PubMed(), count=(1, 4),
+                                        legs=(1, len(self.merged.chain)), deadline=time.time() + deadline)
+
+    def test_a_writer_that_answers_in_text_is_finished_and_a_carried_submission_wins(self):
+        """A run that ends in text is finished like one whose turns ran out; in
+        the finish, the statements a call carries beat the text sent with it."""
+        model = self._replying([
+            ("text", "I have what I need; the statements follow in my next message."),
+            ("calls", [("submit_statements", {"statements_json": json.dumps(self._passing())})], "Done."),
+        ])
+        c = self._writer()
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=5, model=model))
+        self.assertTrue(c.done, c.loop_error)
+        self.assertEqual(len(c.kept), 1)
+        self.assertEqual([bool(tools) for tools in model.calls], [True, False])
+
+    def test_a_citation_is_no_submission(self):
+        """A draft "Fh1 rises [3]." once reduced to "[3]", a JSON array, and
+        spent one of the three submissions on nothing."""
+        c = self._writer()
+        self.assertEqual(asyncio.run(writer_mod.submit(c, "[3]")), writer_mod.NEEDS_ARRAY)
+        self.assertEqual(c.submits, 0)
+        self.assertEqual(writer_mod._json_array('As [3] shows:\n```json\n[{"a": [1]}]\n```'), '[{"a": [1]}]')
+
+    def test_the_finish_stops_at_the_writers_deadline(self):
+        model = self._replying([("text", "no statements yet")])
+        c = self._writer(deadline=-1)
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=5, model=model))
+        self.assertFalse(c.done)
+        self.assertIn("time ran out", c.loop_error)
+        self.assertEqual(len(model.calls), 1, "no finish attempt is started past the deadline")
 
 class WordingAndRecordTest(_Fixture):
     def test_the_walkers_words_never_reach_the_reader(self):

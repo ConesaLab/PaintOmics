@@ -308,7 +308,14 @@ async def write_in_parallel(walker, card_text, pubmed, client, plan, deadline, c
     store = literature.LiteratureStore()
     slots = asyncio.Semaphore(plan["writers"])
     paper_slots = asyncio.Semaphore(plan["papers"])
-    per_part = max(1, int(math.ceil(plan["citations"] / float(max(1, len(parts))))))
+    # About one paper per statement: the plan's citations are for a walk split
+    # into plan["parts"] parts. A walk with fewer (one seed -> one part) must
+    # not hand its whole quota to one Writer -- "3 to 5 statements citing about
+    # 24 papers", each on a different claim, cannot be met, and a model that
+    # takes the brief literally searched 48 times in 30 turns and never
+    # submitted (default/llm, 2026-09-30).
+    per_part = max(1, min(plan["statements"][1],
+                          int(math.ceil(plan["citations"] / float(max(1, len(parts)))))))
     contexts = [writer_mod.WriterContext(walker=walker, card=card_text, pubmed=pubmed, store=store,
                                          client=client, legs=part, count=plan["statements"],
                                          citations=per_part, paper_slots=paper_slots, deadline=deadline,

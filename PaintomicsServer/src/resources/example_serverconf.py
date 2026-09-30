@@ -219,16 +219,18 @@ AI_PROVIDERS = {
     "csic": {
         "api_base": os.getenv("AI_CSIC_API_BASE", "https://llm.iiia.es/v1"),
         "api_key": os.getenv("AI_CSIC_API_KEY", ""),                   # SECRET
-        # Pin a dated snapshot rather than the "default/llm" alias: the service
-        # asks scientific users to name an explicit model for reproducibility,
-        # and an alias can be repointed under a running deployment.
-        "model": os.getenv("AI_CSIC_MODEL", "deepseek-ai/DeepSeek-V4-Flash-0731"),
-        # Asked, in order, when the pinned model is not being served (a 5xx,
-        # a dead backend, a timeout -- never a 4xx that every model would
-        # answer alike). "default/llm" is the gateway's own alias, which its
-        # operator keeps pointed at a working model. Comma-separated; empty
-        # switches the fallback off. Every result records the model that
-        # actually answered, so the pin stays honest.
+        # The gateway's own "default/llm" alias, which its operator keeps
+        # pointed at a working model. Every LLM call -- the interpretation,
+        # the input converter, Step 2's "Choose for me" -- asks this one name.
+        # An alias can be repointed under a running deployment; set a concrete
+        # id here (e.g. "deepseek-ai/DeepSeek-V4-Flash-0731") to pin one.
+        "model": os.getenv("AI_CSIC_MODEL", "default/llm"),
+        # Asked, in order, when the configured model is not being served (a
+        # 5xx, a dead backend, a timeout -- never a 4xx that every model would
+        # answer alike). A fallback equal to the model is dropped, so with the
+        # alias as the model this is inert; it matters only to a deployment
+        # that pins a concrete id above. Comma-separated; empty switches the
+        # fallback off. Every result records the model that actually answered.
         "fallback_models": os.getenv("AI_CSIC_FALLBACK_MODELS", "default/llm"),
     },
     "dashscope": {

@@ -11,6 +11,7 @@ import asyncio
 import contextvars
 import logging
 import os
+import re
 import threading
 import time
 
@@ -231,6 +232,57 @@ async def _stream_to_completion(stream):
     return ChatCompletion.model_validate(payload)
 
 
+# The model's context window, input and output together. Every model the CSIC
+# gateway serves (default/llm and the DeepSeek snapshot alike) has 262,144.
+# The alias can be repointed to another model; AI_CONTEXT_WINDOW_TOKENS says
+# its window, and a value that is no number keeps the default.
+try:
+    CONTEXT_WINDOW_TOKENS = int(os.getenv("AI_CONTEXT_WINDOW_TOKENS") or 262144)
+except ValueError:
+    CONTEXT_WINDOW_TOKENS = 262144
+# A request this full of the window is logged as a warning: the next few turns
+# of a tool loop are what push it over.
+CONTEXT_WARN_SHARE = 0.8
+
+
+def _agent_label(messages):
+    """Which agent sent this request, from its instructions ("You are a
+    Writer of ..." -> "Writer"; otherwise their first four words)."""
+    system = next((m.get("content") for m in messages
+                   if isinstance(m, dict) and m.get("role") == "system"), None)
+    if not isinstance(system, str) or not system.strip():
+        return "?"
+    match = re.match(r"You are (?:a|an|the) (\w+)", system)
+    return match.group(1) if match else " ".join(system.split()[:4])
+
+
+def _log_context(kwargs, completion):
+    """One line per completion: the agent, its turn, how much of the context
+    window the request filled, and what the model answered with.
+
+    A tool loop resends its whole history every turn, so the prompt grows
+    turn by turn; this is the record of that growth over a run's lifetime,
+    and the place a loop that spins (the same tool, turn after turn) or a
+    context that nears the window shows first.
+    """
+    usage = getattr(completion, "usage", None)
+    choices = getattr(completion, "choices", None)
+    if usage is None or not choices:
+        return
+    messages = kwargs.get("messages") or []
+    turn = 1 + sum(1 for m in messages if isinstance(m, dict) and m.get("role") == "assistant")
+    prompt = usage.prompt_tokens or 0
+    share = prompt / CONTEXT_WINDOW_TOKENS if CONTEXT_WINDOW_TOKENS else 0.0
+    message = choices[0].message
+    tools = [tc.function.name for tc in (message.tool_calls or []) if tc.function is not None]
+    answer = ("tools " + ", ".join(tools)) if tools else ("%d chars of text" % len(message.content or ""))
+    level = logging.WARNING if share >= CONTEXT_WARN_SHARE else logging.INFO
+    logger.log(level, "[AI context] %s turn %d: prompt %d tokens (%.1f%% of %d), answer %d tokens, "
+               "%s, model %s", _agent_label(messages), turn, prompt, 100 * share,
+               CONTEXT_WINDOW_TOKENS, usage.completion_tokens or 0, answer,
+               getattr(completion, "model", "") or kwargs.get("model"))
+
+
 def configure_sdk():
     """Point the SDK at our OpenAI-compatible gateway. Idempotent."""
     global _sdk_configured, _MODEL_OBJ, _CLIENT
@@ -336,6 +388,12 @@ def configure_sdk():
             try:
                 result = await _issue(*args, **sent)
                 model_fallback.mark_up(api_base, sent.get("model"))
+                if isinstance(result, ChatCompletion):
+                    try:
+                        _log_context(sent, result)
+                    except Exception:                         # noqa: BLE001
+                        # A log line must never fail a completion that arrived.
+                        logger.debug("[AI context] could not log this completion", exc_info=True)
                 return result
             except asyncio.CancelledError:
                 # Never retry a cancellation. httpx maps some cancellations
@@ -400,8 +458,8 @@ def configure_sdk():
 
     # Passing the model as a *string* routes through the SDK's MultiProvider,
     # which splits on "/" and reads the left side as a provider prefix. Every
-    # CSIC model id contains a slash ("deepseek-ai/DeepSeek-V4-Flash-0731"), so
-    # that path dies with UserError: Unknown prefix: deepseek-ai. Handing the
+    # CSIC model id contains a slash ("default/llm", "deepseek-ai/…"), so that
+    # path dies with UserError: Unknown prefix: default. Handing the
     # SDK a concrete model object bypasses provider resolution entirely.
     _MODEL_OBJ = OpenAIChatCompletionsModel(model=provider["model"],
                                             openai_client=client)
