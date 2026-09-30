@@ -7,8 +7,8 @@ On 2026-09-30 every LLM call was switched from the pinned
 `deepseek-ai/DeepSeek-V4-Flash-0731` snapshot to the CSIC gateway's own
 `default/llm` alias. The model name is not written in one place: the config
 template, the container's compose file, the operator's env.example, the
-developer's .env.example and the gateway check's no-serverconf defaults each
-carry it. A switch that misses one of them is a partial switch that nothing
+developer's .env.example, the gateway check's no-serverconf defaults and the
+CI review's gateway job (.github/workflows/code-review.yml) each carry it. A switch that misses one of them is a partial switch that nothing
 reports -- paintomics.org's compose default would keep asking DeepSeek while
 the template, and every test, says otherwise.
 
@@ -37,6 +37,7 @@ TEMPLATE = os.path.join(SERVER_ROOT, "src", "resources", "example_serverconf.py"
 DOTENV_EXAMPLE = os.path.join(SERVER_ROOT, ".env.example")
 COMPOSE = os.path.join(REPO_ROOT, "deploy", "compose.yaml")
 ENV_EXAMPLE = os.path.join(REPO_ROOT, "deploy", "env.example")
+REVIEW_WORKFLOW = os.path.join(REPO_ROOT, ".github", "workflows", "code-review.yml")
 
 
 def _read(path):
@@ -80,6 +81,13 @@ class EveryPlaceNamesTheAlias(unittest.TestCase):
     def test_the_gateway_check_without_a_serverconf(self):
         from src.AdminTools import check_llm_gateway
         self.assertEqual(check_llm_gateway._ENV_DEFAULTS["csic"][1], MODEL)
+
+    def test_the_ci_review_on_the_gateway(self):
+        """Its three Claude model aliases and its --model all name the gateway's model."""
+        text = _read(REVIEW_WORKFLOW)
+        aliases = re.findall(r"^\s+ANTHROPIC_DEFAULT_(?:HAIKU|SONNET|OPUS)_MODEL: (\S+)", text, re.MULTILINE)
+        self.assertEqual(aliases, [MODEL] * 3)
+        self.assertEqual(re.findall(r"^\s+--model (\S+)", text, re.MULTILINE), [MODEL])
 
 
 class TheAliasIsAskedOnce(unittest.TestCase):
