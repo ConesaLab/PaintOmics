@@ -328,8 +328,7 @@ call against a multi-phase run with literature retrieval.
 | `AI_LLM_PROVIDER` | `csic` | Which entry of `AI_PROVIDERS` to use. `dashscope` and `openrouter` are also defined |
 | `AI_CSIC_API_BASE` | `https://llm.iiia.es/v1` | The endpoint. An OpenAI-compatible gateway run by IIIA-CSIC; tokens are self-service from `https://console.llm.iiia.es` |
 | `AI_CSIC_API_KEY` | empty — the secret | Without it every AI request fails |
-| `AI_CSIC_MODEL` | `default/llm` | The gateway's own alias, which its operator keeps pointed at a working model; every AI feature asks it. An alias can be repointed under a running deployment, so set a concrete id (for example `deepseek-ai/DeepSeek-V4-Flash-0731`) to pin one |
-| `AI_CSIC_FALLBACK_MODELS` | `default/llm` | Asked in order when `AI_CSIC_MODEL` is not being served. A fallback equal to the model is dropped, so this only matters once a concrete model is pinned |
+| `AI_CSIC_MODEL` | `deepseek-ai/DeepSeek-V4-Flash-0731` | Pinned to a dated snapshot rather than an alias, so a model cannot be repointed under a running deployment |
 | `AI_PUBMED_EMAIL` / `AI_PUBMED_API_KEY` | empty | NCBI E-utilities. With a key the rate limit is 10 requests per second instead of 3 |
 
 An unauthenticated `GET /ai_provider` reports `enabled`, `configured`, the

@@ -70,7 +70,7 @@ Everything lives in `deploy/.env`. Nothing is baked into the image, and
 | `PAINTOMICS_BASE_URL` | **Container refuses to start.** It is embedded in activation emails, so a wrong value silently breaks registration. |
 | `SMTP_PASSWORD` | App starts; registration and password-reset email cannot be sent, so **new users cannot activate accounts**. Logged as a warning at start-up. |
 | `AI_CSIC_API_KEY` | App starts; AI interpretation requests fail. Set `AI_INTERPRETATION_ENABLED=false` to disable the feature cleanly. |
-| `AI_CSIC_FALLBACK_MODELS` | Defaults to `default/llm`, which is also the default `AI_CSIC_MODEL`, so out of the box there is no fallback: an outage of the alias is an outage of every AI feature. It matters once `AI_CSIC_MODEL` pins a concrete id: when that model stops being served, calls go to the listed models and each result records which model answered. |
+| `AI_CSIC_FALLBACK_MODELS` | Defaults to `default/llm`: when the pinned model stops being served, calls go to the gateway's default alias and each result records which model answered. Empty means no fallback, and an outage of the pinned model is an outage of every AI feature. |
 | `AI_INPUT_CONVERTER` | Defaults to `false`: every spreadsheet a user uploads, and every file the format check rejects, ends in *"AI file conversion is not enabled on this server"*. Set it to `true` on any deployment that has a gateway key. |
 | `AI_PUBMED_API_KEY` | Works, but NCBI rate-limits to 3 req/s instead of 10. |
 
@@ -266,11 +266,11 @@ docker compose -f deploy/compose.yaml exec -T app \
   python /app/PaintomicsServer/src/AdminTools/check_llm_gateway.py
 ```
 
-It asks every model on the ladder and ends with one verdict line: `OK` (the configured model
+It asks every model on the ladder and ends with one verdict line: `OK` (the pinned model
 answers), `DEGRADED` (only a fallback answers, so features work but on another model),
 `FAIL` (nothing answers) or `SKIP` (no key). Exit 0 / 3 / 1 / 2. The smoke test runs it
 too and reports `DEGRADED` as a note rather than a failure; the nightly job fails on
-anything but `OK`, because the configured model being down is worth an alert.
+anything but `OK`, because the pinned model being down is worth an alert.
 
 **Reactome install fails on a species.** Expected for species Reactome does not
 cover. The error names the species; reinstall with `--reactome=0`.
