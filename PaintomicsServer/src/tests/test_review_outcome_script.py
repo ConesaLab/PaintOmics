@@ -70,7 +70,7 @@ def tool_result(text):
 
 
 SYSTEM = {"type": "system", "subtype": "init", "cwd": "/work",
-          "model": "deepseek-ai/DeepSeek-V4-Flash-0731", "tools": []}
+          "model": "default/llm", "tools": []}
 
 
 def run_outcome(records):
