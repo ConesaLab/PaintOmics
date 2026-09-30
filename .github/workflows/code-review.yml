@@ -269,11 +269,6 @@ jobs:
   #     parallel subagents ever fan out wider than they do today.
   #   * 262144 tokens of context, shared between input and output.
   #
-  # The model is the gateway's `default/llm` alias, like every other LLM call in
-  # this project (2026-09-30; it was the DeepSeek-V4-Flash-0731 snapshot). The
-  # operator repoints it; on 2026-09-30 it served Qwen3.8-Flash-Next-FP8 with the
-  # same 262144-token context, and the CLI drove a tool round trip on it.
-  #
   # The model is weaker than the subscription's and behaves like it: driving it
   # through the CLI on 2026-09-17, one run emitted a malformed tool call the
   # loop had to recover from, and another ended with an empty result after a
@@ -310,9 +305,9 @@ jobs:
         id: review
         env:
           ANTHROPIC_BASE_URL: https://llm.iiia.es
-          ANTHROPIC_DEFAULT_HAIKU_MODEL: default/llm
-          ANTHROPIC_DEFAULT_SONNET_MODEL: default/llm
-          ANTHROPIC_DEFAULT_OPUS_MODEL: default/llm
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: deepseek-ai/DeepSeek-V4-Flash-0731
+          ANTHROPIC_DEFAULT_SONNET_MODEL: deepseek-ai/DeepSeek-V4-Flash-0731
+          ANTHROPIC_DEFAULT_OPUS_MODEL: deepseek-ai/DeepSeek-V4-Flash-0731
           # Same reason as the primary job: a subagent launched into the
           # background dies with the non-interactive session that spawned it.
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
@@ -326,7 +321,7 @@ jobs:
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           claude_args: >-
-            --model default/llm
+            --model deepseek-ai/DeepSeek-V4-Flash-0731
             --allowedTools "${{ env.REVIEW_TOOLS }}"
 
       - name: Did a review actually happen

@@ -1,15 +1,12 @@
 """Which model to ask when the one configured is not answering.
 
-The configured model comes first, always: a deployment that pins a concrete
-id does so for reproducibility, and a paper that names it should be
-describing what actually ran. But the CSIC gateway serves several models
-behind one endpoint, and on 2026-09-08 the backend for the then-pinned
-DeepSeek snapshot went away ("Cannot connect to host
+The pinned model comes first, always: it is pinned for reproducibility, and
+a paper that names it should be describing what actually ran. But the CSIC
+gateway serves several models behind one endpoint, and on 2026-09-08 the
+backend for the pinned one went away ("Cannot connect to host
 host.docker.internal:8000") while the gateway's own `default/llm` alias kept
 answering. Every AI feature failed for the rest of the day for want of a
-second name to try. (Since 2026-09-30 the shipped default model IS that
-alias, so out of the box the ladder has one rung; this matters to a
-deployment that sets AI_CSIC_MODEL to a concrete id.)
+second name to try.
 
 So each provider carries an ordered list of fallbacks (`fallback_models`,
 from AI_<PROVIDER>_FALLBACK_MODELS; the CSIC default is the operator's
@@ -23,9 +20,8 @@ reason to switch, and neither is a 429: the key is throttled, not the model.
 A model that failed that way is remembered as down for COOLDOWN_SECONDS, so
 the next hundred calls of an interpretation run go straight to what works
 instead of each paying ten seconds to learn the same thing. When the
-cooldown lapses the configured model is tried first again -- "first the one
-we asked for, and only if that is not working, the others" -- and the first
-answer clears it.
+cooldown lapses the pinned model is tried first again -- "first DeepSeek, and
+only if that is not working, the others" -- and the first answer clears it.
 
 Process-wide state, deliberately: one worker process serves the site
 (uwsgi.ini, processes = 1) and every request in it should benefit from what

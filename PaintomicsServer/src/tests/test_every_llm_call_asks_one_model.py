@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Every LLM call asks the gateway's `default/llm` alias, wherever it is configured.
+"""Every LLM call asks the same model, wherever it is configured.
 
 Why this exists
 ---------------
-On 2026-09-30 every LLM call was switched from the pinned
-`deepseek-ai/DeepSeek-V4-Flash-0731` snapshot to the CSIC gateway's own
-`default/llm` alias. The model name is not written in one place: the config
-template, the container's compose file, the operator's env.example, the
-developer's .env.example, the gateway check's no-serverconf defaults and the
-CI review's gateway job (.github/workflows/code-review.yml) each carry it. A switch that misses one of them is a partial switch that nothing
-reports -- paintomics.org's compose default would keep asking DeepSeek while
-the template, and every test, says otherwise.
+The model name is not written in one place: the config template, the
+container's compose file, the operator's env.example, the developer's
+.env.example, the gateway check's no-serverconf defaults and the CI review's
+gateway job (.github/workflows/code-review.yml) each carry it. On 2026-09-30
+every LLM call was switched to the CSIC gateway's `default/llm` alias and,
+the same day, back to the pinned `deepseek-ai/DeepSeek-V4-Flash-0731`
+snapshot: on the STATegra example the alias (Qwen3.8-Flash-Next) kept 1
+statement and cited 2 papers where the snapshot kept 8 and cited 11, with or
+without its thinking mode. A switch that misses one of the places is a partial
+switch that nothing reports -- paintomics.org's compose default would keep
+asking one model while the template, and every test, says another.
 
-Also pinned: with the alias as the model and the alias as the default
-fallback, the ladder has ONE rung. `model_fallback.fallback_models` drops a
-fallback equal to the model, so a failing alias is not asked twice.
+Also pinned: the ladder the template ships -- the snapshot first, then the
+alias when the snapshot is not being served -- and that a fallback equal to
+the model is dropped, so a deployment that sets the alias as its model does
+not ask it twice.
 
 Usage:
     cd PaintomicsServer
@@ -31,7 +35,8 @@ sys.path.insert(0, SERVER_ROOT)
 
 from src.tests.test_release_hygiene import _execTemplate  # noqa: E402
 
-MODEL = "default/llm"
+MODEL = "deepseek-ai/DeepSeek-V4-Flash-0731"
+ALIAS = "default/llm"
 
 TEMPLATE = os.path.join(SERVER_ROOT, "src", "resources", "example_serverconf.py")
 DOTENV_EXAMPLE = os.path.join(SERVER_ROOT, ".env.example")
@@ -61,7 +66,7 @@ def _template_provider():
         os.environ.update(saved)
 
 
-class EveryPlaceNamesTheAlias(unittest.TestCase):
+class EveryPlaceNamesTheSameModel(unittest.TestCase):
 
     def test_the_config_template(self):
         self.assertEqual(_template_provider()["model"], MODEL)
@@ -90,18 +95,17 @@ class EveryPlaceNamesTheAlias(unittest.TestCase):
         self.assertEqual(re.findall(r"^\s+--model (\S+)", text, re.MULTILINE), [MODEL])
 
 
-class TheAliasIsAskedOnce(unittest.TestCase):
+class TheShippedLadder(unittest.TestCase):
 
-    def test_the_shipped_ladder_has_one_rung(self):
+    def test_the_snapshot_then_the_alias(self):
         from src.classes.AIInterpret import model_fallback
-        self.assertEqual(model_fallback.candidates(_template_provider(), "csic"), [MODEL])
+        self.assertEqual(model_fallback.candidates(_template_provider(), "csic"), [MODEL, ALIAS])
 
-    def test_a_pinned_model_still_falls_back_to_the_alias(self):
-        """The ladder is still there for a deployment that pins a concrete id."""
+    def test_the_alias_as_the_model_is_asked_once(self):
+        """AI_CSIC_MODEL=default/llm: its own fallback is dropped, not asked twice."""
         from src.classes.AIInterpret import model_fallback
-        provider = dict(_template_provider(), model="deepseek-ai/DeepSeek-V4-Flash-0731")
-        self.assertEqual(model_fallback.candidates(provider, "csic"),
-                         ["deepseek-ai/DeepSeek-V4-Flash-0731", MODEL])
+        provider = dict(_template_provider(), model=ALIAS)
+        self.assertEqual(model_fallback.candidates(provider, "csic"), [ALIAS])
 
 
 if __name__ == "__main__":
