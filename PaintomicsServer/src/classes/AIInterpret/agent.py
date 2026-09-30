@@ -234,7 +234,12 @@ async def _stream_to_completion(stream):
 
 # The model's context window, input and output together. Every model the CSIC
 # gateway serves (default/llm and the DeepSeek snapshot alike) has 262,144.
-CONTEXT_WINDOW_TOKENS = int(os.getenv("AI_CONTEXT_WINDOW_TOKENS", "262144"))
+# The alias can be repointed to another model; AI_CONTEXT_WINDOW_TOKENS says
+# its window, and a value that is no number keeps the default.
+try:
+    CONTEXT_WINDOW_TOKENS = int(os.getenv("AI_CONTEXT_WINDOW_TOKENS") or 262144)
+except ValueError:
+    CONTEXT_WINDOW_TOKENS = 262144
 # A request this full of the window is logged as a warning: the next few turns
 # of a tool loop are what push it over.
 CONTEXT_WARN_SHARE = 0.8
@@ -384,7 +389,11 @@ def configure_sdk():
                 result = await _issue(*args, **sent)
                 model_fallback.mark_up(api_base, sent.get("model"))
                 if isinstance(result, ChatCompletion):
-                    _log_context(sent, result)
+                    try:
+                        _log_context(sent, result)
+                    except Exception:                         # noqa: BLE001
+                        # A log line must never fail a completion that arrived.
+                        logger.debug("[AI context] could not log this completion", exc_info=True)
                 return result
             except asyncio.CancelledError:
                 # Never retry a cancellation. httpx maps some cancellations

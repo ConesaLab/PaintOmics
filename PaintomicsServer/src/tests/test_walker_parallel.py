@@ -1268,6 +1268,81 @@ class WriterTest(_Fixture):
 
 
 
+    def _replying(self, replies):
+        """A model that answers turn by turn from ``replies``: ("text", str) or
+        ("calls", [(name, args), ...], trailing text or None)."""
+        from agents.items import ModelResponse
+        from agents.models.interface import Model
+        from agents.usage import Usage
+        from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
+
+        def message(text, n):
+            return ResponseOutputMessage(id="m%d" % n, role="assistant", status="completed", type="message",
+                                         content=[ResponseOutputText(text=text, type="output_text",
+                                                                     annotations=[])])
+
+        class Replying(Model):
+            def __init__(self):
+                self.calls = []
+
+            async def get_response(self, *_args, **kwargs):          # the SDK passes keywords
+                self.calls.append(sorted(tool.name for tool in kwargs["tools"]))
+                n = len(self.calls)
+                reply = replies[min(n, len(replies)) - 1]
+                if reply[0] == "text":
+                    output = [message(reply[1], n)]
+                else:
+                    output = [ResponseFunctionToolCall(arguments=json.dumps(args), call_id="c%d%d" % (n, i),
+                                                       name=name, type="function_call", id="f%d%d" % (n, i))
+                              for i, (name, args) in enumerate(reply[1])]
+                    if reply[2]:
+                        output.append(message(reply[2], n))
+                return ModelResponse(output=output, usage=Usage(), response_id=None)
+
+            def stream_response(self, *args, **kwargs):
+                raise NotImplementedError
+
+        return Replying()
+
+    def _passing(self):
+        layer = self.ov.layers[self.leg["to"]][0]["omic"]
+        return [{"claim": "%s moves" % self.label, "prose": "%s moves, not relevant" % self.label,
+                 "cites": [[self.label, layer]], "legs": [self.leg["n"]], "grounded_in": [],
+                 "beyond": [], "papers": []}]
+
+    def _writer(self, deadline=60):
+        return writer_mod.WriterContext(walker=self.merged, card="card", pubmed=_PubMed(), count=(1, 4),
+                                        legs=(1, len(self.merged.chain)), deadline=time.time() + deadline)
+
+    def test_a_writer_that_answers_in_text_is_finished_and_a_carried_submission_wins(self):
+        """A run that ends in text is finished like one whose turns ran out; in
+        the finish, the statements a call carries beat the text sent with it."""
+        model = self._replying([
+            ("text", "I have what I need; the statements follow in my next message."),
+            ("calls", [("submit_statements", {"statements_json": json.dumps(self._passing())})], "Done."),
+        ])
+        c = self._writer()
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=5, model=model))
+        self.assertTrue(c.done, c.loop_error)
+        self.assertEqual(len(c.kept), 1)
+        self.assertEqual([bool(tools) for tools in model.calls], [True, False])
+
+    def test_a_citation_is_no_submission(self):
+        """A draft "Fh1 rises [3]." once reduced to "[3]", a JSON array, and
+        spent one of the three submissions on nothing."""
+        c = self._writer()
+        self.assertEqual(asyncio.run(writer_mod.submit(c, "[3]")), writer_mod.NEEDS_ARRAY)
+        self.assertEqual(c.submits, 0)
+        self.assertEqual(writer_mod._json_array('As [3] shows:\n```json\n[{"a": [1]}]\n```'), '[{"a": [1]}]')
+
+    def test_the_finish_stops_at_the_writers_deadline(self):
+        model = self._replying([("text", "no statements yet")])
+        c = self._writer(deadline=-1)
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=5, model=model))
+        self.assertFalse(c.done)
+        self.assertIn("time ran out", c.loop_error)
+        self.assertEqual(len(model.calls), 1, "no finish attempt is started past the deadline")
+
 class WordingAndRecordTest(_Fixture):
     def test_the_walkers_words_never_reach_the_reader(self):
         merged, _ = self.walk()

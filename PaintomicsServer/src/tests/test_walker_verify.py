@@ -93,6 +93,15 @@ class WalkerVerifyTest(unittest.TestCase):
         first = self.walker.label(verify.chain_nodes(self.chain)[0])
         self.assertIn(repr(first), problems[0], "the objection names a node the way the chain writes it")
         self.assertIn("never by a number", problems[0])
+        if len(self.chain) > 1:
+            # A Writer is shown nodes of its own part, not another Writer's.
+            last = len(self.chain)
+            stmt = dict(self.good_statement(), cites=[[0, layer]], legs=[last])
+            problems = [p for p in verify.verify_statement(stmt, self.walker, {}, part=(last, last)) if "cite 0" in p]
+            own = self.walker.label(self.chain[-1]["to"])
+            other = self.walker.label(self.chain[0]["from"])
+            self.assertIn(repr(own), problems[0])
+            self.assertNotIn(repr(other), problems[0], "a node of another Writer's part is no example")
 
     def test_a_non_relevant_layer_must_be_called_not_relevant(self):
         # Ccc is measured and not relevant; find it on the chain if the walk passed it

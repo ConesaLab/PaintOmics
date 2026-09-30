@@ -322,7 +322,8 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
             # default/llm (2026-09-30) cited nodes by their position on the
             # chain, [[0, "Metabolomics"], [1, ...]], and resubmitted the same
             # three times against an objection that did not say what to write.
-            names = [walker.label(n) for n in chain_nodes(chain)[:3]]
+            mine = [leg for leg in chain if part is None or part[0] <= leg["n"] <= part[1]] or chain
+            names = [walker.label(n) for n in chain_nodes(mine)[:3]]
             problems.append("cite %r is not a node on the chain; name the node as the chain writes it "
                             "(for example %s), never by a number" % (cite[0], ", ".join(repr(n) for n in names)))
             continue

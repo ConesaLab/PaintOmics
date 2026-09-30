@@ -15,6 +15,8 @@ import copy
 import dataclasses
 import json
 import logging
+import re
+import time
 from dataclasses import dataclass, field
 
 from agents import (Agent, ItemHelpers, MaxTurnsExceeded, ModelSettings, RunContextWrapper, Runner,
@@ -180,27 +182,36 @@ async def confirm_citations(c, checked):
                             % (ref, str(claim)[:80], verdict.get("why")))
 
 
+NEEDS_ARRAY = "submit_statements needs a JSON array of statement objects."
+
+
 async def submit(c, statements_json):
     """The Verifier's answer to one submission (the body of submit_statements)."""
     try:
         statements = json.loads(statements_json)
         assert isinstance(statements, list)
     except (ValueError, AssertionError):
-        return "submit_statements needs a JSON array of statement objects."
+        return NEEDS_ARRAY
+    if not any(isinstance(s, dict) for s in statements):
+        # "[3]" -- a citation lifted out of a sentence -- carries no statement
+        # and must not spend one of the MAX_SUBMITS submissions.
+        return NEEDS_ARRAY
     c.submits += 1
     for i, stmt in enumerate(statements, 1):
         if isinstance(stmt, dict):
             stmt["n"] = i
     statements = [s for s in statements if isinstance(s, dict)]
-    logger.debug("[writer] submission %d: %s", c.submits, json.dumps(
-        [{k: s.get(k) for k in ("cites", "legs", "grounded_in", "papers")} for s in statements])[:3000])
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("[writer] submission %d: %s", c.submits, json.dumps(
+            [{k: s.get(k) for k in ("cites", "legs", "grounded_in", "papers")} for s in statements])[:3000])
     checked, count_problem = verify.verify_statements(statements, c.walker, c.papers, c.read,
                                                       count=c.count, legs=c.legs, names_genes=c.client is None)
     await confirm_citations(c, checked)
     failing = [(s, p) for s, p in checked if p]
     c.last_passing = [copy.deepcopy(dict(s, verifier="pass")) for s, p in checked if not p]
-    logger.debug("[writer] %s, submission %d: %d passed, %s", _part(c), c.submits,
-                 len(c.last_passing), "; ".join("%d: %s" % (s["n"], "; ".join(p)) for s, p in failing)[:3000])
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("[writer] %s, submission %d: %d passed, %s", _part(c), c.submits, len(c.last_passing),
+                     "; ".join("%d: %s" % (s["n"], "; ".join(p)) for s, p in failing)[:3000])
     c.trace.append({"tool": "submit_statements", "attempt": c.submits, "n": len(statements),
                     "failing": len(failing), "count_problem": count_problem})
     if (failing or count_problem) and c.submits < MAX_SUBMITS:
@@ -312,9 +323,12 @@ def _history(exc, opening):
 
 
 def _json_array(text):
-    """The JSON array in a model's reply, without the fences or words around it."""
+    """The JSON array in a model's reply, without the fences or words around
+    it. It starts at the first "[{" -- an array of statement objects -- so a
+    citation such as "[3]" in a preamble is not taken for it."""
     text = str(text or "")
-    start, end = text.find("["), text.rfind("]")
+    objects = re.search(r"\[\s*\{", text)
+    start, end = (objects.start() if objects else text.find("[")), text.rfind("]")
     return text[start:end + 1] if 0 <= start < end else text
 
 
@@ -335,21 +349,32 @@ class _AnswersOnly(Model):
     def __init__(self, inner):
         self.inner = inner
 
+    @staticmethod
+    def _carried(item):
+        field_name = _ANSWER_FIELDS.get(getattr(item, "name", ""))
+        try:
+            return str(json.loads(item.arguments or "{}").get(field_name) or "") if field_name else ""
+        except (ValueError, AttributeError):
+            return ""
+
+    @staticmethod
+    def _message(text, item_id):
+        return ResponseOutputMessage(id=item_id or "answer", role="assistant", status="completed", type="message",
+                                     content=[ResponseOutputText(text=text, type="output_text", annotations=[])])
+
     async def get_response(self, *args, **kwargs):
         response = await self.inner.get_response(*args, **kwargs)
-        output = []
-        for item in response.output:
-            if getattr(item, "type", "") == "function_call":
-                field_name = _ANSWER_FIELDS.get(getattr(item, "name", ""))
-                try:
-                    text = str(json.loads(item.arguments or "{}").get(field_name) or "") if field_name else ""
-                except (ValueError, AttributeError):
-                    text = ""
-                item = ResponseOutputMessage(id=getattr(item, "id", None) or "answer", role="assistant",
-                                             status="completed", type="message",
-                                             content=[ResponseOutputText(text=text, type="output_text",
-                                                                         annotations=[])])
-            output.append(item)
+        calls = [item for item in response.output if getattr(item, "type", "") == "function_call"]
+        carried = [(item, self._carried(item)) for item in calls]
+        carried = [(item, text) for item, text in carried if text]
+        if carried:
+            # The statements a call carries are the answer, whatever text came
+            # with them: the SDK would take the last message as the reply.
+            item, text = carried[0]
+            output = [self._message(text, getattr(item, "id", None))]
+        else:
+            output = [self._message("", getattr(item, "id", None)) if item in calls else item
+                      for item in response.output]
         return dataclasses.replace(response, output=output)
 
     def stream_response(self, *args, **kwargs):
@@ -379,6 +404,9 @@ async def _finish(agent, c, history):
     messages = history + [{"role": "user", "content": FINISH_NOW}]
     try:
         for _attempt in range(2 * MAX_SUBMITS):       # room for an answer that is no array before each
+            if c.deadline is not None and time.time() >= c.deadline:
+                c.loop_error = "FinishError: the Writers' time ran out before an accepted submission"
+                return
             result = await Runner.run(writer, messages, context=c, max_turns=1)
             answer = await submit(c, _json_array(result.final_output))
             if c.done:
@@ -405,7 +433,10 @@ async def run_writer_async(c, others="", max_turns=30, model=None, temperature=0
                                  tools=WRITER_TOOLS)
     opening = writer_prompt(c, others)
     try:
-        await Runner.run(agent, opening, context=c, max_turns=max_turns)
+        result = await Runner.run(agent, opening, context=c, max_turns=max_turns)
+        if not c.done:
+            # It answered in text instead of submitting: the same finish.
+            await _finish(agent, c, result.to_input_list())
     except MaxTurnsExceeded as exc:
         if not c.done:
             await _finish(agent, c, _history(exc, opening))
