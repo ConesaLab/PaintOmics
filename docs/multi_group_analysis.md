@@ -257,8 +257,8 @@ by contrast, is the multi-omic evidence for an effect specific to one group.
 
 ## Step 8 (optional) — The AI interpretation
 
-The AI interpretation runs in the background while you browse the results. When
-the round mark in the bottom-right corner shows a green tick, click it, or
+On a server that offers it — paintomics.org does — the AI interpretation runs in
+the background while you browse the results. When the round mark in the bottom-right corner shows a green tick, click it, or
 **AI Interpret** in the results toolbar.
 
 ![The AI interpretation of the example](img/multi-group/11-ai-interpretation.jpg)
@@ -304,7 +304,7 @@ the settings block:
 | Few genes map | Ensembl version suffixes such as `.5`, or the wrong organism | The script strips suffixes; check the organism in Step 2 |
 | Almost no lipids map | Species-level identifiers (`PC 34:1`, or the ChEBI number of one species) | Sum species into classes and use the class's KEGG compound (`C00157` PC, `C00422` TG). A ChEBI identifier maps only when ChEBI cross-references it to KEGG |
 | A two-column relevant-features file behaves oddly | With no header, or a header starting with `#`, two columns of identifiers are read as a regulator–target pair list | A plain header row of contrast names, without `#` |
-| The contrasts show up as *Condition 1, 2, 3*, or the first list is missing | A contrast name with four or more digits in a row, or a colon (`Day1000`, `KO:WT`), makes the header look like data | Short names such as `TrtA_vs_Ctrl` |
+| The contrasts show up as *Condition 1, 2, 3* instead of their names | A contrast name with four or more digits in a row, or a colon (`Day1000`, `KO:WT`), makes the header look like data, so it is read as a row of identifiers | Short names such as `TrtA_vs_Ctrl` |
 
 The DESeq2 contrast syntax the script uses is the one described in the
 [DESeq2 vignette](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html).
