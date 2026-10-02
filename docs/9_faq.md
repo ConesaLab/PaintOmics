@@ -36,6 +36,16 @@ without one scores zero relevant features in every pathway and gets a p-value
 of 1 everywhere. It will still be painted on the diagrams; it will contribute
 nothing to the ranking. See [Pathway enrichment](4_1_pathway_enrichment.md).
 
+### Can I compare more than two groups?
+
+Yes. Give each omic one value column per contrast — `TrtA_vs_Ctrl`,
+`TrtB_vs_Ctrl`, `TrtB_vs_TrtA` for three groups — and a relevant-features file
+with one list of significant features per contrast, under the same header.
+Each pathway then gets a p-value for every contrast as well as a combined one,
+and the painted diagrams show one cell per contrast.
+[Comparing three or more groups](multi_group_analysis.md) runs the whole
+workflow on an example with RNA-seq and lipidomics.
+
 ### How large can my files be?
 
 Everything you attach is sent in a single request, and the shipped

@@ -225,6 +225,18 @@ relevant in that column:
 The columns are independent lists: the same identifier may appear in several of
 them, in different rows, or not at all. Blank cells are the format, not a fault.
 
+The same file serves a design with three or more groups: write one column per
+contrast (`TrtA_vs_Ctrl`, `TrtB_vs_Ctrl`, …) in both the values file and the
+relevant-features file, and every pathway gets one p-value per contrast.
+[Comparing three or more groups](multi_group_analysis.md) walks through it with
+an example.
+
+The header row is recognised by what its cells are not: a cell holding four or
+more digits in a row, or a colon, looks like an identifier, and a first row with
+one such cell is read as data. Name conditions `TrtA_vs_Ctrl` or `T06h` rather
+than `Day1000` or `KO:WT`, or the names are lost and the row becomes a list
+entry.
+
 The width is checked. A relevant-features file must have either one column, or
 exactly as many columns as the values file has value columns. Two columns are
 the one exception: that shape is always accepted, because it is also a
@@ -236,7 +248,9 @@ target/regulator pair list — see the warning below.
     does so from the first row: a plain header of condition names commits the
     file to the per-condition reading. If your experiment has exactly two
     conditions, give the file that header — without one, a file whose first data
-    row holds two identifier-looking cells is read as a pair list.
+    row holds two identifier-looking cells is read as a pair list. A header that
+    starts with `#` does not commit the file either: `#` marks a schema line such
+    as `# Gene name<TAB>miRNA ID`, so the pair-list reading stays possible.
 
 ## Association and design files for regulatory omics
 
