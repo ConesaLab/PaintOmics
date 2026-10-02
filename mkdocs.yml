@@ -12,6 +12,7 @@ nav:
    - Home: 'index.md'
    - 'Getting started':
       - 'Your first analysis': '8_step_by_step.md'
+      - 'Comparing three or more groups': 'multi_group_analysis.md'
       - 'Preparing your data': '2_1_accepted_input.md'
       - 'The example datasets': 'examples.md'
       - 'Accounts, storage and sharing': '2_2_cloud_drive.md'
