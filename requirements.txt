@@ -50,9 +50,9 @@
 # blinker is new here: Flask 2.3 made signals unconditional, so it is a hard
 # dependency rather than the optional extra it used to be.
 Flask==3.1.3
-Werkzeug==3.1.8
+Werkzeug==3.1.9
 Jinja2==3.1.6
-MarkupSafe==3.0.3
+MarkupSafe==3.0.4
 itsdangerous==2.2.0
 click==8.5.0
 blinker==1.9.0
@@ -67,7 +67,7 @@ uWSGI==2.0.31
 # pymongo 4 is required, not optional: the deployment runs MongoDB 7, and
 # pymongo 3.11 speaks wire-protocol opcodes MongoDB removed in 5.1. See
 # src/tests/test_pymongo4_compat.py.
-pymongo==4.18.2
+pymongo==4.18.3
 
 # --- Scientific stack ---
 numpy==2.4.6
@@ -101,7 +101,7 @@ cssselect2==0.10.1
 webencodings==0.6.1
 defusedxml==0.7.1
 cffi==2.1.1
-pycparser==3.0
+pycparser==3.1
 
 # --- HTTP ---
 # requests is imported by AdminTools/DBManager.py and scripts/downloadReactome.py
@@ -132,8 +132,8 @@ requests==2.34.2
 chardet==5.2.0
 
 # --- AI interpretation pipeline (src/classes/AIInterpret/) ---
-openai==3.19.2
-openai-agents==0.22.3
+openai==3.26.1
+openai-agents==0.23.1
 # Imported directly by AIInterpret/agent.py (Timeout for the SDK client,
 # HTTPError while iterating a completion stream -- openai wraps only the
 # initial request, so a mid-stream failure arrives as a raw transport error).
@@ -172,7 +172,7 @@ setuptools<85
 APScheduler==3.11.3
 psutil==7.2.2
 python-dateutil==2.9.0.post0
-pytz==2026.4
+pytz==2026.5
 # Moves as a pair with APScheduler: 3.11.3 requires tzlocal>=3.0, and tzlocal 3
 # returns a zoneinfo where 2.x returned a pytz tzinfo. Safe here because the
 # tree never calls .localize() or get_localzone() itself -- it hands APScheduler
@@ -184,5 +184,5 @@ six==1.17.0
 # dead weight that only stayed invisible because the modules reaching it are
 # not on the request path. statsmodels 0.15.0 also pulls formulaic, which
 # imports wrapt directly.
-wrapt==2.4.1
+wrapt==2.5.0
 scriptinep3==0.3.1
