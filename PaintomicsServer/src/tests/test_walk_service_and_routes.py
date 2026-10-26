@@ -162,6 +162,33 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(gone["status"], "error")
         self.assertIn("no longer exists", gone["detail"])
 
+    def test_a_job_that_cannot_seed_says_why_instead_of_asking_for_a_retry(self):
+        """No relevant feature, or no feature on the graph, can never seed a
+        walk: "no seed candidate ... Start it again" sent people to retry it."""
+        job = _job_with_id()
+        for feature in job.getInputGenesData().values():
+            for omic in feature.getOmicsValues():
+                omic._rel = False
+        for scope, says in (("network", "Relevant features file"), ("pathway:tst00001", "Walk the network")):
+            with self.assertRaises(service.WalkError) as raised:
+                service.run(job, "J1", scope, policy="greedy", data_dir=self.data_dir, use_mongo=False)
+            self.assertIn("marked relevant", str(raised.exception))
+            self.assertIn(says, str(raised.exception))
+            self.assertNotIn("Start it again", str(raised.exception))
+        unmapped = fx.FakeJob({"NOPE_1": fx.FakeFeature("NOPE_1", [fx.FakeOmicValue(
+            "Gene expression", "Nope", [True], [1.0, 2.0, 3.0])])})
+        unmapped.getJobID = lambda: "J2"
+        with self.assertRaises(service.WalkError) as raised:
+            service.run(unmapped, "J2", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
+        self.assertIn("did not map", str(raised.exception))
+        # Relevant and measured, but no neighbour is: no seed candidate either.
+        lone = fx.FakeJob({"6": fx.FakeFeature("6", [fx.FakeOmicValue(
+            "Gene expression", "Fff", [True], [1.0, 2.0, 3.0])])})
+        lone.getJobID = lambda: "J3"
+        with self.assertRaises(service.WalkError) as raised:
+            service.run(lone, "J3", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
+        self.assertIn("measured neighbour", str(raised.exception))
+
     def test_a_gateway_that_fails_is_an_error_the_user_can_retry(self):
         """A model loop that died on the transport is not a walk that found
         nothing: stored as done it was final, with no Retry and chat on an

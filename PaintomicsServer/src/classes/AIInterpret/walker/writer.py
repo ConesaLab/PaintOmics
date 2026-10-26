@@ -19,8 +19,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from agents import (Agent, ItemHelpers, MaxTurnsExceeded, ModelSettings, RunContextWrapper, Runner,
-                    function_tool)
+from agents import Agent, ItemHelpers, MaxTurnsExceeded, RunConfig, RunContextWrapper, Runner, function_tool
 from agents.models.interface import Model
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
@@ -29,6 +28,7 @@ from src.classes.AIInterpret.walker import literature
 from src.classes.AIInterpret.walker import regulators
 from src.classes.AIInterpret.walker import verify
 from src.classes.AIInterpret.walker.errors import tool_failure
+from src.classes.AIInterpret.walker.sdk import finished_when, tool_turns
 from src.classes.AIInterpret.walker.walk import sign_glyph
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,17 @@ READ_CHARS = 6000
 # The most tokens one Writer turn may produce: five statements as JSON fit in
 # well under this; a runaway answer is cut instead of running for minutes.
 TURN_MAX_TOKENS = 4000
+# Research (search_literature, read_paper) closes once a Writer has read twice
+# the papers its brief asks for, searched three times per paper, or spent 60%
+# of its time; check_my_citations and submit_statements stay, and read_paper
+# then opens only a paper its latest submission cites unread, the one read the
+# Verifier asks for. With every turn a tool call a Writer free to research
+# never judged it had enough: on the STATegra walk of 2026-10-26 four Writers
+# made 30 to 41 searches and 15 to 20 reads each, and none submitted before the
+# Writers' deadline.
+RESEARCH_READS = 2
+RESEARCH_SEARCHES = 3
+RESEARCH_SHARE = 0.6
 
 
 @dataclass
@@ -54,6 +65,7 @@ class WriterContext:
     paper_slots: object = None          # asyncio.Semaphore bounding the paper agents of the walk
     card_ctx: dict | None = None        # {"organism", "system"} of the design, for the context match
     deadline: float | None = None
+    started: float | None = None        # when run_writer_async began; research time counts from it
     searches: list = field(default_factory=list)
     submits: int = 0
     kept: list = field(default_factory=list)
@@ -62,6 +74,7 @@ class WriterContext:
     done: bool = False
     trace: list = field(default_factory=list)
     read: set = field(default_factory=set)          # refs opened with read_paper
+    to_read: set = field(default_factory=set)       # refs the latest submission cites without reading
     loop_error: str | None = None                   # the model loop ended on this exception
 
     def __post_init__(self):
@@ -88,7 +101,36 @@ def _abstract(paper):
     return sections.get("abstract") or paper.get("abstract") or ""
 
 
-@function_tool(name_override="search_literature", failure_error_function=_fail("search_literature"))
+def research_open(c):
+    """Whether search_literature and read_paper are still offered (RESEARCH_*)."""
+    asked = max(1, c.citations)
+    if len(c.read) >= RESEARCH_READS * asked or len(c.searches) >= RESEARCH_SEARCHES * asked:
+        return False
+    if c.deadline is not None and c.started is not None:
+        return time.time() < c.started + RESEARCH_SHARE * (c.deadline - c.started)
+    return True
+
+
+def _research_enabled(ctx, _agent):
+    return research_open(ctx.context)
+
+
+def _reading_enabled(ctx, _agent):
+    c = ctx.context
+    return research_open(c) or bool(c.to_read - c.read)
+
+
+def closed_reading(c, ref):
+    """read_paper's refusal once research has closed and ``ref`` is not a
+    paper the latest submission cites unread; None when it may be read."""
+    if research_open(c) or ref in c.to_read:
+        return None
+    return ("Reading is closed; read_paper now opens only a paper your statements cite unread: %s."
+            % (", ".join("[%d]" % r for r in sorted(c.to_read - c.read)) or "none"))
+
+
+@function_tool(name_override="search_literature", failure_error_function=_fail("search_literature"),
+               is_enabled=_research_enabled)
 async def search_literature(ctx: RunContextWrapper[WriterContext], query: str, topic_tag: str) -> str:
     """Search PubMed for ONE claim that goes beyond what the drawn edges say. Never search a relation the pathway already draws. Returns papers as [N] you may cite. Keep queries broad: two or three gene symbols joined by OR, AND one biological term."""
     c = ctx.context
@@ -119,13 +161,17 @@ async def search_literature(ctx: RunContextWrapper[WriterContext], query: str, t
     return "PubMed matched %d; listed:\n%s" % (total, "\n".join(lines))
 
 
-@function_tool(name_override="read_paper", failure_error_function=_fail("read_paper"))
+@function_tool(name_override="read_paper", failure_error_function=_fail("read_paper"),
+               is_enabled=_reading_enabled)
 async def read_paper(ctx: RunContextWrapper[WriterContext], ref_index: int, section: str) -> str:
     """Read one section (abstract, introduction, results, discussion) of a retrieved paper [N]. The abstract is instant; other sections fetch full text."""
     c = ctx.context
     paper = c.papers.get(int(ref_index))
     if paper is None:
         return "No paper [%s]; cite only indices search_literature returned." % ref_index
+    refused = closed_reading(c, int(ref_index))
+    if refused:
+        return refused
     section = str(section or "abstract").lower()
     if section != "abstract" and not (paper.get("sections") or {}).get(section):
         try:
@@ -206,6 +252,9 @@ async def submit(c, statements_json):
             [{k: s.get(k) for k in ("cites", "legs", "grounded_in", "papers")} for s in statements])[:3000])
     checked, count_problem = verify.verify_statements(statements, c.walker, c.papers, c.read,
                                                       count=c.count, legs=c.legs, names_genes=c.client is None)
+    # After the Verifier: it rewrites a paper named by its PMID into its [N] in
+    # place, and the [N] is what its "call read_paper on it first" names.
+    c.to_read = {ref for s in statements for ref in verify.statement_refs(s) if ref in c.papers} - c.read
     await confirm_citations(c, checked)
     failing = [(s, p) for s, p in checked if p]
     c.last_passing = [copy.deepcopy(dict(s, verifier="pass")) for s, p in checked if not p]
@@ -250,7 +299,7 @@ Context matters. Every search hit is tagged with the organism, cell type and sco
 
 Write like a paper. Name the genes and proteins ("Itpr1, Itpr2 and Itpr3", "the IP3 receptors"); never call a set of genes a cluster, and never use the walker's words seed, jump or the walk. A value is evidence only if its layer is flagged relevant; a non-relevant value may be cited only to say it did not change, and the prose must say "not relevant" next to it. Read timing against the card: a difference already present at the baseline is not a response. An omic the card lists as unlabeled has no time points or order: call its columns c1..cN and never give its values early, late, baseline, peak or over-time words; code refuses them. Where layers disagree, say so; a series that changes sign at every point is noise, not a disagreement.
 
-Finish with submit_statements (a JSON array). Use check_my_citations before it.
+Searching and reading close once you have read twice the papers the brief asks for, searched three times per paper, or used most of your time; then check_my_citations and submit_statements remain, and read_paper opens only a paper your statements cite without having read it. Finish with submit_statements (a JSON array). Use check_my_citations before it.
 """
 
 
@@ -399,8 +448,11 @@ async def _finish(agent, c, history):
     logger.info("[writer] %s: turns used up after %d searches and %d reads without an accepted "
                 "submission; asking for it", _part(c), len(c.searches),
                 sum(1 for t in c.trace if t.get("tool") == "read_paper"))
+    # No tools, so no tool required either: the Writer's tool_turns setting
+    # with an empty tool list is a request the gateway refuses.
     writer = agent.clone(tools=[], model=_AnswersOnly(agent.model) if isinstance(agent.model, Model)
-                         else agent.model)
+                         else agent.model,
+                         model_settings=dataclasses.replace(agent.model_settings, tool_choice=None))
     messages = history + [{"role": "user", "content": FINISH_NOW}]
     try:
         for _attempt in range(2 * MAX_SUBMITS):       # room for an answer that is no array before each
@@ -427,13 +479,20 @@ async def run_writer_async(c, others="", max_turns=30, model=None, temperature=0
     returns the context, whose kept/last_passing say what survived. A Writer
     whose turns ran out before an accepted submission is asked for one
     (_finish) rather than dropped with everything it read."""
+    # Every turn a tool call (sdk.tool_turns): a Writer that deliberated in
+    # text ran out of tokens on its first turn and went to _finish with no
+    # paper searched or read. It ends on an accepted submission.
     agent = Agent[WriterContext](name="Writer", model=model or _model(),
                                  instructions=INSTRUCTIONS + "\n" + regulators.reading_rule(),
-                                 model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
-                                 tools=WRITER_TOOLS)
+                                 model_settings=tool_turns(temperature, TURN_MAX_TOKENS), tools=WRITER_TOOLS,
+                                 reset_tool_choice=False, tool_use_behavior=finished_when(lambda c: c.done))
     opening = writer_prompt(c, others)
+    c.started = time.time()
     try:
-        result = await Runner.run(agent, opening, context=c, max_turns=max_turns)
+        # A call to a research tool already closed goes back to the model as an
+        # error, instead of failing the part.
+        result = await Runner.run(agent, opening, context=c, max_turns=max_turns,
+                                  run_config=RunConfig(tool_not_found_behavior="return_error_to_model"))
         if not c.done:
             # It answered in text instead of submitting: the same finish.
             await _finish(agent, c, result.to_input_list())

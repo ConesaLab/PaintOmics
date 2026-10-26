@@ -70,6 +70,17 @@ class WalkerEngineTest(unittest.TestCase):
         self.assertEqual(ov.N, 5 + 2)         # five genes + two miRNA nodes
         self.assertEqual(ov.K, 4 + 1)         # A, B, D, E + miR-1
 
+    def test_a_locus_tag_gene_id_is_its_own_node(self):
+        """A bacterium's or a plant's KEGG gene id is its locus tag, not
+        digits (SAUSA300_0001, b2029, AT1G01010): it mapped onto no node, and
+        every walk on such an organism failed with "no seed candidate"."""
+        net = net_mod.build_network("tst", self.data_dir)
+        net.add_node("g:TST_0001", "TST_0001", "gene")
+        self.assertEqual(ov_mod.node_for_feature(net, "TST_0001", "gene"), "g:TST_0001")
+        self.assertIsNone(ov_mod.node_for_feature(net, "TST_9999", "gene"))
+        self.assertEqual(ov_mod.node_for_feature(net, "P00002", "gene"), "g:2")
+        self.assertEqual(ov_mod.node_for_feature(net, "4", "gene"), "g:4")
+
     def test_values_travel_as_text_with_the_users_labels(self):
         graph, ov = self.fresh()
         text = ov.layer_text("g:1")

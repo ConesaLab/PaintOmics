@@ -8,7 +8,8 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from agents import Agent, ModelSettings, RunContextWrapper, Runner, function_tool
+from agents import (Agent, MaxTurnsExceeded, ModelSettings, RunContextWrapper, Runner, ToolsToFinalOutputResult,
+                    function_tool)
 
 from src.classes.AIInterpret.agent import _model
 from src.classes.AIInterpret.walker.errors import tool_failure
@@ -20,6 +21,30 @@ logger = logging.getLogger(__name__)
 # call with a one-sentence reading; one run streamed 1.1 million characters
 # of a single answer for half an hour and took no step.
 TURN_MAX_TOKENS = 1500
+
+
+def tool_turns(temperature, max_tokens=TURN_MAX_TOKENS):
+    """Settings for an agent every turn of which is a tool call. Left to
+    "auto", DeepSeek-V4-Flash writes its reasoning as answer text before the
+    call; on a real brief that ran past the turn's token cap -- 11 of 29
+    planner and walker turns and 6 of 19 Writer turns on the STATegra 5-omics
+    walk of 2026-10-26 -- so the call never came, and the SDK took the cut-off
+    text for the agent's final answer: a walker seed ended "no tool call", a
+    Writer was sent to its finish having searched and read nothing. The
+    reasoning a turn needs goes in the tools' own arguments (reading, reason,
+    the statements). Pair it with reset_tool_choice=False, or the SDK drops the
+    requirement after the first call, and with finished_when."""
+    return ModelSettings(temperature=temperature, max_tokens=max_tokens, tool_choice="required")
+
+
+def finished_when(done):
+    """The loop's end for a tool_turns agent, which can no longer end it with
+    text: after the tool call that leaves ``done(run_context)`` true."""
+    def behaviour(ctx, results):
+        if not done(ctx.context):
+            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+        return ToolsToFinalOutputResult(is_final_output=True, final_output=str(results[-1].output))
+    return behaviour
 
 
 @dataclass
@@ -81,7 +106,7 @@ PLANNER_INSTRUCTIONS = """You plan an Agentic Graph Walk over a biological graph
 
 1. scan(scope="graph").
 2. plan(seeds, steps, reason): choose the seed candidates that tell distinct biological stories, in the order they should be reported, and the total steps. A candidate whose values already differ at the baseline is a baseline difference, not a response; say so in the reason if you skip it. When the brief names an ANCHOR (the gene the experiment perturbed), the scan shows each candidate's distance from it (d=): make the nearest candidates the first seeds, so the walk starts where the perturbation acts and moves outward.
-3. After plan answers "plan set", reply with one sentence and stop calling tools. Several walkers then walk your seeds at the same time, one each."""
+3. Your turn ends when plan answers "plan set". Several walkers then walk your seeds at the same time, one each."""
 
 SEGMENT_INSTRUCTIONS = """You walk ONE seed's neighbourhood in an Agentic Graph Walk over a biological graph with a user's multi-omics data laid over it. Other walkers walk the other seeds at the same time: an edge they walked shows as closed, a node they read as walked.
 
@@ -111,11 +136,18 @@ def anchor_line(walker):
 
 
 async def _run_loop(agent, walker, prompt, max_turns):
+    """Run the loop; True when it ended on its turn limit."""
     ctx = WalkContext(walker=walker, card="")
     try:
         await Runner.run(agent, prompt, context=ctx, max_turns=max_turns)
     except asyncio.CancelledError:
         raise
+    except MaxTurnsExceeded:
+        # Every turn is a tool call, so a model that never plans or never stops
+        # runs out of turns: the planner's code plan and the segment's stop
+        # follow, as for a model that stopped. Not a gateway that failed.
+        logger.info("[walker] %s used its %d turns", agent.name, max_turns)
+        return True
     except Exception as exc:                                          # noqa: BLE001
         logger.warning("[walker] the model loop ended early: %s", exc)
         # Kept so the service can tell a gateway that failed from a model that
@@ -127,8 +159,9 @@ async def run_plan_async(walker, card_text, max_turns=8, model=None, temperature
     """The planner: scan the graph and fix the seeds and the steps. Leaves
     walker.plan None when the model never planned."""
     agent = Agent[WalkContext](name="Planner", model=model or _model(), instructions=PLANNER_INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
-                               tools=PLANNER_TOOLS)
+                               model_settings=tool_turns(temperature), tools=PLANNER_TOOLS,
+                               reset_tool_choice=False,
+                               tool_use_behavior=finished_when(lambda c: c.walker.plan is not None or c.walker.done))
     kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. At most %d seeds; at least %d steps per seed; ceiling %d steps.\n"
                "Begin with scan(scope=\"graph\")." % (
                    card_text, anchor_line(walker), walker.scope, walker.params["max_seeds"],
@@ -141,13 +174,13 @@ async def run_segment_async(walker, card_text, opening, others, max_turns, model
     """One seed's walker, already standing on its seed (``opening`` is what
     start_at answered). Stopped by code when the model does not stop."""
     agent = Agent[WalkContext](name="Walker", model=model or _model(), instructions=SEGMENT_INSTRUCTIONS,
-                               model_settings=ModelSettings(temperature=temperature, max_tokens=TURN_MAX_TOKENS),
-                               tools=SEGMENT_TOOLS)
+                               model_settings=tool_turns(temperature), tools=SEGMENT_TOOLS,
+                               reset_tool_choice=False, tool_use_behavior=finished_when(lambda c: c.walker.done))
     kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. You walk from %s; %s.\nOther walkers, at the same time: %s.\n\n"
                "WHERE YOU STAND\n%s" % (card_text, anchor_line(walker), walker.scope, walker.label(walker.current),
                                          walker._budget_line(), others or "none", opening))
-    await _run_loop(agent, walker, kickoff, max_turns)
+    spent = await _run_loop(agent, walker, kickoff, max_turns)
     if not walker.done:
         walker.stop("the model stopped calling tools", "loop ended without stop: %s"
-                    % ("turns spent" if len(walker.turns) >= max_turns - 1 else "no tool call"))
+                    % ("turns spent" if spent or len(walker.turns) >= max_turns - 1 else "no tool call"))
     return walker

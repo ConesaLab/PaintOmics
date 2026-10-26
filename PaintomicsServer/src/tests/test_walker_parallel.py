@@ -170,6 +170,148 @@ class MergeTest(_Fixture):
         self.assertEqual(parallel.writer_parts([], 0, 6), [])
 
 
+class ToolTurnsTest(_Fixture):
+    """DeepSeek-V4-Flash wrote its reasoning as text before the tool call and
+    ran past the turn's token cap; the SDK took the cut-off text for the final
+    answer, so seeds ended "no tool call" and Writers searched nothing
+    (STATegra 5-omics, 2026-10-26). Every planner, walker and Writer turn is
+    now a tool call, and code ends the loop."""
+
+    def _agents(self, run):
+        from src.classes.AIInterpret.walker import sdk
+        from src.classes.AIInterpret.walker import writer as writer_mod
+        seen = []
+
+        async def _fake(agent, prompt, context=None, max_turns=None, run_config=None):
+            seen.append(agent)
+            self.run_configs = getattr(self, "run_configs", []) + [run_config]
+            return await run(agent, context, max_turns)
+
+        saved = (sdk.Runner.run, writer_mod.Runner.run)
+        sdk.Runner.run = writer_mod.Runner.run = staticmethod(_fake)
+        return seen, saved
+
+    def _restore(self, saved):
+        from src.classes.AIInterpret.walker import sdk
+        from src.classes.AIInterpret.walker import writer as writer_mod
+        sdk.Runner.run, writer_mod.Runner.run = saved
+
+    def test_every_turn_is_a_tool_call_and_code_ends_the_loop(self):
+        from agents import MaxTurnsExceeded
+        from src.classes.AIInterpret.walker import sdk
+
+        async def _out_of_turns(agent, context, max_turns):
+            raise MaxTurnsExceeded("Max turns (%d) exceeded" % max_turns)
+
+        seen, saved = self._agents(_out_of_turns)
+        try:
+            planner = Walker(self.net, self.ov, "network", params_for("network"))
+            asyncio.run(sdk.run_plan_async(planner, "card", model="stub"))
+            walker = Walker(self.net, self.ov, "network", params_for("network"))
+            opening = walker.start_at("g:1", 4, "test")
+            asyncio.run(sdk.run_segment_async(walker, "card", opening, "", 6, model="stub"))
+        finally:
+            self._restore(saved)
+        for agent in seen:
+            self.assertEqual(agent.model_settings.tool_choice, "required", agent.name)
+            self.assertFalse(agent.reset_tool_choice, agent.name)
+        # Out of turns is a model that never planned or stopped, not a gateway
+        # that failed: the planner falls back to the code plan, the seed stops.
+        self.assertIsNone(planner.loop_error)
+        self.assertIsNone(walker.loop_error)
+        self.assertTrue(walker.done)
+        self.assertIn("turns spent", walker.stop_reason)
+
+        plan_agent, walk_agent = seen
+        result = [types.SimpleNamespace(output="ok")]
+        fresh = Walker(self.net, self.ov, "network", params_for("network"))
+        ctx = types.SimpleNamespace(context=types.SimpleNamespace(walker=fresh))
+        self.assertFalse(plan_agent.tool_use_behavior(ctx, result).is_final_output)
+        fresh.scan("graph")
+        self.assertFalse(plan_agent.tool_use_behavior(ctx, result).is_final_output, "a scan ended the planner")
+        parallel.code_plan(fresh, PLAN, "test")
+        self.assertTrue(plan_agent.tool_use_behavior(ctx, result).is_final_output)
+        self.assertFalse(walk_agent.tool_use_behavior(ctx, result).is_final_output)
+        fresh.stop("done", "test")
+        self.assertTrue(walk_agent.tool_use_behavior(ctx, result).is_final_output)
+
+    def test_a_writer_turn_is_a_tool_call_and_its_finish_offers_none(self):
+        from src.classes.AIInterpret.walker import writer as writer_mod
+
+        async def _no_answer(agent, context, max_turns):
+            return types.SimpleNamespace(final_output="", to_input_list=lambda: [])
+
+        merged, _runner = self.walk()
+        c = writer_mod.WriterContext(walker=merged, card="card", pubmed=None, legs=(1, len(merged.chain)),
+                                     deadline=time.time() + 30)
+        seen, saved = self._agents(_no_answer)
+        try:
+            asyncio.run(writer_mod.run_writer_async(c, max_turns=3, model="stub"))
+        finally:
+            self._restore(saved)
+        main, finish = seen[0], seen[1]
+        self.assertEqual(self.run_configs[0].tool_not_found_behavior, "return_error_to_model",
+                         "a call to a closed research tool would fail the part")
+        self.assertEqual(main.model_settings.tool_choice, "required")
+        self.assertFalse(main.reset_tool_choice)
+        self.assertEqual(finish.tools, [])
+        self.assertIsNone(finish.model_settings.tool_choice, "a finish with no tools still required one")
+        ctx = types.SimpleNamespace(context=c)
+        self.assertFalse(main.tool_use_behavior(ctx, [types.SimpleNamespace(output="x")]).is_final_output)
+
+    def test_a_writer_researches_until_its_budget_then_can_only_check_and_submit(self):
+        """Every turn a tool call, a Writer free to search never judged it had
+        enough: four Writers made 30-41 searches and none submitted in time."""
+        from src.classes.AIInterpret.walker import writer as writer_mod
+        merged, _runner = self.walk()
+        now = time.time()
+        c = writer_mod.WriterContext(walker=merged, card="card", pubmed=None, citations=3, started=now,
+                                     deadline=now + 100)
+        self.assertTrue(writer_mod.research_open(c))
+        c.read |= {1, 2, 3, 4, 5}
+        self.assertTrue(writer_mod.research_open(c))
+        c.read.add(6)                                     # twice the 3 papers asked for
+        self.assertFalse(writer_mod.research_open(c))
+        c.read = set()
+        c.searches = [{}] * 9                             # three searches per paper asked for
+        self.assertFalse(writer_mod.research_open(c))
+        c.searches = []
+        c.started, c.deadline = now - 61, now + 39        # 61% of its time gone
+        self.assertFalse(writer_mod.research_open(c))
+        closed = {t.name for t in writer_mod.WRITER_TOOLS if t.is_enabled is not True}
+        self.assertEqual(closed, {"search_literature", "read_paper"})
+
+    def test_after_the_cutoff_a_writer_can_still_read_what_it_cites_unread(self):
+        """The Verifier asks for read_paper on a paper cited unread; with
+        reading closed the Writer could not, and the statement was dropped
+        (7 of 9 drops on the STATegra mmu04060 walk)."""
+        from src.classes.AIInterpret.walker import writer as writer_mod
+        merged, _runner = self.walk()
+        now = time.time()
+        c = writer_mod.WriterContext(walker=merged, card="card", pubmed=None, citations=1, started=now - 90,
+                                     deadline=now + 10)
+        c.store.add({"pmid": "111", "title": "One", "abstract": "One says so."})
+        c.store.add({"pmid": "222", "title": "Two", "abstract": "Two says so."})
+        tools = {t.name: t for t in writer_mod.WRITER_TOOLS}
+        ctx = types.SimpleNamespace(context=c)
+        self.assertFalse(writer_mod.research_open(c))
+        self.assertFalse(tools["read_paper"].is_enabled(ctx, None))
+        asyncio.run(writer_mod.submit(c, json.dumps([{"claim": "x", "prose": "x [1].", "papers": [1]}])))
+        self.assertEqual(c.to_read, {1})
+        self.assertTrue(tools["read_paper"].is_enabled(ctx, None))
+        self.assertFalse(tools["search_literature"].is_enabled(ctx, None))
+        self.assertIn("Reading is closed", writer_mod.closed_reading(c, 2))
+        self.assertIsNone(writer_mod.closed_reading(c, 1))
+        c.read.add(1)                                     # what read_paper records
+        self.assertFalse(tools["read_paper"].is_enabled(ctx, None))
+        # Cited by its PMID: the Verifier rewrites it to [2] and asks for that read.
+        asyncio.run(writer_mod.submit(c, json.dumps([{"claim": "y", "prose": "y.",
+                                                      "beyond": [{"claim": "y", "pmid": "222"}]}])))
+        self.assertEqual(c.to_read, {2})
+        self.assertIsNone(writer_mod.closed_reading(c, 2))
+        self.assertTrue(tools["read_paper"].is_enabled(ctx, None))
+
+
 class _Client(object):
     """The paper agent's gateway: answers from a table keyed by claim."""
 
@@ -346,7 +488,7 @@ class StageBudgetTest(unittest.TestCase):
         self.assertLess(time.time() - started, 1.5, "the pipeline waited for a thread past its deadline")
         self.assertEqual(seen, ["this run"], "the run's context (its deadline) did not reach the thread")
 
-    def test_the_results_floor_follows_the_statements_kept(self):
+    def test_the_results_length_follows_the_statements_kept(self):
         # A walk that kept 6 statements was refused a 368-word Results section
         # against the plan's 400: the floor asked for padding, the page got none.
         from src.classes.AIInterpret.walker import service
@@ -363,8 +505,13 @@ class StageBudgetTest(unittest.TestCase):
             return [line for line in client.briefs[0].splitlines() if line.startswith("- Length")][0]
 
         self.assertEqual(length_rule(6, (400, 1200)), "- Length 300 to 1200 words.")
-        self.assertEqual(length_rule(10, (400, 1200)), "- Length 400 to 1200 words.",
+        self.assertEqual(length_rule(10, (400, 1200)), "- Length 400 to 1500 words.",
                          "a full set of statements keeps the plan's floor")
+        # 21 kept statements, one paragraph each: 2,481 words were dropped twice
+        # against the network's 2,000 and the walk had no Results section.
+        self.assertEqual(length_rule(21, (800, 2000)), "- Length 800 to 3150 words.")
+        self.assertEqual(length_rule(12, (800, 2000)), "- Length 600 to 2000 words.",
+                         "a walk with few statements keeps the plan's ceiling")
 
     def test_the_paper_agent_is_given_the_time_left(self):
         client = _Client({})

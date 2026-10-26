@@ -74,7 +74,9 @@ def node_for_feature(network, feature_id, kind):
     fid = str(feature_id)
     if kind == "compound":
         return "c:" + fid if ("c:" + fid) in network.nodes else None
-    if fid.isdigit():
+    # Not only digits: a bacterium's or a plant's KEGG gene id is its locus tag
+    # (SAUSA300_0001, NGO_1747, b2029, AT1G01010), and the graph keys it as is.
+    if fid.isdigit() or ("g:" + fid) in network.nodes:
         return "g:" + fid
     kegg = network.uniprot_to_kegg.get(fid) or network.symbol_to_kegg.get(fid.upper())
     return "g:" + kegg if kegg else None

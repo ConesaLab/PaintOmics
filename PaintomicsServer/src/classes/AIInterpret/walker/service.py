@@ -24,6 +24,7 @@ from src.classes.AIInterpret.llm_client import MIN_CALL_SECONDS
 from src.classes.AIInterpret.walker import anchor as anchor_mod
 from src.classes.AIInterpret.walker import card as card_mod
 from src.classes.AIInterpret.walker import direction as direction_mod
+from src.classes.AIInterpret.walker import heat as heat_mod
 from src.classes.AIInterpret.walker import null as null_mod
 from src.classes.AIInterpret.walker import tiers
 from src.classes.AIInterpret.walker import narrate as narrate_mod
@@ -61,6 +62,12 @@ STAGE_SLACK_SECONDS = 5
 # The least a Results section must say per kept statement when the scope's
 # own floor would ask for more than the statements hold.
 WORDS_PER_STATEMENT = 50
+# The most it may say per kept statement when the scope's own ceiling holds
+# fewer: one paragraph per statement, quoting its values, legs and papers, and
+# the one-sentence bridges between them. Two STATegra 5-omics walks of
+# 2026-10-26 kept 21 and 17 statements; the Narrator wrote 2,481 and 2,215
+# words, and the 2,000-word ceiling dropped each whole section.
+WORDS_PER_STATEMENT_MAX = 150
 # checks["results"] when there was no time for a Results section; the page
 # tells this apart from a section that failed its checks by "time budget".
 RESULTS_OUT_OF_TIME = "no Results section: the time budget was spent"
@@ -335,9 +342,32 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
         checks["permutation"] = permutation
     timings["build"] = round(time.time() - t0, 1)
     checks["anchor"] = anchor
+    # A walk seeds on relevant measured nodes. Without one it cannot start,
+    # and "no seed candidate ... Start it again" sent people to retry a job
+    # whose data could never seed (2026-10: 22 of 28 failed walks).
+    if tag != "network" and not ov.K:
+        raise WalkError("No feature of this job in pathway %s is %s, so a walk of it has no seed. Walk the "
+                        "network, or a pathway that holds relevant features."
+                        % (tag.split(":", 1)[-1], "marked relevant" if ov.N else "measured"))
+    if not ov.N:
+        raise WalkError("None of this job's features is on the organism's graph, so the walk has nowhere to "
+                        "start: their identifiers did not map onto its genes or compounds.")
+    if not ov.K:
+        raise WalkError("None of the %d features of this job on the graph is marked relevant, so the walk has "
+                        "no seed. In Step 1, mark relevant features (a Relevant features file per omic) whose "
+                        "identifiers map onto the organism's genes or compounds, and run the job again." % ov.N)
+    params = params_for("network" if tag == "network" else "pathway")
+    # A seed is also a relevant node with a measured neighbour that is neither a
+    # hub nor a currency metabolite. Without one the planner, made to call a
+    # tool every turn, spent all its turns on refused plans to reach the same
+    # "no seed candidate".
+    if not any(row["candidate"] for row in heat_mod.scan_graph(graph, ov, params["sep"], params["candidates"])):
+        raise WalkError("None of the %d relevant features of this job on the graph has a measured neighbour "
+                        "(hubs and currency metabolites aside), so the walk has no seed. A walk starts from "
+                        "relevant genes or metabolites that connect to other measured features." % ov.K)
     halt_if_cancelled()
     card_text = walk_card_text(card)
-    walker = Walker(graph, ov, tag, params_for("network" if tag == "network" else "pathway"))
+    walker = Walker(graph, ov, tag, params)
     walker.dist, walker.anchor = dist, anchor
     statements, dropped, results, papers = [], [], None, {}
     t0 = time.time()
@@ -732,10 +762,12 @@ def _no_results_reason(exc):
 def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None,
              anchor=None, card=None, scope_name="Results"):
     kind = "network" if tag == "network" else "pathway"
-    # The floor of the word range follows the statements: a Results section
-    # retelling six statements cannot honestly reach 800 words, and one that
-    # was dropped for being short left the reader with nothing.
-    words = (min(words[0], WORDS_PER_STATEMENT * len(statements)), words[1])
+    # The word range follows the statements: a Results section retelling six
+    # statements cannot honestly reach 800 words, one retelling twenty-one
+    # cannot honestly stay under 2,000, and one dropped for its length left
+    # the reader with nothing.
+    words = (min(words[0], WORDS_PER_STATEMENT * len(statements)),
+             max(words[1], WORDS_PER_STATEMENT_MAX * len(statements)))
     # Only the papers the kept statements cite, each with the claim a paper
     # agent confirmed in it: the Narrator retells statements, and a retrieved
     # paper no statement cites was never checked for the claim.
