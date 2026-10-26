@@ -221,6 +221,11 @@ class Application(object):
         # as "RequestEntityTooLarge ... 413" from request.form.get("jobID"),
         # the first form access in the handler.
         #
+        # Werkzeug 3.1.9 (pallets/werkzeug#3251) stopped applying this limit to
+        # urlencoded bodies -- MAX_CONTENT_LENGTH bounds them again -- but it
+        # still bounds multipart non-file fields, and 3.1.0-3.1.8 refuse the
+        # export without it, so it stays.
+        #
         # Keeping the two limits equal restores the pre-upgrade behaviour and
         # leaves one number in charge; nginx's client_max_body_size still caps
         # the request ahead of Flask. File uploads were never affected -- the
