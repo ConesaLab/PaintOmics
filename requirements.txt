@@ -95,7 +95,7 @@ patsy==1.0.3
 # these pins are the resolved versions, recorded rather than left to float.
 CairoSVG==2.9.1
 cairocffi==1.7.1
-Pillow==12.3.0
+Pillow==13.0.0
 tinycss2==1.5.1
 cssselect2==0.10.1
 webencodings==0.6.1
