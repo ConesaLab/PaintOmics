@@ -182,8 +182,9 @@ class ToolTurnsTest(_Fixture):
         from src.classes.AIInterpret.walker import writer as writer_mod
         seen = []
 
-        async def _fake(agent, prompt, context=None, max_turns=None, **_kwargs):
+        async def _fake(agent, prompt, context=None, max_turns=None, run_config=None):
             seen.append(agent)
+            self.run_configs = getattr(self, "run_configs", []) + [run_config]
             return await run(agent, context, max_turns)
 
         saved = (sdk.Runner.run, writer_mod.Runner.run)
@@ -249,6 +250,8 @@ class ToolTurnsTest(_Fixture):
         finally:
             self._restore(saved)
         main, finish = seen[0], seen[1]
+        self.assertEqual(self.run_configs[0].tool_not_found_behavior, "return_error_to_model",
+                         "a call to a closed research tool would fail the part")
         self.assertEqual(main.model_settings.tool_choice, "required")
         self.assertFalse(main.reset_tool_choice)
         self.assertEqual(finish.tools, [])
@@ -301,6 +304,12 @@ class ToolTurnsTest(_Fixture):
         self.assertIsNone(writer_mod.closed_reading(c, 1))
         c.read.add(1)                                     # what read_paper records
         self.assertFalse(tools["read_paper"].is_enabled(ctx, None))
+        # Cited by its PMID: the Verifier rewrites it to [2] and asks for that read.
+        asyncio.run(writer_mod.submit(c, json.dumps([{"claim": "y", "prose": "y.",
+                                                      "beyond": [{"claim": "y", "pmid": "222"}]}])))
+        self.assertEqual(c.to_read, {2})
+        self.assertIsNone(writer_mod.closed_reading(c, 2))
+        self.assertTrue(tools["read_paper"].is_enabled(ctx, None))
 
 
 class _Client(object):

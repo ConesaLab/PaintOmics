@@ -24,6 +24,7 @@ from src.classes.AIInterpret.llm_client import MIN_CALL_SECONDS
 from src.classes.AIInterpret.walker import anchor as anchor_mod
 from src.classes.AIInterpret.walker import card as card_mod
 from src.classes.AIInterpret.walker import direction as direction_mod
+from src.classes.AIInterpret.walker import heat as heat_mod
 from src.classes.AIInterpret.walker import null as null_mod
 from src.classes.AIInterpret.walker import tiers
 from src.classes.AIInterpret.walker import narrate as narrate_mod
@@ -353,11 +354,20 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
                         "start: their identifiers did not map onto its genes or compounds.")
     if not ov.K:
         raise WalkError("None of the %d features of this job on the graph is marked relevant, so the walk has "
-                        "no seed. Add a Relevant features file for at least one omic in Step 1 and run the "
-                        "job again." % ov.N)
+                        "no seed. In Step 1, mark relevant features (a Relevant features file per omic) whose "
+                        "identifiers map onto the organism's genes or compounds, and run the job again." % ov.N)
+    params = params_for("network" if tag == "network" else "pathway")
+    # A seed is also a relevant node with a measured neighbour that is neither a
+    # hub nor a currency metabolite. Without one the planner, made to call a
+    # tool every turn, spent all its turns on refused plans to reach the same
+    # "no seed candidate".
+    if not any(row["candidate"] for row in heat_mod.scan_graph(graph, ov, params["sep"], params["candidates"])):
+        raise WalkError("None of the %d relevant features of this job on the graph has a measured neighbour "
+                        "(hubs and currency metabolites aside), so the walk has no seed. A walk starts from "
+                        "relevant genes or metabolites that connect to other measured features." % ov.K)
     halt_if_cancelled()
     card_text = walk_card_text(card)
-    walker = Walker(graph, ov, tag, params_for("network" if tag == "network" else "pathway"))
+    walker = Walker(graph, ov, tag, params)
     walker.dist, walker.anchor = dist, anchor
     statements, dropped, results, papers = [], [], None, {}
     t0 = time.time()

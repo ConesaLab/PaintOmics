@@ -247,12 +247,14 @@ async def submit(c, statements_json):
         if isinstance(stmt, dict):
             stmt["n"] = i
     statements = [s for s in statements if isinstance(s, dict)]
-    c.to_read = {ref for s in statements for ref in verify.statement_refs(s) if ref in c.papers} - c.read
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("[writer] submission %d: %s", c.submits, json.dumps(
             [{k: s.get(k) for k in ("cites", "legs", "grounded_in", "papers")} for s in statements])[:3000])
     checked, count_problem = verify.verify_statements(statements, c.walker, c.papers, c.read,
                                                       count=c.count, legs=c.legs, names_genes=c.client is None)
+    # After the Verifier: it rewrites a paper named by its PMID into its [N] in
+    # place, and the [N] is what its "call read_paper on it first" names.
+    c.to_read = {ref for s in statements for ref in verify.statement_refs(s) if ref in c.papers} - c.read
     await confirm_citations(c, checked)
     failing = [(s, p) for s, p in checked if p]
     c.last_passing = [copy.deepcopy(dict(s, verifier="pass")) for s, p in checked if not p]

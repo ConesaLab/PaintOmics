@@ -181,6 +181,13 @@ class ServiceTest(unittest.TestCase):
         with self.assertRaises(service.WalkError) as raised:
             service.run(unmapped, "J2", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
         self.assertIn("did not map", str(raised.exception))
+        # Relevant and measured, but no neighbour is: no seed candidate either.
+        lone = fx.FakeJob({"6": fx.FakeFeature("6", [fx.FakeOmicValue(
+            "Gene expression", "Fff", [True], [1.0, 2.0, 3.0])])})
+        lone.getJobID = lambda: "J3"
+        with self.assertRaises(service.WalkError) as raised:
+            service.run(lone, "J3", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
+        self.assertIn("measured neighbour", str(raised.exception))
 
     def test_a_gateway_that_fails_is_an_error_the_user_can_retry(self):
         """A model loop that died on the transport is not a walk that found
