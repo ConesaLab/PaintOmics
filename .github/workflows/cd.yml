@@ -38,6 +38,15 @@ jobs:
       - name: Image name
         id: meta
         run: echo "image=paintomics-app:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      # build-image.sh refuses an image without more-rs, the only MORE engine,
+      # and the binary is gitignored, so a checkout never has it: every CD run
+      # from 2026-09-12 to 2026-10-26 failed here. The pinned commit, built
+      # static (musl) so it runs on the image's bookworm base whatever glibc
+      # the runner has -- the same kind of binary paintomics.org runs.
+      - name: more-rs for the image (pinned commit, static x86-64)
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          MORE_RS_TARGET=x86_64-unknown-linux-musl scripts/ci/build-more-rs.sh
       - name: Pack app.tar and build the image
         env:
           # compose.yaml refuses to interpolate without it, even for `build`;
