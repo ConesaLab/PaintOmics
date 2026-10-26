@@ -120,6 +120,15 @@ def _reading_enabled(ctx, _agent):
     return research_open(c) or bool(c.to_read - c.read)
 
 
+def closed_reading(c, ref):
+    """read_paper's refusal once research has closed and ``ref`` is not a
+    paper the latest submission cites unread; None when it may be read."""
+    if research_open(c) or ref in c.to_read:
+        return None
+    return ("Reading is closed; read_paper now opens only a paper your statements cite unread: %s."
+            % (", ".join("[%d]" % r for r in sorted(c.to_read - c.read)) or "none"))
+
+
 @function_tool(name_override="search_literature", failure_error_function=_fail("search_literature"),
                is_enabled=_research_enabled)
 async def search_literature(ctx: RunContextWrapper[WriterContext], query: str, topic_tag: str) -> str:
@@ -160,9 +169,9 @@ async def read_paper(ctx: RunContextWrapper[WriterContext], ref_index: int, sect
     paper = c.papers.get(int(ref_index))
     if paper is None:
         return "No paper [%s]; cite only indices search_literature returned." % ref_index
-    if not research_open(c) and int(ref_index) not in c.to_read:
-        return ("Reading is closed; read_paper now opens only a paper your statements cite unread: %s."
-                % (", ".join("[%d]" % r for r in sorted(c.to_read - c.read)) or "none"))
+    refused = closed_reading(c, int(ref_index))
+    if refused:
+        return refused
     section = str(section or "abstract").lower()
     if section != "abstract" and not (paper.get("sections") or {}).get(section):
         try:

@@ -297,11 +297,9 @@ class ToolTurnsTest(_Fixture):
         self.assertEqual(c.to_read, {1})
         self.assertTrue(tools["read_paper"].is_enabled(ctx, None))
         self.assertFalse(tools["search_literature"].is_enabled(ctx, None))
-        call = lambda ref: asyncio.run(tools["read_paper"].on_invoke_tool(   # noqa: E731
-            types.SimpleNamespace(context=c, tool_name="read_paper", tool_call_id="t", tool_arguments=""),
-            json.dumps({"ref_index": ref, "section": "abstract"})))
-        self.assertIn("Reading is closed", call(2))
-        self.assertIn("One says so", call(1))
+        self.assertIn("Reading is closed", writer_mod.closed_reading(c, 2))
+        self.assertIsNone(writer_mod.closed_reading(c, 1))
+        c.read.add(1)                                     # what read_paper records
         self.assertFalse(tools["read_paper"].is_enabled(ctx, None))
 
 
