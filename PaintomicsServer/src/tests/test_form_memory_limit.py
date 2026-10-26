@@ -41,12 +41,23 @@ why it reached users as an in-app message rather than a browser-level failure.
 22 of the 1172 KEGG pathway images bust 500 kB on the background alone, so it
 failed per-pathway -- big overview maps only -- and looked intermittent.
 
+WERKZEUG 3.1.9
+--------------
+3.1.9 (pallets/werkzeug#3251) stopped applying `max_form_memory_size` to
+urlencoded bodies: "only max_content_length" bounds them again. The export
+no longer needs MAX_FORM_MEMORY_SIZE on this Werkzeug, but the setting stays:
+it still bounds multipart non-file fields, and any Werkzeug from 3.1.0 to
+3.1.8 refuses the export without it.
+
 WHAT THESE TESTS ASSERT
 -----------------------
-`testTheDefaultRejectsAnExportSizedBody` is the control. It is the same
-request against an app that sets only MAX_CONTENT_LENGTH, and it fails with 413
--- without it the positive test would pass on any Werkzeug whose default is
-generous, and stop meaning anything.
+`testALimitBelowTheBodyRejectsIt` is the control: the same request against an
+app whose request limit is below the body fails with 413 -- without it the
+positive test would pass on any Werkzeug that stopped enforcing a limit, and
+stop meaning anything. `testAnUrlencodedBodyIsBoundByTheContentLengthOnly`
+records the 3.1.9 behaviour; if it fails, Werkzeug applies the form-memory
+limit to urlencoded bodies again and MAX_FORM_MEMORY_SIZE is what keeps the
+export working.
 
 File uploads are deliberately not covered: the multipart parser sets
 `field_size = None` for `File` parts and skips the check entirely, so Step 1
@@ -76,10 +87,10 @@ _CONFIG_TEMPLATE = os.path.join(
 MEASURED_EXPORT_BODY_BYTES = 4408629
 
 
-def _buildApp(formMemoryLimit):
+def _buildApp(formMemoryLimit, contentLimit=100 * pow(1024, 2)):
     """A Flask app configured the way Application.__init__ configures its own."""
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = 100 * pow(1024, 2)
+    app.config["MAX_CONTENT_LENGTH"] = contentLimit
     if formMemoryLimit is not None:
         app.config["MAX_FORM_MEMORY_SIZE"] = formMemoryLimit
 
@@ -106,21 +117,34 @@ def _readTemplate():
 
 class FormMemoryLimitTest(unittest.TestCase):
 
-    def testTheDefaultRejectsAnExportSizedBody(self):
-        """Control: without the setting, Werkzeug 3.1 refuses the real payload.
+    def testALimitBelowTheBodyRejectsIt(self):
+        """Control: a request limit below the export body refuses it with 413.
 
         If this ever stops failing, the positive tests below are vacuous.
         """
-        client = _buildApp(formMemoryLimit=None)
+        client = _buildApp(formMemoryLimit=512 * 1024, contentLimit=512 * 1024)
 
         response = client.post("/pa_save_image", data=_exportShapedBody(1 << 20))
 
         self.assertEqual(
             413, response.status_code,
-            "expected Werkzeug's 500 kB max_form_memory_size default to reject a "
-            "1 MB urlencoded body; got %s. If this Werkzeug no longer applies the "
-            "limit to urlencoded data, update this file rather than deleting it."
-            % response.status_code)
+            "expected a 512 kB request limit to reject a 1 MB urlencoded body; "
+            "got %s, so this Werkzeug enforces no limit on it and the positive "
+            "tests mean nothing" % response.status_code)
+
+    def testAnUrlencodedBodyIsBoundByTheContentLengthOnly(self):
+        """Werkzeug 3.1.9: max_form_memory_size no longer applies to urlencoded
+        bodies, so an app that sets only MAX_CONTENT_LENGTH takes the export."""
+        client = _buildApp(formMemoryLimit=None)
+
+        response = client.post("/pa_save_image", data=_exportShapedBody(1 << 20))
+
+        self.assertEqual(
+            200, response.status_code,
+            "Werkzeug's 500 kB max_form_memory_size default rejected a 1 MB "
+            "urlencoded body (%s): it applies to urlencoded data again, as in "
+            "3.1.0-3.1.8, and the configured MAX_FORM_MEMORY_SIZE is what keeps "
+            "pathway exports working. Update the docstring." % response.status_code)
 
     def testConfiguredAppAcceptsAMeasuredExport(self):
         """The payload that produced the user-visible 413 must now parse."""
