@@ -61,9 +61,9 @@ papers, each with its passage, in a 1,900-word Results section.
 
 One network per organism, built once at install from the annotation files the installer
 already ships: KEGG relations from the KGML, Reactome reactions from each pathway's graph
-file, and OmniPath interactions. Nodes are genes and compounds; every edge carries its
-database, its pathway and a sign (activation and expression positive, inhibition and
-repression negative). On mouse the union is about 14,000 nodes and 131,000 edges once the job's miRNAs are added,
+file, and OmniPath interactions. Nodes are genes and compounds; every edge carries the
+databases and every pathway that draw it, and a sign (activation and expression positive,
+inhibition and repression negative). On mouse the union is about 14,000 nodes and 131,000 edges once the job's miRNAs are added,
 builds in about three seconds, and is cached beside the KGML directory.
 
 Reactome reactions join proteins, and their participants are mostly complexes and sets:

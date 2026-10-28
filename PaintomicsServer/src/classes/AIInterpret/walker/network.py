@@ -36,12 +36,13 @@ import zlib
 from collections import defaultdict
 
 from src.classes.AIInterpret.walker.tiers import CURRENCY
-from src.common.KeggGraph.parser import parse_directory
+from src.common.KeggGraph.parser import iter_directory
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 4                  # 2: Reactome complexes and sets expanded; 3: Reactome names;
-                                   # 4: relations drawn through a currency metabolite dropped
+CACHE_VERSION = 5                  # 2: Reactome complexes and sets expanded; 3: Reactome names;
+                                   # 4: relations drawn through a currency metabolite dropped;
+                                   # 5: a KEGG edge tagged with every map that draws it
 REACTOME_FAN_MAX = 36              # member pairs one reaction may add; larger sets are skipped
 REACTOME_MAX_DEPTH = 8             # nesting of complexes and sets followed
 # KGML relation subtypes -> sign. Anything else (binding, indirect, ...) is 0.
@@ -263,30 +264,61 @@ def sign_of_subtype(subtype):
 # sources
 # ---------------------------------------------------------------------------
 def _add_kegg(net, org_dir, k2sym):
-    edges, types, read = parse_directory(os.path.join(org_dir, "kgml"))
-    if not read:
-        return 0
-    for edge in edges:
-        if getattr(edge, "via", None) in CURRENCY:
-            # Two enzymes joined by ATP, water or NAD share nothing a walk
-            # could read; the relation is not an edge of this network.
-            continue
-        ends = []
-        for raw in (edge.a, edge.b):
-            kind = types.get(raw)
-            if kind == "gene":
-                node_id = "g:" + raw
-                net.add_node(node_id, k2sym.get(raw, raw), "gene")
-            elif kind == "compound":
-                node_id = "c:" + raw
-                net.add_node(node_id, raw, "compound")
-            else:                      # map links and unknown entries
-                node_id = None
-            ends.append(node_id)
-        if ends[0] and ends[1]:
-            net.add_edge(ends[0], ends[1], sign_of_subtype(edge.subtype),
-                         "KEGG:" + edge.pathway, edge.subtype)
-    return read
+    """Every KGML map's relations, each edge tagged with every map that draws it.
+
+    Read map by map, not through parse_directory, which keeps one copy of a
+    pair -- the first map's by file name -- for the hub graph. Built on that,
+    16 of the 336 hsa maps that draw relations tagged no edge, so a walk on
+    Bladder cancer (hsa05219, 16 relations) was refused outright, and 125 kept
+    under half of their own edges (hsa01200 8 of 275, hsa01230 1 of 187); mmu
+    lost 17 and 119 the same way. Read map by map, every map keeps all of its
+    edges, and the hsa network gains 80 edges and loses none: pairs whose first
+    map drew them through a currency metabolite now enter from another
+    (measured 2026-10-28 on paintomics.org's install, without OmniPath: 102,078
+    to 102,158).
+
+    A later map enriches an edge the way a second database does
+    (Network.add_edge): an edge drawn unsigned takes the first sign another map
+    gives it, and an empty subtype the first non-empty one. Neither is replaced
+    once set, so an edge first drawn as binding/association and later as
+    activation is signed +1 but still reads binding/association, and opposite
+    signs in two maps keep the first map's. KEGG is read before Reactome, so on
+    hsa 457 edges every source drew unsigned before are now signed, and 11 whose
+    sign came from a Reactome reaction take a later map's: NFKBIA -> NFKB1 was
+    +1 from Reactome and is -1 from hsa04620's inhibition.
+
+    Holding every map's relations until the kinds are merged costs about 12 MB
+    at peak on hsa (186 to 198 MB), once per network rebuild.
+    """
+    # An id's kind is read from every map, merged as parse_directory merges it:
+    # a reaction may name a compound its own map never draws as an entry
+    # (hsa00510 R06258 -> glycan G10617), and only another map types it.
+    per_map, types = [], {}
+    for edges, map_types in iter_directory(os.path.join(org_dir, "kgml")):
+        per_map.append(edges)
+        types.update(map_types)
+    for edges in per_map:
+        for edge in edges:
+            if getattr(edge, "via", None) in CURRENCY:
+                # Two enzymes joined by ATP, water or NAD share nothing a walk
+                # could read; the relation is not an edge of this network.
+                continue
+            ends = []
+            for raw in (edge.a, edge.b):
+                kind = types.get(raw)
+                if kind == "gene":
+                    node_id = "g:" + raw
+                    net.add_node(node_id, k2sym.get(raw, raw), "gene")
+                elif kind == "compound":
+                    node_id = "c:" + raw
+                    net.add_node(node_id, raw, "compound")
+                else:                  # map links and unknown entries
+                    node_id = None
+                ends.append(node_id)
+            if ends[0] and ends[1]:
+                net.add_edge(ends[0], ends[1], sign_of_subtype(edge.subtype),
+                             "KEGG:" + edge.pathway, edge.subtype)
+    return len(per_map)
 
 
 def _reactome_leaves(nodes, db_id, memo, depth=0):
