@@ -784,6 +784,9 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         for r, p in sorted(papers.items()) if r in cited)
     title_gate = {"pass": True, "not_applicable": False, "verbs_found": [], "rewritten": False, "fallback": False,
                   "why": ""}
+    # Why the last draft lost a sentence that carried its statement's
+    # citation: the repair round is told, not only that the citation is gone.
+    removed = []
 
     def checked(results):
         if results is None:
@@ -791,7 +794,8 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         pruned = narrate_mod.prune_connectives(results)
         if pruned:
             checks["connectives_pruned"] = checks.get("connectives_pruned", 0) + pruned
-        unquoted = verify.drop_unrecorded_sentences(results, walker)
+        del removed[:]
+        unquoted = verify.drop_unrecorded_sentences(results, walker, statements, removed)
         if unquoted:
             checks["misquoted_sentences_dropped"] = checks.get("misquoted_sentences_dropped", 0) + unquoted
         uncited = verify.drop_uncited_sentences(results, statements)
@@ -819,7 +823,7 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         try:
             results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
-                                          objections=problems + title_problems, deadline=deadline)
+                                          objections=problems + removed + title_problems, deadline=deadline)
             problems, title_problems = checked(results)
             title_gate["rewritten"] = True
         except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:

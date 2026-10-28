@@ -1073,6 +1073,31 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertIsNotNone(out, "a draft whose only fault was its title lost its section: %s" % checks.get("results"))
         self.assertTrue(checks["gates"]["title"].get("fallback"))
 
+    def test_the_repair_is_told_why_a_cited_sentence_went(self):
+        """Told only "paragraph 1 drops [5]", the Narrator re-sent the sentence
+        the pruner had removed, which already had [5], and the section was lost
+        (hsa05219, 2026-10-28)."""
+        import copy
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        statement = [{"n": 1, "claim": "c", "prose": "p [5]", "legs": [1], "papers": [5],
+                      "evidence": [{"ref": 5, "claim": "exclusive (p = 0.001)", "quote": "exclusive (p = 0.001)"}]}]
+        draft = {"title": "Results", "summary": "s.", "paragraphs": [
+            {"from_statement": 1, "legs": [1],
+             "text": "Aaa and Bbb move together [e1]. Aaa and Bbb were exclusive (p = 0.004) [5]."}]}
+        prompts = []
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                return copy.deepcopy(draft) if len(prompts) == 1 else {}
+        service._narrate(Client(), "card", "chain", statement, [], walker, {}, "pathway:x", {"gates": {}},
+                         (100, 200), deadline=time.time() + 400)
+        self.assertGreater(len(prompts), 1, "no repair was asked")
+        self.assertIn("paragraph 1 drops [5], which its statement cites", prompts[1])
+        self.assertIn('paragraph 1 (from statement 1): the sentence "Aaa and Bbb were exclusive (p = 0.004) [5]." '
+                      'citing [5] was removed because it quotes 0.004', prompts[1])
+
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service
         verdicts = iter([["paragraph 1 is too short"], [], [], []])
