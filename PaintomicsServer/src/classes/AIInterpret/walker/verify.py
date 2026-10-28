@@ -681,6 +681,12 @@ def meta_note(removed):
                 ", ..." if len(removed) > 3 else ""))
 
 
+# Owed citations a paragraph lost only with sentences removed for a misquoted
+# value: their claim went too, so that paragraph alone no longer owes them; no
+# other pruner excuses (the [80] case: CHANGELOG, PR #205). Stripped before storage.
+LET_GO = "_let_go"
+
+
 def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
     """Remove every sentence of the Results that quotes a value the record does
     not hold, and return how many went. A misquoted number is a sentence the
@@ -689,15 +695,18 @@ def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
     job with statements and no Results at all. Paragraphs left empty go too.
 
     With ``kept``, the kept statements, a sentence of a paragraph retelling one
-    may also quote what a paper it cites states (unrecorded_values). With
+    may also quote what a paper it cites states (unrecorded_values), and a
+    paragraph that loses an owed citation this way is marked (LET_GO). With
     ``removed``, a list, every sentence removed with a citation its statement
     makes adds a line saying which and why, for the Narrator's repair round."""
     numbers = _record_numbers(walker)
     count = {"dropped": 0}
 
     def keep_quoted(text, source=None, where=None):
-        out = []
+        """(the sentences kept, the owed citations they no longer carry)."""
+        out, gone = [], set()
         source_refs = set(statement_refs(source)) if source is not None else set()
+        owed = set(statement_papers(source)) if source is not None else set()
         for sentence in sentences(text):
             values = unrecorded_values(sentence, numbers, source, source_refs)
             if not values:
@@ -705,9 +714,11 @@ def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
                 continue
             count["dropped"] += 1
             refs = [ref for ref in cited_refs(sentence) if ref in source_refs]
+            gone.update(owed.intersection(refs))
             if removed is not None and refs:
                 removed.append(_removal_note(where, source, sentence, refs, values))
-        return " ".join(out)
+        text = " ".join(out)
+        return text, gone - set(cited_refs(text))
 
     paragraphs = []
     for i, paragraph in enumerate(results.get("paragraphs") or [], 1):
@@ -715,13 +726,28 @@ def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
             paragraphs.append(paragraph)          # verify_results objects to it
             continue
         source = _statement_by_n(kept or (), paragraph.get("from_statement"))
-        text = keep_quoted(paragraph.get("text"), source, i)
+        text, let_go = keep_quoted(paragraph.get("text"), source, i)
         if text.strip():
-            paragraphs.append(dict(paragraph, text=text))
+            paragraph = dict(paragraph, text=text)
+            paragraph.pop(LET_GO, None)           # set here only, never by the model's answer
+            if let_go:
+                paragraph[LET_GO] = sorted(let_go)
+            paragraphs.append(paragraph)
     results["paragraphs"] = paragraphs
     if results.get("summary"):
-        results["summary"] = keep_quoted(results["summary"])
+        results["summary"] = keep_quoted(results["summary"])[0]
     return count["dropped"]
+
+
+def pop_let_go(results):
+    """{statement n, as text: the citations its paragraphs let go (LET_GO)},
+    with the marks removed from ``results``."""
+    out = {}
+    for paragraph in (results or {}).get("paragraphs") or []:
+        refs = paragraph.pop(LET_GO, None) if isinstance(paragraph, dict) else None
+        if refs:
+            out.setdefault(str(paragraph.get("from_statement")), set()).update(refs)
+    return {n: sorted(refs) for n, refs in out.items()}
 
 
 def _removal_note(where, source, sentence, refs, values):
@@ -858,10 +884,12 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                 # A paragraph retells its statement's literature claims, so it
                 # keeps their citations: the network Narrator once wrote "Slc7a11
                 # encodes the xCT subunit ... central to ferroptosis" with the [1]
-                # dropped.
+                # dropped. Except the ones this paragraph let go with a
+                # misquoting sentence (LET_GO).
                 quoted = set(cited_refs(text))
+                let_go = set(para.get(LET_GO) or ())
                 for ref in statement_papers(source):
-                    if ref not in quoted:
+                    if ref not in quoted and ref not in let_go:
                         problems.append("paragraph %d drops [%d], which its statement cites" % (i, ref))
                 # ...and cites nothing its statement does not.
                 for ref in sorted(quoted - source_refs):

@@ -1094,9 +1094,10 @@ class NarratorRepairCasesTest(_Fixture):
         service._narrate(Client(), "card", "chain", statement, [], walker, {}, "pathway:x", {"gates": {}},
                          (100, 200), deadline=time.time() + 400)
         self.assertGreater(len(prompts), 1, "no repair was asked")
-        self.assertIn("paragraph 1 drops [5], which its statement cites", prompts[1])
         self.assertIn('paragraph 1 (from statement 1): the sentence "Aaa and Bbb were exclusive (p = 0.004) [5]." '
                       'citing [5] was removed because it quotes 0.004', prompts[1])
+        # [5] went with the claim it supported: the note says so, and it is not owed.
+        self.assertNotIn("drops [5]", prompts[1])
 
     # Stored on hsa05219 on 2026-10-28, less its "(−1.58)": this walk records
     # no such value, and the unrecorded-value pruner would take that sentence first.
@@ -1266,6 +1267,87 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertEqual((gate["rewritten"], gate["repair_kept"], gate["repair_problems"], gate["fallback"]),
                          (False, False, ["statement 1 is not covered"], True))
         self.assertNotIn("meta_sentences_dropped", checks, "the discarded repair's pruning is not on the record")
+
+    # Eight words, no value, no timing word: what every check passes.
+    TOGETHER = "Aaa and Bbb change together in this experiment [e1]. "
+    # 7O521E0Y0y's one-statement capture (staging, 2026-10-28): [80]'s
+    # confirmed passage gives no hazard ratio, so the value check removes it.
+    SURVIVIN = ("In a meta-analysis of 13 studies covering 1,963 bladder cancer patients, positive survivin "
+                "expression was associated with poor recurrence-free survival (HR 1.83), disease-specific "
+                "survival (HR 1.72) and overall survival (HR 1.75) [%d].")
+
+    def narrate_cited(self, texts, ref=5):
+        """_narrate, every check real, on paragraphs ``texts`` all retelling one
+        statement that cites [ref], whose confirmed passage holds no number;
+        the repair is the same answer again. (out, checks, prompts)."""
+        import copy
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        statement = [{"n": 1, "claim": "c", "prose": "p [%d]" % ref, "legs": [1], "papers": [ref],
+                      "evidence": [{"ref": ref, "claim": "Aaa marks poor survival", "quote": "Aaa marks poor survival"}]}]
+        draft = {"title": "Results", "summary": "s.",
+                 "paragraphs": [text if isinstance(text, dict) else {"from_statement": 1, "legs": [1], "text": text}
+                                for text in texts]}
+        prompts = []
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                return copy.deepcopy(draft)
+        checks = {"gates": {}}
+        out = service._narrate(Client(), "card", "chain", statement, [], walker, {}, "pathway:x", checks,
+                               (100, 200), deadline=time.time() + 400)
+        return out, checks, prompts
+
+    def test_a_citation_let_go_in_one_paragraph_is_still_owed_by_another(self):
+        """Statement 1 told in two paragraphs: the first loses its only [5]
+        sentence to the value check, the second never wrote [5]."""
+        out, checks, prompts = self.narrate_cited([self.TOGETHER * 4 + "Aaa marked poor survival (HR 1.83) [5].",
+                                                   self.TOGETHER * 4])
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"], ["paragraph 2 drops [5], which its statement cites"])
+        self.assertIn('paragraph 1 (from statement 1): the sentence "Aaa marked poor survival (HR 1.83) [5]." '
+                      'citing [5] was removed', prompts[1])
+
+    def test_a_citation_let_go_in_one_paragraph_and_kept_in_another_passes(self):
+        out, checks, prompts = self.narrate_cited([self.TOGETHER * 4 + "Aaa marks poor survival [5].",
+                                                   self.TOGETHER * 4 + "Aaa marked poor survival (HR 1.83) [5]."])
+        self.assertEqual((checks["results"], len(prompts)), ([], 1))
+        self.assertEqual([p["text"] for p in out["paragraphs"]],
+                         [self.TOGETHER * 4 + "Aaa marks poor survival [5].", (self.TOGETHER * 4).strip()])
+        self.assertEqual(checks["citations_with_pruned_sentence"], {"1": [5]})
+
+    def test_a_citation_another_pruner_took_is_still_owed(self):
+        """Only a misquoted value lets a citation go: the walker's own words and
+        a stray [9] beside an owed [5] fail as on master."""
+        for gone_with in ("Along the walk, Aaa marks poor survival [5].", "Aaa marks poor survival [5] [9]."):
+            with self.subTest(gone_with=gone_with):
+                out, checks, _ = self.narrate_cited([self.TOGETHER * 7 + gone_with])
+                self.assertIsNone(out)
+                self.assertEqual(checks["results"], ["paragraph 1 drops [5], which its statement cites"])
+                self.assertNotIn("citations_with_pruned_sentence", checks)
+
+    def test_the_only_sentence_citing_80_goes_and_the_section_stays(self):
+        """One pruned sentence must not cost the section: master refused this
+        one for lacking [80]. The record says what was let go."""
+        out, checks, prompts = self.narrate_cited([self.TOGETHER * 7 + self.SURVIVIN % 80], ref=80)
+        self.assertEqual((checks["results"], len(prompts)), ([], 1))
+        self.assertEqual(out["paragraphs"][0]["text"], (self.TOGETHER * 7).strip())
+        self.assertEqual(checks["citations_with_pruned_sentence"], {"1": [80]})
+        self.assertEqual(checks["misquoted_sentences_dropped"], 1)
+
+    def test_a_mark_never_leaves_the_checks_and_no_answer_sets_one(self):
+        """The marks are the checks' own state: not in the section returned,
+        the record or a dropped draft. A paragraph that wrote one itself still
+        owes [5]."""
+        out, checks, _ = self.narrate_cited([self.TOGETHER * 7 + self.SURVIVIN % 5])
+        self.assertIsNotNone(out)
+        self.assertNotIn(verify.LET_GO, json.dumps([out, checks]))
+        _, checks, _ = self.narrate_cited([{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 7,
+                                            verify.LET_GO: [5]}])
+        self.assertEqual(checks["results"], ["paragraph 1 drops [5], which its statement cites"])
+        self.assertIsNotNone(checks.get("results_dropped"))
+        self.assertNotIn(verify.LET_GO, json.dumps(checks))
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service

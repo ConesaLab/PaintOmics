@@ -119,7 +119,10 @@ check are read without those sentences. An answer half of whose paragraphs are p
 for only because of the title is not kept when it breaks the body.
 Code checks that every quoted value appears in the record (a signed value verbatim, an
 unsigned one as the magnitude of a recorded value), that a paragraph keeps every citation its
-statement makes and cites nothing its statement does not, and drops the sentences that fail. A story that
+statement makes and cites nothing its statement does not, and drops the sentences that fail. A
+paragraph whose only sentence carrying a citation was removed for a misquoted value no longer
+owes that citation, since its claim went too; the record lists it. Every other paragraph, and
+every other removal, still owes it. A story that
 fails twice is dropped and the statements stand alone. The cited papers are then numbered
 1..n in the order the reader meets them; retrieved papers nothing cites are left out, and
 each cited paper carries its passages, the section each sits in, and the claim each supports.

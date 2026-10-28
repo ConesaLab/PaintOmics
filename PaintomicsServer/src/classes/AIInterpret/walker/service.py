@@ -870,26 +870,24 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         for r, p in sorted(papers.items()) if r in cited)
     title_gate = {"pass": True, "not_applicable": False, "verbs_found": [], "rewritten": False, "fallback": False,
                   "why": ""}
-    # Why the last draft lost a sentence that carried its statement's
-    # citation: the repair round is told, not only that the citation is gone.
-    removed = []
-    # The last draft's summary and title sentences in the brief's own words.
-    meta = []
 
     def checked(results):
         """(problems, title problems, effects) for one draft, pruned in place.
         What the pruners counted and the title state reach checks and the gate
-        only through keep(effects), so a repair that is not kept leaves none."""
+        only through keep(effects), and the repair notes only from the draft
+        that needs the repair, so a repair that is not kept leaves none."""
         if results is None:
             return ["no results"], [], {}
+        # Why the draft lost a sentence that carried its statement's citation:
+        # the repair round is told, not only that the citation is gone.
+        removed = []
         counts = {"connectives_pruned": narrate_mod.prune_connectives(results)}
-        del removed[:]
         counts["misquoted_sentences_dropped"] = verify.drop_unrecorded_sentences(results, walker, statements,
                                                                                  removed)
         counts["uncited_sentences_dropped"] = verify.drop_uncited_sentences(results, statements)
         counts["jargon_sentences_dropped"] = verify.drop_jargon_sentences(results)
-        del meta[:]
-        meta.extend(verify.drop_meta_sentences(results))
+        # The summary and title sentences in the brief's own words.
+        meta = verify.drop_meta_sentences(results)
         counts["meta_sentences_dropped"] = len(meta)
         # None written, only the brief's words or "...": the title code writes
         # when the Narrator's cannot stand (the title gate's fallback), and the
@@ -900,7 +898,8 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             fallback = "neutral"
         title = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         return (verify.verify_results(results, statements, dropped, walker, kind, words), title,
-                {"counts": counts, "fallback": fallback})
+                {"counts": counts, "fallback": fallback,
+                 "notes": removed + ([verify.meta_note(meta)] if meta else [])})
 
     def keep(effects):
         """A kept draft's pruning counts into checks, its title state into the gate."""
@@ -925,12 +924,11 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     # A summary that restated the brief is pruned, silently, and asks for no
     # repair of its own: a re-narration put a draft that had passed at risk.
     # When the section's problems ask for one, the repair is told what went.
-    notes = [verify.meta_note(meta)] if meta else []
     if (problems or title_problems) and results is not None and (
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         try:
             repaired = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
-                                           objections=problems + removed + notes + title_problems,
+                                           objections=problems + effects["notes"] + title_problems,
                                            deadline=deadline)
             repaired_problems, repaired_title, repaired_effects = checked(repaired)
             if repaired_problems and not problems:
@@ -962,6 +960,11 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             title_gate["fallback"] = "scope"
             title_problems = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         problems = verify.verify_results(results, statements, dropped, walker, kind, words)
+    # The kept draft's marks, read and removed: the record lists what they let
+    # go, and neither the record nor a view ever holds a mark.
+    let_go = verify.pop_let_go(results)
+    if let_go:
+        checks["citations_with_pruned_sentence"] = let_go
     checks["results"] = problems
     if results is None or problems:
         checks["gates"]["title"] = {"pass": True, "not_applicable": True, "why": "no Results section to check"}
