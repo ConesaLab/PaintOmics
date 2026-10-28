@@ -809,9 +809,53 @@ def _in_record(token, numbers):
     return token in numbers or ("+" + token) in numbers or ("−" + token) in numbers
 
 
-def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None):
+def paragraph_citations(results):
+    """{statement n: the paper refs its paragraphs cite}, as the draft stands."""
+    out = {}
+    for paragraph in (results or {}).get("paragraphs") or []:
+        if not isinstance(paragraph, dict):
+            continue
+        try:
+            n = int(paragraph.get("from_statement"))
+        except (TypeError, ValueError):
+            continue
+        out.setdefault(n, set()).update(cited_refs(paragraph.get("text")))
+    return out
+
+
+def reattach_citations(results, kept, pruned_refs=None):
+    """Give every statement paragraph back the citations its statement makes
+    (statement_papers) that the Narrator left out, in the statement's order,
+    as one group before the paragraph's final stop: "... in recurrent
+    tumours [137]." The paragraph retells that statement, whose claim a paper
+    agent confirmed in each of them. A ref in ``pruned_refs`` ({n: refs})
+    went with a sentence a pruner removed: the claim it supported went too,
+    and it is not given back. Returns how many refs were attached; a
+    paragraph missing none is left byte for byte."""
+    attached = 0
+    for paragraph in (results or {}).get("paragraphs") or []:
+        if not isinstance(paragraph, dict):
+            continue
+        source = _statement_by_n(kept, paragraph.get("from_statement"))
+        text = str(paragraph.get("text") or "")
+        if source is None or is_placeholder(text):
+            continue
+        cited, gone = set(cited_refs(text)), (pruned_refs or {}).get(int(source["n"]), ())
+        missing = [ref for ref in statement_papers(source) if ref not in cited and ref not in gone]
+        if not missing:
+            continue
+        group = "[%s]" % ", ".join(str(ref) for ref in missing)
+        body = text.rstrip()
+        paragraph["text"] = (body[:-1].rstrip() + " " + group + body[-1] if body[-1:] in ".!?"
+                             else body + " " + group)
+        attached += len(missing)
+    return attached
+
+
+def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None, pruned_refs=None):
     """Objections to the Narrator's Results section. ``words_range`` = (fewest,
-    most) words; RESULTS_WORDS by scope otherwise."""
+    most) words; RESULTS_WORDS by scope otherwise. ``pruned_refs`` ({statement
+    n: refs}) are the citations the pruners removed with their sentences."""
     problems = []
     chain = walker.record()["chain"]
     paragraphs = results.get("paragraphs") or []
@@ -859,9 +903,12 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                 # keeps their citations: the network Narrator once wrote "Slc7a11
                 # encodes the xCT subunit ... central to ferroptosis" with the [1]
                 # dropped.
+                # A citation that went with a sentence a pruner removed went
+                # with the claim it supported (``pruned_refs``): not owed.
                 quoted = set(cited_refs(text))
+                gone = (pruned_refs or {}).get(int(source["n"]), ())
                 for ref in statement_papers(source):
-                    if ref not in quoted:
+                    if ref not in quoted and ref not in gone:
                         problems.append("paragraph %d drops [%d], which its statement cites" % (i, ref))
                 # ...and cites nothing its statement does not.
                 for ref in sorted(quoted - source_refs):

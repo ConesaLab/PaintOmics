@@ -260,6 +260,43 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertTrue(verify.is_placeholder(" … "))
         self.assertFalse(verify.is_placeholder("Cdkn1a."))
 
+    def test_a_citation_the_narrator_left_out_is_given_back(self):
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        lead = ("At the first time point in this series, the gene %s read %s [e1]. " % (
+            self.walker.label(node), value)) * 12
+        kept = [{"n": 1, "papers": [2], "beyond": [{"paper": 7, "claim": "c", "hypothesis": False}]}]
+        results = {"title": "t", "summary": "s",
+                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": lead + "It is documented."}]}
+        self.assertTrue(any("drops [2]" in p for p in verify.verify_results(results, kept, [], self.walker)))
+        self.assertEqual(verify.reattach_citations(results, kept), 2)
+        self.assertTrue(results["paragraphs"][0]["text"].endswith("It is documented [2, 7]."))
+        self.assertEqual(verify.verify_results(results, kept, [], self.walker), [])
+        # A paragraph citing what it should is left byte for byte.
+        cited = lead + "It is documented [7] and [2]."
+        results["paragraphs"][0]["text"] = cited
+        self.assertEqual(verify.reattach_citations(results, kept), 0)
+        self.assertEqual(results["paragraphs"][0]["text"], cited)
+        # One its statement does not make still fails, given back or not.
+        results["paragraphs"][0]["text"] = lead + "It is documented [9]."
+        verify.reattach_citations(results, kept)
+        self.assertIn("paragraph 1 cites [9], which its statement does not cite",
+                      verify.verify_results(results, kept, [], self.walker))
+
+    def test_a_citation_pruned_with_its_sentence_is_not_owed(self):
+        """The claim it supported went with it: given back, it would cite a
+        paper for a sentence no longer there."""
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        lead = ("At the first time point in this series, the gene %s read %s [e1]. " % (
+            self.walker.label(node), value)) * 12
+        kept = [{"n": 1, "papers": [2]}]
+        results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1], "text": lead}]}
+        self.assertEqual(verify.reattach_citations(results, kept, {1: {2}}), 0)
+        self.assertNotIn("[2]", results["paragraphs"][0]["text"])
+        self.assertEqual(verify.verify_results(results, kept, [], self.walker, pruned_refs={1: {2}}), [])
+        self.assertTrue(any("drops [2]" in p for p in verify.verify_results(results, kept, [], self.walker)))
+
     def test_a_connective_paragraph_that_quotes_a_value_is_pruned(self):
         from src.classes.AIInterpret.walker import narrate
         results = {"paragraphs": [{"from_statement": 1, "legs": [1], "text": "Aaa rose to +1.00 [1]."},
