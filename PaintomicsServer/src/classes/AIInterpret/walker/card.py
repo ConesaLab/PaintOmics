@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 
+from src.classes.AIInterpret.llm_client import strip_reasoning
 from src.classes.AIInterpret.walker.anchor import find_perturbed_genes
 
 # A column is a time point when its label carries a time token: a number with a
@@ -23,6 +24,24 @@ TIME_TOKEN_RE = re.compile(
     r"[\s_-]?\d+(?:\.\d+)?)(?![A-Za-z])", re.I)
 NUMBER_LABEL_RE = re.compile(r"^-?\d+(\.\d+)?\s*[a-zA-Zµ%/]*$")
 TIME_WORDS = ("time course", "time-course", "timecourse", "time point", "timepoint", "time series", "kinetic")
+# A column of p-values or q-values, by its header: p.value, pvalue, p_val,
+# P-value, PValue, adj.p.Value, adj.P.Val, padj, p.adjusted, FDR, qvalue,
+# q.value, q_val. Whole tokens only -- letters or digits on either side break
+# the match -- so Ip, pH, Ctr_0H, PDX and dpi are not one.
+SIGNIFICANCE_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:adj[._ -]?p(?:[._ -]?val(?:ue)?s?)?|p[._ -]?adj(?:usted)?|p[._ -]?val(?:ue)?s?"
+    r"|q[._ -]?val(?:ue)?s?|fdr)(?![A-Za-z0-9])", re.I)
+# Of those, the corrected ones, which a relevance cut-off should be made from.
+ADJUSTED_RE = re.compile(r"adj|fdr|(?<![A-Za-z0-9])q[._ -]?val", re.I)
+# What every agent is told about such a column (service.walk_card_text, the
+# chat's card_lines, the direction check's fit prompt). Nothing said it on job
+# u36I21KMxV (2026-10-27), whose design text even read "adjusted p-value for
+# differential expression": the walker, the Writer, the checks and the
+# Narrator wrote "flat", "unchanged" and "the only non-zero adjusted p-value".
+SIGNIFICANCE_NOTE = (
+    "p-values or q-values (0 to 1); smaller means a stronger difference between conditions. They carry no "
+    "direction: never call a gene up, down, flat or unchanged from them, and a value near 0 is the strongest "
+    "difference, not the absence of one.")
 # The organism as a paper's MeSH heading names it, by KEGG code.
 ORGANISM_WORDS = {"mmu": "mouse", "hsa": "human", "rno": "rat", "dre": "zebrafish", "dme": "fly", "cel": "worm",
                   "sce": "yeast", "ath": "arabidopsis", "bta": "cow", "ssc": "pig", "gga": "chicken",
@@ -53,12 +72,9 @@ def shorten_labels(header):
     return labels
 
 
-def labels_by_omic(job_instance):
-    """omic name -> the user's labels, or None for an omic whose file had no
-    header. Every reader of the job's values goes through this, so the chat,
-    the report and the walk print the same labels and never borrow another
-    omic's."""
-    labels = {}
+def _omic_headers(job_instance):
+    """(omic name, its file's header as stored) for every gene- and
+    compound-based omic of the job."""
     for getter in ("getGeneBasedInputOmics", "getCompoundBasedInputOmics"):
         try:
             omics = getattr(job_instance, getter)() or []
@@ -67,8 +83,94 @@ def labels_by_omic(job_instance):
         for omic in omics:
             name = omic.get("omicName") if isinstance(omic, dict) else None
             if name:
-                labels[name] = shorten_labels(omic.get("omicHeader"))
-    return labels
+                yield name, omic.get("omicHeader")
+
+
+def labels_by_omic(job_instance):
+    """omic name -> the user's labels, or None for an omic whose file had no
+    header. Every reader of the job's values goes through this, so the chat,
+    the report and the walk print the same labels and never borrow another
+    omic's."""
+    return {name: shorten_labels(header) for name, header in _omic_headers(job_instance)}
+
+
+def significance_columns(labels):
+    """The indices of the labels that name a p-value or q-value column."""
+    return [i for i, label in enumerate(labels or []) if SIGNIFICANCE_RE.search(str(label))]
+
+
+def value_kinds(headers_by_omic, condition_names=None):
+    """Which omics' values are significance values, from the data alone (like
+    axis_kind, never from a model): a list of {omic, kind, columns, index}, one
+    per omic with at least one p-value or q-value column. ``kind`` is
+    "significance" when every column is one, "mixed" otherwise (a limma table:
+    logFC, AveExpr, t, P.Value, adj.P.Val, B); ``columns`` are those columns'
+    labels as the layer text prints them, ``index`` their positions.
+
+    ``headers_by_omic`` maps an omic to its file's header as stored (ID column
+    first). The whole cells are read, not the shortened labels: a prefix every
+    label shares ("padj_KO", "padj_WT" -> "KO", "WT") can be the very word.
+    An omic with no header borrows the job's condition names only when it is
+    the job's sole omic; with two, they belong to some other file."""
+    out = []
+    for omic, header in headers_by_omic.items():
+        shown = shorten_labels(header)
+        cells = [str(h).strip() for h in header[1:]] if shown else None
+        if cells is None and len(headers_by_omic) == 1 and condition_names:
+            cells = shown = [str(c).strip() for c in condition_names]
+        if not cells:
+            continue
+        index = sorted(set(significance_columns(cells)) | set(significance_columns(shown)))
+        if index:
+            out.append({"omic": omic, "kind": "significance" if len(index) == len(cells) else "mixed",
+                        "columns": [shown[i] for i in index], "index": index})
+    return out
+
+
+def job_value_kinds(job_instance):
+    """value_kinds for a stored job."""
+    try:
+        conditions = list(getattr(job_instance, "conditionNames", None) or [])
+    except TypeError:
+        conditions = []
+    return value_kinds(dict(_omic_headers(job_instance)), conditions)
+
+
+def value_kind_text(value_kind):
+    """The line every agent reads about significance columns; "" when there
+    are none. A mixed omic names its columns, the others are all of it."""
+    parts = [entry["omic"] if entry["kind"] == "significance"
+             else "%s (columns %s)" % (entry["omic"], ", ".join(entry["columns"]))
+             for entry in value_kind or []]
+    return "%s: %s" % ("; ".join(parts), SIGNIFICANCE_NOTE) if parts else ""
+
+
+def relevance_hint(value_kind):
+    """For a job with no relevant feature: one sentence naming a significance
+    column and the Relevant features file it could make; "" without one. An
+    adjusted column is named before a raw one. Job laW30Q7bYU (2026-10-27)
+    uploaded a whole limma table with adj.p.Value in it, no relevant file, and
+    got only the generic refusal."""
+    columns = [c for entry in value_kind or [] for c in entry["columns"]]
+    if not columns:
+        return ""
+    column = next((c for c in columns if ADJUSTED_RE.search(c)), columns[0])
+    return (" Your values include %s: a Relevant features file listing the features with %s below 0.05 "
+            "would give the walk its seeds." % (column, column))
+
+
+def design_text_of(job_instance):
+    """The job's stored design text without the reasoning a model leaked into
+    it. Designs written before every completion went through
+    llm_client.strip_reasoning (#202) can begin "The user asks for a
+    description of the experiment design ... Let's craft.</think>I performed
+    ..." (jobs laW30Q7bYU, u36I21KMxV, 2026-10-27), and the card took that
+    first sentence as the perturbation."""
+    try:
+        text = job_instance.getExperimentDesign() if hasattr(job_instance, "getExperimentDesign") else ""
+    except Exception:                                          # noqa: BLE001
+        text = ""
+    return strip_reasoning(text or "")
 
 
 def axis_kind(labels, design_text=""):
@@ -97,10 +199,7 @@ def job_card(job_instance):
     sentence, the value type if the text names it, the axis, the labels, and
     which omics are unlabeled. No model call; cheap enough for every request."""
     labels = labels_by_omic(job_instance)
-    try:
-        design_text = job_instance.getExperimentDesign() or ""
-    except Exception:                                          # noqa: BLE001
-        design_text = ""
+    design_text = design_text_of(job_instance)
     conditions = []
     try:
         conditions = list(getattr(job_instance, "conditionNames", None) or [])
@@ -110,6 +209,7 @@ def job_card(job_instance):
     card["axis_kind"] = axis_kind(labels, design_text)
     card["labels"] = labels
     card["unlabeled"] = sorted(name for name, l in labels.items() if not l)
+    card["value_kind"] = value_kinds(dict(_omic_headers(job_instance)), conditions)
     return card
 
 
@@ -132,6 +232,8 @@ def card_lines(card):
     if card.get("unlabeled"):
         lines.append("- no timing or order claims on: %s (their columns are unlabeled)"
                      % ", ".join(card["unlabeled"]))
+    if value_kind_text(card.get("value_kind")):
+        lines.append("- value kind: %s" % value_kind_text(card.get("value_kind")))
     return lines
 
 

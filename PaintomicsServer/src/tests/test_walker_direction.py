@@ -124,7 +124,42 @@ class DirectionTest(unittest.TestCase):
         self.assertEqual(hits[0]["row"]["class"], "feedback")
         self.assertEqual(hits[0]["sign"], -1)
         self.assertEqual(direction.panel_hits(self.statement("Foxo1", "x"), walker), [])
-        self.assertEqual(direction.flipped_text("0h +0.10 · 2h −2.00 · 6h −1.50"), "0h −0.10 · 2h +2.00 · 6h +1.50")
+        self.assertEqual(ov_mod.flipped_text("0h +0.10 · 2h −2.00 · 6h −1.50"), "0h −0.10 · 2h +2.00 · 6h +1.50")
+
+    def test_a_p_value_layer_yields_no_direction_and_no_check(self):
+        """Every p-value is positive: read as a sign, each one said "up".
+        Job u36I21KMxV's value column was adj.p.Value (2026-10-27)."""
+        self.assertEqual(direction.data_direction({"values": [0.001, 0.04], "significance": [0, 1]}), 0)
+        self.assertEqual(direction.data_direction({"values": [0.001, -1.5], "significance": [0]}), -1)
+        walker = self.walker_with("g:2", self.feedback["symbol"], [0.001, 0.0004, 0.03])
+        walker.overlay.layers["g:2"][0]["significance"] = [0, 1, 2]
+        self.assertEqual(direction.panel_hits(self.statement(self.feedback["symbol"], "it rose"), walker), [])
+
+        class Objects(object):
+            def complete_json(self, *args, **kwargs):
+                raise AssertionError("a p-value layer reached the direction check")
+        verdicts, objections = direction.direction_check(
+            Objects(), [self.statement(self.feedback["symbol"], "it rose")], walker)
+        self.assertEqual((verdicts, objections), ({}, {}))
+
+    def test_the_fit_prompt_says_which_values_are_p_values(self):
+        walker = self.walker_with("g:2", self.feedback["symbol"], [-0.1, -2.0, -1.5])
+        walker.overlay.value_kind = [{"omic": "Gene expression", "kind": "mixed", "columns": ["2h"], "index": [1]}]
+        walker.overlay.layers["g:2"][0]["significance"] = [1]
+        prompts = []
+
+        class Records(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                return {"claimed": "none", "quote": ""} if "PATHWAY" in messages[-1]["content"] \
+                    else {"consistent": True, "note": ""}
+        direction.direction_check(Records(), [self.statement(self.feedback["symbol"], "it fell")], walker)
+        fits = [p for p in prompts if p.startswith("GENE")]
+        self.assertEqual(len(fits), 2)
+        self.assertTrue(all("VALUE KIND: Gene expression (columns 2h): p-values or q-values" in p for p in fits))
+        # The reversed reading reverses the signed columns only.
+        self.assertIn("0h +0.10", fits[1])
+        self.assertIn("2h −2.00", fits[1])
 
     def test_a_falling_reporter_read_as_derepression_is_objected(self):
         symbol = self.feedback["symbol"]
@@ -194,6 +229,38 @@ class DirectionTest(unittest.TestCase):
         self.assertFalse(gate["pass"])
         self.assertEqual(gate["insensitive"], 1)
         self.assertEqual(gate["dropped"], 1)
+
+    def test_a_regulator_the_user_flagged_not_relevant_has_no_direction(self):
+        """Job 7O521E0Y0y (2026-10-28): RB1 at -0.45 and MDM2 at +0.45, both not
+        relevant, dropped 4 of the walk's 5 dropped statements -- one of them
+        for saying MDM2 was unchanged, which reads the same reversed."""
+        class Refuses(StubClient):
+            def complete_json(self, *args, **kwargs):
+                raise AssertionError("a call was made about a regulator the user called unchanged")
+        for symbol in (self.feedback["symbol"], self.inhibitor["symbol"]):
+            walker = self.walker_with("g:2", symbol, [-0.1, -0.45, -0.08])
+            walker.overlay.layers["g:2"][0]["relevant"] = False
+            for prose in ("%s is essentially unchanged (−0.08, not relevant)" % symbol,
+                          "%s fell, so the pathway is up" % symbol):
+                stmt = self.statement(symbol, prose)
+                self.assertEqual(direction.panel_hits(stmt, walker), [])
+                verdicts, objections = direction.direction_check(Refuses("up"), [stmt], walker)
+                self.assertEqual((verdicts, objections), ({}, {}))
+                self.assertTrue(direction.gate(verdicts, 0)["not_applicable"])
+
+    def test_a_relevant_layer_is_checked_even_beside_one_that_is_not(self):
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        relevant = walker.overlay.layers["g:2"][0]
+        flat = dict(relevant, omic="Proteomics", relevant=False, values=[0.9, 0.8, 0.7])
+        flat["text"] = ov_mod.values_text(flat["values"], ["0h", "2h", "6h"])
+        walker.overlay.layers["g:2"].insert(0, flat)
+        stmt = dict(self.statement(symbol, "%s fell, derepressing the pathway" % symbol),
+                    cites=[[symbol, "Proteomics"], [symbol, "Gene expression"]])
+        hits = direction.panel_hits(stmt, walker)
+        self.assertEqual([(h["layer"]["omic"], h["sign"]) for h in hits], [("Gene expression", -1)])
+        verdicts, objections = direction.direction_check(StubClient("up"), [stmt], walker)
+        self.assertIn("reports the pathway down, not up", objections[1][0])
 
     def test_no_panel_gene_means_not_applicable(self):
         walker = self.walker_with("g:2", "Bbb", [-0.1, -2.0, -1.5])

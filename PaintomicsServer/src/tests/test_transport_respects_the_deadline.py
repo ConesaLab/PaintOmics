@@ -88,9 +88,8 @@ def test_the_shim_stops_retrying_when_the_run_is_due():
     httpx = A._transport
 
     A._sdk_configured = False
-    A.configure_sdk()
-    client = A._CLIENT
-    assert client is not None, "configure_sdk no longer exposes its client"
+    client = A._build_client()
+    assert client is not None, "_build_client no longer returns its client"
     completions = client.chat.completions
     original = completions._pa_orig_create
     attempts = {"n": 0}
@@ -138,7 +137,7 @@ def test_a_cancellation_is_never_retried():
     re-raise, 'the run is over' becomes 'sleep, then try again'."""
     import inspect
     from src.classes.AIInterpret import agent as A
-    source = inspect.getsource(A.configure_sdk)
+    source = inspect.getsource(A._build_client)
     assert "except asyncio.CancelledError:" in source, (
         "no explicit cancellation clause in the retry shim")
     assert source.index("except asyncio.CancelledError:") < \

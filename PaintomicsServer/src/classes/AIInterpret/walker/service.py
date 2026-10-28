@@ -342,7 +342,7 @@ def design_card(job, labels, policy, client=None, override=None, aliases=None):
         conditions = list(job.conditionNames or [])
     except (AttributeError, TypeError):
         pass
-    design_text = job.getExperimentDesign() if hasattr(job, "getExperimentDesign") else ""
+    design_text = card_mod.design_text_of(job)
     if override:
         card = card_mod.deterministic_card(design_text, conditions, labels, aliases)
         card.update(override)
@@ -356,19 +356,27 @@ def design_card(job, labels, policy, client=None, override=None, aliases=None):
     # The omics whose file carried no header: the walker may make no timing
     # claim on them until the user confirms the columns.
     card["unlabeled"] = sorted(name for name, l in labels.items() if l is None)
+    # The omics whose values are p-values or q-values, read from the column
+    # headers: they carry no direction (walk_card_text says so to every agent).
+    card["value_kind"] = card_mod.job_value_kinds(job)
     card["organism"] = card_mod.organism_word(job.getOrganism())
     return card
 
 
 def walk_card_text(card):
-    """The card as the walker, the Writer and the Narrator read it, with what the
-    axis allows: trajectories only on an ordered axis."""
+    """The card as the walker, the Writer, the checks and the Narrator read it,
+    with what the axis allows (trajectories only on an ordered axis) and, when
+    some values are p-values or q-values, that they carry no direction."""
     kind = card.get("axis_kind", "groups")
     allowed = {"time": "time points in order; timing words are allowed",
                "ordered": "ordered values (doses or concentrations); say higher or lower, not earlier or later",
                "groups": "conditions with no order; compare them by name, never as a trajectory",
                "unlabeled": "no labels; make no timing or order claim"}[kind]
-    return card_mod.card_text(card) + "\n%-13s %s" % ("axis kind", allowed)
+    text = card_mod.card_text(card) + "\n%-13s %s" % ("axis kind", allowed)
+    significance = card_mod.value_kind_text(card.get("value_kind"))
+    if significance:
+        text += "\n%-13s %s" % ("value kind", significance)
+    return text
 
 
 def _pct(stage, walker=None):
@@ -433,15 +441,17 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     # whose data could never seed (2026-10: 22 of 28 failed walks).
     if tag != "network" and not ov.K:
         raise WalkError("No feature of this job in pathway %s is %s, so a walk of it has no seed. Walk the "
-                        "network, or a pathway that holds relevant features."
-                        % (tag.split(":", 1)[-1], "marked relevant" if ov.N else "measured"))
+                        "network, or a pathway that holds relevant features.%s"
+                        % (tag.split(":", 1)[-1], "marked relevant" if ov.N else "measured",
+                           card_mod.relevance_hint(card.get("value_kind")) if ov.N else ""))
     if not ov.N:
         raise WalkError("None of this job's features is on the organism's graph, so the walk has nowhere to "
                         "start: their identifiers did not map onto its genes or compounds.")
     if not ov.K:
         raise WalkError("None of the %d features of this job on the graph is marked relevant, so the walk has "
                         "no seed. In Step 1, mark relevant features (a Relevant features file per omic) whose "
-                        "identifiers map onto the organism's genes or compounds, and run the job again." % ov.N)
+                        "identifiers map onto the organism's genes or compounds, and run the job again.%s"
+                        % (ov.N, card_mod.relevance_hint(card.get("value_kind"))))
     params = params_for("network" if tag == "network" else "pathway")
     # A seed is also a relevant node with a measured neighbour that is neither a
     # hub nor a currency metabolite. Without one the planner, made to call a

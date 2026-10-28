@@ -41,6 +41,8 @@ from src.tests.test_walk_service_and_routes import FakeQueue, FakeWalkDAO   # no
 class _Handler(BaseHTTPRequestHandler):
     bodies = []
     answer = "Stub answer about the walk."
+    # Answers given one per request, in order, before `answer` takes over.
+    answers = []
 
     def log_message(self, *args):
         pass
@@ -50,7 +52,8 @@ class _Handler(BaseHTTPRequestHandler):
         _Handler.bodies.append(json.loads(self.rfile.read(length) or b"{}"))
         body = json.dumps({
             "choices": [{"index": 0, "finish_reason": "stop",
-                         "message": {"role": "assistant", "content": _Handler.answer}}],
+                         "message": {"role": "assistant",
+                                     "content": _Handler.answers.pop(0) if _Handler.answers else _Handler.answer}}],
         }).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -124,6 +127,7 @@ class _RouteCase(unittest.TestCase):
         FakeWalkDAO.store, FakeChatDAO.conversations, FakeChatDAO.cleared = {}, {}, []
         _Handler.bodies = []
         _Handler.answer = "Stub answer about the walk."
+        _Handler.answers = []
         self.consent = True
         test = self
         job = fx.make_job()
@@ -160,6 +164,69 @@ class _RouteCase(unittest.TestCase):
         # calls jsonify(), which needs a Flask application context.
         from src.paintomicsserver import Response
         return Response()
+
+
+class ExpDesignDraftTest(_RouteCase):
+    """Step 1's drafted experiment design is a description or nothing.
+
+    Probed on the production gateway on 2026-10-28 with the 300-token free-text
+    request: 4 of 8 drafts were the model's reasoning ("The user asks for a
+    description of the experiment design ..."), 3 stopped mid-sentence, and two
+    stored jobs carry such text as their design."""
+
+    CLEAN = "I compared Ikaros-induced cells with controls at 0 h and 24 h, in triplicate."
+
+    def draft(self):
+        form = {"aiConsent": "true", "organism": "mmu",
+                "omics": json.dumps([{"omicName": "Gene expression",
+                                      "columns": ["Ctr_0H", "Ctr_24H", "Ik_0H", "Ik_24H"]}])}
+        return self.servlet.aiGenerateExpDesign(_Request(form, {"userID": "u1"}), self._response()).content
+
+    def test_a_clean_json_reply_is_the_suggestion_asked_for_once(self):
+        _Handler.answers = [json.dumps({"description": self.CLEAN})]
+        out = self.draft()
+        self.assertTrue(out["success"])
+        self.assertEqual(out["suggestion"], self.CLEAN)
+        self.assertEqual(out["columnsSent"][0]["columns"], ["Ctr_0H", "Ctr_24H", "Ik_0H", "Ik_24H"])
+        self.assertEqual(out["columnsDropped"], 0)
+        self.assertEqual(len(_Handler.bodies), 1)
+        body = _Handler.bodies[0]
+        self.assertEqual(body["response_format"]["type"], "json_schema")
+        self.assertEqual(body["response_format"]["json_schema"]["schema"]["required"], ["description"])
+        self.assertGreaterEqual(body["max_tokens"], 800, "a cap the reasoning preamble can eat")
+
+    def test_reasoning_twice_is_a_plain_refusal_never_the_suggestion(self):
+        reasoning = ("The user asks for a description of the experiment design based on the column headers. "
+                     "The headers are: Ctr_0H, Ctr_24H, Ik_0H, Ik_24H. I need to write 2-3 sentences")
+        _Handler.answers = [reasoning, json.dumps({"description": "We need to describe a two-arm design."})]
+        out = self.draft()
+        self.assertFalse(out["success"])
+        self.assertEqual(out["suggestion"], "")
+        self.assertIn("could not draft a description", out["message"])
+        self.assertIn("columnsSent", out)
+        self.assertEqual(len(_Handler.bodies), 2, "asked once again, then gave up")
+
+    def test_a_truncated_reply_is_asked_again(self):
+        _Handler.answers = [json.dumps({"description": "I compared a control group (Ctr"}),
+                            json.dumps({"description": self.CLEAN})]
+        out = self.draft()
+        self.assertTrue(out["success"])
+        self.assertEqual(out["suggestion"], self.CLEAN)
+        self.assertEqual(len(_Handler.bodies), 2)
+
+    def test_reasoning_closed_before_the_answer_still_gives_the_answer(self):
+        _Handler.answers = ["Let me read the headers.</think>" + json.dumps({"description": self.CLEAN})]
+        self.assertEqual(self.draft()["suggestion"], self.CLEAN)
+
+    def test_an_endpoint_without_schema_support_answers_in_prose(self):
+        from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
+        self.assertEqual(_usableDescription(_descriptionFromText(self.CLEAN)), self.CLEAN)
+        fenced = "```json\n%s\n```" % json.dumps({"description": self.CLEAN})
+        self.assertEqual(_usableDescription(_descriptionFromText(fenced)), self.CLEAN)
+        for bad in ("Okay, so the headers are", "First, list the groups.", "We should say two groups.", ""):
+            self.assertIsNone(_usableDescription({"description": bad}), bad)
+        self.assertEqual(_usableDescription({"description": "We have two groups, sampled at 0 h and 24 h."}),
+                         "We have two groups, sampled at 0 h and 24 h.")
 
 
 class InitiateTest(_RouteCase):

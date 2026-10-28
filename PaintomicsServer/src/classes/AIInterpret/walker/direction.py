@@ -14,14 +14,28 @@ with the regulator's values reversed -- the counter-hypothesis. A claim that
 contradicts the implied direction is sent back once and then dropped; a
 statement that fits the values and their opposite alike is flagged as saying
 nothing about the data.
+
+Only a regulator the user flagged relevant has a data direction. The walk's
+one piece of arithmetic on the user's values is their relevance flag
+(overlay.py); the sign of a value the user called unchanged is noise, and read
+as a direction it sent good statements back. Job 7O521E0Y0y (hsa05219,
+2026-10-28) lost 4 of its 5 dropped statements that way: "reads the same with
+RB1's values reversed" (RB1 logFC -0.45, not relevant) twice, "RB1 ... its fall
+reports the pathway up, not down" on a statement that only said TP53 and RB1
+are down, "MDM2 ... its fall reports the pathway down" (MDM2 +0.45, not
+relevant); an earlier walk dropped "MDM2 is essentially unchanged (-0.08, not
+relevant)" as reading the same reversed -- which a gene called flat always
+does. A regulator whose cited layers are all not relevant is skipped like one
+with no sign: no call is made about it and nothing is objected to.
 """
 from __future__ import annotations
 
 import logging
-import re
 import time
 
 from src.classes.AIInterpret import llm_client
+from src.classes.AIInterpret.walker import card as card_mod
+from src.classes.AIInterpret.walker import overlay as ov_mod
 from src.classes.AIInterpret.walker import regulators
 from src.classes.AIInterpret.walker import verify
 
@@ -62,19 +76,14 @@ class OutOfTime(Exception):
     """A direction call was not made, or gave up, because the stage's
     deadline had no time left for it."""
 
-_SIGN_RE = re.compile(r"(?<=\s)([+−-])(?=\d)")
-
 
 def data_direction(layer):
-    """+1, -1 or 0: the sign of the largest-magnitude value of a layer."""
+    """+1, -1 or 0: the sign of the largest-magnitude value of a layer. A
+    p-value or q-value column gives none (overlay.signed_values): every one is
+    positive, and job u36I21KMxV's adj.p.Value layer would have read "up" on
+    every gene. A layer of nothing else is 0, so no regulator check runs on it."""
     best = 0.0
-    for value in layer.get("values") or []:
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            continue
-        if number != number:
-            continue
+    for number in ov_mod.signed_values(layer):
         if abs(number) > abs(best):
             best = number
     return 1 if best > 0 else (-1 if best < 0 else 0)
@@ -82,7 +91,8 @@ def data_direction(layer):
 
 def panel_hits(stmt, walker):
     """The regulators of the panel among a statement's cites: one hit per gene,
-    with the cited layer (a relevant one when the statement cites several)."""
+    with its first cited layer the user flagged relevant. A gene whose cited
+    layers are all not relevant is no hit (see the module docstring)."""
     hits = {}
     for cite in stmt.get("cites") or []:
         if not isinstance(cite, (list, tuple)) or len(cite) != 2:
@@ -99,21 +109,21 @@ def panel_hits(stmt, walker):
                 row = regulators.panel_row(layer.get("member"))
         if row is None:
             continue
-        layer = next((l for l in layers if l.get("relevant")), layers[0])
+        layer = next((l for l in layers if l.get("relevant")), None)
+        if layer is None or node_id in hits:
+            continue
         sign = data_direction(layer)
         if sign == 0:
             continue
-        current = hits.get(node_id)
-        if current is None or (layer.get("relevant") and not current["layer"].get("relevant")):
-            hits[node_id] = {"node": node_id, "gene": walker.label(node_id), "row": row, "layer": layer, "sign": sign}
+        hits[node_id] = {"node": node_id, "gene": walker.label(node_id), "row": row, "layer": layer, "sign": sign}
     return list(hits.values())
 
 
-def flipped_text(layer_text):
-    """The layer text with every value's sign reversed."""
-    def flip(match):
-        return "−" if match.group(1) == "+" else "+"
-    return _SIGN_RE.sub(flip, str(layer_text or ""))
+def _value_kind_of(overlay, node_id):
+    """card.value_kind_text for the omics of a node's layers that hold
+    p-values or q-values; "" when none does."""
+    omics = {layer["omic"] for layer in overlay.layers.get(node_id, [])}
+    return card_mod.value_kind_text([e for e in getattr(overlay, "value_kind", None) or [] if e["omic"] in omics])
 
 
 def _statement_text(stmt):
@@ -151,11 +161,14 @@ def claimed_direction(client, stmt, hit, temperature=TEMPERATURE, budget_seconds
     return {"claimed": out["claimed"], "quote": str(out.get("quote") or "")[:200]}
 
 
-def fits_values(client, stmt, hit, layer_text, temperature=TEMPERATURE, budget_seconds=None):
+def fits_values(client, stmt, hit, layer_text, temperature=TEMPERATURE, budget_seconds=None, value_kind=""):
     """{consistent: bool, note}; None when the call fails. Raises OutOfTime
-    when the call gave up on `budget_seconds`."""
-    prompt = ("GENE: %s, %s\nVALUES OF %s (%s; the user's column labels):\n%s\n\nSTATEMENT\n%s" % (
-        hit["gene"], _role(hit["row"]), hit["gene"], hit["layer"]["omic"], layer_text, _statement_text(stmt)))
+    when the call gave up on `budget_seconds`. ``value_kind``: the card's line
+    on the p-value or q-value layers among these values (card.value_kind_text),
+    which this prompt, carrying no design card, would otherwise read as signed."""
+    prompt = ("GENE: %s, %s\nVALUES OF %s (%s; the user's column labels):\n%s\n%s\nSTATEMENT\n%s" % (
+        hit["gene"], _role(hit["row"]), hit["gene"], hit["layer"]["omic"], layer_text,
+        ("VALUE KIND: %s\n" % value_kind) if value_kind else "", _statement_text(stmt)))
     try:
         out = client.complete_json([{"role": "system", "content": FIT_BRIEF}, {"role": "user", "content": prompt}],
                                    "direction_fit", FIT_SCHEMA, lambda text: None, max_tokens=200,
@@ -208,10 +221,12 @@ def direction_check(client, statements, walker, deadline=None):
                        "fits": None, "fits_flipped": None, "consistent": True, "insensitive": False}
             claim = fit = flipped = None
             text = walker.overlay.layer_text(hit["node"])
+            kinds = _value_kind_of(walker.overlay, hit["node"])
             try:
                 claim = claimed_direction(client, stmt, hit, budget_seconds=budget())
-                fit = fits_values(client, stmt, hit, text, budget_seconds=budget())
-                flipped = fits_values(client, stmt, hit, flipped_text(text), budget_seconds=budget())
+                fit = fits_values(client, stmt, hit, text, budget_seconds=budget(), value_kind=kinds)
+                flipped = fits_values(client, stmt, hit, walker.overlay.layer_text(hit["node"], flip=True),
+                                      budget_seconds=budget(), value_kind=kinds)
                 if claim is None or fit is None or flipped is None:
                     verdict["unchecked"] = UNCHECKED_NO_ANSWER
             except OutOfTime:

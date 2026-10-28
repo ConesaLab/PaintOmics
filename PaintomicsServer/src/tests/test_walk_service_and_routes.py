@@ -200,6 +200,49 @@ class ServiceTest(unittest.TestCase):
             service.run(lone, "J3", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
         self.assertIn("measured neighbour", str(raised.exception))
 
+    def test_a_job_with_p_values_and_no_relevant_feature_is_told_how_to_seed(self):
+        """Job laW30Q7bYU (2026-10-27): a raw limma table, adj.p.Value in it,
+        no Relevant features file, and only the generic refusal."""
+        job = _job_with_id()
+        job._headers["Gene expression"] = ["#geneID", "logFC", "p.Value", "adj.p.Value"]
+        for feature in job.getInputGenesData().values():
+            for omic in feature.getOmicsValues():
+                omic._rel = False
+        for scope in ("network", "pathway:tst00001"):
+            with self.assertRaises(service.WalkError) as raised:
+                service.run(job, "J1", scope, policy="greedy", data_dir=self.data_dir, use_mongo=False)
+            self.assertIn("Your values include adj.p.Value: a Relevant features file listing the features with "
+                          "adj.p.Value below 0.05 would give the walk its seeds.", str(raised.exception))
+
+    def test_the_card_says_p_values_carry_no_direction_even_when_the_user_edits_it(self):
+        job = _job_with_id()
+        job._headers["Gene expression"] = ["#geneID", "adj.p.Value_0h", "adj.p.Value_2h", "adj.p.Value_6h"]
+        labels = service.card_mod.labels_by_omic(job)
+        for override in (None, {"perturbation": "the user's own words", "value": "fold change"}):
+            card = service.design_card(job, labels, "greedy", override=override)
+            self.assertEqual([e["omic"] for e in card["value_kind"]], ["Gene expression"])
+            self.assertEqual(card["value_kind"][0]["kind"], "significance")
+            text = service.walk_card_text(card)
+            self.assertIn("\nvalue kind    Gene expression: p-values or q-values (0 to 1)", text)
+            self.assertIn("a value near 0 is the strongest difference, not the absence of one", text)
+        self.assertNotIn("value kind", service.walk_card_text(service.design_card(_job_with_id(), labels, "greedy")))
+
+    def test_the_card_reads_a_design_without_its_leaked_reasoning(self):
+        job = _job_with_id()
+        job.getExperimentDesign = lambda: ("The user asks for a description. Let's craft.</think>Livers of "
+                                           "treated mice against controls. Values are adjusted p-values.")
+        card = service.design_card(job, service.card_mod.labels_by_omic(job), "greedy")
+        self.assertEqual(card["perturbation"], "Livers of treated mice against controls.")
+
+        class Card(object):
+            def complete_json(self, messages, *args, **kwargs):
+                seen.append(messages[-1]["content"])
+                return None
+        seen = []
+        service.design_card(job, service.card_mod.labels_by_omic(job), "model", client=Card())
+        self.assertNotIn("Let's craft", seen[0])
+        self.assertIn("Livers of treated mice", seen[0])
+
     def test_a_gateway_that_fails_is_an_error_the_user_can_retry(self):
         """A model loop that died on the transport is not a walk that found
         nothing: stored as done it was final, with no Retry and chat on an

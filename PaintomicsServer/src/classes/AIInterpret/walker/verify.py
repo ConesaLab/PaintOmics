@@ -7,12 +7,18 @@ or it does not, a number is in the record verbatim or it is not.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 
 # A quoted value is a decimal: signed as the layer text prints it (+2.13, −0.35),
 # or unsigned when a sentence gives a magnitude ("fell by 3.24"), which must be
 # the record's value with either sign. "18-24h" is a range, not a value, and a
 # number after ±, < or > (±0.6, |value| > 1.00) is a bound, not a reading.
-NUMBER_RE = re.compile(r"(?<![\w.±<>≤≥|])[+\-−]?\d+\.\d+")
+# A small value is printed in scientific form (overlay.value_text: +3.2e-05),
+# and a model quoting it back may write 3.2e-05, 3.2e-5, 3.2E-05, 3.2 × 10⁻⁵
+# or 3.2x10^-5: all are one value. Only a negative exponent makes one -- the
+# record prints nothing else that way, and "2 x 10^3 cells" stays what it was.
+_EXPONENT = r"(?:[eE][\-−]\d+|\s?[×x]\s?10(?:\^[\-−]\d+|⁻[⁰¹²³⁴⁵⁶⁷⁸⁹]+))"
+NUMBER_RE = re.compile(r"(?<![\w.±<>≤≥|])[+\-−]?(?:\d+\.\d+%s?|\d+%s)" % (_EXPONENT, _EXPONENT))
 BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 
 
@@ -822,8 +828,31 @@ def _record_numbers(walker):
     return tokens
 
 
+_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")
+_PARTS_RE = re.compile(r"^([+\-−]?)(\d+(?:\.\d+)?)(?:[eE]|[×x]10\^?)?([\-−]\d+)?$")
+# Below this a value is compared in scientific form, however it was written.
+_SMALL = Decimal("0.01")
+
+
 def _norm(token):
-    return token.replace(" ", "").replace("-", "−").replace("+", "+")
+    """One spelling per value: spaces out, a minus as "−", and a small value
+    (a written exponent, or a magnitude under 0.01) in one scientific form,
+    "+3.2e-05", "3.2×10⁻⁵" and "0.000032" all becoming "3.2e-5" with the sign
+    they were written with. Values of 0.01 and over, and an exact 0, compare
+    as written, as they always have."""
+    token = token.replace(" ", "").translate(_SUPERSCRIPTS)
+    match = _PARTS_RE.match(token)
+    if match:
+        sign, mantissa, exponent = match.groups()
+        try:
+            value = Decimal(mantissa)
+            if exponent:
+                value = value.scaleb(int(exponent.replace("−", "-")))
+        except (InvalidOperation, ValueError):
+            value = None
+        if value is not None and (exponent or 0 < value < _SMALL):
+            return {"": "", "+": "+"}.get(sign, "−") + format(value.normalize(), "e")
+    return token.replace("-", "−")
 
 
 def _in_record(token, numbers):

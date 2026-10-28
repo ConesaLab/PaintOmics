@@ -24,8 +24,8 @@ The tests below pin the fixed contract:
 
   * ``_stream_to_completion`` folds a chunk stream (content, tool calls, usage)
     into a ``ChatCompletion`` the SDK can consume unchanged.
-  * ``configure_sdk`` hands the SDK a client with ``max_retries=0`` and a
-    finite timeout, and its ``create`` shim streams by default and passes a
+  * ``_build_client`` (the client each event loop's model is bound to) has
+    ``max_retries=0`` and a finite timeout, and its ``create`` shim streams by default and passes a
     caller's ``stream=True`` straight through.
 
 Usage:
@@ -180,16 +180,14 @@ class ClientConfigurationTest(unittest.TestCase):
     def setUp(self):
         import src.classes.AIInterpret.agent as agent
         self.agent = agent
-        self._saved = (agent._sdk_configured, agent._MODEL_OBJ)
+        self._saved = agent._sdk_configured
         agent._sdk_configured = False
-        agent._MODEL_OBJ = None
 
     def tearDown(self):
-        self.agent._sdk_configured, self.agent._MODEL_OBJ = self._saved
+        self.agent._sdk_configured = self._saved
 
     def test_client_owns_no_retries_and_has_a_finite_timeout(self):
-        self.agent.configure_sdk()
-        client = self.agent._MODEL_OBJ._client
+        client = self.agent._build_client()
         self.assertEqual(client.max_retries, 0,
                          "the shim is the only retry policy; stacked retries "
                          "made one 408 cost twelve eight-minute attempts")
@@ -200,8 +198,7 @@ class ClientConfigurationTest(unittest.TestCase):
         self.assertLess(float(read), 600.0)
 
     def test_create_streams_by_default_and_passes_stream_true_through(self):
-        self.agent.configure_sdk()
-        client = self.agent._MODEL_OBJ._client
+        client = self.agent._build_client()
         calls = []
 
         async def fake_orig(*args, **kwargs):
@@ -227,6 +224,125 @@ class ClientConfigurationTest(unittest.TestCase):
         self.assertEqual(raw, "raw-stream")
 
 
+class ClientPerEventLoopTest(unittest.TestCase):
+    """Every event loop gets a client of its own.
+
+    paintomics.org, 26-27 Oct 2026: one process-wide AsyncOpenAI client served
+    every walk, each walk ran in an event loop of its own, and httpx binds a
+    pooled connection to the loop that opened it. When one walk finished and
+    closed its loop, the next walk to reuse that connection died with
+    "RuntimeError: Event loop is closed" (three times; job vRmKBo4E60 stored
+    "The AI service failed before the walk took a step").
+    """
+
+    def setUp(self):
+        import src.classes.AIInterpret.agent as agent
+        self.agent = agent
+
+    async def _grab(self):
+        model = self.agent._model()
+        # The same loop asking again gets the same object, not a new pool.
+        self.assertIs(self.agent._model(), model)
+        return model
+
+    def test_a_loop_closed_before_the_next_starts_does_not_share_its_client(self):
+        first = asyncio.new_event_loop()
+        try:
+            one = first.run_until_complete(self._grab())
+        finally:
+            first.close()
+        second = asyncio.new_event_loop()
+        try:
+            two = second.run_until_complete(self._grab())
+        finally:
+            second.close()
+        self.assertIsNot(one, two)
+        self.assertIsNot(one._client, two._client,
+                         "a closed loop's client was handed to the next loop")
+
+    def test_two_loops_running_at_once_on_two_threads_get_two_clients(self):
+        import threading
+        both_running = threading.Barrier(2, timeout=10)
+        seen = {}
+
+        def walk(name):
+            async def go():
+                model = self.agent._model()
+                both_running.wait()          # the two loops overlap here
+                return model
+            loop = asyncio.new_event_loop()
+            try:
+                seen[name] = loop.run_until_complete(go())
+            finally:
+                loop.close()
+
+        threads = [threading.Thread(target=walk, args=(n,)) for n in ("a", "b")]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(15)
+        self.assertEqual(set(seen), {"a", "b"})
+        self.assertIsNot(seen["a"]._client, seen["b"]._client)
+
+    def test_a_released_loop_closes_its_client_and_never_returns_it(self):
+        released = {}
+
+        async def use_then_release():
+            model = self.agent._model()
+            await self.agent.release_loop_client()
+            released["client"] = model._client
+            # Asked again in the same loop after the release: a new one.
+            return self.agent._model()
+
+        loop = asyncio.new_event_loop()
+        try:
+            again = loop.run_until_complete(use_then_release())
+            loop.run_until_complete(self.agent.release_loop_client())
+        finally:
+            loop.close()
+        self.assertTrue(released["client"].is_closed(),
+                        "the client was not closed inside its own loop")
+        self.assertIsNot(again._client, released["client"])
+
+    def test_a_loop_that_is_gone_takes_its_entry_with_it(self):
+        import gc
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(self._grab())
+        finally:
+            loop.close()
+        self.assertIn(loop, self.agent._LOOP_MODELS)
+        del loop
+        gc.collect()
+        self.assertEqual(len([k for k in self.agent._LOOP_MODELS.keys()
+                              if k.is_closed()]), 0,
+                         "a closed loop's client is still cached")
+
+    def test_two_clients_are_two_pools(self):
+        # Pacing is not theirs to hold: test_one_rate_budget_per_gateway shows
+        # every client, and LLMClient, waiting on the one pacer per gateway.
+        a, b = self.agent._build_client(), self.agent._build_client()
+        self.assertIsNot(a, b)
+
+    def test_no_agent_relies_on_the_sdk_default_client(self):
+        """set_default_openai_client is process-global in the SDK; a default
+        bound to one loop would be the shared client all over again."""
+        import inspect
+        source = inspect.getsource(self.agent)
+        self.assertNotIn("set_default_openai_client(", source)
+
+    def test_run_pipeline_releases_the_client_before_closing_its_loop(self):
+        from src.classes.AIInterpret.walker import parallel
+        made = {}
+
+        async def walk():
+            made["model"] = self.agent._model()
+            return "done"
+
+        self.assertEqual(parallel.run_pipeline(walk()), "done")
+        self.assertTrue(made["model"]._client.is_closed())
+
+
 class RateLimitRetryTest(unittest.TestCase):
     """429 gets a patient policy of its own.
 
@@ -242,11 +358,9 @@ class RateLimitRetryTest(unittest.TestCase):
     def setUp(self):
         import src.classes.AIInterpret.agent as agent
         self.agent = agent
-        self._saved = (agent._sdk_configured, agent._MODEL_OBJ)
+        self._saved = agent._sdk_configured
         agent._sdk_configured = False
-        agent._MODEL_OBJ = None
-        agent.configure_sdk()
-        self.client = agent._MODEL_OBJ._client
+        self.client = agent._build_client()
         self.sleeps = []
         self._real_sleep = asyncio.sleep
 
@@ -256,7 +370,7 @@ class RateLimitRetryTest(unittest.TestCase):
 
     def tearDown(self):
         self.agent.asyncio.sleep = self._real_sleep
-        self.agent._sdk_configured, self.agent._MODEL_OBJ = self._saved
+        self.agent._sdk_configured = self._saved
 
     def _rate_limited(self, times, retry_after=None):
         import openai, httpx
