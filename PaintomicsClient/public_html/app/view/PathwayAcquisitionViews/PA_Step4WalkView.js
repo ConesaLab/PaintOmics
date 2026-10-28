@@ -338,10 +338,15 @@ function paWalkGatesNode(view) {
 		var chip = paWalkEl("span", "pa-walk-gate is-" + state, label);
 		chip.title = paWalkGateTitle(name, gate, state);
 		row.appendChild(chip);
-		if (state === "fail" || state === "untested") { failed.push(label + ": " + String(gate.why || "failed")); }
+		if (state === "fail" || state === "untested") {
+			failed.push({state: state, text: label + ": " + String(gate.why || "failed")});
+		}
 	});
 	box.appendChild(row);
-	failed.forEach(function (line) { box.appendChild(paWalkEl("p", "pa-walk-gate-why", line)); });
+	// An untested check's line wears the amber of its "?" chip, not a failure's red.
+	failed.forEach(function (line) {
+		box.appendChild(paWalkEl("p", "pa-walk-gate-why" + (line.state === "untested" ? " is-untested" : ""), line.text));
+	});
 	return box;
 }
 

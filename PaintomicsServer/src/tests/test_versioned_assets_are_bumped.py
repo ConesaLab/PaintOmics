@@ -257,8 +257,11 @@ PUBLISHED = {
     # paWalkAppendText) and draws an untestable artifact check as its own chip.
     # It ships with graph-walk.css v=1.3 and dark.css v=1.46, where
     # .pa-walk-warning, .pa-walk-gate.is-untested and the caution tokens live.
+    # Still unreleased when the untested check's reason line took the chip's
+    # amber (.pa-walk-gate-why.is-untested, also in graph-walk.css v=1.3), so
+    # the marker stayed at 1.6 and only the digest moved.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.6", "67001093c2c9cc674f7e79a40e39e4fbf76420d489f4e2020eb5fc89beffb779"),
+        "1.6", "caf246a0a2e37efbce8832c801dbef8c7fbb602e853bee0c6618c5be9f695916"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

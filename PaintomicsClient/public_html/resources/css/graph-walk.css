@@ -218,6 +218,11 @@
 	font-size: 12px;
 	color: var(--pa-walk-fail-ink);
 }
+/* An untested check is not a failure: its reason takes the "?" chip's amber.
+   dark.css lifts the caution ink, so the line needs no rule of its own there. */
+.pa-walk-gate-why.is-untested {
+	color: var(--pa-walk-caution-ink);
+}
 
 /* What stands in for the Results when the gates held the text back: a note,
    the button that shows it anyway, and once pressed a warning above it. */

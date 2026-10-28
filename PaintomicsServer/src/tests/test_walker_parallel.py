@@ -1221,6 +1221,11 @@ class ResultsNoteWiringTest(unittest.TestCase):
         # An untestable check is its own chip state and counts as not cleared.
         self.assertIn('return gate.untestable === true ? "untested" : "fail";', walk)
         self.assertEqual(walk.count('state === "fail" || state === "untested"'), 2)
+        # ...and its reason line wears the chip's amber, not a failure's red.
+        self.assertIn('"pa-walk-gate-why" + (line.state === "untested" ? " is-untested" : "")', walk)
+        with open(os.path.join(self.VIEWS, "../../../resources/css/graph-walk.css"), encoding="utf-8") as handle:
+            self.assertRegex(handle.read(),
+                             r"\.pa-walk-gate-why\.is-untested \{\s*color: var\(--pa-walk-caution-ink\);")
         for source in (walk, panel):
             self.assertNotRegex(source, r"\b(alert|confirm|prompt)\(", "a modal dialog blocks the page")
 
