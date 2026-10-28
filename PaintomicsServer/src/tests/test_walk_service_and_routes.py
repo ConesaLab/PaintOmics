@@ -300,6 +300,33 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("LEGS:", text)
         self.assertIn("Test pathway one", text)
 
+    def test_the_chat_reads_a_held_back_walk_as_hidden_by_default(self):
+        # The page opens a held-back interpretation on a click, under a
+        # warning: the chat must read its Results, labelled with the checks
+        # it did not clear, and must not tell the user they cannot see them.
+        def stored(gates, rendered):
+            view = {"checks": {"gates": gates, "rendered": rendered, "anchor": None},
+                    "results": {"summary": "Foxo1 rises.", "paragraphs": [{"text": "Foxo1 rises with Pten [e1]."}]},
+                    "statements": [{"n": 1, "claim": "Foxo1 rises.", "legs": [1]}], "papers": {}, "chain": []}
+            return service.stored_walk_text({"status": "done", "viewJSON": json.dumps(view)})
+
+        passed = {name: {"pass": True} for name in service.GATES}
+        held = dict(passed, artifact={"pass": False, "untestable": True, "why": "could not be tested"},
+                    anchor={"pass": False, "why": "far from the anchor"})
+        text = stored(held, False)
+        self.assertIn("FAILED artifact (could not be tested on this data), anchor -- the Results and statements "
+                      "are hidden from the user by default; the user can open them under a warning", text)
+        self.assertIn("RESULTS (did not clear the checks: artifact (could not be tested on this data), anchor): "
+                      "Foxo1 rises.", text)
+        self.assertIn("- Foxo1 rises with Pten [e1].", text)
+        self.assertIn("STATEMENT 1: Foxo1 rises.", text)
+        self.assertNotIn("not shown to the user", text)
+        self.assertNotIn("RESULTS (checked)", text)
+        text = stored(passed, True)
+        self.assertIn("CHECKS: all five passed", text)
+        self.assertIn("RESULTS (checked): Foxo1 rises.", text)
+        self.assertNotIn("did not clear", text)
+
 
 class ReactomeExpansionTest(unittest.TestCase):
     def setUp(self):

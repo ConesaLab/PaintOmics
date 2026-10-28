@@ -418,7 +418,9 @@ def artifact_gate(walker):
     gate["currency_legs"] = currency
     if currency:
         gate["pass"] = False
-        gate["why"] = ("; " if gate["why"] else "") + "%d leg(s) run through a currency metabolite" % currency
+        # Appended to the null's own reason: this line used to replace it,
+        # leaving a walk that failed both halves with "; 1 leg(s) ..." alone.
+        gate["why"] += ("; " if gate["why"] else "") + "%d leg(s) run through a currency metabolite" % currency
     return gate
 
 
@@ -1025,8 +1027,11 @@ def quick_walk(job, symbol, steps=8, data_dir=None, use_mongo=True):
 
 
 def stored_walk_text(doc, limit_legs=40):
-    """The stored universal walk as chat text: the Results section when it
-    passed its checks, the kept statements, and the legs with their pathways."""
+    """The stored universal walk as chat text: the Results section (labelled
+    with the checks it did not clear, when the gates held it back), the kept
+    statements, and the legs with their pathways. A held-back walk is hidden
+    from the user by default, not withheld: the page opens it on a click,
+    under a warning, so the chat model must know what the user can read."""
     if not doc:
         return ("No universal walk has run for this job yet. It is the job's interpretation and "
                 "starts when the analysis finishes; name a gene to walk a few steps from it instead.")
@@ -1043,16 +1048,23 @@ def stored_walk_text(doc, limit_legs=40):
     lines = []
     checks = v.get("checks") or {}
     gates = checks.get("gates") or {}
+    failed = []
     if gates:
-        failed = [name for name in GATES if not (gates.get(name) or {}).get("pass")]
+        for name in GATES:
+            gate = gates.get(name) or {}
+            if not gate.get("pass"):
+                failed.append(name + (" (could not be tested on this data)" if gate.get("untestable") else ""))
         anchor = checks.get("anchor") or {}
         lines.append("CHECKS: %s%s" % (
-            "all five passed" if not failed else "FAILED %s -- the Results and statements are not shown to the user; "
-            "only the walk is" % ", ".join(failed),
+            "all five passed" if not failed else "FAILED %s -- the Results and statements are hidden from the user "
+            "by default; the user can open them under a warning to read them as hypotheses, not findings"
+            % ", ".join(failed),
             "; perturbation %s (%s)" % (anchor.get("gene"), anchor.get("direction")) if anchor else "; no perturbed gene named"))
     results = v.get("results") or {}
-    if results.get("paragraphs") and checks.get("rendered", True):
-        lines.append("RESULTS (checked): %s" % results.get("summary", ""))
+    if results.get("paragraphs"):
+        lines.append("RESULTS (checked): %s" % results.get("summary", "") if checks.get("rendered", True)
+                     else "RESULTS (did not clear the checks%s): %s" % (
+                         ": " + ", ".join(failed) if failed else "", results.get("summary", "")))
         for p in results["paragraphs"]:
             lines.append("- %s" % p.get("text", ""))
     for s in v.get("statements") or []:

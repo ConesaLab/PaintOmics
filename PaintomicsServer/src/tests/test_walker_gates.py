@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -116,12 +117,27 @@ class GatesOnARunTest(unittest.TestCase):
         walker = policies.greedy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
         gate = service.artifact_gate(walker)
         self.assertEqual(gate["currency_legs"], 0)
+        null_why = gate["why"]
         # forge a leg through ATP onto the sealed chain
         walker.chain[0].src = "c:C00002"
         gate = service.artifact_gate(walker)
         self.assertEqual(gate["currency_legs"], 1)
         self.assertFalse(gate["pass"])
         self.assertIn("currency metabolite", gate["why"])
+        # the currency reason is added to the null's own, never put in its place
+        self.assertEqual(gate["why"], null_why + ("; " if null_why else "") +
+                         "1 leg(s) run through a currency metabolite")
+
+    def test_a_null_failure_keeps_its_reason_beside_a_currency_leg(self):
+        net = net_mod.build_network("tst", self.data_dir)
+        graph = net.filter_pathway("KEGG:tst00001")
+        ov = ov_mod.overlay_job(graph, fx.make_job())
+        walker = policies.greedy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
+        walker.chain[0].src = "c:C00002"
+        failed = {"pass": False, "why": "the null's reason"}
+        with mock.patch.object(service.null_mod, "structure_null", return_value=dict(failed)):
+            gate = service.artifact_gate(walker)
+        self.assertEqual(gate["why"], "the null's reason; 1 leg(s) run through a currency metabolite")
 
 
 class AnswerCountTest(unittest.TestCase):
