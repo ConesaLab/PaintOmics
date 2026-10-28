@@ -239,6 +239,17 @@ class ReportTest(_RouteCase):
         self.assertFalse(out["success"])
         self.assertIn("in progress", out["message"])
 
+    def test_a_summary_sealed_with_the_narrators_brief_is_reported_without_it(self):
+        """The network interpretation reaches the AI panel through this route
+        (7O521E0Y0y's, sealed 2026-10-28, was the Narrator's planning)."""
+        view = _view()
+        view["results"]["summary"] = ("We walked a graph over recurrent vs primary bladder cancer expression data. "
+                                      "The kept statements are the facts; the prose is mine.")
+        FakeWalkDAO().save_progress("J1", "network", {"status": "done", "viewJSON": json.dumps(view)})
+        out = self.report()
+        self.assertEqual(out["walk"]["results"]["summary"], "")
+        self.assertEqual(out["walk"]["results"]["paragraphs"], _view()["results"]["paragraphs"])
+
     def test_a_sealed_walk_is_the_report(self):
         FakeWalkDAO().save_progress("J1", "network", {"status": "done", "viewJSON": json.dumps(_view())})
         out = self.report()

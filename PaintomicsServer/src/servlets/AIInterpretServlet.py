@@ -388,7 +388,8 @@ def aiInterpretReport(REQUEST, RESPONSE):
         view = None
         if doc and doc.get("status") == "done" and doc.get("viewJSON"):
             try:
-                view = json.loads(doc["viewJSON"])
+                # A summary sealed with the Narrator's brief in it is read without it.
+                view = walk_service.prune_stored_results(json.loads(doc["viewJSON"]))
             except ValueError:
                 view = None
         if doc is None:
@@ -928,7 +929,9 @@ def aiWalkStatus(REQUEST, RESPONSE, QUEUE_INSTANCE):
             # The view was stored when the walk was sealed; the rule that
             # decides what it hides is applied as it is read, so a pathway
             # walk held back by check 1 alone shows without being walked again.
-            walk_service.apply_render_rule(content["walk"])
+            # So is the Results summary: one sealed with the Narrator's brief
+            # in it is read without it.
+            walk_service.prune_stored_results(walk_service.apply_render_rule(content["walk"]))
         if status in ("not_started", "error"):
             # The card the walk will read unless the user edits it first.
             content["card"] = card_mod.job_card(jobInstance)

@@ -1098,6 +1098,96 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertIn('paragraph 1 (from statement 1): the sentence "Aaa and Bbb were exclusive (p = 0.004) [5]." '
                       'citing [5] was removed because it quotes 0.004', prompts[1])
 
+    # Stored on hsa05219 on 2026-10-28, less its "(−1.58)": this walk records
+    # no such value, and the unrecorded-value pruner would take that sentence first.
+    BRIEF_ECHO = ("Then TP53 and back through MDM2, CDKN2A, CDK4, CDKN1A. The kept statements are about "
+                  "CDKN1A down and CDKN2A/MDM2 unchanged.")
+
+    def narrate_drafts(self, drafts, verdicts):
+        """_narrate on scripted drafts and scripted verify_results answers;
+        (results, checks, prompts)."""
+        import copy
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        prompts, verdicts = [], iter(verdicts)
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                return copy.deepcopy(drafts[min(len(prompts), len(drafts)) - 1])
+        checks = {"gates": {}}
+        with patched((service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+                     (service.tiers, "title_outruns_body", lambda *a, **k: [])):
+            out = service._narrate(Client(), "card", "chain", self.STATEMENT, [], walker, {}, "pathway:x", checks,
+                                   (100, 200), deadline=time.time() + 400)
+        return out, checks, prompts
+
+    def test_a_leaked_summary_alone_asks_for_no_repair(self):
+        """Pruned and kept: a re-narration for the summary alone put a draft
+        that had passed at risk."""
+        draft = {"title": "Results", "summary": self.BRIEF_ECHO,
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, prompts = self.narrate_drafts([draft, dict(draft, summary="Cdkn1a fell.")], [[]])
+        self.assertEqual(len(prompts), 1, "the leaked summary alone asked for a repair")
+        self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("", "Body."))
+        self.assertEqual(checks["results"], [])
+        self.assertFalse(checks["gates"]["title"]["rewritten"])
+        self.assertEqual(checks["meta_sentences_dropped"], 2)
+
+    def test_a_repair_the_problems_ask_for_is_told_what_the_summary_lost(self):
+        draft = {"title": "Results", "summary": self.BRIEF_ECHO,
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, prompts = self.narrate_drafts([draft, dict(draft, summary="Cdkn1a fell.")],
+                                                   [["paragraph 1 is too short"], []])
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("- paragraph 1 is too short\n", prompts[1])
+        self.assertIn("- code removed 2 sentences of your summary or title that restated your instructions", prompts[1])
+        self.assertEqual(out["summary"], "Cdkn1a fell.")
+        self.assertTrue(checks["gates"]["title"]["rewritten"])
+
+    def test_a_title_in_the_briefs_words_or_none_takes_the_neutral_title(self):
+        from src.classes.AIInterpret.walker import tiers
+        for title in ("The kept statements in walk order", ""):
+            draft = {"title": title, "summary": "Cdkn1a fell.",
+                     "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+            out, checks, prompts = self.narrate_drafts([draft], [[]])
+            self.assertEqual(len(prompts), 1, title)
+            self.assertEqual(out["title"], tiers.neutral_title("Results", {}, None), title)
+            self.assertEqual(checks["gates"]["title"]["fallback"], "neutral", "the record says code wrote it")
+            self.assertEqual(out["summary"], "Cdkn1a fell.")
+        draft["title"] = "Cdkn1a fell in the knockout"
+        out, checks, _ = self.narrate_drafts([draft], [[]])
+        self.assertEqual((out["title"], checks["gates"]["title"]["fallback"]), ("Cdkn1a fell in the knockout", False))
+
+    def test_the_plan_reaches_nothing_the_walk_keeps(self):
+        """The planning field comes first in the schema and leaves with the
+        answer: no record, view, chat or page sees it."""
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        self.assertEqual(list(narrate_mod.RESULTS_SCHEMA["properties"])[0], "plan")
+        self.assertIn("plan", narrate_mod.RESULTS_SCHEMA["required"])
+        self.assertIn("`plan` is never shown", narrate_mod.BRIEF)
+        draft = {"plan": "I must produce exactly 1 fact paragraph in walk order.", "title": "Results",
+                 "summary": "Cdkn1a fell.", "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, _ = self.narrate_drafts([draft], [[]])
+        self.assertNotIn("plan", out)
+        out, checks, _ = self.narrate_drafts([draft], [["paragraph 1 is too short"], ["paragraph 1 is too short"]])
+        self.assertIsNone(out)
+        self.assertNotIn("plan", checks["results_dropped"], "a dropped draft is stored too")
+        # An answer without a plan reads as before.
+        no_plan = {k: v for k, v in draft.items() if k != "plan"}
+        out, _, _ = self.narrate_drafts([no_plan], [[]])
+        self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("Cdkn1a fell.", "Body."))
+        # The plan is paid for on top of the text: 2,500 for a 450-word section,
+        # and room for the 3,230-character plan staging measured.
+        asked = {}
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                asked.update(kwargs)
+                return dict(draft)
+        self.assertNotIn("plan", narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "", words=(150, 450)))
+        self.assertEqual(asked["max_tokens"], 4500)
+
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service
         verdicts = iter([["paragraph 1 is too short"], [], [], []])

@@ -110,7 +110,12 @@ fails is rewritten once and then dropped, and every drop is listed with its reas
 The Narrator then writes a Results section from the kept statements only, every sentence
 tagged with its statement and its legs. It sees only the papers the kept statements cite, each
 with the claim its paper agent confirmed, and writes as a paper reports results: code drops a
-sentence that calls genes a cluster or narrates the walk.
+sentence that calls genes a cluster or narrates the walk. The Narrator plans in a `plan` field
+that comes first in its answer and is dropped before anything is checked or stored; a summary
+or title sentence that still restates its instructions ("the kept statements", "connective
+paragraphs", "I must ...") is removed, and the rest of the summary stays. That removal asks for
+no rewrite of its own. A title left empty is written by code, as when it outruns the body.
+Walks sealed before this check are read without those sentences.
 Code checks that every quoted value appears in the record (a signed value verbatim, an
 unsigned one as the magnitude of a recorded value), that a paragraph keeps every citation its
 statement makes and cites nothing its statement does not, and drops the sentences that fail. A story that

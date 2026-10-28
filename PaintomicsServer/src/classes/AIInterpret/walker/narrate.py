@@ -10,9 +10,17 @@ import time
 
 from src.classes.AIInterpret import llm_client
 
+# ``plan`` comes first and is never shown. Under the gateway's guided JSON
+# decoding DeepSeek can only write JSON, so its planning went into the first
+# string field there was, the summary: 5 of the 19 Results sections stored on
+# 2026-10-28 carry it there ("The kept statements are the facts; the prose is
+# mine. I must produce ..."). The field gives the planning a place before the text a
+# reader sees; without_plan removes it from every answer narrate() returns,
+# and verify.drop_meta_sentences stays as the net for planning written elsewhere.
 RESULTS_SCHEMA = {
     "type": "object",
     "properties": {
+        "plan": {"type": "string"},
         "title": {"type": "string"},
         "summary": {"type": "string"},
         "paragraphs": {
@@ -29,9 +37,16 @@ RESULTS_SCHEMA = {
             },
         },
     },
-    "required": ["title", "summary", "paragraphs"],
+    "required": ["plan", "title", "summary", "paragraphs"],
     "additionalProperties": False,
 }
+# Room for the plan on top of the text's own budget. The longest planning
+# stored in a summary ran to 2,051 characters; given the field, the Narrator
+# wrote a 3,230-character plan (about 800 tokens) on staging for 7O521E0Y0y's
+# network walk with 7 statements, 2026-10-28. No maxLength on it: guided
+# decoding may not honour one, and the text's own words x 5 budget is already
+# about 3.5 times the 1.4 tokens a word of prose takes.
+PLAN_TOKENS = 2000
 
 BRIEF = (
     "You write the Results section of a paper from a graph walk over a pathway or a whole interaction "
@@ -40,6 +55,8 @@ BRIEF = (
     "walk: name the genes and proteins (\"Itpr1, Itpr2 and Itpr3\", \"the IP3 receptors\"), never call a "
     "set of genes a cluster, and never use the walker's words seed, jump or the walk; code removes a "
     "sentence that does. Rules:\n"
+    "- Plan in `plan`, first: notes on these rules, the statements and the order go there, and `plan` is never "
+    "shown. The title, the summary and the paragraphs are what the reader sees: never restate these rules there.\n"
     "- Exactly %d paragraphs carry facts, one per kept statement, in walk order, each tagged "
     "from_statement = that statement's n, with the legs it rests on. Explain how these genes connect "
     "under the experiment design.\n"
@@ -78,6 +95,16 @@ def prune_connectives(results):
     return dropped
 
 
+def without_plan(results):
+    """``results`` without its ``plan``: the dict itself when it has none, else
+    a copy without it. narrate() returns every answer through it, and nothing
+    else writes a Results section, so the plan reaches no record, view, chat
+    or page."""
+    if not isinstance(results, dict) or "plan" not in results:
+        return results
+    return {key: value for key, value in results.items() if key != "plan"}
+
+
 def _embedded_json(text):
     """The outermost JSON object in a reply that wrapped it in prose or a fence."""
     text = str(text or "")
@@ -113,7 +140,9 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
     The token budget follows the word budget: a network Results section of up to
     900 words is about 1,300 tokens of prose plus the JSON around it, and the
     2,500-token budget the pathway section needs cut one off mid-object, which
-    left the job with no Results at all."""
+    left the job with no Results at all. PLAN_TOKENS more pay for the plan,
+    which is dropped from the answer (without_plan); an answer without one
+    reads the same."""
     prompt = "DESIGN CARD\n%s\n\nCHAIN\n%s\n\nKEPT STATEMENTS\n%s\n\nPAPERS\n%s" % (
         card_text, chain_text,
         json.dumps([{"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
@@ -122,7 +151,7 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         papers_text or "none")
     if objections:
         prompt += "\n\nYOUR PREVIOUS DRAFT FAILED THESE CHECKS; fix every one:\n- " + "\n- ".join(objections)
-    max_tokens = max(2500, int(words[1] * 5))
+    max_tokens = max(2500, int(words[1] * 5)) + PLAN_TOKENS
     brief = BRIEF % (len(kept), max(0, len(kept) - 1), words[0], words[1])
     failure = None
     for _attempt in range(2):                 # one more try when the reply is unreadable
@@ -138,7 +167,7 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         except Exception as exc:                                      # noqa: BLE001
             out, failure = None, exc
         if isinstance(out, dict) and isinstance(out.get("paragraphs"), list):
-            return out
+            return without_plan(out)
     if failure is not None and deadline is not None and llm_client.ran_out_of_budget(failure):
         raise OutOfTime("the Narrator's call gave up at the run's deadline")
     if failure is not None:

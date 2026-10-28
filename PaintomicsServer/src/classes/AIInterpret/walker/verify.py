@@ -64,6 +64,37 @@ RESULTS_WORDS = {"pathway": (150, 450), "network": (300, 900)}
 JARGON_RE = re.compile(r"\b(clusters?|the walk(?:er)?|(?:a|an|the|this|our|each) (?:network|graph|pathway) walk(?:er)?s?"
                        r"|via a jump|jump(?:s|ed|ing)? (?:to|from|back)"
                        r"|seed nodes?|seed mirnas? (?:[a-z]{3}-)?(?:mir|let)-)\b", re.I)
+# The Narrator's brief in its own words, and the pipeline's: what a reader
+# never meets. DeepSeek plans in the first string of its JSON, the summary,
+# and the planning reached the page. Of the 19 Results sections stored on
+# paintomics.org on 2026-10-28, 5 summaries were such planning ("The kept
+# statements are the facts; the prose is mine. I must produce exactly 12 fact
+# paragraphs ...", "We walked a signed, directed interaction network from
+# XPO1 to ...") and no title was; every alternative here matches only in those
+# five, none in the other 14 summaries or any title. JARGON_RE's walker words
+# are pruned everywhere; these only in the summary and the title
+# (drop_meta_sentences). Of the 324 stored paragraph sentences they match 23:
+# fifteen connectives that open "The drawn edge from STEAP3 to BNIP3L is ...",
+# leg lists such as "(e12, e23)", and four built on "kept statement" that carry
+# their paragraph's reading. Removing a paragraph sentence can take a citation
+# or a statement's only paragraph with it, and fail a section that passed.
+# "The chain" is not here: it carries biology in six stored paragraphs ("Thrb
+# is the timed hub of this chain"), and y712svrXTf's summary keeps "The chain
+# separates into a baseline-up miRNA module ...".
+META_RE = re.compile(
+    r"\b(?:kept|dropped) statements?\b|\bstatements? \d+\b|\bfrom_statement\b"
+    r"|\b(?:fact|connective) paragraphs?\b|\bthe prose\b|\bwalk order\b|\bdesign card\b|\bdrawn edges?\b"
+    r"|\btwo decimals\b|\bpast tense\b|\bhedging words\b|\bunlabell?ed omic\b"
+    r"|\b\d+\s*(?:-|–|to)\s*\d+ words\b|\bc1\s*\.\.\s*cN\b|\[(?:eN|N|node · layer)\]"
+    # a list of bare leg or jump ids, "e1, e3, e5", never the citation "[e3, e5]"
+    r"|(?-i:(?<![\[\w])[eJ]\d+(?:, (?:and )?[eJ]\d+)+\b(?!\]))"
+    r"|\b(?:I|we) (?:must|will|need|should|have to)\b|\bI(?:'ll|'m going to)\b|\blet me\b"
+    r"|\bwe (?:walked|traced)\b", re.I)
+# When drop_meta_sentences has removed part of a summary, a first sentence
+# left opening on one of these followed what went: "Then TP53 (−1.58) and back
+# through MDM2, CDKN2A, CDK4, CDKN1A." was all that stood before the brief's
+# words on hsa05219. "Next to EGFR, ERBB2 ..." opens a summary that means it.
+SEQUENCE_LEAD_RE = re.compile(r"^(?:Then|Next(?! to\b)|After that|From there)(?=[\s,])")
 
 
 def chain_nodes(chain):
@@ -584,6 +615,61 @@ def drop_jargon_sentences(results):
     return count["dropped"]
 
 
+def drop_meta_sentences(results):
+    """Remove from the summary and the title what is in the Narrator's brief's
+    own words (META_RE), and return the removed text, as written, for the
+    repair round. The paragraphs are left alone (see META_RE).
+
+    Sentence by sentence: the rest of a summary stays, so y712svrXTf keeps its
+    finding ("The baseline-up module is consistent with a PI3K-suppressive
+    brake ...") once its "We traced ..." is gone. When a sentence went, the
+    first ones left opening on a sequencing word (SEQUENCE_LEAD_RE) go too. A
+    summary that loses nothing comes back as it was, byte for byte: stored
+    views are read through this. A title with any such word goes whole; the
+    caller decides what stands in for it."""
+    removed = []
+    if not isinstance(results, dict):
+        return removed
+    if results.get("summary"):
+        summary = []
+        for sentence in sentences(results["summary"]):
+            if not sentence.strip():
+                continue
+            (removed if META_RE.search(sentence) else summary).append(sentence)
+        if removed:
+            while summary and SEQUENCE_LEAD_RE.match(summary[0].lstrip()):
+                removed.append(summary.pop(0))
+            results["summary"] = " ".join(summary)
+    if results.get("title") and META_RE.search(str(results["title"])):
+        removed.append(str(results["title"]))
+        results["title"] = ""
+    return removed
+
+
+def _clip(text, width):
+    """``text`` on one line, cut at a word boundary to at most ``width``
+    characters with "…" when it was longer: how a repair note quotes a
+    sentence the pruners removed."""
+    text = " ".join(str(text or "").split())
+    if len(text) <= width:
+        return text
+    return text[:width].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def meta_note(removed):
+    """The repair round's objection for a summary drop_meta_sentences pruned:
+    which sentences went and what to write instead. It joins the objections
+    of a repair the section's problems asked for; it never asks for one, and
+    is never one of the problems itself."""
+    quoted = ["\"%s\"" % _clip(sentence, 60) for sentence in removed[:3]]
+    return ("code removed %s of your summary or title that restated your instructions instead of reporting "
+            "the biology (%s%s); write the summary in plain biological terms: what changed in this "
+            "experiment, naming the genes, as a paper's own summary of its results, never the rules, the "
+            "statements or how the section was planned" % (
+                "a sentence" if len(removed) == 1 else "%d sentences" % len(removed), ", ".join(quoted),
+                ", ..." if len(removed) > 3 else ""))
+
+
 def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
     """Remove every sentence of the Results that quotes a value the record does
     not hold, and return how many went. A misquoted number is a sentence the
@@ -634,12 +720,10 @@ def _removal_note(where, source, sentence, refs, values):
     cites = ", ".join("[%d]" % ref for ref in refs)
     passage = ("%s's confirmed passage" % cites if len(refs) == 1
                else "the confirmed passages of %s" % cites)
-    head = sentence.strip()
-    if len(head) > 90:
-        head = head[:90].rsplit(" ", 1)[0].rstrip(",;:") + "…"
     return ("paragraph %d (from statement %s): the sentence \"%s\" citing %s was removed because it quotes %s, "
             "which neither the record nor %s holds; keep %s and quote only the record's values or the paper's"
-            % (where, source.get("n"), head, cites, " and ".join(dict.fromkeys(values)), passage, cites))
+            % (where, source.get("n"), _clip(sentence, 90), cites, " and ".join(dict.fromkeys(values)), passage,
+               cites))
 
 
 def paper_numbers(stmt, ref):

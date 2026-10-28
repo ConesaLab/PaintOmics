@@ -159,6 +159,19 @@ def apply_render_rule(v):
     checks["rendered"] = renders(v.get("scope"), checks["gates"])
     return v
 
+
+def prune_stored_results(v):
+    """A stored view's Results as the routes and the chat read it, in place:
+    the summary and title without the Narrator's brief
+    (verify.drop_meta_sentences). 5 of the 19 summaries sealed before the
+    check echo the brief; the stored document is not rewritten. A title this
+    empties stays "", which the page shows as "Results". No view holds a
+    ``plan``: narrate() drops it from every answer. Returns ``v``."""
+    results = v.get("results") if isinstance(v, dict) else None
+    if isinstance(results, dict):
+        verify.drop_meta_sentences(results)
+    return v
+
 _MONGO = {"client": None}
 _MONGO_LOCK = threading.Lock()
 
@@ -860,6 +873,8 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     # Why the last draft lost a sentence that carried its statement's
     # citation: the repair round is told, not only that the citation is gone.
     removed = []
+    # The last draft's summary and title sentences in the brief's own words.
+    meta = []
 
     def checked(results):
         if results is None:
@@ -877,6 +892,17 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         jargon = verify.drop_jargon_sentences(results)
         if jargon:
             checks["jargon_sentences_dropped"] = checks.get("jargon_sentences_dropped", 0) + jargon
+        del meta[:]
+        meta.extend(verify.drop_meta_sentences(results))
+        if meta:
+            checks["meta_sentences_dropped"] = checks.get("meta_sentences_dropped", 0) + len(meta)
+        # None written, or only the brief's words: the title code writes when
+        # the Narrator's cannot stand (the title gate's fallback), and the
+        # gate's record says so. Each draft decides it anew.
+        title_gate["fallback"] = False
+        if not str(results.get("title") or "").strip():
+            results["title"] = tiers.neutral_title(scope_name, card or {}, anchor)
+            title_gate["fallback"] = "neutral"
         title = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         return verify.verify_results(results, statements, dropped, walker, kind, words), title
 
@@ -892,11 +918,16 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     if results is not None:
         title_gate["verbs_found"] = sorted(set(tiers.mechanistic_verbs(
             " ".join([str(results.get("title") or ""), str(results.get("summary") or "")]))))
+    # A summary that restated the brief is pruned, silently, and asks for no
+    # repair of its own: a re-narration put a draft that had passed at risk.
+    # When the section's problems ask for one, the repair is told what went.
+    notes = [verify.meta_note(meta)] if meta else []
     if (problems or title_problems) and results is not None and (
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         try:
             results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
-                                          objections=problems + removed + title_problems, deadline=deadline)
+                                          objections=problems + removed + notes + title_problems,
+                                          deadline=deadline)
             problems, title_problems = checked(results)
             title_gate["rewritten"] = True
         except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
@@ -1119,7 +1150,7 @@ def stored_walk_text(doc, limit_legs=40):
         return "The universal walk for this job is still running (%s, %s%%)." % (
             doc.get("stage", "queued"), doc.get("percent", 0))
     try:
-        v = json.loads(doc.get("viewJSON") or "{}")
+        v = prune_stored_results(json.loads(doc.get("viewJSON") or "{}"))
     except ValueError:
         return "The stored universal walk could not be read."
     lines = []
