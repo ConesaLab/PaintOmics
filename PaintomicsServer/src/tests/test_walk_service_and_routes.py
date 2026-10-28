@@ -675,6 +675,25 @@ class RouteTest(unittest.TestCase):
         self.assertFalse(walk["checks"]["rendered"])
         self.assertNotIn("advisory", walk["checks"]["gates"]["artifact"])
 
+    def test_a_summary_sealed_with_the_narrators_brief_is_read_without_it(self):
+        # 7O521E0Y0y's hsa05219 walk, sealed 2026-10-28: the summary was the
+        # Narrator's planning. It is read without it; the document is not rewritten.
+        brief = ("Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4, CDKN1A. The kept statements are about "
+                 "CDKN1A down and CDKN2A/MDM2 unchanged.")
+        paragraphs = [{"from_statement": 1, "legs": [1], "text": "CDKN1A fell (−1.20) [e1]."}]
+        stored = {"scope": "KEGG:hsa05219", "chain": [],
+                  "results": {"title": "Results", "summary": brief, "paragraphs": paragraphs}}
+        FakeWalkDAO().save_progress("J1", "pathway:hsa05219", {"status": "done", "viewJSON": json.dumps(stored)})
+        walk = self.status(jobID="J1", scope="pathway:hsa05219")["walk"]
+        self.assertEqual(walk["results"]["summary"], "")
+        self.assertEqual(walk["results"]["paragraphs"], paragraphs)
+        self.assertEqual(json.loads(FakeWalkDAO.store[("J1", "pathway:hsa05219")]["viewJSON"])["results"]["summary"],
+                         brief, "the stored document was rewritten")
+        # ...and so does the chat, which reads the stored network walk.
+        text = service.stored_walk_text({"status": "done", "viewJSON": json.dumps(dict(stored, scope="network"))})
+        self.assertNotIn("kept statements", text)
+        self.assertIn("CDKN1A fell (−1.20) [e1].", text)
+
     def test_a_walk_that_stopped_writing_progress_is_marked_interrupted(self):
         FakeWalkDAO().save_progress("J1", "network", {"status": "running", "stage": "writer"})
         FakeWalkDAO.store[("J1", "network")]["updatedAt"] = datetime.utcnow() - timedelta(minutes=11)

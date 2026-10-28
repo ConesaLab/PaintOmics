@@ -1098,6 +1098,57 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertIn('paragraph 1 (from statement 1): the sentence "Aaa and Bbb were exclusive (p = 0.004) [5]." '
                       'citing [5] was removed because it quotes 0.004', prompts[1])
 
+    # Stored on hsa05219 on 2026-10-28, less its "(−1.58)": this walk records
+    # no such value, and the unrecorded-value pruner would take that sentence first.
+    BRIEF_ECHO = ("Then TP53 and back through MDM2, CDKN2A, CDK4, CDKN1A. The kept statements are about "
+                  "CDKN1A down and CDKN2A/MDM2 unchanged.")
+
+    def narrate_drafts(self, drafts, verdicts):
+        """_narrate on scripted drafts and scripted verify_results answers;
+        (results, checks, prompts)."""
+        import copy
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        prompts, verdicts = [], iter(verdicts)
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                return copy.deepcopy(drafts[min(len(prompts), len(drafts)) - 1])
+        checks = {"gates": {}}
+        with patched((service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+                     (service.tiers, "title_outruns_body", lambda *a, **k: [])):
+            out = service._narrate(Client(), "card", "chain", self.STATEMENT, [], walker, {}, "pathway:x", checks,
+                                   (100, 200), deadline=time.time() + 400)
+        return out, checks, prompts
+
+    def test_a_summary_in_the_briefs_words_is_repaired_never_failed(self):
+        draft = {"title": "Results", "summary": self.BRIEF_ECHO,
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        repaired = dict(draft, summary="Cdkn1a fell.")
+        # The draft passed; the repair it was asked for broke a paragraph.
+        out, checks, prompts = self.narrate_drafts([draft, repaired], [[], ["paragraph 1 is too short"]])
+        self.assertEqual(len(prompts), 2, "the leaked summary alone asks for a repair")
+        self.assertIn("code removed 2 sentences of your summary or title that restated your instructions", prompts[1])
+        self.assertIsNotNone(out, "a leaked summary failed the section: %s" % checks.get("results"))
+        self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("", "Body."))
+        self.assertEqual(checks["results"], [])
+        self.assertFalse(checks["gates"]["title"]["rewritten"])
+        self.assertEqual(checks["meta_sentences_dropped"], 2)
+        # A repair that passes is kept.
+        out, checks, _ = self.narrate_drafts([draft, repaired], [[], []])
+        self.assertEqual(out["summary"], "Cdkn1a fell.")
+        self.assertTrue(checks["gates"]["title"]["rewritten"])
+
+    def test_a_title_in_the_briefs_words_or_none_takes_the_neutral_title(self):
+        from src.classes.AIInterpret.walker import tiers
+        for title in ("The kept statements in walk order", ""):
+            draft = {"title": title, "summary": "Cdkn1a fell.",
+                     "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+            out, checks, _ = self.narrate_drafts([draft, {}], [[], [], []])
+            self.assertEqual(out["title"], tiers.neutral_title("Results", {}, None), title)
+            self.assertEqual(out["summary"], "Cdkn1a fell.")
+
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service
         verdicts = iter([["paragraph 1 is too short"], [], [], []])

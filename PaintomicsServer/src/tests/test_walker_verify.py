@@ -487,5 +487,133 @@ class WalkJargonFormsTest(unittest.TestCase):
                          "The seed miRNA hsa-let-7a falls."):
             self.assertEqual(self.dropped(sentence), 1, sentence)
 
+
+# Results summaries stored on paintomics.org on 2026-10-28, verbatim: the
+# Narrator's planning (a restatement of narrate.BRIEF) where the summary goes.
+LEAKED_SUMMARIES = {
+    "7O521E0Y0y network": (
+        "We walked a graph over recurrent vs primary bladder cancer expression data, starting from the hottest "
+        "relevant genes and following drawn edges. The kept statements are the facts; the prose is mine. I must "
+        "produce exactly 12 fact paragraphs, one per kept statement, in walk order, each tagged from_statement = n, "
+        "with legs. Between them at most 11 connective paragraphs of one sentence each, tagged from_statement null, "
+        "containing no value and no paper. I must quote values exactly as in the chain with sign and two decimals. "
+        "Cite legs as [eN], layers as [node · layer], papers as [N] only where the statement did. Never mention "
+        "dropped statements. Past tense, no hedging words the statements do not use. Unlabeled omic has no time "
+        "points: describe values by column (c1..cN) and give them no early, late, baseline, peak or over-time word, "
+        "even in a sentence about another gene. Length 600-2000 words."),
+    "rJMPHKo7n6 network": (
+        "The kept statements cover pkmb→eno3, mipa→mipb, and pgk1→gapdhs. The prose must report these three facts "
+        "in walk order, with connective paragraphs between them that only state what a drawn edge or the design "
+        "card says, no value and no paper. The design card says perturbation is knockout of gene in mouse liver, "
+        "value log2 fold change of knockout over wildtype at 24 h, baseline wildtype (C) is baseline, text says "
+        "'wildtype vs knockout' so baseline precedes perturbation, columns labeled Gene expression, no gene named, "
+        "system mouse liver, axis kind conditions with no order; compare them by name, never as a trajectory. The "
+        "chain has edges e1, e3, e5, e6, e7, e8, e11, e12, e14, e15, and jumps J2, J4, J9, J10, J13. The kept "
+        "statements are n=1 (e1), n=2 (e3), n=3 (e5). The prose must be in walk order: statement 1, then "
+        "statement 2, then statement 3. Between them at most 2 connective paragraphs of one sentence each, tagged "
+        "from_statement null, may only say what a drawn edge or the design card says, and contain no value and no "
+        "paper. So I need to write exactly 3 fact paragraphs, each tagged from_statement = n, with legs, and "
+        "between them up to 2 connective paragraphs. The connective paragraphs could be placed between e1 and e3, "
+        "and between e3 and e5. They can only say what a drawn edge or the design card says. The design card says "
+        "perturbation is knockout of gene in mouse liver, value log2 fold change of knockout over wildtype at 24 h, "
+        "baseline wildtype (C) is baseline, text says 'wildtype vs knockout' so baseline precedes perturbation, "
+        "columns labeled Gene expression, no gene named, system mouse liver, axis kind conditions with no order; "
+        "compare them by name, never as a trajectory. The drawn edges: e1 is pkmb → eno3, KEGG "
+        "Glycolysis/Gluconeogenesis, compound ?, with the arrow. e3 is mipa → mipb, Reactome Vasopressin regulates "
+        "renal water homeostasis via Aquaporins, reaction +, with the arrow. e5 is pgk1 → gapdhs, KEGG "
+        "Glycolysis/Gluconeogenesis, compound ?, against the arrow. The connective paragraphs can say something "
+        "like "),
+    "y712svrXTf pathway:mmu04919": (
+        "We traced the Ikzf1 perturbation through the thyroid hormone signalling pathway. The chain separates into "
+        "a baseline-up miRNA module (188-3p/188-5p/532-3p/532-5p/501-5p/362-3p/362-5p/542-3p/542-5p) that is "
+        "already high at 0h and rises further, and a timed-down component (Thrb, Thra, Hdac2 and their late-falling "
+        "miRs 34B-5p/34B-3p/363-5p/1187/669F-3p/466N-3p/3074-1-3p) that only drops after 12h. The baseline-up "
+        "module is consistent with a PI3K-suppressive brake; the timed-down component is consistent with loss of "
+        "TRα1/TRβ-dependent miR-34 expression as Thrb/Thra mRNA collapses."),
+    "7O521E0Y0y pathway:hsa05219": (
+        "Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4, CDKN1A. The kept statements are about CDKN1A down "
+        "and CDKN2A/MDM2 unchanged."),
+    "7mE2o46g43 network": (
+        "We walked a signed, directed interaction network from XPO1 to SMAD4, SESN1, KEAP1, NFE2L2, KRT17, NCOA2, "
+        "MPST, CTH and CDO1, reading the transcript and protein values of each node in the Xpo1-knockout mouse "
+        "liver."),
+}
+# Stored summaries and a paragraph that report biology; the paragraph says
+# "the chain" twice, which the summary rule refuses.
+BIOLOGY_SUMMARIES = [
+    "OSKM expression in senescent MEFs reversed a senescence-associated loss of 14-3-3ε (Ywhae) only partially and "
+    "transiently. Ywhae mRNA and protein were both lower in senescent MEFs than in young MEFs at baseline "
+    "(Sen_MEF_D0_vs_Young_MEF −0.52 for Gene expression and −0.60 for Proteomics). After OSKM expression, the mRNA "
+    "rose slightly at OSKM_D1 (+0.07) but fell again at OSKM_D2 (−0.14), while the protein continued to decline at "
+    "both time points (−0.15 and −0.43).",
+    "Ikaros perturbation collapses Tnf expression while Nox1 chromatin opens; the drawn Nox1→Tnf stimulation is "
+    "contradicted by the data; literature places both genes in a TNF–NOX feedback loop.",
+    "Cdkn1b's miRNA layer shows MMU-MIR-532-3P rising from +1.51 to +3.06, MMU-MIR-221-3P down throughout, "
+    "MMU-MIR-222-3P dipping at 12h; interpreted as relieving p27 brake. Then Shc1's miRNA layer shows "
+    "MMU-MIR-188-3P/5P and 362-3P rising, MMU-MIR-3091-3P collapsing late, MMU-MIR-466N-3P drifting down.",
+    "The RPA/BTR recombination core, the BER arm, the RFC clamp loader, the Pol α/ε replisome, the SLX1-MUS81 "
+    "module, and the chondroitin/dermatan sulfate synthases each showed coherent late induction, while the CCR4-NOT "
+    "paralogs Cnot7/Cnot8, the RFC subunits Rfc2/Rfc3/Rfc5, the HR core Palb2/Brca2/Rad51, and the "
+    "galactosyltransferases B4galt1/Chpf2/B3galt6 moved in opposite directions within their complexes. The results "
+    "reveal a transcriptome-wide timing architecture in which late up-regulation of repair and recombination "
+    "nucleases is accompanied by repression of their regulatory or catalytic partners.",
+]
+CHAIN_PARAGRAPH = (
+    "Thrb is the timed hub of this chain: its Gene expression ENSMUSG00000021779 (not relevant) declines steadily "
+    "from −0.24 at 0h to −3.68 at 24h, the only clean monotone fall on the chain, and its relevant miRNA layer shows "
+    "the same late-falling set (MMU-MIR-34B-5P, MMU-MIR-34B-3P, MMU-MIR-363-5P, MMU-MIR-1187, MMU-MIR-669F-3P) "
+    "dropping only after 12h while the baseline-up set (MMU-MIR-188-5P, MMU-MIR-188-3P, MMU-MIR-532-5P, "
+    "MMU-MIR-501-5P, MMU-MIR-362-3P) stays high.")
+
+
+class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
+    """The summary DeepSeek fills with its planning reaches no reader: 5 of the
+    19 Results sections stored on 2026-10-28 showed it."""
+
+    def pruned(self, summary, title="Results", paragraphs=()):
+        results = {"title": title, "summary": summary,
+                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": text} for text in paragraphs]}
+        return results, verify.drop_meta_sentences(results)
+
+    def test_every_leaked_summary_is_removed_whole(self):
+        for where, summary in LEAKED_SUMMARIES.items():
+            results, removed = self.pruned(summary)
+            self.assertEqual(results["summary"], "", where)
+            self.assertEqual(sorted(removed), sorted(s for s in verify.sentences(summary) if s.strip()), where)
+            self.assertEqual(results["title"], "Results", where)
+
+    def test_a_summary_reporting_biology_and_the_paragraphs_are_untouched(self):
+        for summary in BIOLOGY_SUMMARIES:
+            results, removed = self.pruned(summary, paragraphs=[CHAIN_PARAGRAPH])
+            self.assertEqual(removed, [], summary)
+            self.assertEqual(results["summary"], summary)
+            self.assertEqual(results["paragraphs"][0]["text"], CHAIN_PARAGRAPH)
+        self.assertTrue(verify.META_RE.search(CHAIN_PARAGRAPH), "the paragraph is why paragraphs are left alone")
+
+    def test_a_sentence_left_dangling_by_a_removal_goes_too(self):
+        results, removed = self.pruned("The kept statements are about Aaa. Then Bbb rose (+1.20). Ccc fell.")
+        self.assertEqual(results["summary"], "Ccc fell.")
+        self.assertEqual(removed, ["The kept statements are about Aaa.", "Then Bbb rose (+1.20)."])
+        # hsa05219: the sentence the "Then" followed was taken at seal time
+        results, removed = self.pruned(LEAKED_SUMMARIES["7O521E0Y0y pathway:hsa05219"])
+        self.assertEqual(removed[-1], "Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4, CDKN1A.")
+
+    def test_a_title_in_the_briefs_words_goes_whole(self):
+        results, removed = self.pruned("Aaa rose.", title="The kept statements in walk order")
+        self.assertEqual(results["title"], "")
+        self.assertEqual(removed, ["The kept statements in walk order"])
+        self.assertEqual(results["summary"], "Aaa rose.")
+
+    def test_the_repair_is_told_what_went_and_what_to_write(self):
+        _, removed = self.pruned(LEAKED_SUMMARIES["7O521E0Y0y pathway:hsa05219"])
+        self.assertEqual(
+            verify.meta_note(removed),
+            "code removed 2 sentences of your summary or title that restated your instructions instead of "
+            "reporting the biology (\"The kept statements are about CDKN1A down and CDKN2A/MDM2…\", \"Then TP53 "
+            "(−1.58) and back through MDM2, CDKN2A, CDK4…\"); write the summary in plain biological terms: "
+            "what changed in this experiment, naming the genes, as a paper's own summary of its results, never "
+            "the rules, the statements or how the section was planned")
+
+
 if __name__ == "__main__":
     unittest.main()
