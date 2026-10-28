@@ -19,7 +19,8 @@ import re
 import time
 from dataclasses import dataclass, field
 
-from agents import Agent, ItemHelpers, MaxTurnsExceeded, RunConfig, RunContextWrapper, Runner, function_tool
+from agents import (Agent, ItemHelpers, MaxTurnsExceeded, ModelBehaviorError, RunConfig, RunContextWrapper, Runner,
+                    function_tool)
 from agents.models.interface import Model
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
@@ -362,8 +363,11 @@ FINISH_NOW = ("Your turns for searching and reading are used up. Reply now with 
 
 
 def _history(exc, opening):
-    """The conversation a Writer had when its turns ran out, as the input of
-    the next run; the opening brief alone when the SDK kept none."""
+    """The conversation a Writer had when its run ended early (its turns ran
+    out, or it called a tool that closed during the turn), as the input of the
+    next run; the opening brief alone when the SDK kept none. On a closed
+    tool openai-agents 0.24 keeps the turns before the failing one, never its
+    unanswered call."""
     data = getattr(exc, "run_data", None)
     if data is None:
         return [{"role": "user", "content": opening}]
@@ -489,14 +493,28 @@ async def run_writer_async(c, others="", max_turns=30, model=None, temperature=0
     opening = writer_prompt(c, others)
     c.started = time.time()
     try:
-        # A call to a research tool already closed goes back to the model as an
-        # error, instead of failing the part.
+        # A call to a tool the turn did not offer goes back to the model as an
+        # error; one to a research tool that closed during the turn raises
+        # (below).
         result = await Runner.run(agent, opening, context=c, max_turns=max_turns,
                                   run_config=RunConfig(tool_not_found_behavior="return_error_to_model"))
         if not c.done:
             # It answered in text instead of submitting: the same finish.
             await _finish(agent, c, result.to_input_list())
     except MaxTurnsExceeded as exc:
+        if not c.done:
+            await _finish(agent, c, _history(exc, opening))
+    except ModelBehaviorError as exc:
+        # A research tool offered when the turn began and closed by the time
+        # its call runs (research_open closes on its share of the time, and the
+        # model can take that long to answer): openai-agents 0.24 raises this,
+        # where a tool closed before the turn reads as not found and goes back
+        # to the model. On staging (7O521E0Y0y's network walk, 2026-10-28)
+        # "Tool search_literature is currently disabled for agent Writer"
+        # failed the whole walk. Asked for its statements like a Writer whose
+        # turns ran out -- with any other misbehaviour too, since the finish
+        # offers no tool at all.
+        logger.warning("[writer] %s: %s; asking for the statements", _part(c), exc)
         if not c.done:
             await _finish(agent, c, _history(exc, opening))
     except Exception as exc:                                          # noqa: BLE001

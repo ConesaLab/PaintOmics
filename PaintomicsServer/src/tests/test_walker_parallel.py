@@ -1747,6 +1747,54 @@ class WriterTest(_Fixture):
         self.assertEqual(len(c.kept), 1)
         self.assertEqual([bool(tools) for tools in model.calls], [True, False])
 
+    def test_a_writer_that_calls_a_closed_tool_is_asked_for_its_statements(self):
+        """openai-agents 0.24 raises ModelBehaviorError when a tool offered at
+        the start of a turn is disabled when the call runs -- research closing
+        on its time share while the model answers: "Tool search_literature is
+        currently disabled for agent Writer" lost a whole walk on staging
+        (7O521E0Y0y, 2026-10-28). The Writer goes to its finish instead."""
+        from agents.items import ModelResponse
+        from agents.models.interface import Model
+        from agents.usage import Usage
+        from openai.types.responses import ResponseFunctionToolCall
+
+        passing = self._passing()
+        c = self._writer()
+
+        class Closing(Model):
+            """Offered search_literature, it searches; research closes while it
+            answers. Asked for the statements, it submits them."""
+            def __init__(self):
+                self.calls = []
+
+            async def get_response(self, *_args, **kwargs):          # the SDK passes keywords
+                self.calls.append({"tools": sorted(t.name for t in kwargs["tools"]), "input": kwargs["input"]})
+                n = len(self.calls)
+                if n == 1:
+                    c.searches.extend([{"query": "q", "topic_tag": "t"}] * writer_mod.RESEARCH_SEARCHES
+                                      * max(1, c.citations))
+                name, args = (("search_literature", {"query": "Foxo1 OR Cdkn1b", "topic_tag": "t"}) if n == 1
+                              else ("submit_statements", {"statements_json": json.dumps(passing)}))
+                item = ResponseFunctionToolCall(arguments=json.dumps(args), call_id="c%d" % n, name=name,
+                                                type="function_call", id="f%d" % n)
+                return ModelResponse(output=[item], usage=Usage(), response_id=None)
+
+            def stream_response(self, *args, **kwargs):
+                raise NotImplementedError
+
+        model = Closing()
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=5, model=model))
+        self.assertIn("search_literature", model.calls[0]["tools"], "research was closed before the turn")
+        self.assertIsNone(c.loop_error)
+        self.assertTrue(c.done)
+        self.assertEqual(len(c.kept), 1)
+        self.assertEqual(model.calls[1]["tools"], [], "the finish offers no tool")
+        finish = model.calls[1]["input"]
+        called = {item.get("call_id") for item in finish if item.get("type") == "function_call"}
+        answered = {item.get("call_id") for item in finish if item.get("type") == "function_call_output"}
+        self.assertLessEqual(called, answered, "a tool call without its result went back to the gateway")
+        self.assertEqual(finish[-1], {"role": "user", "content": writer_mod.FINISH_NOW})
+
     def test_a_citation_is_no_submission(self):
         """A draft "Fh1 rises [3]." once reduced to "[3]", a JSON array, and
         spent one of the three submissions on nothing."""
