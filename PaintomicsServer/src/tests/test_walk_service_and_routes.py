@@ -31,6 +31,17 @@ from src.classes.AIInterpret.walker.walk import Walker, params_for  # noqa: E402
 from src.tests import walker_fixture as fx                       # noqa: E402
 
 
+def narrated(answer):
+    """The Results section narrate() returns for the Narrator's ``answer``:
+    the only producer of what a record, a view and the routes hold."""
+    from src.classes.AIInterpret.walker import narrate as narrate_mod
+
+    class Client(object):
+        def complete_json(self, *args, **kwargs):
+            return dict(answer)
+    return narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "")
+
+
 class FakeWalkDAO(object):
     """aiWalkCollection in a dict, shared by every instance like the real one."""
     store = {}
@@ -300,14 +311,13 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("LEGS:", text)
         self.assertIn("Test pathway one", text)
 
-    def test_a_view_carries_no_plan_and_leaves_its_record_alone(self):
+    def test_neither_the_record_nor_its_view_carries_the_plan(self):
         rec, *_ = service.run(_job_with_id(), "J1", "pathway:tst00001", policy="greedy", data_dir=self.data_dir,
                               use_mongo=False)
-        rec["results"] = {"plan": "Notes on the rules.", "title": "Results", "summary": "Bbb rose.",
-                          "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Bbb rose [e1]."}]}
-        self.assertNotIn("plan", service.view(rec)["results"])
+        rec["results"] = narrated({"plan": "Notes on the rules.", "title": "Results", "summary": "Bbb rose.",
+                                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Bbb rose [e1]."}]})
+        self.assertNotIn("plan", rec["results"])
         self.assertNotIn("Notes on the rules", json.dumps(service.view(rec)))
-        self.assertEqual(rec["results"]["plan"], "Notes on the rules.", "view() edited the record")
 
     def test_the_chat_reads_a_held_back_walk_as_hidden_by_default(self):
         # The page opens a held-back interpretation on a click, under a
@@ -690,10 +700,10 @@ class RouteTest(unittest.TestCase):
         brief = ("Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4, CDKN1A. The kept statements are about "
                  "CDKN1A down and CDKN2A/MDM2 unchanged.")
         paragraphs = [{"from_statement": 1, "legs": [1], "text": "CDKN1A fell (−1.20) [e1]."}]
-        # and a planning field, were one ever stored: the page never sees it
+        # Sealed as narrate() returns it, from an answer with a planning field.
         stored = {"scope": "KEGG:hsa05219", "chain": [],
-                  "results": {"plan": "I must write 1 fact paragraph.", "title": "Results", "summary": brief,
-                              "paragraphs": paragraphs}}
+                  "results": narrated({"plan": "I must write 1 fact paragraph.", "title": "Results",
+                                       "summary": brief, "paragraphs": paragraphs})}
         FakeWalkDAO().save_progress("J1", "pathway:hsa05219", {"status": "done", "viewJSON": json.dumps(stored)})
         walk = self.status(jobID="J1", scope="pathway:hsa05219")["walk"]
         self.assertEqual(walk["results"], {"title": "Results", "summary": "", "paragraphs": paragraphs})

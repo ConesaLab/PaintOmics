@@ -40,9 +40,13 @@ RESULTS_SCHEMA = {
     "required": ["plan", "title", "summary", "paragraphs"],
     "additionalProperties": False,
 }
-# Room for the plan on top of the text's own budget: the longest planning
-# stored in a summary ran to 2,051 characters, about 500 tokens.
-PLAN_TOKENS = 1000
+# Room for the plan on top of the text's own budget. The longest planning
+# stored in a summary ran to 2,051 characters; given the field, the Narrator
+# wrote a 3,230-character plan (about 800 tokens) on staging for 7O521E0Y0y's
+# network walk with 7 statements, 2026-10-28. No maxLength on it: guided
+# decoding may not honour one, and the text's own words x 5 budget is already
+# about 3.5 times the 1.4 tokens a word of prose takes.
+PLAN_TOKENS = 2000
 
 BRIEF = (
     "You write the Results section of a paper from a graph walk over a pathway or a whole interaction "
@@ -93,8 +97,9 @@ def prune_connectives(results):
 
 def without_plan(results):
     """``results`` without its ``plan``: the dict itself when it has none, else
-    a copy without it, so a record or a view it is read from is never
-    edited. The plan reaches no record, view, chat or page."""
+    a copy without it. narrate() returns every answer through it, and nothing
+    else writes a Results section, so the plan reaches no record, view, chat
+    or page."""
     if not isinstance(results, dict) or "plan" not in results:
         return results
     return {key: value for key, value in results.items() if key != "plan"}

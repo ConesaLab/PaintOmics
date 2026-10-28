@@ -86,14 +86,15 @@ META_RE = re.compile(
     r"|\b(?:fact|connective) paragraphs?\b|\bthe prose\b|\bwalk order\b|\bdesign card\b|\bdrawn edges?\b"
     r"|\btwo decimals\b|\bpast tense\b|\bhedging words\b|\bunlabell?ed omic\b"
     r"|\b\d+\s*(?:-|–|to)\s*\d+ words\b|\bc1\s*\.\.\s*cN\b|\[(?:eN|N|node · layer)\]"
-    r"|(?-i:\b[eJ]\d+(?:, (?:and )?[eJ]\d+)+\b)"           # a list of bare leg or jump ids: "e1, e3, e5"
+    # a list of bare leg or jump ids, "e1, e3, e5", never the citation "[e3, e5]"
+    r"|(?-i:(?<![\[\w])[eJ]\d+(?:, (?:and )?[eJ]\d+)+\b(?!\]))"
     r"|\b(?:I|we) (?:must|will|need|should|have to)\b|\bI(?:'ll|'m going to)\b|\blet me\b"
     r"|\bwe (?:walked|traced)\b", re.I)
-# A summary whose first sentence opens on one of these follows a sentence a
-# pruner took: "Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4,
-# CDKN1A." was all that stood before the brief's words on hsa05219. Not "And",
-# "So" or "Finally", which can open a summary that means it.
-SEQUENCE_LEAD_RE = re.compile(r"^(?:Then|Next|After that|From there)(?=[\s,])")
+# When drop_meta_sentences has removed part of a summary, a first sentence
+# left opening on one of these followed what went: "Then TP53 (−1.58) and back
+# through MDM2, CDKN2A, CDK4, CDKN1A." was all that stood before the brief's
+# words on hsa05219. "Next to EGFR, ERBB2 ..." opens a summary that means it.
+SEQUENCE_LEAD_RE = re.compile(r"^(?:Then|Next(?! to\b)|After that|From there)(?=[\s,])")
 
 
 def chain_nodes(chain):
@@ -619,13 +620,13 @@ def drop_meta_sentences(results):
     own words (META_RE), and return the removed text, as written, for the
     repair round. The paragraphs are left alone (see META_RE).
 
-    Sentence by sentence: the rest of a summary stays, whatever share of it
-    went. Taken whole when most of it matched, y712svrXTf's lost its finding
-    ("The baseline-up module is consistent with a PI3K-suppressive brake ...")
-    with the "We traced ..." before it. Then a first sentence opening on a
-    sequencing word (SEQUENCE_LEAD_RE) goes too, whoever removed the sentence
-    it followed. A title with any such word goes whole; the caller decides
-    what stands in for it."""
+    Sentence by sentence: the rest of a summary stays, so y712svrXTf keeps its
+    finding ("The baseline-up module is consistent with a PI3K-suppressive
+    brake ...") once its "We traced ..." is gone. When a sentence went, the
+    first ones left opening on a sequencing word (SEQUENCE_LEAD_RE) go too. A
+    summary that loses nothing comes back as it was, byte for byte: stored
+    views are read through this. A title with any such word goes whole; the
+    caller decides what stands in for it."""
     removed = []
     if not isinstance(results, dict):
         return removed
@@ -635,9 +636,10 @@ def drop_meta_sentences(results):
             if not sentence.strip():
                 continue
             (removed if META_RE.search(sentence) else summary).append(sentence)
-        if summary and SEQUENCE_LEAD_RE.match(summary[0].lstrip()):
-            removed.append(summary.pop(0))
-        results["summary"] = " ".join(summary)
+        if removed:
+            while summary and SEQUENCE_LEAD_RE.match(summary[0].lstrip()):
+                removed.append(summary.pop(0))
+            results["summary"] = " ".join(summary)
     if results.get("title") and META_RE.search(str(results["title"])):
         removed.append(str(results["title"]))
         results["title"] = ""

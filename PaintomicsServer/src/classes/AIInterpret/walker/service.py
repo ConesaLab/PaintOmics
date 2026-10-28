@@ -162,14 +162,13 @@ def apply_render_rule(v):
 
 def prune_stored_results(v):
     """A stored view's Results as the routes and the chat read it, in place:
-    without a ``plan`` (narrate.without_plan) and with the summary and title
-    stripped of the Narrator's brief (verify.drop_meta_sentences). 5 of the 19
-    summaries sealed before the check echo the brief; the stored document is
-    not rewritten. A title this empties stays "", which the page shows as
-    "Results". Returns ``v``."""
+    the summary and title without the Narrator's brief
+    (verify.drop_meta_sentences). 5 of the 19 summaries sealed before the
+    check echo the brief; the stored document is not rewritten. A title this
+    empties stays "", which the page shows as "Results". No view holds a
+    ``plan``: narrate() drops it from every answer. Returns ``v``."""
     results = v.get("results") if isinstance(v, dict) else None
     if isinstance(results, dict):
-        v["results"] = results = narrate_mod.without_plan(results)
         verify.drop_meta_sentences(results)
     return v
 
@@ -1027,7 +1026,7 @@ def view(rec):
                                                "discordant_legs")}
                        for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
-        "results": narrate_mod.without_plan(rec.get("results")),
+        "results": rec.get("results"),
         "papers": {str(ref): p for ref, p in (rec.get("papers") or {}).items()},
         "checks": {"results": (rec.get("checks") or {}).get("results"),
                    "sense": (rec.get("checks") or {}).get("sense"),

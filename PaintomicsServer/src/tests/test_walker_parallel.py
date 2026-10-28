@@ -1177,6 +1177,16 @@ class NarratorRepairCasesTest(_Fixture):
         no_plan = {k: v for k, v in draft.items() if k != "plan"}
         out, _, _ = self.narrate_drafts([no_plan], [[]])
         self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("Cdkn1a fell.", "Body."))
+        # The plan is paid for on top of the text: 2,500 for a 450-word section,
+        # and room for the 3,230-character plan staging measured.
+        asked = {}
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                asked.update(kwargs)
+                return dict(draft)
+        self.assertNotIn("plan", narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "", words=(150, 450)))
+        self.assertEqual(asked["max_tokens"], 4500)
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service

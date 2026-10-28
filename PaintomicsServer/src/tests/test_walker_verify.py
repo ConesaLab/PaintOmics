@@ -597,13 +597,23 @@ class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
                                                     "TRα1/TRβ-dependent miR-34 expression as Thrb/Thra mRNA collapses."))
 
     def test_a_summary_reporting_biology_and_the_paragraphs_are_untouched(self):
-        for summary in BIOLOGY_SUMMARIES:
+        # byte for byte: stored views are read through this, spacing included
+        spaced = [BIOLOGY_SUMMARIES[0].replace(". ", ".  "), BIOLOGY_SUMMARIES[2].replace(". ", ".\n")]
+        for summary in BIOLOGY_SUMMARIES + spaced:
             results, removed = self.pruned(summary, paragraphs=[CHAIN_PARAGRAPH, DRAWN_EDGE_PARAGRAPH])
             self.assertEqual(removed, [], summary)
             self.assertEqual(results["summary"], summary)
             self.assertEqual([p["text"] for p in results["paragraphs"]], [CHAIN_PARAGRAPH, DRAWN_EDGE_PARAGRAPH])
         self.assertIsNone(verify.META_RE.search(CHAIN_PARAGRAPH), "\"the chain\" carries biology")
         self.assertTrue(verify.META_RE.search(DRAWN_EDGE_PARAGRAPH), "the connective is why paragraphs are left alone")
+
+    def test_a_bare_leg_list_goes_and_a_leg_citation_stays(self):
+        """The brief asks for "[e3, e5]"; "The chain has edges e1, e3, e5, ..."
+        lists legs the reader never sees named that way."""
+        cited = "STEAP3 fell and BNIP3L rose downstream of it [e3, e5]."
+        self.assertEqual(self.pruned(cited), ({"title": "Results", "summary": cited, "paragraphs": []}, []))
+        listed = "The chain has edges e1, e3, e5, e6, and jumps J2, J4."
+        self.assertEqual(self.pruned(listed + " " + cited)[1], [listed])
 
     def test_and_so_and_finally_may_open_a_summary(self):
         for summary in ("And Foxo1 fell (−0.52) while Cdkn1b rose.", "So both arms of the axis fell together.",
@@ -617,6 +627,13 @@ class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
         # hsa05219: the sentence the "Then" followed was taken at seal time
         results, removed = self.pruned(LEAKED_SUMMARIES["7O521E0Y0y pathway:hsa05219"])
         self.assertEqual(removed[-1], "Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4, CDKN1A.")
+        # a chain of them goes, "Next to" is not one, and nothing removed means nothing dangles
+        results, _ = self.pruned("The kept statements are about Aaa. Then Bbb rose. Next Ccc fell. Ddd stayed.")
+        self.assertEqual(results["summary"], "Ddd stayed.")
+        results, _ = self.pruned("The kept statements are about Aaa. Next to EGFR, ERBB2 rose.")
+        self.assertEqual(results["summary"], "Next to EGFR, ERBB2 rose.")
+        results, removed = self.pruned("Then Bbb rose. Ccc fell.")
+        self.assertEqual((results["summary"], removed), ("Then Bbb rose. Ccc fell.", []))
 
     def test_a_title_in_the_briefs_words_goes_whole(self):
         results, removed = self.pruned("Aaa rose.", title="The kept statements in walk order")
