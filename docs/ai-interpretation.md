@@ -46,8 +46,14 @@ minutes, usually in about five.
   induced (up) · anchored in the network") and five chips, one per check the walk must
   pass before anything below is shown -- not a graph artifact, title fits the body,
   direction logic, citations in context, anchored to the perturbation. Hover a chip for
-  its numbers. When a check fails, its reason is printed, the Results and the statements
-  are withheld, and only the walk itself is shown; see [How the walk works](ai-graph-walk.md).
+  its numbers. When a check is not cleared, its reason is printed under the chips and the
+  Results, references and statements are hidden by default: a note names the checks it did
+  not clear, and **Show the interpretation anyway** opens them under a warning, to be read
+  as hypotheses drawn from the walk and the cited papers, not as findings. The walk itself
+  is always shown. A *Not a graph artifact* chip marked **?** (amber, neither passed nor
+  failed) could not be tested on this data: no three relevant genes on the walked graph
+  are connected to one another, so the check's walker could form no module to compare with
+  shuffled data. It counts as not cleared. See [How the walk works](ai-graph-walk.md).
 * **The Results section:** a title, a one-sentence summary, and one paragraph per
   kept statement in the order the walk found them. Each paragraph ends with chips
   for the legs it rests on. Numbers in brackets such as `[1]` link to the papers

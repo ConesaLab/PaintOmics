@@ -121,8 +121,12 @@ each cited paper carries its passages, the section each sits in, and the claim e
 Nothing the Writers and the Narrator produce reaches the page until the walk has passed five
 checks that can fail. Each is a verdict stored with the walk, shown as a chip above the
 Results section with its numbers on hover and its reason when it failed; a walk that fails
-any of them shows the checks, the reason and the walk itself (the legs are database
-relations and your values, not findings), and no Results section or statements.
+any of them shows the checks, the reasons and the walk itself (the legs are database
+relations and your values, not findings), and hides its Results section, references and
+statements by default. A note names the checks it did not clear; **Show the interpretation
+anyway** replaces the note with a warning and the text, in the order a passing walk shows
+it, to be read as hypotheses drawn from the walk and the cited papers, not as findings. The
+page remembers the choice for that walk while it stays open; a new walk starts hidden.
 
 1. **Not a graph artifact.** After the walk, code runs a permutation test of the data: the
    scripted walker walks the real relevant flags once and flags permuted over the measured
@@ -131,8 +135,22 @@ relations and your values, not findings), and no Results section or statements.
    values at least half the time -- and how hot its seeds are. The real flags must give more
    modules than the permuted ones do (empirical p below 0.05), or, when the graph holds only
    one or two modules, seeds far hotter than chance. A pathway whose relevant genes are
-   spread as the job's genes are at large fails here, and its walk is withheld: on the
-   STATegra example the FoxO pathway does, the whole network does not. A statement resting on
+   spread as the job's genes are at large fails here, and its text is hidden by default: on
+   the STATegra example the FoxO pathway does, the whole network does not. A failure says
+   less than "no structure": the scripted walker steps only from relevant gene to relevant
+   gene, so with few relevant genes it stalls after a leg or two on real and permuted data
+   alike. On a human bladder cancer job (199 of 6,070 measured genes relevant) the network
+   walk found 1 module against 1.1 on permuted data (p = 0.73) while 45 edges joined two
+   relevant genes against 27.8 expected (p = 0.10 over 200 permutations, counted by hand).
+   The gate therefore also reports, from
+   the same fifty permutations and outside the pass rule, the measured and relevant counts
+   on the walked graph, the edges joining two relevant nodes against chance
+   (`adjacent_pairs`: real, null mean, empirical p), and `untestable` when no three relevant
+   nodes are connected at all, so no module can form on the data (hsa05219's 4 relevant
+   genes of 22 touch no other relevant gene: 0 modules real and permuted, p = 1). Its reason
+   says which case it is: "could not be tested on this data", or "could not tell this data
+   from shuffled data on this graph" with the adjacency count beside it. The pass rule and
+   the numbers measured for it are unchanged. A statement resting on
    an arrow the values move against is an association whatever the arrow says. Every edge is also
    *tiered*: a signed, directed relation (activation, inhibition, expression, a reaction, a
    transcription-factor target) is a **mechanism**; a binding, an indirect effect, a shared
@@ -206,8 +224,9 @@ recall of a 12-node module at a 0.33 background rate is about 0.4, which is the 
 model policy is measured against.
 
 Measured on the STATegra example (`docs/dev/tellme-five-checks.md`): the five gates together
-render all three real network interpretations and withhold 18 of 20 built on permuted data
-(one-sided Fisher p = 0.006), the direction panel is read correctly in more than 97 percent of
+render all three real network interpretations and hold back 18 of 20 built on permuted data
+(one-sided Fisher p = 0.006; a held-back interpretation is hidden by default and opens on
+request under a warning), the direction panel is read correctly in more than 97 percent of
 164 constructed statements, and an Ikaros-anchored walk stays within two steps of Ikaros in
 every run where a decoy-anchored one reaches about three fifths and an unanchored one a
 quarter. Two of the checks do not meet their own bar: the context read from MeSH agrees with a
