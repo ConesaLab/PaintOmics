@@ -1157,15 +1157,47 @@ class ResultsNoteWiringTest(unittest.TestCase):
         walk = self.source("PA_Step4WalkView.js")
         self.assertIn('(rerun ? "; Walk again to try for one." : ".")', walk)
         self.assertIn("var rerun = !!(options && options.canRerun);", walk)
-        self.assertIn("paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()})", walk)
+        # The Results reach the page only through paWalkAppendText, shown or
+        # opened on request, with the call site's options.
+        self.assertIn("parent.appendChild(paWalkResultsNode(view, options));", walk)
+        self.assertEqual(walk.count("paWalkResultsNode("), 2, "one definition, one call (paWalkAppendText)")
+        self.assertIn("var textOptions = {onLeg: onLeg, canRerun: this.canEdit()};", walk)
         self.assertIn("if (this.canEdit()) {\n\t\t\tvar again = paWalkEl(\"a\", \"button btn-default pa-walk-again\"",
                       walk, "the button and the hint no longer share one condition")
         self.assertEqual(walk.count("Walk again to try for one"), 1, "the hint is built once, under canRerun")
         self.assertEqual(walk.count("+ standAlone"), 3, "every no-section note ends with the same rerun hint")
         panel = self.source("PA_AIInterpretView.js")
-        calls = [line for line in panel.splitlines() if "paWalkResultsNode(" in line and "typeof" not in line]
-        self.assertTrue(calls)
+        calls = [line for line in panel.splitlines()
+                 if ("paWalkAppendText(" in line or "paWalkBlockedNode(" in line) and "typeof" not in line]
+        self.assertEqual(len(calls), 2)
         self.assertFalse([line for line in calls if "canRerun" in line], "the AI panel has no Walk again button")
+
+    def test_a_held_back_walk_opens_on_request_at_both_call_sites(self):
+        walk = self.source("PA_Step4WalkView.js")
+        panel = self.source("PA_AIInterpretView.js")
+        # Each call site: the passing branch and the held-back one hand the
+        # same options to the shared helpers, and the held-back one a map the
+        # view keeps, so a re-render of the same walk keeps it open.
+        self.assertIn("\t\t\tpaWalkAppendText(root, view, textOptions);\n\t\t} else {\n"
+                      "\t\t\troot.appendChild(paWalkBlockedNode(view, textOptions, this.revealed));", walk)
+        self.assertIn("this.revealed = {};", walk)
+        self.assertIn("            paWalkAppendText(bubble, view, {onLeg: focusLeg});\n        } else {\n"
+                      "            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}, this.revealedWalks));",
+                      panel)
+        self.assertIn("this.revealedWalks = {};", panel)
+        self.assertIn("paWalkAppendText", panel.splitlines()[0], "listed in the /* global */ header")
+        # The revealed branch is the same helper, behind a real button, and
+        # the key is one sealed walk.
+        self.assertIn("paWalkAppendText(box, view, options);", walk)
+        self.assertIn('paWalkEl("button", "button btn-default pa-walk-reveal", "Show the interpretation anyway");', walk)
+        self.assertIn('reveal.type = "button";', walk)
+        self.assertIn('warning.setAttribute("role", "note");', walk)
+        self.assertIn("[view.job, view.scope, view.sealed_at]", walk)
+        # An untestable check is its own chip state and counts as not cleared.
+        self.assertIn('return gate.untestable === true ? "untested" : "fail";', walk)
+        self.assertEqual(walk.count('state === "fail" || state === "untested"'), 2)
+        for source in (walk, panel):
+            self.assertNotRegex(source, r"\b(alert|confirm|prompt)\(", "a modal dialog blocks the page")
 
     def test_the_notes_read_the_servers_reasons(self):
         from src.classes.AIInterpret.walker import service

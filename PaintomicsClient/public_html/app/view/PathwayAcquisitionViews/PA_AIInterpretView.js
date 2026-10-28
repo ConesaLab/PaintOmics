@@ -1,4 +1,4 @@
-/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, readableAnswer, paWalkEl, paWalkCount, paWalkResultsNode, paWalkReferencesNode, paWalkStatementsNode, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway, paWalkHeaderNode, paWalkGatesNode, paWalkTextShown, paWalkBlockedNode, paWalkModuleSegments, paWalkAnchorGene */
+/* global Ext, $, marked, SERVER_URL_AI_INTERPRET_REPORT, SERVER_URL_AI_INTERPRET_CHAT, withAIProviderInfo, readableAnswer, paWalkEl, paWalkCount, paWalkAppendText, paWalkLegsNode, paWalkPathwayLink, paWalkOpenPathway, paWalkHeaderNode, paWalkGatesNode, paWalkTextShown, paWalkBlockedNode, paWalkModuleSegments, paWalkAnchorGene */
 
 if (typeof marked !== "undefined" && marked.use) {
     marked.use({
@@ -27,6 +27,11 @@ function PA_AIInterpretView() {
     // id/name/source of the pathways the interpretation walk runs through,
     // used to turn pathway mentions in chat replies into links.
     this.pathwayIndex = [];
+    // Held-back walks the user opened, by paWalkRevealKey. The bubble is
+    // built once per report load (reportLoaded and reportLoading guard
+    // against a second), so today nothing redraws an opened walk; kept so a
+    // future redraw of the same walk opens it again rather than hiding it.
+    this.revealedWalks = {};
 
     var CHAT_PLACEHOLDER = "Ask a follow-up question...";
     var CHAT_WAIT_PLACEHOLDER = "Questions open once the walk has finished";
@@ -800,7 +805,7 @@ function PA_AIInterpretView() {
      * write-up copies it too.
      */
     this.displayWalk = function(view) {
-        if (!this.$root || typeof paWalkResultsNode !== "function") { return; }
+        if (!this.$root || typeof paWalkAppendText !== "function") { return; }
         var $bubble = $('<div class="ai-message ai-msg-assistant ai-walk-message">' +
             '<div class="ai-msg-label">AI Assistant</div><div class="ai-msg-bubble ai-walk-bubble"></div></div>');
         var bubble = $bubble.find(".ai-walk-bubble")[0];
@@ -822,22 +827,18 @@ function PA_AIInterpretView() {
             (starts === 1 ? " holds" : "s hold") + " surprisingly many relevant features and took " +
             paWalkCount(counts.steps, "step") + "."));
         /* The perturbation line and the five gates first; the text they judged
-           only when every gate passed (or the walk predates them). A walk they
-           held back shows a note in its place and opens its legs. */
+           when every gate passed (or the walk predates them). A walk they held
+           back shows a note in its place, with a button that opens the text
+           under a warning, and opens its legs. */
         var header = paWalkHeaderNode(view);
         if (header) { bubble.appendChild(header); }
         var gates = paWalkGatesNode(view);
         if (gates) { bubble.appendChild(gates); }
         var shown = paWalkTextShown(view);
         if (shown) {
-            bubble.appendChild(paWalkResultsNode(view, {onLeg: focusLeg}));
-            var references = paWalkReferencesNode(view);
-            if (references) { bubble.appendChild(references); }
-            if ((view.statements || []).length || (view.dropped || []).length) {
-                bubble.appendChild(paWalkStatementsNode(view, {onLeg: focusLeg}));
-            }
+            paWalkAppendText(bubble, view, {onLeg: focusLeg});
         } else {
-            bubble.appendChild(paWalkBlockedNode(view));
+            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}, this.revealedWalks));
         }
         var chain = paWalkEl("details", "pa-walk-chain");
         chain.open = !shown;
