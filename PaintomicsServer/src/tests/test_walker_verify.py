@@ -242,6 +242,24 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertFalse(any("drops" in p for p in verify.verify_results(results, [{"n": 1, "papers": [2]}], [],
                                                                          self.walker)))
 
+    def test_a_placeholder_paragraph_covers_no_statement(self):
+        """7O521E0Y0y's 20-statement Narrator wrote "..." for every paragraph
+        (2026-10-28); counted as covering, a "..." could be published."""
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        text = ("At the first time point in this series, the gene %s read %s [e1]. " % (
+            self.walker.label(node), value)) * 12
+        kept = [{"n": 1}, {"n": 2}]
+        for placeholder in ("...", "…", ""):
+            results = {"title": "t", "summary": "s", "paragraphs": [
+                {"from_statement": 1, "legs": [1], "text": text},
+                {"from_statement": 2, "legs": [1], "text": placeholder}]}
+            problems = verify.verify_results(results, kept, [], self.walker)
+            self.assertIn("statement 2 is not covered", problems, placeholder)
+            self.assertNotIn("statement 1 is not covered", problems)
+        self.assertTrue(verify.is_placeholder(" … "))
+        self.assertFalse(verify.is_placeholder("Cdkn1a."))
+
     def test_a_connective_paragraph_that_quotes_a_value_is_pruned(self):
         from src.classes.AIInterpret.walker import narrate
         results = {"paragraphs": [{"from_statement": 1, "legs": [1], "text": "Aaa rose to +1.00 [1]."},

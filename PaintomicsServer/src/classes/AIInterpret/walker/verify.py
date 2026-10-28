@@ -52,6 +52,17 @@ SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\[(])")
 def sentences(text):
     """A text's sentences, split where every pruner and check here splits them."""
     return SENTENCE_RE.split(str(text or ""))
+
+
+_WORD_RE = re.compile(r"[^\W_]")
+
+
+def is_placeholder(text):
+    """Whether a Results text says nothing: not a single word in it. "...",
+    "…" and "" are what the Narrator wrote in every field it skipped on
+    7O521E0Y0y's 20-statement network walk (2026-10-28). Not a word count:
+    verify_results already refuses a section too short for its statements."""
+    return not _WORD_RE.search(str(text or ""))
 STATEMENT_MIN, STATEMENT_MAX = 3, 5
 RESULTS_WORDS = {"pathway": (150, 450), "network": (300, 900)}
 # The walker's working words. In a statement or a Results section they narrate
@@ -840,7 +851,9 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
             if source is None:
                 problems.append("paragraph %d comes from statement %s, which was not kept" % (i, origin))
             else:
-                covered.add(int(source["n"]))
+                # A "..." paragraph retells nothing: its statement is not covered.
+                if not is_placeholder(text):
+                    covered.add(int(source["n"]))
                 source_refs = set(statement_refs(source))
                 # A paragraph retells its statement's literature claims, so it
                 # keeps their citations: the network Narrator once wrote "Slc7a11

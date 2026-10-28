@@ -1147,7 +1147,7 @@ class NarratorRepairCasesTest(_Fixture):
 
     def test_a_title_in_the_briefs_words_or_none_takes_the_neutral_title(self):
         from src.classes.AIInterpret.walker import tiers
-        for title in ("The kept statements in walk order", ""):
+        for title in ("The kept statements in walk order", "", "...", "…"):
             draft = {"title": title, "summary": "Cdkn1a fell.",
                      "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
             out, checks, prompts = self.narrate_drafts([draft], [[]])
@@ -1159,34 +1159,113 @@ class NarratorRepairCasesTest(_Fixture):
         out, checks, _ = self.narrate_drafts([draft], [[]])
         self.assertEqual((out["title"], checks["gates"]["title"]["fallback"]), ("Cdkn1a fell in the knockout", False))
 
-    def test_the_plan_reaches_nothing_the_walk_keeps(self):
-        """The planning field comes first in the schema and leaves with the
-        answer: no record, view, chat or page sees it."""
+    def test_the_answer_has_no_planning_field_and_the_prose_budget(self):
+        """#203's "plan" field took the whole answer on a 20-statement network
+        walk and left "..." in every field a reader sees (2026-10-28)."""
         from src.classes.AIInterpret.walker import narrate as narrate_mod
-        self.assertEqual(list(narrate_mod.RESULTS_SCHEMA["properties"])[0], "plan")
-        self.assertIn("plan", narrate_mod.RESULTS_SCHEMA["required"])
-        self.assertIn("`plan` is never shown", narrate_mod.BRIEF)
-        draft = {"plan": "I must produce exactly 1 fact paragraph in walk order.", "title": "Results",
-                 "summary": "Cdkn1a fell.", "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
-        out, checks, _ = self.narrate_drafts([draft], [[]])
-        self.assertNotIn("plan", out)
-        out, checks, _ = self.narrate_drafts([draft], [["paragraph 1 is too short"], ["paragraph 1 is too short"]])
-        self.assertIsNone(out)
-        self.assertNotIn("plan", checks["results_dropped"], "a dropped draft is stored too")
-        # An answer without a plan reads as before.
-        no_plan = {k: v for k, v in draft.items() if k != "plan"}
-        out, _, _ = self.narrate_drafts([no_plan], [[]])
-        self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("Cdkn1a fell.", "Body."))
-        # The plan is paid for on top of the text: 2,500 for a 450-word section,
-        # and room for the 3,230-character plan staging measured.
+        self.assertNotIn("plan", narrate_mod.RESULTS_SCHEMA["properties"])
+        self.assertNotIn("plan", narrate_mod.RESULTS_SCHEMA["required"])
+        self.assertNotIn("`plan`", narrate_mod.BRIEF)
+        draft = {"plan": "I must produce exactly 1 fact paragraph.", "title": "Results", "summary": "Cdkn1a fell.",
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
         asked = {}
 
         class Client(object):
             def complete_json(self, messages, *args, **kwargs):
                 asked.update(kwargs)
                 return dict(draft)
-        self.assertNotIn("plan", narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "", words=(150, 450)))
-        self.assertEqual(asked["max_tokens"], 4500)
+        out = narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "", words=(150, 450))
+        self.assertEqual(asked["max_tokens"], 2500)
+        self.assertEqual(sorted(out), ["paragraphs", "summary", "title"], "a key the schema does not name was kept")
+
+    def test_an_answer_of_placeholders_is_asked_again_and_never_kept(self):
+        """7O521E0Y0y, 20 kept statements: "..." for the summary and all 40 paragraphs."""
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        dots = {"title": "Results", "summary": "...", "paragraphs": [
+            {"from_statement": 1, "legs": [1], "text": "..."}, {"from_statement": None, "legs": [], "text": "…"}]}
+        good = {"title": "Results", "summary": "...",
+                "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Cdkn1a fell [e1]."}]}
+        calls = []
+
+        class Client(object):
+            def __init__(self, replies):
+                self.replies = list(replies)
+
+            def complete_json(self, *args, **kwargs):
+                calls.append(1)
+                return dict(self.replies.pop(0))
+        out = narrate_mod.narrate(Client([dots, good]), "card", [{"n": 1}], "chain", "")
+        self.assertEqual((len(calls), out["paragraphs"][0]["text"]), (2, "Cdkn1a fell [e1]."))
+        self.assertEqual(out["summary"], "", "a placeholder summary is shown as none")
+        # Two placeholder answers are no answer, not a section that failed its checks.
+        del calls[:]
+        with self.assertRaisesRegex(narrate_mod.Unanswered, "placeholders"):
+            narrate_mod.narrate(Client([dots, dots]), "card", [{"n": 1}], "chain", "")
+        self.assertEqual(len(calls), 2)
+        # Half the paragraphs are enough to ask again; a missing summary stays missing.
+        half = {"title": "Results", "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Cdkn1a fell [e1]."},
+                                                   {"from_statement": None, "legs": [], "text": "..."}]}
+        no_summary = {"title": "Results", "paragraphs": good["paragraphs"]}
+        del calls[:]
+        out = narrate_mod.narrate(Client([half, no_summary]), "card", [{"n": 1}], "chain", "")
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("summary", out)
+
+    def test_placeholder_answers_read_as_no_answer_on_the_page(self):
+        from src.classes.AIInterpret.walker import service
+        dots = {"title": "Results", "summary": "...", "paragraphs": [{"from_statement": 1, "legs": [1], "text": "..."}]}
+        out, checks, budgets = self.narrate([dots])
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"], [service.RESULTS_NO_ANSWER])
+        self.assertEqual(len(budgets), 2, "asked once more, as for an unreadable answer")
+
+    def test_a_repair_that_passes_is_kept_whatever_it_retells(self):
+        """Master's rule: the repair replaces a draft that failed. A guard that
+        counted retold statements its own way threw away a repair that had
+        passed every check."""
+        from src.classes.AIInterpret.walker import service
+        statements = [{"n": 1, "claim": "c", "prose": "p", "legs": [1]}, {"n": 2, "claim": "d", "prose": "q", "legs": [1]}]
+        draft = {"title": "Results", "summary": "s.", "paragraphs": [
+            {"text": "Cdkn1a fell in the knockout.", "legs": [1], "from_statement": 1},
+            {"text": "Foxo1 rose in the knockout.", "legs": [1], "from_statement": 2}]}
+        repaired = {"title": "Results", "summary": "s.", "paragraphs": [
+            {"text": "Cdkn1a fell while Foxo1 rose in the knockout.", "legs": [1], "from_statement": 1}]}
+        answers, verdicts = iter([draft, repaired]), iter([["paragraph 2 cites leg e9, not on the chain"], []])
+        walker, _ = self.walk()
+
+        class Client(object):
+            def complete_json(self, *args, **kwargs):
+                return next(answers)
+        checks = {"gates": {}}
+        with patched((service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+                     (service.tiers, "title_outruns_body", lambda *a, **k: [])):
+            out = service._narrate(Client(), "card", "chain", statements, [], walker, {}, "pathway:x", checks,
+                                   (100, 200), deadline=time.time() + 400)
+        self.assertEqual([p["text"] for p in out["paragraphs"]], ["Cdkn1a fell while Foxo1 rose in the knockout."])
+        self.assertTrue(checks["gates"]["title"]["rewritten"])
+
+    def test_a_title_only_repair_that_breaks_the_body_is_not_kept(self):
+        """Asked for because of its title alone, a repair that fails the body's
+        checks would cost a section that had none: the draft stands, with the
+        title code writes, and the gate says the repair was not kept."""
+        from src.classes.AIInterpret.walker import service
+        draft = {"title": "X activates Y", "summary": "Cdkn1a fell.",
+                 "paragraphs": [{"text": "Cdkn1a fell in the knockout.", "legs": [1], "from_statement": 1}]}
+        worse = {"title": "Results", "summary": "Cdkn1a fell. The kept statements are about Cdkn1a.",
+                 "paragraphs": [{"text": "The map draws this edge.", "legs": [], "from_statement": None}]}
+        titles = iter([["the title claims a mechanism"]] + [[]] * 10)
+        verdicts = iter([[], ["statement 1 is not covered"], []])
+        out, checks, _ = self.narrate(
+            [draft, worse],
+            [(service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+             (service.tiers, "title_outruns_body", lambda *a, **k: next(titles)),
+             (service.tiers, "drop_mechanistic_sentences", lambda results: 0)])
+        self.assertEqual(out["paragraphs"][0]["text"], "Cdkn1a fell in the knockout.")
+        self.assertEqual(out["title"], service.tiers.neutral_title("Results", {}, None))
+        gate = checks["gates"]["title"]
+        self.assertEqual((gate["rewritten"], gate["repair_kept"], gate["repair_problems"], gate["fallback"]),
+                         (False, False, ["statement 1 is not covered"], True))
+        self.assertNotIn("meta_sentences_dropped", checks, "the discarded repair's pruning is not on the record")
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service
@@ -1667,6 +1746,54 @@ class WriterTest(_Fixture):
         self.assertTrue(c.done, c.loop_error)
         self.assertEqual(len(c.kept), 1)
         self.assertEqual([bool(tools) for tools in model.calls], [True, False])
+
+    def test_a_writer_that_calls_a_closed_tool_is_asked_for_its_statements(self):
+        """openai-agents 0.24 raises ModelBehaviorError when a tool offered at
+        the start of a turn is disabled when the call runs -- research closing
+        on its time share while the model answers: "Tool search_literature is
+        currently disabled for agent Writer" lost a whole walk on staging
+        (7O521E0Y0y, 2026-10-28). The Writer goes to its finish instead."""
+        from agents.items import ModelResponse
+        from agents.models.interface import Model
+        from agents.usage import Usage
+        from openai.types.responses import ResponseFunctionToolCall
+
+        passing = self._passing()
+        c = self._writer()
+
+        class Closing(Model):
+            """Offered search_literature, it searches; research closes while it
+            answers. Asked for the statements, it submits them."""
+            def __init__(self):
+                self.calls = []
+
+            async def get_response(self, *_args, **kwargs):          # the SDK passes keywords
+                self.calls.append({"tools": sorted(t.name for t in kwargs["tools"]), "input": kwargs["input"]})
+                n = len(self.calls)
+                if n == 1:
+                    c.searches.extend([{"query": "q", "topic_tag": "t"}] * writer_mod.RESEARCH_SEARCHES
+                                      * max(1, c.citations))
+                name, args = (("search_literature", {"query": "Foxo1 OR Cdkn1b", "topic_tag": "t"}) if n == 1
+                              else ("submit_statements", {"statements_json": json.dumps(passing)}))
+                item = ResponseFunctionToolCall(arguments=json.dumps(args), call_id="c%d" % n, name=name,
+                                                type="function_call", id="f%d" % n)
+                return ModelResponse(output=[item], usage=Usage(), response_id=None)
+
+            def stream_response(self, *args, **kwargs):
+                raise NotImplementedError
+
+        model = Closing()
+        asyncio.run(writer_mod.run_writer_async(c, max_turns=5, model=model))
+        self.assertIn("search_literature", model.calls[0]["tools"], "research was closed before the turn")
+        self.assertIsNone(c.loop_error)
+        self.assertTrue(c.done)
+        self.assertEqual(len(c.kept), 1)
+        self.assertEqual(model.calls[1]["tools"], [], "the finish offers no tool")
+        finish = model.calls[1]["input"]
+        called = {item.get("call_id") for item in finish if item.get("type") == "function_call"}
+        answered = {item.get("call_id") for item in finish if item.get("type") == "function_call_output"}
+        self.assertLessEqual(called, answered, "a tool call without its result went back to the gateway")
+        self.assertEqual(finish[-1], {"role": "user", "content": writer_mod.FINISH_NOW})
 
     def test_a_citation_is_no_submission(self):
         """A draft "Fh1 rises [3]." once reduced to "[3]", a JSON array, and

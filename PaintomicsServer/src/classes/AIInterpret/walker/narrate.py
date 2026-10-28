@@ -6,21 +6,27 @@ story is dropped and the statements stand alone.
 from __future__ import annotations
 
 import json
+import logging
 import time
 
 from src.classes.AIInterpret import llm_client
+from src.classes.AIInterpret.walker.verify import is_placeholder
 
-# ``plan`` comes first and is never shown. Under the gateway's guided JSON
-# decoding DeepSeek can only write JSON, so its planning went into the first
-# string field there was, the summary: 5 of the 19 Results sections stored on
-# 2026-10-28 carry it there ("The kept statements are the facts; the prose is
-# mine. I must produce ..."). The field gives the planning a place before the text a
-# reader sees; without_plan removes it from every answer narrate() returns,
-# and verify.drop_meta_sentences stays as the net for planning written elsewhere.
+logger = logging.getLogger(__name__)
+
+# No planning field. #203 put a "plan" string first, for the planning
+# DeepSeek writes into the first string field under guided JSON decoding (5 of
+# 19 stored summaries held it), and it broke large sections in production: on
+# 7O521E0Y0y's network walk with 20 kept statements (2026-10-28) the first
+# draft wrote a 4,321-character plan and "..." for the summary and all 40
+# paragraphs, and the repair a 10,356-character plan and one "..." paragraph
+# ("1 words; between 800 and 3000"), so the Results were dropped where the
+# 12-statement walk of the same job had passed before #203. The planning that
+# still lands in the summary is pruned (verify.drop_meta_sentences), and an
+# answer of placeholders is asked again (placeholder_answer).
 RESULTS_SCHEMA = {
     "type": "object",
     "properties": {
-        "plan": {"type": "string"},
         "title": {"type": "string"},
         "summary": {"type": "string"},
         "paragraphs": {
@@ -37,17 +43,9 @@ RESULTS_SCHEMA = {
             },
         },
     },
-    "required": ["plan", "title", "summary", "paragraphs"],
+    "required": ["title", "summary", "paragraphs"],
     "additionalProperties": False,
 }
-# Room for the plan on top of the text's own budget. The longest planning
-# stored in a summary ran to 2,051 characters; given the field, the Narrator
-# wrote a 3,230-character plan (about 800 tokens) on staging for 7O521E0Y0y's
-# network walk with 7 statements, 2026-10-28. No maxLength on it: guided
-# decoding may not honour one, and the text's own words x 5 budget is already
-# about 3.5 times the 1.4 tokens a word of prose takes.
-PLAN_TOKENS = 2000
-
 BRIEF = (
     "You write the Results section of a paper from a graph walk over a pathway or a whole interaction "
     "network. Facts come only from "
@@ -55,8 +53,6 @@ BRIEF = (
     "walk: name the genes and proteins (\"Itpr1, Itpr2 and Itpr3\", \"the IP3 receptors\"), never call a "
     "set of genes a cluster, and never use the walker's words seed, jump or the walk; code removes a "
     "sentence that does. Rules:\n"
-    "- Plan in `plan`, first: notes on these rules, the statements and the order go there, and `plan` is never "
-    "shown. The title, the summary and the paragraphs are what the reader sees: never restate these rules there.\n"
     "- Exactly %d paragraphs carry facts, one per kept statement, in walk order, each tagged "
     "from_statement = that statement's n, with the legs it rests on. Explain how these genes connect "
     "under the experiment design.\n"
@@ -95,14 +91,13 @@ def prune_connectives(results):
     return dropped
 
 
-def without_plan(results):
-    """``results`` without its ``plan``: the dict itself when it has none, else
-    a copy without it. narrate() returns every answer through it, and nothing
-    else writes a Results section, so the plan reaches no record, view, chat
-    or page."""
-    if not isinstance(results, dict) or "plan" not in results:
-        return results
-    return {key: value for key, value in results.items() if key != "plan"}
+def placeholder_answer(out):
+    """Whether at least half of an answer's paragraphs are placeholders
+    (verify.is_placeholder): the section was skipped, and the answer is asked
+    again. Fewer still fail verify_results, which covers no statement with
+    one. No paragraphs at all is the verifier's "no paragraphs", as before."""
+    texts = [p.get("text") for p in out.get("paragraphs") or [] if isinstance(p, dict)]
+    return bool(texts) and 2 * sum(1 for text in texts if is_placeholder(text)) >= len(texts)
 
 
 def _embedded_json(text):
@@ -135,14 +130,17 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
             objections=None, temperature=0.3, deadline=None):
     """The Results dict, or None when the call fails. Raises OutOfTime when
     `deadline` passed, or the call gave up on it, before a readable answer,
-    and Unanswered when the last attempt's call failed with time left.
+    and Unanswered when the last attempt's call failed with time left, or
+    when the answers it had were placeholders.
 
     The token budget follows the word budget: a network Results section of up to
     900 words is about 1,300 tokens of prose plus the JSON around it, and the
     2,500-token budget the pathway section needs cut one off mid-object, which
-    left the job with no Results at all. PLAN_TOKENS more pay for the plan,
-    which is dropped from the answer (without_plan); an answer without one
-    reads the same."""
+    left the job with no Results at all.
+
+    An answer half of whose paragraphs are placeholders is asked again
+    (placeholder_answer); a placeholder summary comes back empty; keys the
+    schema does not name (a "plan") are dropped."""
     prompt = "DESIGN CARD\n%s\n\nCHAIN\n%s\n\nKEPT STATEMENTS\n%s\n\nPAPERS\n%s" % (
         card_text, chain_text,
         json.dumps([{"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
@@ -151,9 +149,9 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         papers_text or "none")
     if objections:
         prompt += "\n\nYOUR PREVIOUS DRAFT FAILED THESE CHECKS; fix every one:\n- " + "\n- ".join(objections)
-    max_tokens = max(2500, int(words[1] * 5)) + PLAN_TOKENS
+    max_tokens = max(2500, int(words[1] * 5))
     brief = BRIEF % (len(kept), max(0, len(kept) - 1), words[0], words[1])
-    failure = None
+    failure, placeholders = None, 0
     for _attempt in range(2):                 # one more try when the reply is unreadable
         budget = None if deadline is None else deadline - time.time()
         if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
@@ -167,9 +165,19 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         except Exception as exc:                                      # noqa: BLE001
             out, failure = None, exc
         if isinstance(out, dict) and isinstance(out.get("paragraphs"), list):
-            return without_plan(out)
+            if placeholder_answer(out):
+                logger.warning("[walker] the Narrator answered with placeholder paragraphs; asking again")
+                out, placeholders = None, placeholders + 1
+                continue
+            out = {key: out[key] for key in RESULTS_SCHEMA["properties"] if key in out}
+            if "summary" in out and is_placeholder(out["summary"]):
+                out["summary"] = ""
+            return out
     if failure is not None and deadline is not None and llm_client.ran_out_of_budget(failure):
         raise OutOfTime("the Narrator's call gave up at the run's deadline")
+    if failure is None and placeholders:
+        # Not "failed its checks": nothing was written to check.
+        raise Unanswered("the Narrator answered with placeholders")
     if failure is not None:
         raise Unanswered("the Narrator's call failed: %s" % failure, rate_limited=llm_client.rate_limited(failure))
     return None
