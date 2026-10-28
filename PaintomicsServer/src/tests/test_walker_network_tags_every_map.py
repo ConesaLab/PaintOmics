@@ -12,8 +12,14 @@ more kept under half of their own edges (hsa01200 8 of 275).
 The second map here draws only relations the first draws too, so on the old
 build it has no tag at all: resolve_scope refuses it and these tests fail.
 
+Tagged with every map, an edge still kept one merged sign and subtype, and a
+pathway walk read that merge instead of its own map: on hsa 427 pairs carry
+opposite signs in two maps (NF1 -> HRAS inhibits in hsa04010, activates in
+hsa04014). The third map here draws 1 -> 5 against the first.
+
     cd PaintomicsServer && PYTHONPATH=. python -m src.tests.test_walker_network_tags_every_map
 """
+import json
 import os
 import shutil
 import sys
@@ -56,6 +62,19 @@ SECOND = """<?xml version="1.0"?>
   <reaction id="3" name="rn:R00200" type="irreversible"><substrate id="9" name="cpd:C00022"/></reaction>
 </pathway>
 """
+# 1 -> 5: an inhibition here, an activation in the first map.
+THIRD = """<?xml version="1.0"?>
+<pathway name="path:tst00003" org="tst" number="00003">
+  <entry id="1" name="tst:1" type="gene"/>
+  <entry id="2" name="tst:5" type="gene"/>
+  <relation entry1="1" entry2="2" type="PPrel"><subtype name="inhibition" value="--|"/></relation>
+</pathway>
+"""
+
+
+def reading(net, a, b):
+    edge = net.edges[(a, b)]
+    return edge["sign"], edge["subtype"]
 
 
 class NetworkTagsEveryMapTest(unittest.TestCase):
@@ -64,7 +83,7 @@ class NetworkTagsEveryMapTest(unittest.TestCase):
         cls.data_dir = tempfile.mkdtemp(prefix="walker_tags_")
         kgml = os.path.join(cls.data_dir, "current", "tst", "kgml")
         os.makedirs(kgml)
-        for name, text in (("tst00001.kgml", FIRST), ("tst00002.kgml", SECOND)):
+        for name, text in (("tst00001.kgml", FIRST), ("tst00002.kgml", SECOND), ("tst00003.kgml", THIRD)):
             with open(os.path.join(kgml, name), "w", encoding="utf-8") as handle:
                 handle.write(text)
         cls.net = net_mod.build_network("tst", cls.data_dir)
@@ -76,7 +95,32 @@ class NetworkTagsEveryMapTest(unittest.TestCase):
     def test_a_shared_edge_carries_both_maps(self):
         self.assertEqual(self.net.edges[("g:1", "g:2")]["tags"], ["KEGG:tst00001", "KEGG:tst00002"])
         self.assertIn("KEGG:tst00002", self.net.nodes["g:1"]["pathways"])
-        self.assertEqual(self.net.sources["kegg"], 2, "each readable map is one file read")
+        self.assertEqual(self.net.sources["kegg"], 3, "each readable map is one file read")
+
+    def test_each_pathway_reads_its_own_maps_sign_and_subtype(self):
+        """The network keeps the merge; each pathway's subgraph, what its map draws."""
+        self.assertEqual(reading(self.net, "g:1", "g:5"), (1, "activation"))
+        self.assertEqual(reading(self.net.filter_pathway("KEGG:tst00001"), "g:1", "g:5"), (1, "activation"))
+        self.assertEqual(reading(self.net.filter_pathway("KEGG:tst00003"), "g:1", "g:5"), (-1, "inhibition"))
+        self.assertEqual(reading(self.net, "g:1", "g:2"), (1, "binding/association"))
+        self.assertEqual(reading(self.net.filter_pathway("KEGG:tst00001"), "g:1", "g:2"), (0, "binding/association"))
+        self.assertEqual(reading(self.net.filter_pathway("KEGG:tst00002"), "g:1", "g:2"), (1, "activation"))
+
+    def test_only_a_reading_that_differs_from_the_merge_is_stored(self):
+        self.assertEqual(self.net.edges[("g:1", "g:5")]["by_tag"], {"KEGG:tst00003": [-1, "inhibition"]})
+        self.assertEqual(self.net.edges[("g:1", "g:2")]["by_tag"],
+                         {"KEGG:tst00001": [0, "binding/association"], "KEGG:tst00002": [1, "activation"]})
+        self.assertNotIn("by_tag", self.net.edges[("g:3", "g:4")], "one map draws it: nothing to keep")
+
+    def test_the_cache_keeps_each_maps_reading(self):
+        again = net_mod.Network.from_dict(json.loads(json.dumps(self.net.to_dict())))
+        self.assertEqual(again.edges[("g:1", "g:5")]["by_tag"], {"KEGG:tst00003": [-1, "inhibition"]})
+        self.assertEqual(reading(again.filter_pathway("KEGG:tst00003"), "g:1", "g:5"), (-1, "inhibition"))
+        self.assertEqual(reading(again, "g:1", "g:5"), (1, "activation"))
+        # A cache row written without the sixth element still reads.
+        old = self.net.to_dict()
+        old["edges"] = [row[:5] for row in old["edges"]]
+        self.assertNotIn("by_tag", net_mod.Network.from_dict(old).edges[("g:1", "g:5")])
 
     def test_a_map_drawn_first_elsewhere_is_a_walk_scope(self):
         """hsa05219: refused with 'draws no interactions a walk can follow'."""

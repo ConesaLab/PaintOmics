@@ -69,7 +69,9 @@ builds in about three seconds, and is cached beside the KGML directory.
 Reactome reactions join proteins, and their participants are mostly complexes and sets:
 a complex or a set is read as its member proteins, and a reaction whose expansion would join
 more than 36 pairs is skipped, because a large set says "in the same bag", not "one acts on
-the other". A **pathway walk** uses that network filtered to one pathway's tag. A
+the other". A **pathway walk** uses that network filtered to one pathway's tag, with each
+edge's sign and subtype as that pathway draws it: NF1 → HRAS is an activation on the Ras
+map and an inhibition on the MAPK map. A
 **universal walk** uses the whole network. Your job is laid over either: a node is *relevant* when any of its
 own layers is in your relevant list, every layer's values travel as text with your own
 column labels, and miRNAs from a miRNA-seq input become nodes of their own with an edge to
