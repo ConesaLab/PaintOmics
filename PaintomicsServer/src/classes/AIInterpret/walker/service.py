@@ -161,13 +161,15 @@ def apply_render_rule(v):
 
 
 def prune_stored_results(v):
-    """A stored view's Results summary and title without the Narrator's brief
-    (verify.drop_meta_sentences), in place, as the routes and the chat read
-    it: 5 of the 19 summaries sealed before the check echo the brief, and the
-    stored document is not rewritten. A title left empty is shown as
+    """A stored view's Results as the routes and the chat read it, in place:
+    without a ``plan`` (narrate.without_plan) and with the summary and title
+    stripped of the Narrator's brief (verify.drop_meta_sentences). 5 of the 19
+    summaries sealed before the check echo the brief; the stored document is
+    not rewritten. A title this empties stays "", which the page shows as
     "Results". Returns ``v``."""
-    results = (v or {}).get("results") if isinstance(v, dict) else None
+    results = v.get("results") if isinstance(v, dict) else None
     if isinstance(results, dict):
+        v["results"] = results = narrate_mod.without_plan(results)
         verify.drop_meta_sentences(results)
     return v
 
@@ -895,10 +897,13 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         meta.extend(verify.drop_meta_sentences(results))
         if meta:
             checks["meta_sentences_dropped"] = checks.get("meta_sentences_dropped", 0) + len(meta)
+        # None written, or only the brief's words: the title code writes when
+        # the Narrator's cannot stand (the title gate's fallback), and the
+        # gate's record says so. Each draft decides it anew.
+        title_gate["fallback"] = False
         if not str(results.get("title") or "").strip():
-            # None written, or only the brief's words: the title code writes
-            # when the Narrator's cannot stand (the title gate's fallback).
             results["title"] = tiers.neutral_title(scope_name, card or {}, anchor)
+            title_gate["fallback"] = "neutral"
         title = tiers.title_outruns_body(results, statements, walker, anchor, scope_name)
         return verify.verify_results(results, statements, dropped, walker, kind, words), title
 
@@ -914,12 +919,11 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     if results is not None:
         title_gate["verbs_found"] = sorted(set(tiers.mechanistic_verbs(
             " ".join([str(results.get("title") or ""), str(results.get("summary") or "")]))))
-    # A summary that restated the brief is repaired even when nothing else
-    # failed, but that alone never costs the section: a repair that breaks a
-    # draft which had passed is not kept, and the draft stands, pruned.
-    first = (results, problems, title_problems) if not (problems or title_problems) else None
+    # A summary that restated the brief is pruned, silently, and asks for no
+    # repair of its own: a re-narration put a draft that had passed at risk.
+    # When the section's problems ask for one, the repair is told what went.
     notes = [verify.meta_note(meta)] if meta else []
-    if (problems or title_problems or notes) and results is not None and (
+    if (problems or title_problems) and results is not None and (
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         try:
             results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
@@ -927,9 +931,6 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
                                           deadline=deadline)
             problems, title_problems = checked(results)
             title_gate["rewritten"] = True
-            if first is not None and (results is None or problems):
-                results, problems, title_problems = first
-                title_gate["rewritten"] = False
         except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
             # The draft failed its checks; the repair could not be had. A
             # title that outran the body is still repaired in code below.
@@ -1026,7 +1027,7 @@ def view(rec):
                                                "discordant_legs")}
                        for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
-        "results": rec.get("results"),
+        "results": narrate_mod.without_plan(rec.get("results")),
         "papers": {str(ref): p for ref, p in (rec.get("papers") or {}).items()},
         "checks": {"results": (rec.get("checks") or {}).get("results"),
                    "sense": (rec.get("checks") or {}).get("sense"),

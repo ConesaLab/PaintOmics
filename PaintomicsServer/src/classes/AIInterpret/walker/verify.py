@@ -70,26 +70,30 @@ JARGON_RE = re.compile(r"\b(clusters?|the walk(?:er)?|(?:a|an|the|this|our|each)
 # paintomics.org on 2026-10-28, 5 summaries were such planning ("The kept
 # statements are the facts; the prose is mine. I must produce exactly 12 fact
 # paragraphs ...", "We walked a signed, directed interaction network from
-# XPO1 to ...") and no title was; nothing here matches any of the other 14
-# summaries. JARGON_RE's walker words are pruned everywhere; these only in the
-# summary and the title (drop_meta_sentences). Of the 324 stored paragraph
-# sentences it matches 11: six where "the chain" carries biology ("Thrb is the
-# timed hub of this chain ... the only clean monotone fall on the chain"), a
-# connective that opens "The design card places Ikzf1 as the perturbed gene",
-# and four built on "kept statement" (one walk) that carry their paragraph's
-# reading. Removing a paragraph sentence can take a citation or a statement's
-# only paragraph with it, and fail a section that passed.
+# XPO1 to ...") and no title was; every alternative here matches only in those
+# five, none in the other 14 summaries or any title. JARGON_RE's walker words
+# are pruned everywhere; these only in the summary and the title
+# (drop_meta_sentences). Of the 324 stored paragraph sentences they match 23:
+# fifteen connectives that open "The drawn edge from STEAP3 to BNIP3L is ...",
+# leg lists such as "(e12, e23)", and four built on "kept statement" that carry
+# their paragraph's reading. Removing a paragraph sentence can take a citation
+# or a statement's only paragraph with it, and fail a section that passed.
+# "The chain" is not here: it carries biology in six stored paragraphs ("Thrb
+# is the timed hub of this chain"), and y712svrXTf's summary keeps "The chain
+# separates into a baseline-up miRNA module ...".
 META_RE = re.compile(
     r"\b(?:kept|dropped) statements?\b|\bstatements? \d+\b|\bfrom_statement\b"
-    r"|\b(?:fact|connective) paragraphs?\b|\bthe prose\b|\bwalk order\b|\bthe chain\b|\bdesign card\b"
+    r"|\b(?:fact|connective) paragraphs?\b|\bthe prose\b|\bwalk order\b|\bdesign card\b|\bdrawn edges?\b"
     r"|\btwo decimals\b|\bpast tense\b|\bhedging words\b|\bunlabell?ed omic\b"
     r"|\b\d+\s*(?:-|–|to)\s*\d+ words\b|\bc1\s*\.\.\s*cN\b|\[(?:eN|N|node · layer)\]"
+    r"|(?-i:\b[eJ]\d+(?:, (?:and )?[eJ]\d+)+\b)"           # a list of bare leg or jump ids: "e1, e3, e5"
     r"|\b(?:I|we) (?:must|will|need|should|have to)\b|\bI(?:'ll|'m going to)\b|\blet me\b"
     r"|\bwe (?:walked|traced)\b", re.I)
-# A summary's first sentence opening on one of these follows a sentence a
+# A summary whose first sentence opens on one of these follows a sentence a
 # pruner took: "Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4,
-# CDKN1A." was all that stood before the brief's words on hsa05219.
-SEQUENCE_LEAD_RE = re.compile(r"^(?:Then|Next|After that|From there|Finally|And|So)(?=[\s,])")
+# CDKN1A." was all that stood before the brief's words on hsa05219. Not "And",
+# "So" or "Finally", which can open a summary that means it.
+SEQUENCE_LEAD_RE = re.compile(r"^(?:Then|Next|After that|From there)(?=[\s,])")
 
 
 def chain_nodes(chain):
@@ -615,23 +619,23 @@ def drop_meta_sentences(results):
     own words (META_RE), and return the removed text, as written, for the
     repair round. The paragraphs are left alone (see META_RE).
 
-    A summary most of whose sentences match is planning throughout and goes
-    whole: "The drawn edges: e1 is pkmb → eno3, KEGG Glycolysis ..." was the
-    one sentence of 13 on rJMPHKo7n6 no word here names. Then a first
-    sentence opening on a sequencing word (SEQUENCE_LEAD_RE) goes too, whoever
-    removed the sentence it followed. A title with any such word goes whole;
-    the caller decides what stands in for it."""
+    Sentence by sentence: the rest of a summary stays, whatever share of it
+    went. Taken whole when most of it matched, y712svrXTf's lost its finding
+    ("The baseline-up module is consistent with a PI3K-suppressive brake ...")
+    with the "We traced ..." before it. Then a first sentence opening on a
+    sequencing word (SEQUENCE_LEAD_RE) goes too, whoever removed the sentence
+    it followed. A title with any such word goes whole; the caller decides
+    what stands in for it."""
     removed = []
     if not isinstance(results, dict):
         return removed
     if results.get("summary"):
-        summary = [s for s in sentences(results["summary"]) if s.strip()]
-        meta = [s for s in summary if META_RE.search(s)]
-        if meta and 2 * len(meta) > len(summary):
-            meta = summary
-        removed.extend(meta)
-        summary = [s for s in summary if s not in meta]
-        while summary and SEQUENCE_LEAD_RE.match(summary[0].lstrip()):
+        summary = []
+        for sentence in sentences(results["summary"]):
+            if not sentence.strip():
+                continue
+            (removed if META_RE.search(sentence) else summary).append(sentence)
+        if summary and SEQUENCE_LEAD_RE.match(summary[0].lstrip()):
             removed.append(summary.pop(0))
         results["summary"] = " ".join(summary)
     if results.get("title") and META_RE.search(str(results["title"])):
@@ -640,17 +644,22 @@ def drop_meta_sentences(results):
     return removed
 
 
+def _clip(text, width):
+    """``text`` on one line, cut at a word boundary to at most ``width``
+    characters with "…" when it was longer: how a repair note quotes a
+    sentence the pruners removed."""
+    text = " ".join(str(text or "").split())
+    if len(text) <= width:
+        return text
+    return text[:width].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def meta_note(removed):
     """The repair round's objection for a summary drop_meta_sentences pruned:
-    which sentences went and what to write instead. It guides the repair and
-    is never one of the section's problems: the pruned section stands as it
-    is."""
-    quoted = []
-    for sentence in removed[:3]:
-        head = " ".join(str(sentence).split())
-        if len(head) > 60:
-            head = head[:60].rsplit(" ", 1)[0].rstrip(",;:") + "…"
-        quoted.append("\"%s\"" % head)
+    which sentences went and what to write instead. It joins the objections
+    of a repair the section's problems asked for; it never asks for one, and
+    is never one of the problems itself."""
+    quoted = ["\"%s\"" % _clip(sentence, 60) for sentence in removed[:3]]
     return ("code removed %s of your summary or title that restated your instructions instead of reporting "
             "the biology (%s%s); write the summary in plain biological terms: what changed in this "
             "experiment, naming the genes, as a paper's own summary of its results, never the rules, the "
@@ -709,12 +718,10 @@ def _removal_note(where, source, sentence, refs, values):
     cites = ", ".join("[%d]" % ref for ref in refs)
     passage = ("%s's confirmed passage" % cites if len(refs) == 1
                else "the confirmed passages of %s" % cites)
-    head = sentence.strip()
-    if len(head) > 90:
-        head = head[:90].rsplit(" ", 1)[0].rstrip(",;:") + "…"
     return ("paragraph %d (from statement %s): the sentence \"%s\" citing %s was removed because it quotes %s, "
             "which neither the record nor %s holds; keep %s and quote only the record's values or the paper's"
-            % (where, source.get("n"), head, cites, " and ".join(dict.fromkeys(values)), passage, cites))
+            % (where, source.get("n"), _clip(sentence, 90), cites, " and ".join(dict.fromkeys(values)), passage,
+               cites))
 
 
 def paper_numbers(stmt, ref):

@@ -538,8 +538,9 @@ LEAKED_SUMMARIES = {
         "MPST, CTH and CDO1, reading the transcript and protein values of each node in the Xpo1-knockout mouse "
         "liver."),
 }
-# Stored summaries and a paragraph that report biology; the paragraph says
-# "the chain" twice, which the summary rule refuses.
+# Stored summaries and paragraphs that report biology. The first paragraph
+# says "the chain" twice; the connective names a "drawn edge", which the
+# summary rule refuses.
 BIOLOGY_SUMMARIES = [
     "OSKM expression in senescent MEFs reversed a senescence-associated loss of 14-3-3ε (Ywhae) only partially and "
     "transiently. Ywhae mRNA and protein were both lower in senescent MEFs than in young MEFs at baseline "
@@ -564,6 +565,8 @@ CHAIN_PARAGRAPH = (
     "the same late-falling set (MMU-MIR-34B-5P, MMU-MIR-34B-3P, MMU-MIR-363-5P, MMU-MIR-1187, MMU-MIR-669F-3P) "
     "dropping only after 12h while the baseline-up set (MMU-MIR-188-5P, MMU-MIR-188-3P, MMU-MIR-532-5P, "
     "MMU-MIR-501-5P, MMU-MIR-362-3P) stays high.")
+DRAWN_EDGE_PARAGRAPH = ("The drawn edge from STEAP3 to BNIP3L is a reaction in the TP53 Regulates Transcription of "
+                        "Cell Death Genes pathway [e14].")
 
 
 class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
@@ -575,20 +578,37 @@ class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
                    "paragraphs": [{"from_statement": 1, "legs": [1], "text": text} for text in paragraphs]}
         return results, verify.drop_meta_sentences(results)
 
-    def test_every_leaked_summary_is_removed_whole(self):
+    def test_every_leaked_summary_loses_the_briefs_words(self):
         for where, summary in LEAKED_SUMMARIES.items():
             results, removed = self.pruned(summary)
-            self.assertEqual(results["summary"], "", where)
-            self.assertEqual(sorted(removed), sorted(s for s in verify.sentences(summary) if s.strip()), where)
+            self.assertTrue(removed, where)
+            self.assertIsNone(verify.META_RE.search(results["summary"]), where)
             self.assertEqual(results["title"], "Results", where)
+            if where != "y712svrXTf pathway:mmu04919":
+                self.assertEqual(results["summary"], "", where)
+
+    def test_a_finding_after_the_briefs_words_stays(self):
+        """Taken whole for being mostly planning, y712svrXTf's summary lost its
+        finding with the "We traced ..." before it."""
+        results, removed = self.pruned(LEAKED_SUMMARIES["y712svrXTf pathway:mmu04919"])
+        self.assertEqual(removed, ["We traced the Ikzf1 perturbation through the thyroid hormone signalling pathway."])
+        self.assertTrue(results["summary"].endswith("The baseline-up module is consistent with a PI3K-suppressive "
+                                                    "brake; the timed-down component is consistent with loss of "
+                                                    "TRα1/TRβ-dependent miR-34 expression as Thrb/Thra mRNA collapses."))
 
     def test_a_summary_reporting_biology_and_the_paragraphs_are_untouched(self):
         for summary in BIOLOGY_SUMMARIES:
-            results, removed = self.pruned(summary, paragraphs=[CHAIN_PARAGRAPH])
+            results, removed = self.pruned(summary, paragraphs=[CHAIN_PARAGRAPH, DRAWN_EDGE_PARAGRAPH])
             self.assertEqual(removed, [], summary)
             self.assertEqual(results["summary"], summary)
-            self.assertEqual(results["paragraphs"][0]["text"], CHAIN_PARAGRAPH)
-        self.assertTrue(verify.META_RE.search(CHAIN_PARAGRAPH), "the paragraph is why paragraphs are left alone")
+            self.assertEqual([p["text"] for p in results["paragraphs"]], [CHAIN_PARAGRAPH, DRAWN_EDGE_PARAGRAPH])
+        self.assertIsNone(verify.META_RE.search(CHAIN_PARAGRAPH), "\"the chain\" carries biology")
+        self.assertTrue(verify.META_RE.search(DRAWN_EDGE_PARAGRAPH), "the connective is why paragraphs are left alone")
+
+    def test_and_so_and_finally_may_open_a_summary(self):
+        for summary in ("And Foxo1 fell (−0.52) while Cdkn1b rose.", "So both arms of the axis fell together.",
+                        "Finally, Cdkn1b rose at 24h."):
+            self.assertEqual(self.pruned(summary), ({"title": "Results", "summary": summary, "paragraphs": []}, []))
 
     def test_a_sentence_left_dangling_by_a_removal_goes_too(self):
         results, removed = self.pruned("The kept statements are about Aaa. Then Bbb rose (+1.20). Ccc fell.")

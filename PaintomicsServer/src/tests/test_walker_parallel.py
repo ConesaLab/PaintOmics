@@ -1122,21 +1122,26 @@ class NarratorRepairCasesTest(_Fixture):
                                    (100, 200), deadline=time.time() + 400)
         return out, checks, prompts
 
-    def test_a_summary_in_the_briefs_words_is_repaired_never_failed(self):
+    def test_a_leaked_summary_alone_asks_for_no_repair(self):
+        """Pruned and kept: a re-narration for the summary alone put a draft
+        that had passed at risk."""
         draft = {"title": "Results", "summary": self.BRIEF_ECHO,
                  "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
-        repaired = dict(draft, summary="Cdkn1a fell.")
-        # The draft passed; the repair it was asked for broke a paragraph.
-        out, checks, prompts = self.narrate_drafts([draft, repaired], [[], ["paragraph 1 is too short"]])
-        self.assertEqual(len(prompts), 2, "the leaked summary alone asks for a repair")
-        self.assertIn("code removed 2 sentences of your summary or title that restated your instructions", prompts[1])
-        self.assertIsNotNone(out, "a leaked summary failed the section: %s" % checks.get("results"))
+        out, checks, prompts = self.narrate_drafts([draft, dict(draft, summary="Cdkn1a fell.")], [[]])
+        self.assertEqual(len(prompts), 1, "the leaked summary alone asked for a repair")
         self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("", "Body."))
         self.assertEqual(checks["results"], [])
         self.assertFalse(checks["gates"]["title"]["rewritten"])
         self.assertEqual(checks["meta_sentences_dropped"], 2)
-        # A repair that passes is kept.
-        out, checks, _ = self.narrate_drafts([draft, repaired], [[], []])
+
+    def test_a_repair_the_problems_ask_for_is_told_what_the_summary_lost(self):
+        draft = {"title": "Results", "summary": self.BRIEF_ECHO,
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, prompts = self.narrate_drafts([draft, dict(draft, summary="Cdkn1a fell.")],
+                                                   [["paragraph 1 is too short"], []])
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("- paragraph 1 is too short\n", prompts[1])
+        self.assertIn("- code removed 2 sentences of your summary or title that restated your instructions", prompts[1])
         self.assertEqual(out["summary"], "Cdkn1a fell.")
         self.assertTrue(checks["gates"]["title"]["rewritten"])
 
@@ -1145,9 +1150,33 @@ class NarratorRepairCasesTest(_Fixture):
         for title in ("The kept statements in walk order", ""):
             draft = {"title": title, "summary": "Cdkn1a fell.",
                      "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
-            out, checks, _ = self.narrate_drafts([draft, {}], [[], [], []])
+            out, checks, prompts = self.narrate_drafts([draft], [[]])
+            self.assertEqual(len(prompts), 1, title)
             self.assertEqual(out["title"], tiers.neutral_title("Results", {}, None), title)
+            self.assertEqual(checks["gates"]["title"]["fallback"], "neutral", "the record says code wrote it")
             self.assertEqual(out["summary"], "Cdkn1a fell.")
+        draft["title"] = "Cdkn1a fell in the knockout"
+        out, checks, _ = self.narrate_drafts([draft], [[]])
+        self.assertEqual((out["title"], checks["gates"]["title"]["fallback"]), ("Cdkn1a fell in the knockout", False))
+
+    def test_the_plan_reaches_nothing_the_walk_keeps(self):
+        """The planning field comes first in the schema and leaves with the
+        answer: no record, view, chat or page sees it."""
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        self.assertEqual(list(narrate_mod.RESULTS_SCHEMA["properties"])[0], "plan")
+        self.assertIn("plan", narrate_mod.RESULTS_SCHEMA["required"])
+        self.assertIn("`plan` is never shown", narrate_mod.BRIEF)
+        draft = {"plan": "I must produce exactly 1 fact paragraph in walk order.", "title": "Results",
+                 "summary": "Cdkn1a fell.", "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
+        out, checks, _ = self.narrate_drafts([draft], [[]])
+        self.assertNotIn("plan", out)
+        out, checks, _ = self.narrate_drafts([draft], [["paragraph 1 is too short"], ["paragraph 1 is too short"]])
+        self.assertIsNone(out)
+        self.assertNotIn("plan", checks["results_dropped"], "a dropped draft is stored too")
+        # An answer without a plan reads as before.
+        no_plan = {k: v for k, v in draft.items() if k != "plan"}
+        out, _, _ = self.narrate_drafts([no_plan], [[]])
+        self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("Cdkn1a fell.", "Body."))
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service

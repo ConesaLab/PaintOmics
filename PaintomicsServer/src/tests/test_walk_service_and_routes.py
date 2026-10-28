@@ -300,6 +300,15 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("LEGS:", text)
         self.assertIn("Test pathway one", text)
 
+    def test_a_view_carries_no_plan_and_leaves_its_record_alone(self):
+        rec, *_ = service.run(_job_with_id(), "J1", "pathway:tst00001", policy="greedy", data_dir=self.data_dir,
+                              use_mongo=False)
+        rec["results"] = {"plan": "Notes on the rules.", "title": "Results", "summary": "Bbb rose.",
+                          "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Bbb rose [e1]."}]}
+        self.assertNotIn("plan", service.view(rec)["results"])
+        self.assertNotIn("Notes on the rules", json.dumps(service.view(rec)))
+        self.assertEqual(rec["results"]["plan"], "Notes on the rules.", "view() edited the record")
+
     def test_the_chat_reads_a_held_back_walk_as_hidden_by_default(self):
         # The page opens a held-back interpretation on a click, under a
         # warning: the chat must read its Results, labelled with the checks
@@ -681,17 +690,19 @@ class RouteTest(unittest.TestCase):
         brief = ("Then TP53 (−1.58) and back through MDM2, CDKN2A, CDK4, CDKN1A. The kept statements are about "
                  "CDKN1A down and CDKN2A/MDM2 unchanged.")
         paragraphs = [{"from_statement": 1, "legs": [1], "text": "CDKN1A fell (−1.20) [e1]."}]
+        # and a planning field, were one ever stored: the page never sees it
         stored = {"scope": "KEGG:hsa05219", "chain": [],
-                  "results": {"title": "Results", "summary": brief, "paragraphs": paragraphs}}
+                  "results": {"plan": "I must write 1 fact paragraph.", "title": "Results", "summary": brief,
+                              "paragraphs": paragraphs}}
         FakeWalkDAO().save_progress("J1", "pathway:hsa05219", {"status": "done", "viewJSON": json.dumps(stored)})
         walk = self.status(jobID="J1", scope="pathway:hsa05219")["walk"]
-        self.assertEqual(walk["results"]["summary"], "")
-        self.assertEqual(walk["results"]["paragraphs"], paragraphs)
+        self.assertEqual(walk["results"], {"title": "Results", "summary": "", "paragraphs": paragraphs})
         self.assertEqual(json.loads(FakeWalkDAO.store[("J1", "pathway:hsa05219")]["viewJSON"])["results"]["summary"],
                          brief, "the stored document was rewritten")
         # ...and so does the chat, which reads the stored network walk.
         text = service.stored_walk_text({"status": "done", "viewJSON": json.dumps(dict(stored, scope="network"))})
         self.assertNotIn("kept statements", text)
+        self.assertNotIn("I must write", text)
         self.assertIn("CDKN1A fell (−1.20) [e1].", text)
 
     def test_a_walk_that_stopped_writing_progress_is_marked_interrupted(self):
