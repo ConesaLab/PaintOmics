@@ -253,3 +253,11 @@ test_versioned_assets_are_bumped	0.4
 test_walker_engine	1.2
 test_walker_verify	0.7
 test_zero_matched_omic_says_so	1.5
+
+# Not yet measured on a runner: added with fix/walk-pathway-tags (2026-10-28)
+# before any CI run had them. Each is charged what the recorded suite with the
+# same imports costs -- on Drago the new and the recorded one took 2.0 and
+# 1.8 s, 0.7 and 0.6 s -- and is replaced by the next refresh. Without them 24
+# suites were unrecorded, and test_shard_split_is_balanced allows fewer than 24.
+test_llm_reasoning_is_not_the_answer	0.1
+test_walker_network_tags_every_map	1.2

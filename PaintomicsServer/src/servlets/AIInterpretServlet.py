@@ -10,7 +10,7 @@ from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.DAO.AIWalkDAO import AIWalkDAO
 from src.common.JobInformationManager import JobInformationManager
 from src.common.PySiQ import JobStatus
-from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError
+from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError, strip_reasoning
 from src.classes.AIInterpret import model_fallback
 from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT, design_guidance
 from src.classes.AIInterpret.walker import card as card_mod
@@ -468,7 +468,14 @@ def aiInterpretChat(REQUEST, RESPONSE):
             {"role": "assistant", "content": "I've read the walk. What would you like to know?"},
         ]
         for msg in conversation:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+            content = msg["content"]
+            if msg["role"] == "assistant":
+                # Answers stored before strip_reasoning ran on every reply
+                # still open with the model's reasoning, and would go back to
+                # it as what it said. Cleaned on read; the database is left as
+                # it is. A user's own text is never touched.
+                content = strip_reasoning(content)
+            messages.append({"role": msg["role"], "content": content})
         messages.append({"role": "user", "content": userMessage})
 
         dao.append_chat(jobID, "user", userMessage)

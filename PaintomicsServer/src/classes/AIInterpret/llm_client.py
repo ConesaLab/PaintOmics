@@ -3,6 +3,7 @@ import json
 import os
 import logging
 import random
+import re
 import threading
 import time
 
@@ -123,6 +124,33 @@ def json_schema_format(name, schema):
             "json_schema": {"name": name, "strict": True, "schema": schema}}
 
 
+# DeepSeek-V4-Flash behind the CSIC gateway writes its reasoning into the
+# answer's content and closes it with a bare "</think>", usually with no
+# "<think>" to open it. 39 of the 50 chat answers stored on paintomics.org on
+# 2026-10-28 began like "Now I have the data. Let me compose the
+# answer.</think>## FGFR3 in this dataset ...", some after several paragraphs,
+# and the page rendered all of it as the answer.
+_THINK_CLOSE = "</think>"
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def strip_reasoning(text):
+    """A model's text answer without the reasoning it leaked into it.
+
+    Complete ``<think>...</think>`` blocks go first, wherever they sit; then
+    everything up to and including the last ``</think>`` left, reasoning whose
+    opening tag never arrived; then the surrounding whitespace. Text with no
+    ``</think>`` comes back untouched, and so does anything that is not a
+    string. When the whole text was reasoning the original is kept: an empty
+    answer is stored and shown as a failed question, and a JSON caller's
+    fallback parser would get nothing to try.
+    """
+    if not isinstance(text, str) or _THINK_CLOSE not in text:
+        return text
+    answer = _THINK_BLOCK.sub("", text).rpartition(_THINK_CLOSE)[2].strip()
+    return answer or text
+
+
 class MissingAPIKeyError(RuntimeError):
     """This server was never given a token for its configured LLM provider.
 
@@ -219,6 +247,9 @@ class LLMClient:
         model_fallback.falls_back) the next model on the ladder is asked at
         once, and the failed one is skipped for a while. `self.model_used`
         says which one answered.
+
+        The answer comes back without the reasoning a model leaks into it
+        (see strip_reasoning).
         """
         # Drop the schema up front on an endpoint already known to reject it,
         # so we pay the 400 once per process rather than once per call.
@@ -260,7 +291,10 @@ class LLMClient:
             if model != self.model:
                 logger.warning("LLM answer came from fallback model %s, not the "
                                "configured %s", model, self.model)
-            return content
+            # Here rather than in _fold_stream, so a streamed and a plain answer
+            # are both cleaned, and before complete_json's json.loads, so a JSON
+            # object the model prefixed with its reasoning still parses.
+            return strip_reasoning(content)
         raise RuntimeError("no model configured for provider %r" % self.provider_name)
 
     def _complete_one(self, model, messages, max_tokens, temperature,
@@ -490,7 +524,8 @@ class LLMClient:
             max_iterations: Safety cap on tool-call round-trips.
 
         Returns:
-            Final text content from the assistant (after all tool calls resolved).
+            Final text content from the assistant (after all tool calls resolved),
+            without the reasoning a model leaks into it (see strip_reasoning).
         """
         for iteration in range(max_iterations):
             for attempt in range(3):  # 2 retries on network errors
@@ -543,8 +578,9 @@ class LLMClient:
             tool_calls = resp_msg.get("tool_calls")
 
             if not tool_calls:
-                # No more tool calls — return the final text answer
-                content = resp_msg.get("content", "")
+                # No more tool calls — return the final text answer. A null
+                # content reads as no answer, not as a TypeError on len().
+                content = strip_reasoning(resp_msg.get("content") or "")
                 logger.info(f"LLM tool loop done at iter={iteration + 1}, got {len(content)} chars")
                 return content
 
