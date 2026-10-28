@@ -260,24 +260,23 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertTrue(verify.is_placeholder(" … "))
         self.assertFalse(verify.is_placeholder("Cdkn1a."))
 
-    def test_a_citation_pruned_with_its_sentence_is_not_owed_one_never_written_is(self):
-        """The claim a pruned citation supported went with its sentence; one the
-        Narrator never wrote is still asked for, as on master."""
-        node = self.chain[0]["to"]
-        value = self.ov.layer_text(node).split("·")[0].split()[-1]
-        lead = ("At the first time point in this series, the gene %s read %s [e1]. " % (
-            self.walker.label(node), value)) * 12
-        kept = [{"n": 1, "papers": [2], "beyond": [{"paper": 7, "claim": "c", "hypothesis": False}]}]
-        results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1], "text": lead}]}
-        problems = verify.verify_results(results, kept, [], self.walker)
-        self.assertTrue(any("drops [2]" in p for p in problems) and any("drops [7]" in p for p in problems))
-        problems = verify.verify_results(results, kept, [], self.walker, pruned_refs={1: {2}})
-        self.assertEqual(problems, ["paragraph 1 drops [7], which its statement cites"])
-        self.assertEqual(verify.verify_results(results, kept, [], self.walker, pruned_refs={1: {2, 7}}), [])
-        self.assertEqual(verify.paragraph_citations(
-            {"paragraphs": [{"from_statement": 1, "text": "A [2]. B [7, 9]."}, {"from_statement": None,
-                                                                               "text": "C [3]."}]}),
-            {1: {2, 7, 9}})
+    def test_only_the_paragraph_that_lost_a_citation_to_a_misquote_lets_it_go(self):
+        """The claim went with the sentence, in that paragraph: another retelling
+        the same statement still owes the citation, and one the Narrator never
+        wrote is owed everywhere, as on master."""
+        stmt, lead, cited = self.cited_paper_case()
+        stmt = dict(stmt, beyond=[{"paper": 7, "claim": "c", "hypothesis": False}])
+        results = {"title": "t", "summary": "s", "paragraphs": [
+            {"from_statement": 1, "legs": [1], "text": lead * 7 + cited.replace("0.001", "0.004")},
+            {"from_statement": 1, "legs": [1], "text": lead * 7}]}
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker, [stmt]), 1)
+        self.assertEqual([p.get(verify.LET_GO) for p in results["paragraphs"]], [[5], None])
+        self.assertEqual(sorted(verify.verify_results(results, [stmt], [], self.walker)),
+                         ["paragraph 1 drops [7], which its statement cites",
+                          "paragraph 2 drops [5], which its statement cites",
+                          "paragraph 2 drops [7], which its statement cites"])
+        self.assertEqual(verify.pop_let_go(results), {"1": [5]})
+        self.assertFalse([p for p in results["paragraphs"] if verify.LET_GO in p], "a mark was left behind")
 
     def test_a_connective_paragraph_that_quotes_a_value_is_pruned(self):
         from src.classes.AIInterpret.walker import narrate
@@ -422,7 +421,9 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertTrue(any("quotes +7.77, not in the record" in p for p in problems), problems)
         self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker, [stmt]), 2)
         self.assertNotIn("[5]", results["paragraphs"][0]["text"])
-        self.assertTrue(any("drops [5]" in p for p in verify.verify_results(results, [stmt], [], self.walker)))
+        # [5] went with the claims it supported: let go, no longer owed.
+        self.assertEqual(results["paragraphs"][0][verify.LET_GO], [5])
+        self.assertFalse(any("drops [5]" in p for p in verify.verify_results(results, [stmt], [], self.walker)))
 
     def test_a_papers_number_needs_that_papers_citation_in_its_own_sentence(self):
         stmt, lead, cited = self.cited_paper_case()
