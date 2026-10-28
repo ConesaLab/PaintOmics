@@ -114,9 +114,9 @@ sentence that calls genes a cluster or narrates the walk. A summary or title sen
 restates its instructions ("the kept statements", "connective paragraphs", "I must ...") is
 removed, and the rest of the summary stays. That removal asks for no rewrite of its own. A
 title left empty is written by code, as when it outruns the body. Walks sealed before this
-check are read without those sentences. An answer whose paragraphs are mostly placeholders
-("...") is asked for again, and a repair that retells fewer statements than the draft it was
-asked to fix is not kept.
+check are read without those sentences. An answer half of whose paragraphs are placeholders
+("...") is asked for again, a placeholder paragraph covers no statement, and a repair asked
+for only because of the title is not kept when it breaks the body.
 Code checks that every quoted value appears in the record (a signed value verbatim, an
 unsigned one as the magnitude of a recorded value), that a paragraph keeps every citation its
 statement makes and cites nothing its statement does not, and drops the sentences that fail. A story that

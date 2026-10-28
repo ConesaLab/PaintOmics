@@ -1147,7 +1147,7 @@ class NarratorRepairCasesTest(_Fixture):
 
     def test_a_title_in_the_briefs_words_or_none_takes_the_neutral_title(self):
         from src.classes.AIInterpret.walker import tiers
-        for title in ("The kept statements in walk order", ""):
+        for title in ("The kept statements in walk order", "", "...", "…"):
             draft = {"title": title, "summary": "Cdkn1a fell.",
                      "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
             out, checks, prompts = self.narrate_drafts([draft], [[]])
@@ -1197,34 +1197,75 @@ class NarratorRepairCasesTest(_Fixture):
         out = narrate_mod.narrate(Client([dots, good]), "card", [{"n": 1}], "chain", "")
         self.assertEqual((len(calls), out["paragraphs"][0]["text"]), (2, "Cdkn1a fell [e1]."))
         self.assertEqual(out["summary"], "", "a placeholder summary is shown as none")
+        # Two placeholder answers are no answer, not a section that failed its checks.
         del calls[:]
-        self.assertIsNone(narrate_mod.narrate(Client([dots, dots]), "card", [{"n": 1}], "chain", ""))
+        with self.assertRaisesRegex(narrate_mod.Unanswered, "placeholders"):
+            narrate_mod.narrate(Client([dots, dots]), "card", [{"n": 1}], "chain", "")
         self.assertEqual(len(calls), 2)
+        # Half the paragraphs are enough to ask again; a missing summary stays missing.
+        half = {"title": "Results", "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Cdkn1a fell [e1]."},
+                                                   {"from_statement": None, "legs": [], "text": "..."}]}
+        no_summary = {"title": "Results", "paragraphs": good["paragraphs"]}
+        del calls[:]
+        out = narrate_mod.narrate(Client([half, no_summary]), "card", [{"n": 1}], "chain", "")
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("summary", out)
 
-    def test_a_repair_that_retells_fewer_statements_is_not_kept(self):
-        """The repair on 7O521E0Y0y answered "..." in its one paragraph, and
-        "1 words; between 800 and 3000" became the section's reason."""
+    def test_placeholder_answers_read_as_no_answer_on_the_page(self):
         from src.classes.AIInterpret.walker import service
-        draft = {"title": "Results", "summary": "Cdkn1a fell.",
+        dots = {"title": "Results", "summary": "...", "paragraphs": [{"from_statement": 1, "legs": [1], "text": "..."}]}
+        out, checks, budgets = self.narrate([dots])
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"], [service.RESULTS_NO_ANSWER])
+        self.assertEqual(len(budgets), 2, "asked once more, as for an unreadable answer")
+
+    def test_a_repair_that_passes_is_kept_whatever_it_retells(self):
+        """Master's rule: the repair replaces a draft that failed. A guard that
+        counted retold statements its own way threw away a repair that had
+        passed every check."""
+        from src.classes.AIInterpret.walker import service
+        statements = [{"n": 1, "claim": "c", "prose": "p", "legs": [1]}, {"n": 2, "claim": "d", "prose": "q", "legs": [1]}]
+        draft = {"title": "Results", "summary": "s.", "paragraphs": [
+            {"text": "Cdkn1a fell in the knockout.", "legs": [1], "from_statement": 1},
+            {"text": "Foxo1 rose in the knockout.", "legs": [1], "from_statement": 2}]}
+        repaired = {"title": "Results", "summary": "s.", "paragraphs": [
+            {"text": "Cdkn1a fell while Foxo1 rose in the knockout.", "legs": [1], "from_statement": 1}]}
+        answers, verdicts = iter([draft, repaired]), iter([["paragraph 2 cites leg e9, not on the chain"], []])
+        walker, _ = self.walk()
+
+        class Client(object):
+            def complete_json(self, *args, **kwargs):
+                return next(answers)
+        checks = {"gates": {}}
+        with patched((service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+                     (service.tiers, "title_outruns_body", lambda *a, **k: [])):
+            out = service._narrate(Client(), "card", "chain", statements, [], walker, {}, "pathway:x", checks,
+                                   (100, 200), deadline=time.time() + 400)
+        self.assertEqual([p["text"] for p in out["paragraphs"]], ["Cdkn1a fell while Foxo1 rose in the knockout."])
+        self.assertTrue(checks["gates"]["title"]["rewritten"])
+
+    def test_a_title_only_repair_that_breaks_the_body_is_not_kept(self):
+        """Asked for because of its title alone, a repair that fails the body's
+        checks would cost a section that had none: the draft stands, with the
+        title code writes, and the gate says the repair was not kept."""
+        from src.classes.AIInterpret.walker import service
+        draft = {"title": "X activates Y", "summary": "Cdkn1a fell.",
                  "paragraphs": [{"text": "Cdkn1a fell in the knockout.", "legs": [1], "from_statement": 1}]}
-        worse = {"title": "Results", "summary": "",
+        worse = {"title": "Results", "summary": "Cdkn1a fell. The kept statements are about Cdkn1a.",
                  "paragraphs": [{"text": "The map draws this edge.", "legs": [], "from_statement": None}]}
-        verdicts = iter([["paragraph 1 cites leg e9, not on the chain"], ["statement 1 is not covered"]])
-        out, checks, _ = self.narrate(
-            [draft, worse], [(service.verify, "verify_results", lambda *a, **k: next(verdicts)),
-                             (service.tiers, "title_outruns_body", lambda *a, **k: [])])
-        self.assertIsNone(out, "the draft failed too: dropped, as before")
-        self.assertEqual(checks["results"], ["paragraph 1 cites leg e9, not on the chain"])
-        self.assertEqual(checks["results_dropped"]["paragraphs"][0]["text"], "Cdkn1a fell in the knockout.")
-        # A draft whose only fault was its title keeps its section.
         titles = iter([["the title claims a mechanism"]] + [[]] * 10)
+        verdicts = iter([[], ["statement 1 is not covered"], []])
         out, checks, _ = self.narrate(
-            [dict(draft, title="X activates Y"), worse],
-            [(service.verify, "verify_results", lambda *a, **k: []),
+            [draft, worse],
+            [(service.verify, "verify_results", lambda *a, **k: next(verdicts)),
              (service.tiers, "title_outruns_body", lambda *a, **k: next(titles)),
              (service.tiers, "drop_mechanistic_sentences", lambda results: 0)])
         self.assertEqual(out["paragraphs"][0]["text"], "Cdkn1a fell in the knockout.")
-        self.assertFalse(checks["gates"]["title"]["rewritten"])
+        self.assertEqual(out["title"], service.tiers.neutral_title("Results", {}, None))
+        gate = checks["gates"]["title"]
+        self.assertEqual((gate["rewritten"], gate["repair_kept"], gate["repair_problems"], gate["fallback"]),
+                         (False, False, ["statement 1 is not covered"], True))
+        self.assertNotIn("meta_sentences_dropped", checks, "the discarded repair's pruning is not on the record")
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service

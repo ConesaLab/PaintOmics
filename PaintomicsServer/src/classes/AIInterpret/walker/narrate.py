@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 
 from src.classes.AIInterpret import llm_client
+from src.classes.AIInterpret.walker.verify import is_placeholder
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +46,6 @@ RESULTS_SCHEMA = {
     "required": ["title", "summary", "paragraphs"],
     "additionalProperties": False,
 }
-# A paragraph or summary text without a single word is a placeholder: "...",
-# "…" or "", what the Narrator wrote in every field it skipped. Not a word
-# count: the verifier already refuses a section too short for its statements.
-_WORD_RE = re.compile(r"[^\W_]")
-
 BRIEF = (
     "You write the Results section of a paper from a graph walk over a pathway or a whole interaction "
     "network. Facts come only from "
@@ -96,17 +91,13 @@ def prune_connectives(results):
     return dropped
 
 
-def is_placeholder(text):
-    """Whether a Results text says nothing: not a single word in it."""
-    return not _WORD_RE.search(str(text or ""))
-
-
 def placeholder_answer(out):
-    """Whether most of an answer's paragraphs are placeholders: the section
-    was skipped, and the answer is read as unreadable. No paragraphs at all
-    is the verifier's to refuse ("no paragraphs"), as before."""
+    """Whether at least half of an answer's paragraphs are placeholders
+    (verify.is_placeholder): the section was skipped, and the answer is asked
+    again. Fewer still fail verify_results, which covers no statement with
+    one. No paragraphs at all is the verifier's "no paragraphs", as before."""
     texts = [p.get("text") for p in out.get("paragraphs") or [] if isinstance(p, dict)]
-    return bool(texts) and 2 * sum(1 for text in texts if is_placeholder(text)) > len(texts)
+    return bool(texts) and 2 * sum(1 for text in texts if is_placeholder(text)) >= len(texts)
 
 
 def _embedded_json(text):
@@ -139,16 +130,17 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
             objections=None, temperature=0.3, deadline=None):
     """The Results dict, or None when the call fails. Raises OutOfTime when
     `deadline` passed, or the call gave up on it, before a readable answer,
-    and Unanswered when the last attempt's call failed with time left.
+    and Unanswered when the last attempt's call failed with time left, or
+    when the answers it had were placeholders.
 
     The token budget follows the word budget: a network Results section of up to
     900 words is about 1,300 tokens of prose plus the JSON around it, and the
     2,500-token budget the pathway section needs cut one off mid-object, which
     left the job with no Results at all.
 
-    An answer whose paragraphs are mostly placeholders is asked again, like an
-    unreadable one (placeholder_answer); a placeholder summary comes back
-    empty; keys the schema does not name (a "plan") are dropped."""
+    An answer half of whose paragraphs are placeholders is asked again
+    (placeholder_answer); a placeholder summary comes back empty; keys the
+    schema does not name (a "plan") are dropped."""
     prompt = "DESIGN CARD\n%s\n\nCHAIN\n%s\n\nKEPT STATEMENTS\n%s\n\nPAPERS\n%s" % (
         card_text, chain_text,
         json.dumps([{"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
@@ -159,7 +151,7 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         prompt += "\n\nYOUR PREVIOUS DRAFT FAILED THESE CHECKS; fix every one:\n- " + "\n- ".join(objections)
     max_tokens = max(2500, int(words[1] * 5))
     brief = BRIEF % (len(kept), max(0, len(kept) - 1), words[0], words[1])
-    failure = None
+    failure, placeholders = None, 0
     for _attempt in range(2):                 # one more try when the reply is unreadable
         budget = None if deadline is None else deadline - time.time()
         if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
@@ -175,14 +167,17 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         if isinstance(out, dict) and isinstance(out.get("paragraphs"), list):
             if placeholder_answer(out):
                 logger.warning("[walker] the Narrator answered with placeholder paragraphs; asking again")
-                out = None
+                out, placeholders = None, placeholders + 1
                 continue
             out = {key: out[key] for key in RESULTS_SCHEMA["properties"] if key in out}
-            if is_placeholder(out.get("summary")):
+            if "summary" in out and is_placeholder(out["summary"]):
                 out["summary"] = ""
             return out
     if failure is not None and deadline is not None and llm_client.ran_out_of_budget(failure):
         raise OutOfTime("the Narrator's call gave up at the run's deadline")
+    if failure is None and placeholders:
+        # Not "failed its checks": nothing was written to check.
+        raise Unanswered("the Narrator answered with placeholders")
     if failure is not None:
         raise Unanswered("the Narrator's call failed: %s" % failure, rate_limited=llm_client.rate_limited(failure))
     return None
