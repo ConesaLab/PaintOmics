@@ -847,6 +847,26 @@ def _no_results_reason(exc):
     return RESULTS_RATE_LIMITED if getattr(exc, "rate_limited", False) else RESULTS_NO_ANSWER
 
 
+# What _narrate's pruners count in checks, per draft checked.
+_PRUNE_COUNTS = ("connectives_pruned", "misquoted_sentences_dropped", "uncited_sentences_dropped",
+                 "jargon_sentences_dropped", "meta_sentences_dropped")
+
+
+def _covered(results, statements):
+    """How many kept statements a Results draft retells: each with a paragraph
+    of its own that has a word in it (narrate.is_placeholder)."""
+    kept, told = {int(s["n"]) for s in statements}, set()
+    paragraphs = results.get("paragraphs") if isinstance(results, dict) else None
+    for paragraph in paragraphs if isinstance(paragraphs, list) else []:
+        try:
+            n = int(paragraph.get("from_statement"))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if n in kept and not narrate_mod.is_placeholder(paragraph.get("text")):
+            told.add(n)
+    return len(told)
+
+
 def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None,
              anchor=None, card=None, scope_name="Results"):
     kind = "network" if tag == "network" else "pathway"
@@ -924,12 +944,27 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     notes = [verify.meta_note(meta)] if meta else []
     if (problems or title_problems) and results is not None and (
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
+        counts, fallback = {key: checks.get(key) for key in _PRUNE_COUNTS}, title_gate["fallback"]
         try:
-            results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
-                                          objections=problems + removed + notes + title_problems,
-                                          deadline=deadline)
-            problems, title_problems = checked(results)
-            title_gate["rewritten"] = True
+            repaired = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
+                                           objections=problems + removed + notes + title_problems,
+                                           deadline=deadline)
+            checked_repair = checked(repaired)
+            if _covered(repaired, statements) < _covered(results, statements):
+                # A repair that retells fewer statements than the draft it was
+                # asked to fix is not kept, nor are its objections: on
+                # 7O521E0Y0y (2026-10-28) one answered "..." in its only
+                # paragraph and reported "1 words; between 800 and 3000".
+                logger.warning("[walker] the Narrator's repair retold fewer statements; keeping the draft")
+                for key, value in counts.items():
+                    if value is None:
+                        checks.pop(key, None)
+                    else:
+                        checks[key] = value
+                title_gate["fallback"] = fallback
+            else:
+                results, (problems, title_problems) = repaired, checked_repair
+                title_gate["rewritten"] = True
         except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
             # The draft failed its checks; the repair could not be had. A
             # title that outran the body is still repaired in code below.

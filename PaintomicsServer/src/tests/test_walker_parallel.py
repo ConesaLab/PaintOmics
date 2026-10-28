@@ -1159,34 +1159,72 @@ class NarratorRepairCasesTest(_Fixture):
         out, checks, _ = self.narrate_drafts([draft], [[]])
         self.assertEqual((out["title"], checks["gates"]["title"]["fallback"]), ("Cdkn1a fell in the knockout", False))
 
-    def test_the_plan_reaches_nothing_the_walk_keeps(self):
-        """The planning field comes first in the schema and leaves with the
-        answer: no record, view, chat or page sees it."""
+    def test_the_answer_has_no_planning_field_and_the_prose_budget(self):
+        """#203's "plan" field took the whole answer on a 20-statement network
+        walk and left "..." in every field a reader sees (2026-10-28)."""
         from src.classes.AIInterpret.walker import narrate as narrate_mod
-        self.assertEqual(list(narrate_mod.RESULTS_SCHEMA["properties"])[0], "plan")
-        self.assertIn("plan", narrate_mod.RESULTS_SCHEMA["required"])
-        self.assertIn("`plan` is never shown", narrate_mod.BRIEF)
-        draft = {"plan": "I must produce exactly 1 fact paragraph in walk order.", "title": "Results",
-                 "summary": "Cdkn1a fell.", "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
-        out, checks, _ = self.narrate_drafts([draft], [[]])
-        self.assertNotIn("plan", out)
-        out, checks, _ = self.narrate_drafts([draft], [["paragraph 1 is too short"], ["paragraph 1 is too short"]])
-        self.assertIsNone(out)
-        self.assertNotIn("plan", checks["results_dropped"], "a dropped draft is stored too")
-        # An answer without a plan reads as before.
-        no_plan = {k: v for k, v in draft.items() if k != "plan"}
-        out, _, _ = self.narrate_drafts([no_plan], [[]])
-        self.assertEqual((out["summary"], out["paragraphs"][0]["text"]), ("Cdkn1a fell.", "Body."))
-        # The plan is paid for on top of the text: 2,500 for a 450-word section,
-        # and room for the 3,230-character plan staging measured.
+        self.assertNotIn("plan", narrate_mod.RESULTS_SCHEMA["properties"])
+        self.assertNotIn("plan", narrate_mod.RESULTS_SCHEMA["required"])
+        self.assertNotIn("`plan`", narrate_mod.BRIEF)
+        draft = {"plan": "I must produce exactly 1 fact paragraph.", "title": "Results", "summary": "Cdkn1a fell.",
+                 "paragraphs": [{"text": "Body.", "legs": [1], "from_statement": 1}]}
         asked = {}
 
         class Client(object):
             def complete_json(self, messages, *args, **kwargs):
                 asked.update(kwargs)
                 return dict(draft)
-        self.assertNotIn("plan", narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "", words=(150, 450)))
-        self.assertEqual(asked["max_tokens"], 4500)
+        out = narrate_mod.narrate(Client(), "card", [{"n": 1}], "chain", "", words=(150, 450))
+        self.assertEqual(asked["max_tokens"], 2500)
+        self.assertEqual(sorted(out), ["paragraphs", "summary", "title"], "a key the schema does not name was kept")
+
+    def test_an_answer_of_placeholders_is_asked_again_and_never_kept(self):
+        """7O521E0Y0y, 20 kept statements: "..." for the summary and all 40 paragraphs."""
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        dots = {"title": "Results", "summary": "...", "paragraphs": [
+            {"from_statement": 1, "legs": [1], "text": "..."}, {"from_statement": None, "legs": [], "text": "…"}]}
+        good = {"title": "Results", "summary": "...",
+                "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Cdkn1a fell [e1]."}]}
+        calls = []
+
+        class Client(object):
+            def __init__(self, replies):
+                self.replies = list(replies)
+
+            def complete_json(self, *args, **kwargs):
+                calls.append(1)
+                return dict(self.replies.pop(0))
+        out = narrate_mod.narrate(Client([dots, good]), "card", [{"n": 1}], "chain", "")
+        self.assertEqual((len(calls), out["paragraphs"][0]["text"]), (2, "Cdkn1a fell [e1]."))
+        self.assertEqual(out["summary"], "", "a placeholder summary is shown as none")
+        del calls[:]
+        self.assertIsNone(narrate_mod.narrate(Client([dots, dots]), "card", [{"n": 1}], "chain", ""))
+        self.assertEqual(len(calls), 2)
+
+    def test_a_repair_that_retells_fewer_statements_is_not_kept(self):
+        """The repair on 7O521E0Y0y answered "..." in its one paragraph, and
+        "1 words; between 800 and 3000" became the section's reason."""
+        from src.classes.AIInterpret.walker import service
+        draft = {"title": "Results", "summary": "Cdkn1a fell.",
+                 "paragraphs": [{"text": "Cdkn1a fell in the knockout.", "legs": [1], "from_statement": 1}]}
+        worse = {"title": "Results", "summary": "",
+                 "paragraphs": [{"text": "The map draws this edge.", "legs": [], "from_statement": None}]}
+        verdicts = iter([["paragraph 1 cites leg e9, not on the chain"], ["statement 1 is not covered"]])
+        out, checks, _ = self.narrate(
+            [draft, worse], [(service.verify, "verify_results", lambda *a, **k: next(verdicts)),
+                             (service.tiers, "title_outruns_body", lambda *a, **k: [])])
+        self.assertIsNone(out, "the draft failed too: dropped, as before")
+        self.assertEqual(checks["results"], ["paragraph 1 cites leg e9, not on the chain"])
+        self.assertEqual(checks["results_dropped"]["paragraphs"][0]["text"], "Cdkn1a fell in the knockout.")
+        # A draft whose only fault was its title keeps its section.
+        titles = iter([["the title claims a mechanism"]] + [[]] * 10)
+        out, checks, _ = self.narrate(
+            [dict(draft, title="X activates Y"), worse],
+            [(service.verify, "verify_results", lambda *a, **k: []),
+             (service.tiers, "title_outruns_body", lambda *a, **k: next(titles)),
+             (service.tiers, "drop_mechanistic_sentences", lambda results: 0)])
+        self.assertEqual(out["paragraphs"][0]["text"], "Cdkn1a fell in the knockout.")
+        self.assertFalse(checks["gates"]["title"]["rewritten"])
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service
