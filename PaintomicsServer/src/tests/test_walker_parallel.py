@@ -1268,20 +1268,16 @@ class NarratorRepairCasesTest(_Fixture):
                          (False, False, ["statement 1 is not covered"], True))
         self.assertNotIn("meta_sentences_dropped", checks, "the discarded repair's pruning is not on the record")
 
-    def test_a_citation_left_out_is_given_back_and_one_pruned_is_not_owed(self):
-        """A Results section was lost to "paragraph N drops [k], which its
-        statement cites" (7O521E0Y0y's 17-statement network walk, staging,
-        2026-10-28: six of them, in the draft and in the repair alike)."""
+    def narrate_citations(self, text):
+        """_narrate on one draft paragraph for a statement citing [5] and [6],
+        with a verify_results that records what it was given; (out, checks,
+        [(text, pruned_refs)])."""
         from src.classes.AIInterpret.walker import service
         walker, _ = self.walk()
         statement = [{"n": 1, "claim": "c", "prose": "p [5]", "legs": [1], "papers": [5, 6],
                       "evidence": [{"ref": 5, "claim": "exclusive (p = 0.001)", "quote": "exclusive (p = 0.001)"},
                                    {"ref": 6, "claim": "Aaa binds Bbb", "quote": "Aaa binds Bbb"}]}]
-        # [5] sits in a sentence the value check removes (0.004 is in neither
-        # the record nor [5]'s passage); [6] the Narrator never wrote.
-        draft = {"title": "Results", "summary": "s.", "paragraphs": [
-            {"from_statement": 1, "legs": [1],
-             "text": "Aaa and Bbb move together [e1]. Aaa and Bbb were exclusive (p = 0.004) [5]."}]}
+        draft = {"title": "Results", "summary": "s.", "paragraphs": [{"from_statement": 1, "legs": [1], "text": text}]}
         judged = []
 
         def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None, pruned_refs=None):
@@ -1296,9 +1292,27 @@ class NarratorRepairCasesTest(_Fixture):
                      (service.tiers, "title_outruns_body", lambda *a, **k: [])):
             out = service._narrate(Client(), "card", "chain", statement, [], walker, {}, "pathway:x", checks,
                                    (100, 200), deadline=time.time() + 400)
-        self.assertEqual(judged, [("Aaa and Bbb move together [e1] [6].", {1: {5}})])
-        self.assertEqual(out["paragraphs"][0]["text"], "Aaa and Bbb move together [e1] [6].")
-        self.assertEqual((checks["citations_reattached"], checks["misquoted_sentences_dropped"]), (1, 1))
+        return out, checks, judged
+
+    def test_a_citation_pruned_with_its_sentence_is_not_owed_and_is_recorded(self):
+        """One pruned sentence must not cost the section: a 1-statement walk
+        (7O521E0Y0y, staging, 2026-10-28) lost "... (HR 1.75) [80]." to the
+        value check, and master then refused the section for lacking [80].
+        Here [5] goes with a sentence quoting 0.004, in neither the record nor
+        [5]'s passage; [6] the Narrator never wrote and still owes."""
+        out, checks, judged = self.narrate_citations(
+            "Aaa and Bbb move together [e1]. Aaa and Bbb were exclusive (p = 0.004) [5].")
+        self.assertEqual(judged, [("Aaa and Bbb move together [e1].", {1: {5}})])
+        self.assertEqual(checks["citations_with_pruned_sentence"], {"1": [5]})
+        self.assertEqual(checks["misquoted_sentences_dropped"], 1)
+        self.assertNotIn("citations_reattached", checks, "nothing is given back")
+
+    def test_a_paragraph_with_its_citations_reaches_the_check_untouched(self):
+        text = "Aaa and Bbb were exclusive (p = 0.001) [5], and Aaa binds Bbb [6] [e1]."
+        out, checks, judged = self.narrate_citations(text)
+        self.assertEqual(judged, [(text, {})])
+        self.assertEqual(out["paragraphs"][0]["text"], text)
+        self.assertNotIn("citations_with_pruned_sentence", checks)
 
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service

@@ -823,35 +823,6 @@ def paragraph_citations(results):
     return out
 
 
-def reattach_citations(results, kept, pruned_refs=None):
-    """Give every statement paragraph back the citations its statement makes
-    (statement_papers) that the Narrator left out, in the statement's order,
-    as one group before the paragraph's final stop: "... in recurrent
-    tumours [137]." The paragraph retells that statement, whose claim a paper
-    agent confirmed in each of them. A ref in ``pruned_refs`` ({n: refs})
-    went with a sentence a pruner removed: the claim it supported went too,
-    and it is not given back. Returns how many refs were attached; a
-    paragraph missing none is left byte for byte."""
-    attached = 0
-    for paragraph in (results or {}).get("paragraphs") or []:
-        if not isinstance(paragraph, dict):
-            continue
-        source = _statement_by_n(kept, paragraph.get("from_statement"))
-        text = str(paragraph.get("text") or "")
-        if source is None or is_placeholder(text):
-            continue
-        cited, gone = set(cited_refs(text)), (pruned_refs or {}).get(int(source["n"]), ())
-        missing = [ref for ref in statement_papers(source) if ref not in cited and ref not in gone]
-        if not missing:
-            continue
-        group = "[%s]" % ", ".join(str(ref) for ref in missing)
-        body = text.rstrip()
-        paragraph["text"] = (body[:-1].rstrip() + " " + group + body[-1] if body[-1:] in ".!?"
-                             else body + " " + group)
-        attached += len(missing)
-    return attached
-
-
 def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None, pruned_refs=None):
     """Objections to the Narrator's Results section. ``words_range`` = (fewest,
     most) words; RESULTS_WORDS by scope otherwise. ``pruned_refs`` ({statement
