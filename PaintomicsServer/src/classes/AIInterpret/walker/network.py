@@ -36,12 +36,14 @@ import zlib
 from collections import defaultdict
 
 from src.classes.AIInterpret.walker.tiers import CURRENCY
-from src.common.KeggGraph.parser import parse_directory
+from src.common.KeggGraph.parser import iter_directory
 
 logger = logging.getLogger(__name__)
 
-CACHE_VERSION = 4                  # 2: Reactome complexes and sets expanded; 3: Reactome names;
-                                   # 4: relations drawn through a currency metabolite dropped
+CACHE_VERSION = 5                  # 2: Reactome complexes and sets expanded; 3: Reactome names;
+                                   # 4: relations drawn through a currency metabolite dropped;
+                                   # 5: a KEGG edge tagged with every map that draws it,
+                                   #    with each map's own sign and subtype where they differ
 REACTOME_FAN_MAX = 36              # member pairs one reaction may add; larger sets are skipped
 REACTOME_MAX_DEPTH = 8             # nesting of complexes and sets followed
 # KGML relation subtypes -> sign. Anything else (binding, indirect, ...) is 0.
@@ -57,7 +59,9 @@ class Network(object):
     """Nodes, signed tagged edges, and an adjacency built on first use.
 
     ``nodes``: id -> {"label", "kind", "pathways": [tag, ...]}
-    ``edges``: (a, b) -> {"sign", "subtype", "tags": ["KEGG:mmu04068", ...]}
+    ``edges``: (a, b) -> {"sign", "subtype", "tags": ["KEGG:mmu04068", ...]},
+    plus ``"by_tag": {tag: [sign, subtype]}`` for the KEGG maps that draw the
+    pair otherwise than its merged sign and subtype (see _add_kegg).
     """
 
     def __init__(self, organism):
@@ -79,10 +83,11 @@ class Network(object):
         self._adjacency = None
 
     def add_edge(self, a, b, sign, tag, subtype=""):
-        """Add or enrich the directed edge a -> b. A second source for the same
-        pair adds its tag; a non-zero sign never downgrades to zero."""
+        """Add or enrich the directed edge a -> b, and return it (None when an
+        end is missing). A second source for the same pair adds its tag; a
+        non-zero sign never downgrades to zero."""
         if a == b or a not in self.nodes or b not in self.nodes:
-            return
+            return None
         edge = self.edges.get((a, b))
         if edge is None:
             edge = self.edges[(a, b)] = {"sign": int(sign), "subtype": subtype or "",
@@ -98,6 +103,7 @@ class Network(object):
         if subtype and not edge["subtype"]:
             edge["subtype"] = subtype
         self._adjacency = None
+        return edge
 
     # ---- queries ------------------------------------------------------
     @property
@@ -125,8 +131,9 @@ class Network(object):
         return None, None
 
     def filter_pathway(self, tag):
-        """The subgraph of one pathway tag: its nodes and the edges tagged with it.
-        Nothing is rebuilt; the annotation file was read at install."""
+        """The subgraph of one pathway tag: its nodes and the edges tagged with
+        it, each with the sign and subtype that pathway draws. Nothing is
+        rebuilt; the annotation file was read at install."""
         sub = Network(self.organism)
         sub.pathway_names = self.pathway_names
         sub.uniprot_to_kegg = self.uniprot_to_kegg
@@ -137,7 +144,8 @@ class Network(object):
                     if node_id not in sub.nodes:
                         node = self.nodes[node_id]
                         sub.add_node(node_id, node["label"], node["kind"])
-                sub.add_edge(a, b, edge["sign"], tag, edge["subtype"])
+                sign, subtype = (edge.get("by_tag") or {}).get(tag) or (edge["sign"], edge["subtype"])
+                sub.add_edge(a, b, sign, tag, subtype)
         return sub
 
     def pathway_name(self, tag):
@@ -152,7 +160,9 @@ class Network(object):
             "symbol_to_kegg": self.symbol_to_kegg,
             "sources": self.sources,
             "nodes": self.nodes,
-            "edges": [[a, b, e["sign"], e["subtype"], e["tags"]]
+            # by_tag rides as an optional sixth element, only on the edges
+            # that have one, so a cache written without it still reads.
+            "edges": [[a, b, e["sign"], e["subtype"], e["tags"]] + ([e["by_tag"]] if e.get("by_tag") else [])
                       for (a, b), e in self.edges.items()],
         }
 
@@ -164,8 +174,11 @@ class Network(object):
         net.symbol_to_kegg = data.get("symbol_to_kegg", {})
         net.sources = data.get("sources", {})
         net.nodes = data["nodes"]
-        for a, b, sign, subtype, tags in data["edges"]:
-            net.edges[(a, b)] = {"sign": sign, "subtype": subtype, "tags": list(tags)}
+        for row in data["edges"]:
+            a, b, sign, subtype, tags = row[:5]
+            edge = net.edges[(a, b)] = {"sign": sign, "subtype": subtype, "tags": list(tags)}
+            if len(row) > 5 and row[5]:
+                edge["by_tag"] = {tag: list(reading) for tag, reading in row[5].items()}
         return net
 
 
@@ -263,30 +276,96 @@ def sign_of_subtype(subtype):
 # sources
 # ---------------------------------------------------------------------------
 def _add_kegg(net, org_dir, k2sym):
-    edges, types, read = parse_directory(os.path.join(org_dir, "kgml"))
-    if not read:
-        return 0
-    for edge in edges:
-        if getattr(edge, "via", None) in CURRENCY:
-            # Two enzymes joined by ATP, water or NAD share nothing a walk
-            # could read; the relation is not an edge of this network.
+    """Every KGML map's relations, each edge tagged with every map that draws it.
+
+    Read map by map, not through parse_directory, which keeps one copy of a
+    pair -- the first map's by file name -- for the hub graph. Built on that,
+    16 of the 336 hsa maps that draw relations tagged no edge, so a walk on
+    Bladder cancer (hsa05219, 16 relations) was refused outright, and 125 kept
+    under half of their own edges (hsa01200 8 of 275, hsa01230 1 of 187); mmu
+    lost 17 and 119 the same way. Read map by map, every map keeps all of its
+    edges, and the hsa network gains 80 edges and loses none: pairs whose first
+    map drew them through a currency metabolite now enter from another
+    (measured 2026-10-28 on paintomics.org's install, without OmniPath: 102,078
+    to 102,158).
+
+    The network walk reads one merged edge per pair. A later map enriches it
+    the way a second database does (Network.add_edge): an edge drawn unsigned
+    takes the first sign another map gives it, and an empty subtype the first
+    non-empty one. Neither is replaced once set, so an edge first drawn as
+    binding/association and later as activation is signed +1 but still reads
+    binding/association, and opposite signs in two maps keep the first map's.
+    KEGG is read before Reactome, so on hsa 457 edges every source drew
+    unsigned before are now signed, and 11 whose sign came from a Reactome
+    reaction take a later map's: NFKBIA -> NFKB1 was +1 from Reactome and is -1
+    from hsa04620's inhibition.
+
+    A pathway walk reads the map it walks, never the merge. Of the 78,817 hsa
+    gene and compound pairs the maps draw, 20,943 are drawn in more than one:
+    427 with opposite signs (NF1 -> HRAS is an inhibition in hsa04010 and
+    hsa01521, an activation in hsa04014), 1,641 signed in one map and unsigned
+    in another, 6,168 with another subtype. Read through the merge, 14,473 of
+    the 134,247 (map, pair) readings in 265 of the 336 maps reached a pathway
+    walk wrong, 5,364 of them in sign. Each map's own reading is now kept under
+    ``by_tag`` where it differs from the merged one (_keep_differing_readings),
+    and filter_pathway gives the pathway's subgraph that reading: 6,852 hsa
+    edges carry one, the gzipped cache grows from 975 to 1,002 kB, and the
+    network edges are unchanged (measured 2026-10-28, without OmniPath).
+
+    Holding every map's relations until the kinds are merged costs about 12 MB
+    at peak on hsa, and every map's reading until the merge is known about 24
+    MB more, once per network rebuild.
+    """
+    # An id's kind is read from every map, merged as parse_directory merges it:
+    # a reaction may name a compound its own map never draws as an entry
+    # (hsa00510 R06258 -> glycan G10617), and only another map types it.
+    per_map, types = [], {}
+    for edges, map_types in iter_directory(os.path.join(org_dir, "kgml")):
+        per_map.append(edges)
+        types.update(map_types)
+    for edges in per_map:
+        for edge in edges:
+            if getattr(edge, "via", None) in CURRENCY:
+                # Two enzymes joined by ATP, water or NAD share nothing a walk
+                # could read; the relation is not an edge of this network.
+                continue
+            ends = []
+            for raw in (edge.a, edge.b):
+                kind = types.get(raw)
+                if kind == "gene":
+                    node_id = "g:" + raw
+                    net.add_node(node_id, k2sym.get(raw, raw), "gene")
+                elif kind == "compound":
+                    node_id = "c:" + raw
+                    net.add_node(node_id, raw, "compound")
+                else:                  # map links and unknown entries
+                    node_id = None
+                ends.append(node_id)
+            if ends[0] and ends[1]:
+                tag, sign = "KEGG:" + edge.pathway, sign_of_subtype(edge.subtype)
+                stored = net.add_edge(ends[0], ends[1], sign, tag, edge.subtype)
+                if stored is not None:
+                    # One relation per pair in a map (parse_pathway), so one
+                    # reading per tag; build_network keeps the differing ones.
+                    stored.setdefault("by_tag", {})[tag] = [sign, edge.subtype or ""]
+    return len(per_map)
+
+
+def _keep_differing_readings(net):
+    """Drop each map's reading that equals its edge's merged sign and subtype.
+
+    Run once every source has been read: Reactome can still sign an edge every
+    KEGG map drew unsigned, after which those maps' readings differ from it.
+    What is left is what filter_pathway needs and the cache stores."""
+    for edge in net.edges.values():
+        readings = edge.get("by_tag")
+        if readings is None:
             continue
-        ends = []
-        for raw in (edge.a, edge.b):
-            kind = types.get(raw)
-            if kind == "gene":
-                node_id = "g:" + raw
-                net.add_node(node_id, k2sym.get(raw, raw), "gene")
-            elif kind == "compound":
-                node_id = "c:" + raw
-                net.add_node(node_id, raw, "compound")
-            else:                      # map links and unknown entries
-                node_id = None
-            ends.append(node_id)
-        if ends[0] and ends[1]:
-            net.add_edge(ends[0], ends[1], sign_of_subtype(edge.subtype),
-                         "KEGG:" + edge.pathway, edge.subtype)
-    return read
+        merged = [edge["sign"], edge["subtype"]]
+        for tag in [tag for tag, reading in readings.items() if reading == merged]:
+            del readings[tag]
+        if not readings:
+            del edge["by_tag"]
 
 
 def _reactome_leaves(nodes, db_id, memo, depth=0):
@@ -401,6 +480,7 @@ def build_network(organism, data_dir, mongo_db=None):
         "reactome": _add_reactome(net, org_dir, net.uniprot_to_kegg, k2sym),
         "omnipath": _add_omnipath(net, mongo_db, net.uniprot_to_kegg, k2sym),
     }
+    _keep_differing_readings(net)
     logger.info("[walker] network %s: %d nodes, %d edges from %s", organism,
                 len(net.nodes), len(net.edges), net.sources)
     return net

@@ -85,6 +85,79 @@ DIRECTION_MIN_SECONDS = 30
 # smallest attainable p is 1/21, right at the threshold.
 NULL_K = 50
 GATES = ("artifact", "title", "direction", "context", "anchor")
+# Check 1 (not a graph artifact) hides the text only on the network walk. On
+# a pathway walk it is advisory: shown, never hiding anything. The user
+# opened a map PaintOmics' enrichment test already flagged (Bladder cancer,
+# p = 0.018 on job 7O521E0Y0y), and with few relevant genes the check has
+# nothing to measure: hsa05219's 4 relevant genes touch no other relevant
+# gene (untestable), and on the STATegra FoxO map it withheld every run, real
+# ones included (docs/dev/tellme-five-checks.md). It runs the scripted
+# walker, not the AI text; the four text checks still decide. D6.1 (3 of 3
+# real runs rendered, 18 of 20 permuted withheld) was measured on the network
+# walk, which keeps the blocking rule, so that measurement still describes it.
+# Only the null's half is advisory: a leg through a currency metabolite (ATP,
+# water, NAD; artifact_gate's currency_legs) is a definite artifact, not a
+# low-power statistic, and hides a pathway walk's text as it always did.
+ADVISORY_ON_PATHWAY = ("artifact",)
+
+
+def advisory_gates(tag, gates):
+    """The gates that inform without hiding the text on a walk of ``tag``
+    (the sealed record's scope: "network", or a pathway tag such as
+    "KEGG:hsa05219"): check 1 on a pathway walk, unless it ran a leg through
+    a currency metabolite. The one place that decides; the seal, renders(),
+    apply_render_rule() and the client's ``advisory`` flag all follow it."""
+    if not tag or tag == "network":
+        return ()
+    return tuple(name for name in ADVISORY_ON_PATHWAY if not ((gates or {}).get(name) or {}).get("currency_legs"))
+
+
+def renders(tag, gates):
+    """Whether a walk's text is shown by default: every gate passed, an
+    advisory one (advisory_gates) aside. A gate the record does not carry
+    (sealed before that gate existed) has nothing to say, as the client reads
+    it; at seal time every gate is present."""
+    skip = advisory_gates(tag, gates)
+    return all(bool((gates.get(name) or {"pass": True}).get("pass")) for name in GATES if name not in skip)
+
+
+def seal_render(tag, gates):
+    """At seal (run(), harness.regate): the advisory gates marked
+    ``advisory: true`` in place, and whether the text renders."""
+    for name in advisory_gates(tag, gates):
+        gates[name]["advisory"] = True
+    return renders(tag, gates)
+
+
+def _marked(gate, advisory):
+    """``gate`` carrying ``advisory: true`` exactly when ``advisory``; a copy
+    when that changes it, so a view never edits the record it came from."""
+    if not isinstance(gate, dict) or bool(gate.get("advisory")) == advisory:
+        return gate
+    gate = dict(gate)
+    if advisory:
+        gate["advisory"] = True
+    else:
+        gate.pop("advisory", None)
+    return gate
+
+
+def apply_render_rule(v):
+    """The rule above on a view, in place: the advisory gates marked
+    ``advisory: true`` (and a stale mark dropped from any other) and
+    ``checks.rendered`` recomputed. view() calls it, and so does the status
+    route on a viewJSON stored before the rule, so a pathway walk held back
+    only by check 1's null shows without a re-walk. A view without gates
+    keeps its flag: a walk sealed before them has nothing to withhold.
+    Returns ``v``."""
+    checks = (v or {}).get("checks")
+    gates = (checks or {}).get("gates")
+    if not isinstance(gates, dict) or not gates:
+        return v
+    advisory = advisory_gates(v.get("scope"), gates)
+    checks["gates"] = {name: _marked(gate, name in advisory) for name, gate in gates.items()}
+    checks["rendered"] = renders(v.get("scope"), checks["gates"])
+    return v
 
 _MONGO = {"client": None}
 _MONGO_LOCK = threading.Lock()
@@ -395,7 +468,7 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     gates["anchor"] = anchor_mod.anchor_gate(anchor, walker, ov, dist or {}, network=network)
     for name in GATES:
         gates.setdefault(name, {"pass": True, "not_applicable": True, "why": "no statements were written"})
-    checks["rendered"] = all(bool(gates[name].get("pass")) for name in GATES)
+    checks["rendered"] = seal_render(tag, gates)
     if papers:
         papers = record_mod.renumber_citations(statements, dropped, results, papers)
         attach_evidence(statements, papers)
@@ -418,7 +491,9 @@ def artifact_gate(walker):
     gate["currency_legs"] = currency
     if currency:
         gate["pass"] = False
-        gate["why"] = ("; " if gate["why"] else "") + "%d leg(s) run through a currency metabolite" % currency
+        # Appended to the null's own reason: this line used to replace it,
+        # leaving a walk that failed both halves with "; 1 leg(s) ..." alone.
+        gate["why"] += ("; " if gate["why"] else "") + "%d leg(s) run through a currency metabolite" % currency
     return gate
 
 
@@ -782,6 +857,9 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         for r, p in sorted(papers.items()) if r in cited)
     title_gate = {"pass": True, "not_applicable": False, "verbs_found": [], "rewritten": False, "fallback": False,
                   "why": ""}
+    # Why the last draft lost a sentence that carried its statement's
+    # citation: the repair round is told, not only that the citation is gone.
+    removed = []
 
     def checked(results):
         if results is None:
@@ -789,7 +867,8 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         pruned = narrate_mod.prune_connectives(results)
         if pruned:
             checks["connectives_pruned"] = checks.get("connectives_pruned", 0) + pruned
-        unquoted = verify.drop_unrecorded_sentences(results, walker)
+        del removed[:]
+        unquoted = verify.drop_unrecorded_sentences(results, walker, statements, removed)
         if unquoted:
             checks["misquoted_sentences_dropped"] = checks.get("misquoted_sentences_dropped", 0) + unquoted
         uncited = verify.drop_uncited_sentences(results, statements)
@@ -817,7 +896,7 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         try:
             results = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
-                                          objections=problems + title_problems, deadline=deadline)
+                                          objections=problems + removed + title_problems, deadline=deadline)
             problems, title_problems = checked(results)
             title_gate["rewritten"] = True
         except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
@@ -895,7 +974,7 @@ def view(rec):
     seen = sorted(walk.get("seen") or [], key=lambda r: -(r.get("heat") or 0))[:SEEN_SHOWN]
     steps = sum(1 for leg in walk["chain"] if leg["kind"] == "step")
     card = rec.get("design_card") or {}
-    return {
+    return apply_render_rule({
         "schema": rec.get("schema"), "job": rec.get("job"), "scope": rec.get("scope"),
         "sealed_at": rec.get("sealed_at"), "graph": rec.get("graph"),
         "design_card": {k: card.get(k) for k in CARD_FIELDS + ("columns", "source", "axis_kind", "unlabeled")},
@@ -925,7 +1004,7 @@ def view(rec):
                    "rendered": bool((rec.get("checks") or {}).get("rendered", True)),
                    "anchor": (rec.get("checks") or {}).get("anchor")},
         "model_used": rec.get("model_used"), "timings": rec.get("timings"),
-    }
+    })
 
 
 # ----------------------------------------------------------------- the job
@@ -1025,8 +1104,11 @@ def quick_walk(job, symbol, steps=8, data_dir=None, use_mongo=True):
 
 
 def stored_walk_text(doc, limit_legs=40):
-    """The stored universal walk as chat text: the Results section when it
-    passed its checks, the kept statements, and the legs with their pathways."""
+    """The stored universal walk as chat text: the Results section (labelled
+    with the checks it did not clear, when the gates held it back), the kept
+    statements, and the legs with their pathways. A held-back walk is hidden
+    from the user by default, not withheld: the page opens it on a click,
+    under a warning, so the chat model must know what the user can read."""
     if not doc:
         return ("No universal walk has run for this job yet. It is the job's interpretation and "
                 "starts when the analysis finishes; name a gene to walk a few steps from it instead.")
@@ -1043,16 +1125,25 @@ def stored_walk_text(doc, limit_legs=40):
     lines = []
     checks = v.get("checks") or {}
     gates = checks.get("gates") or {}
+    failed = []
     if gates:
-        failed = [name for name in GATES if not (gates.get(name) or {}).get("pass")]
+        for name in GATES:
+            gate = gates.get(name) or {}
+            if not gate.get("pass"):
+                # untestable says why the null failed; a currency leg failed it outright
+                failed.append(name + (" (could not be tested on this data)"
+                                      if gate.get("untestable") and not gate.get("currency_legs") else ""))
         anchor = checks.get("anchor") or {}
         lines.append("CHECKS: %s%s" % (
-            "all five passed" if not failed else "FAILED %s -- the Results and statements are not shown to the user; "
-            "only the walk is" % ", ".join(failed),
+            "all five passed" if not failed else "FAILED %s -- the Results and statements are hidden from the user "
+            "by default; the user can open them under a warning to read them as hypotheses, not findings"
+            % ", ".join(failed),
             "; perturbation %s (%s)" % (anchor.get("gene"), anchor.get("direction")) if anchor else "; no perturbed gene named"))
     results = v.get("results") or {}
-    if results.get("paragraphs") and checks.get("rendered", True):
-        lines.append("RESULTS (checked): %s" % results.get("summary", ""))
+    if results.get("paragraphs"):
+        lines.append("RESULTS (checked): %s" % results.get("summary", "") if checks.get("rendered", True)
+                     else "RESULTS (did not clear the checks%s): %s" % (
+                         ": " + ", ".join(failed) if failed else "", results.get("summary", "")))
         for p in results["paragraphs"]:
             lines.append("- %s" % p.get("text", ""))
     for s in v.get("statements") or []:

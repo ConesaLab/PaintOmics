@@ -1073,6 +1073,31 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertIsNotNone(out, "a draft whose only fault was its title lost its section: %s" % checks.get("results"))
         self.assertTrue(checks["gates"]["title"].get("fallback"))
 
+    def test_the_repair_is_told_why_a_cited_sentence_went(self):
+        """Told only "paragraph 1 drops [5]", the Narrator re-sent the sentence
+        the pruner had removed, which already had [5], and the section was lost
+        (hsa05219, 2026-10-28)."""
+        import copy
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        statement = [{"n": 1, "claim": "c", "prose": "p [5]", "legs": [1], "papers": [5],
+                      "evidence": [{"ref": 5, "claim": "exclusive (p = 0.001)", "quote": "exclusive (p = 0.001)"}]}]
+        draft = {"title": "Results", "summary": "s.", "paragraphs": [
+            {"from_statement": 1, "legs": [1],
+             "text": "Aaa and Bbb move together [e1]. Aaa and Bbb were exclusive (p = 0.004) [5]."}]}
+        prompts = []
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                return copy.deepcopy(draft) if len(prompts) == 1 else {}
+        service._narrate(Client(), "card", "chain", statement, [], walker, {}, "pathway:x", {"gates": {}},
+                         (100, 200), deadline=time.time() + 400)
+        self.assertGreater(len(prompts), 1, "no repair was asked")
+        self.assertIn("paragraph 1 drops [5], which its statement cites", prompts[1])
+        self.assertIn('paragraph 1 (from statement 1): the sentence "Aaa and Bbb were exclusive (p = 0.004) [5]." '
+                      'citing [5] was removed because it quotes 0.004', prompts[1])
+
     def test_a_repaired_section_says_it_was_rewritten(self):
         from src.classes.AIInterpret.walker import service
         verdicts = iter([["paragraph 1 is too short"], [], [], []])
@@ -1157,15 +1182,94 @@ class ResultsNoteWiringTest(unittest.TestCase):
         walk = self.source("PA_Step4WalkView.js")
         self.assertIn('(rerun ? "; Walk again to try for one." : ".")', walk)
         self.assertIn("var rerun = !!(options && options.canRerun);", walk)
-        self.assertIn("paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()})", walk)
+        # The Results reach the page only through paWalkAppendText, shown or
+        # opened on request, with the call site's options.
+        self.assertIn("parent.appendChild(paWalkResultsNode(view, options));", walk)
+        self.assertEqual(walk.count("paWalkResultsNode("), 2, "one definition, one call (paWalkAppendText)")
+        self.assertIn("var textOptions = {onLeg: onLeg, canRerun: this.canEdit()};", walk)
         self.assertIn("if (this.canEdit()) {\n\t\t\tvar again = paWalkEl(\"a\", \"button btn-default pa-walk-again\"",
                       walk, "the button and the hint no longer share one condition")
         self.assertEqual(walk.count("Walk again to try for one"), 1, "the hint is built once, under canRerun")
         self.assertEqual(walk.count("+ standAlone"), 3, "every no-section note ends with the same rerun hint")
         panel = self.source("PA_AIInterpretView.js")
-        calls = [line for line in panel.splitlines() if "paWalkResultsNode(" in line and "typeof" not in line]
-        self.assertTrue(calls)
+        calls = [line for line in panel.splitlines()
+                 if ("paWalkAppendText(" in line or "paWalkBlockedNode(" in line) and "typeof" not in line]
+        self.assertEqual(len(calls), 2)
         self.assertFalse([line for line in calls if "canRerun" in line], "the AI panel has no Walk again button")
+
+    def test_a_held_back_walk_opens_on_request_at_both_call_sites(self):
+        walk = self.source("PA_Step4WalkView.js")
+        panel = self.source("PA_AIInterpretView.js")
+        # Each call site: the passing branch and the held-back one hand the
+        # same options to the shared helpers. The Walk column, which
+        # re-renders, also hands a map it keeps, so a re-render of the same
+        # walk keeps it open; the AI panel builds its bubble once and keeps none.
+        self.assertIn("\t\t\tpaWalkAppendText(root, view, textOptions);\n\t\t} else {\n"
+                      "\t\t\troot.appendChild(paWalkBlockedNode(view, textOptions, this.revealed));", walk)
+        self.assertIn("this.revealed = {};", walk)
+        self.assertIn("            paWalkAppendText(bubble, view, {onLeg: focusLeg});\n        } else {\n", panel)
+        self.assertIn("            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}));", panel)
+        self.assertNotIn("revealedWalks", panel)
+        self.assertIn("paWalkAppendText", panel.splitlines()[0], "listed in the /* global */ header")
+        # The revealed branch is the same helper, behind a real button, and
+        # the key is one sealed walk.
+        self.assertIn("paWalkAppendText(box, view, options);", walk)
+        self.assertIn('paWalkEl("button", "button btn-default pa-walk-reveal", "Show the interpretation anyway");', walk)
+        self.assertIn('reveal.type = "button";', walk)
+        self.assertIn('warning.setAttribute("role", "note");', walk)
+        self.assertIn("[view.job, view.scope, view.sealed_at]", walk)
+        # An untestable check is its own chip state and counts as not cleared
+        # where it blocks (the network walk).
+        self.assertIn('if (gate.untestable === true) { return "untested"; }', walk)
+        self.assertIn('return state === "fail" || (state === "untested" && gate.advisory !== true);', walk)
+        # ...and its reason line wears the chip's amber, not a failure's red.
+        self.assertIn('"pa-walk-gate-why" + (line.state === "fail" ? "" : " is-" + line.state)', walk)
+        with open(os.path.join(self.VIEWS, "../../../resources/css/graph-walk.css"), encoding="utf-8") as handle:
+            self.assertRegex(handle.read(), r"\.pa-walk-gate-why\.is-untested,\s*\.pa-walk-gate-why\.is-advisory "
+                                            r"\{\s*color: var\(--pa-walk-caution-ink\);")
+        for source in (walk, panel):
+            self.assertNotRegex(source, r"\b(alert|confirm|prompt)\(", "a modal dialog blocks the page")
+
+    def test_an_advisory_check_is_a_caveat_that_hides_nothing(self):
+        # Check 1 on a pathway walk (service.advisory_gates): an amber "!"
+        # chip, a reason line that says it hid nothing, and no part in the
+        # "Not shown by default" note. The AI panel (network) has no such gate.
+        walk = self.source("PA_Step4WalkView.js")
+        self.assertIn('return gate.advisory === true ? "advisory" : "fail";', walk)
+        self.assertIn('var caveat = (state === "untested" || state === "advisory") && gate.advisory === true;', walk)
+        self.assertIn('(caveat ? "Advisory on a pathway walk, hides nothing. " : "")', walk)
+        self.assertIn('(caveat ? " (advisory on a pathway walk, hides nothing)" : "")', walk)
+        self.assertIn('if (state === "fail" || state === "untested" || state === "advisory") {', walk)
+        # the blocked note counts only the gates that held the text back
+        self.assertIn("\t\treturn paWalkGateBlocks(gates[entry[0]]);", walk)
+        self.assertEqual(walk.count("paWalkFailedGates(view)"), 2, "one definition, one caller: the blocked note")
+        with open(os.path.join(self.VIEWS, "../../../resources/css/graph-walk.css"), encoding="utf-8") as handle:
+            css = handle.read()
+        self.assertRegex(css, r"\.pa-walk-gate\.is-untested,\s*\.pa-walk-gate\.is-advisory \{\s*"
+                              r"background: var\(--pa-walk-caution-bg\);")
+        self.assertRegex(css, r'\.pa-walk-gate\.is-advisory::before \{\s*content: "!";')
+
+    def test_a_currency_leg_is_a_plain_failure_whatever_else_the_gate_says(self):
+        # A leg through ATP, water or NAD fails check 1 outright: red, and on
+        # a pathway walk still a block. The currency test comes before the
+        # untestable and advisory ones, so neither can turn it amber.
+        walk = self.source("PA_Step4WalkView.js")
+        body = walk[walk.index("function paWalkGateState(gate) {"):walk.index("function paWalkGateBlocks(gate) {")]
+        currency = body.index('if (Number(gate.currency_legs) > 0) { return "fail"; }')
+        self.assertLess(currency, body.index('if (gate.untestable === true) { return "untested"; }'))
+        self.assertLess(currency, body.index('return gate.advisory === true ? "advisory" : "fail";'))
+        # a "fail" always blocks, advisory flag or not
+        self.assertIn('return state === "fail" || (state === "untested" && gate.advisory !== true);', walk)
+
+    def test_the_untested_hover_says_which_case_it_is(self):
+        walk = self.source("PA_Step4WalkView.js")
+        self.assertIn('return "Could not be tested: " + (typeof gate.relevant === "number" && '
+                      'gate.relevant < PA_WALK_MODULE_MIN', walk)
+        self.assertIn('? "fewer than " + PA_WALK_MODULE_MIN + " relevant nodes are on this graph"', walk)
+        self.assertIn(': "no " + PA_WALK_MODULE_MIN + " relevant nodes are connected to one another on this graph")',
+                      walk)
+        from src.classes.AIInterpret.walker import null as null_mod
+        self.assertIn("var PA_WALK_MODULE_MIN = %d;" % null_mod.MODULE_MIN_RELEVANT, walk)
 
     def test_the_notes_read_the_servers_reasons(self):
         from src.classes.AIInterpret.walker import service

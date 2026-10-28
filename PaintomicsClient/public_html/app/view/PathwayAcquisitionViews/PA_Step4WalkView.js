@@ -57,6 +57,9 @@ var PA_WALK_GATES = [
 /* How far from the anchor a walked node counts as near (anchor.REACH_RADIUS). */
 var PA_WALK_REACH_RADIUS = 2;
 
+/* How many relevant nodes a module holds (null.MODULE_MIN_RELEVANT). */
+var PA_WALK_MODULE_MIN = 3;
+
 /* The perturbation's direction, as the design card read it, in plain words. */
 var PA_WALK_DIRECTION_WORDS = {up: "induced (up)", down: "knocked out or inhibited (down)"};
 
@@ -254,11 +257,27 @@ function paWalkGateTitle(name, gate, state) {
 	switch (name) {
 	case "artifact": {
 		var real = gate.real || {}, nul = gate.null_mean || {};
+		/* measured, relevant, adjacent_pairs and untestable arrived after the
+		   gates did: a walk sealed before them has none, and reads as it did. */
+		var pairs = (gate.adjacent_pairs && typeof gate.adjacent_pairs === "object") ? gate.adjacent_pairs : null;
+		var tail = "; " + paWalkCount(gate.currency_legs, "leg") + " through currency metabolites; " +
+			paWalkCount(gate.k, "permutation");
+		if (state === "untested") {
+			/* As the server's reason says it: too few relevant nodes, or enough
+			   of them but no three connected. */
+			return "Could not be tested: " + (typeof gate.relevant === "number" && gate.relevant < PA_WALK_MODULE_MIN
+				? "fewer than " + PA_WALK_MODULE_MIN + " relevant nodes are on this graph"
+				: "no " + PA_WALK_MODULE_MIN + " relevant nodes are connected to one another on this graph") +
+				" (" + paWalkNumber(gate.relevant) + " relevant of " + paWalkNumber(gate.measured) +
+				" measured" + (pairs ? ", " + paWalkCount(pairs.real, "adjacent pair") : "") +
+				"), so the check's walker can form no module on this data" + tail;
+		}
 		return paWalkCount(real.modules, "module") + " found; permuted data gives " + paWalkNumber(nul.modules) +
 			" on average (p = " + paWalkNumber(gate.p_modules) + "); seeds " +
 			(Number(gate.p_heat) < 0.05 ? "hotter than chance" : "no hotter than chance") +
-			" (p = " + paWalkNumber(gate.p_heat) + "); " + paWalkCount(gate.currency_legs, "leg") +
-			" through currency metabolites; " + paWalkCount(gate.k, "permutation");
+			" (p = " + paWalkNumber(gate.p_heat) + ")" +
+			(pairs ? "; " + paWalkCount(pairs.real, "adjacent pair") + " of relevant nodes, " +
+				paWalkNumber(pairs.null_mean) + " by chance (p = " + paWalkNumber(pairs.p) + ")" : "") + tail;
 	}
 	case "title": {
 		var verbs = gate.verbs_found || [];
@@ -286,18 +305,46 @@ function paWalkGateTitle(name, gate, state) {
 	}
 }
 
-/* The labels of the gates that failed, in chip order. */
+/*
+ * A gate's chip state: "pass", "fail", "na" (nothing to judge), "untested":
+ * a failed artifact check whose data could form no module at all (no three
+ * relevant nodes connected on the walked graph), so the check neither
+ * cleared the walk nor found it an artifact, or "advisory": a failed check
+ * the server marked advisory (check 1 on a pathway walk,
+ * service.advisory_gates), a caveat that hides nothing. An untestable check
+ * keeps its "?" either way; whether it hid the text is paWalkGateBlocks's.
+ */
+function paWalkGateState(gate) {
+	if (!gate || gate.not_applicable) { return "na"; }
+	if (gate.pass) { return "pass"; }
+	/* A leg through a currency metabolite fails check 1 outright, whatever
+	   the null could test: a plain red failure, never a caveat, and on a
+	   pathway walk it still hides the text (service.advisory_gates). */
+	if (Number(gate.currency_legs) > 0) { return "fail"; }
+	if (gate.untestable === true) { return "untested"; }
+	return gate.advisory === true ? "advisory" : "fail";
+}
+
+/* Whether a gate held the text back: a failure, or an untestable check
+   that is not advisory. */
+function paWalkGateBlocks(gate) {
+	var state = paWalkGateState(gate);
+	return state === "fail" || (state === "untested" && gate.advisory !== true);
+}
+
+/* The labels of the gates that held the text back, in chip order. */
 function paWalkFailedGates(view) {
 	var gates = paWalkGates(view) || {};
 	return PA_WALK_GATES.filter(function (entry) {
-		var gate = gates[entry[0]];
-		return gate && !gate.not_applicable && !gate.pass;
+		return paWalkGateBlocks(gates[entry[0]]);
 	}).map(function (entry) { return entry[1]; });
 }
 
 /*
- * The five checks as a row of chips, then one line per failed check saying
- * why. Null for a walk that predates the gates.
+ * The five checks as a row of chips, then one line per check not cleared
+ * saying why. An advisory check's line and hover say it hid nothing, so a
+ * reader does not look for text it kept back. Null for a walk that predates
+ * the gates.
  */
 function paWalkGatesNode(view) {
 	var gates = paWalkGates(view);
@@ -307,24 +354,99 @@ function paWalkGatesNode(view) {
 	var failed = [];
 	PA_WALK_GATES.forEach(function (entry) {
 		var name = entry[0], label = entry[1], gate = gates[name];
-		var state = (!gate || gate.not_applicable) ? "na" : (gate.pass ? "pass" : "fail");
+		var state = paWalkGateState(gate);
+		var caveat = (state === "untested" || state === "advisory") && gate.advisory === true;
 		var chip = paWalkEl("span", "pa-walk-gate is-" + state, label);
-		chip.title = paWalkGateTitle(name, gate, state);
+		chip.title = (caveat ? "Advisory on a pathway walk, hides nothing. " : "") + paWalkGateTitle(name, gate, state);
 		row.appendChild(chip);
-		if (state === "fail") { failed.push(label + ": " + String(gate.why || "failed")); }
+		if (state === "fail" || state === "untested" || state === "advisory") {
+			failed.push({state: state, text: label + (caveat ? " (advisory on a pathway walk, hides nothing)" : "") +
+				": " + String(gate.why || "failed")});
+		}
 	});
 	box.appendChild(row);
-	failed.forEach(function (line) { box.appendChild(paWalkEl("p", "pa-walk-gate-why", line)); });
+	// An untested or advisory check's line wears the amber of its chip, not a failure's red.
+	failed.forEach(function (line) {
+		box.appendChild(paWalkEl("p", "pa-walk-gate-why" + (line.state === "fail" ? "" : " is-" + line.state), line.text));
+	});
 	return box;
 }
 
-/* What stands where the Results would, when the gates held the text back. */
-function paWalkBlockedNode(view) {
+/*
+ * The walk's text in the order a passing walk shows it -- Results,
+ * references, statements -- appended to parent. options are the call site's:
+ * onLeg makes leg chips clickable, canRerun lets the Results note offer
+ * "Walk again". The passing branch and the revealed one both come here, so a
+ * held-back walk opened on request reads exactly as a passing one would.
+ */
+function paWalkAppendText(parent, view, options) {
+	options = options || {};
+	parent.appendChild(paWalkResultsNode(view, options));
+	var references = paWalkReferencesNode(view);
+	if (references) { parent.appendChild(references); }
+	if ((view.statements || []).length || (view.dropped || []).length) {
+		parent.appendChild(paWalkStatementsNode(view, {onLeg: options.onLeg}));
+	}
+	return parent;
+}
+
+/* One sealed walk, for remembering that its text was opened: a "Walk again"
+   seals a new one, which starts hidden again. */
+function paWalkRevealKey(view) {
+	return [view.job, view.scope, view.sealed_at].map(String).join("|");
+}
+
+/*
+ * What stands where the Results would when the gates held the text back: a
+ * note naming the checks it did not clear and a button that shows it anyway.
+ * The click replaces both with a warning and the text (paWalkAppendText with
+ * the call site's options). The checks' reasons are already printed under
+ * the chips above, so the warning names them and refers there rather than
+ * repeating them. revealed, when given, is an object the calling view keeps
+ * across its renders, keyed by paWalkRevealKey, so a re-render of the same
+ * walk keeps the text open instead of hiding what the user asked to read; the
+ * Walk column passes one (it re-renders), the AI panel none (its bubble is
+ * built once per report load).
+ */
+function paWalkBlockedNode(view, options, revealed) {
 	var failed = paWalkFailedGates(view);
-	return paWalkEl("p", "pa-walk-note pa-walk-blocked", (failed.length
-		? "Not shown: this interpretation failed " + failed.length + " of the five checks (" + failed.join(", ") + ")."
-		: "Not shown: this interpretation did not clear the five checks.") +
-		" The walk itself is below; its legs are database relations and your values, not findings.");
+	var key = paWalkRevealKey(view);
+	var box = paWalkEl("div", "pa-walk-withheld");
+	var named = failed.length
+		? failed.length + " of the five checks (" + failed.join(", ") + ")"
+		: "the five checks";
+	var open = function () {
+		$(box).empty();
+		var warning = paWalkEl("div", "pa-walk-warning");
+		warning.setAttribute("role", "note");
+		warning.tabIndex = -1;
+		warning.appendChild(paWalkEl("strong", null, "Shown at your request. "));
+		warning.appendChild(document.createTextNode("This interpretation did not clear " + named +
+			(failed.length ? "; the reasons are listed above" : "") + ". Read its statements and Results as " +
+			"hypotheses drawn from the walk and the cited papers, not as findings."));
+		box.appendChild(warning);
+		paWalkAppendText(box, view, options);
+		return warning;
+	};
+	if (revealed && revealed[key]) {
+		open();
+		return box;
+	}
+	box.appendChild(paWalkEl("p", "pa-walk-note pa-walk-blocked", "Not shown by default: this interpretation " +
+		"did not clear " + named + ". The walk itself is below; its legs are database relations and your " +
+		"values, not findings."));
+	var reveal = paWalkEl("button", "button btn-default pa-walk-reveal", "Show the interpretation anyway");
+	reveal.type = "button";
+	$(reveal).on("click", function () {
+		if (revealed) { revealed[key] = true; }
+		/* The button goes with the click: focus moves to the warning, without
+		   scrolling the panels around the column (see focus below). */
+		open().focus({preventScroll: true});
+	});
+	var row = paWalkEl("div", "pa-walk-actions");
+	row.appendChild(reveal);
+	box.appendChild(row);
+	return box;
 }
 
 /*
@@ -633,6 +755,14 @@ function PA_Step4WalkView() {
 	this.focusLeg = null;
 	this.layer = null;
 	this.starting = false;
+	/* Held-back walks the user opened (paWalkBlockedNode), by paWalkRevealKey.
+	   render() empties the body and rebuilds it on every status answer, and
+	   a sealed walk can be answered twice: opening the column asks from both
+	   boxready and toggle while no answer has come. The reveal must survive
+	   that. Focusing a leg does not re-render; it moves a class and redraws
+	   the map layer. The view lives as long as its pathway view (closing the
+	   column only hides it). */
+	this.revealed = {};
 
 	this.scope = function () {
 		return "pathway:" + this.getModel().getID();
@@ -917,22 +1047,19 @@ function PA_Step4WalkView() {
 		var root = body[0];
 		var onLeg = function (n) { me.focus(n); };
 		/* The perturbation line and the five gates come first; the text they
-		   judged follows only when every gate passed (or the walk predates
-		   them). A walk they held back keeps its legs, opened, with a note. */
+		   judged follows when every gate passed (or the walk predates them).
+		   A walk they held back keeps its legs, opened, with a note and a
+		   button that shows the text under a warning. */
 		var header = paWalkHeaderNode(view);
 		if (header) { root.appendChild(header); }
 		var gates = paWalkGatesNode(view);
 		if (gates) { root.appendChild(gates); }
 		var shown = paWalkTextShown(view);
+		var textOptions = {onLeg: onLeg, canRerun: this.canEdit()};
 		if (shown) {
-			root.appendChild(paWalkResultsNode(view, {onLeg: onLeg, canRerun: this.canEdit()}));
-			var references = paWalkReferencesNode(view);
-			if (references) { root.appendChild(references); }
-			if ((view.statements || []).length || (view.dropped || []).length) {
-				root.appendChild(paWalkStatementsNode(view, {onLeg: onLeg}));
-			}
+			paWalkAppendText(root, view, textOptions);
 		} else {
-			root.appendChild(paWalkBlockedNode(view));
+			root.appendChild(paWalkBlockedNode(view, textOptions, this.revealed));
 		}
 		var legs = paWalkEl("details", "pa-walk-chain");
 		legs.open = !shown || !(view.results && view.results.paragraphs && view.results.paragraphs.length);

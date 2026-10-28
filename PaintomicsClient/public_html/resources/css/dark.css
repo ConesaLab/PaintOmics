@@ -2370,4 +2370,10 @@
   --pa-walk-na-ink: #A1B0C0;
   --pa-walk-na-bg: rgba(255, 255, 255, 0.08);
   --pa-walk-other-border: #F59E0B;
+  /* The untested chip and the warning over an opened held-back walk: the
+     light amber fill would glare, so the fill goes translucent and the ink
+     lifts. */
+  --pa-walk-caution-ink: #FCD34D;
+  --pa-walk-caution-bg: rgba(245, 158, 11, 0.16);
+  --pa-walk-caution-rule: #F59E0B;
 }

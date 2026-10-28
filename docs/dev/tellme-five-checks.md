@@ -9,7 +9,13 @@ user-facing description is in [ai-interpretation.md](../ai-interpretation.md); t
 
 Every walk interpretation (the network walk in the AI panel and a pathway walk in the Step 4
 Walk column) carries five verdicts in `checks.gates` and a `checks.rendered` flag, and the
-client shows the Results section and the statements only when all five pass. The harness
+client shows the Results section and the statements by default only when all five pass;
+otherwise a note names the checks not cleared and a **Show the interpretation anyway**
+button opens the text under a warning (since 2026-10-28; before that it was not shown at
+all). Also since 2026-10-28, check 1's permutation test is advisory on a pathway walk and the
+other four decide `checks.rendered` there unless a leg ran through a currency metabolite; on
+the network walk all five still do (see the end of check 1 below). "Withheld" and "rendered" below mean `checks.rendered` as it was computed when these
+runs were measured, from all five gates on both scopes. The harness
 (`walker/harness.py`, run by `walker/cli.py --five-checks`) measures each gate offline the way
 the checks were specified: three whole-pipeline runs at the production temperatures against
 the null each check names, every number reported as a range over the three runs.
@@ -166,8 +172,51 @@ its output therefore does not separate real data from noise, and the check as th
 it fails. What does separate them is the gate: on the network, permuted data passed check 1's
 request-time null twice in twenty attempts, and those two runs are the false-positive rate a
 reader is exposed to. On the FoxO map the same gate withholds every walk, real included; that
-pathway's relevant genes are spread as the job's genes are at large, so no walk on it can be
-told from a walk on permuted values, and the interpretation is not shown.
+pathway's relevant genes are spread as the job's genes are at large, so the check's walker
+cannot tell a walk on it from a walk on permuted values, and the interpretation is hidden by
+default.
+
+**What a failure of this check says (2026-10-28).** Less than the reason used to claim ("on
+this graph the data has no structure a walk could find"). The scripted walker seeds on a
+relevant node and steps only onto relevant neighbours, so with few relevant genes it stalls
+after a leg or two on real and permuted data alike and the test has little power. On job
+7O521E0Y0y (human bladder cancer, 199 of 6,070 measured genes relevant) the network walk
+found 1 module against 1.1 permuted (p_modules 0.73, p_heat 0.29), while 45 edges joined two
+relevant genes against 27.8 expected (200 permutations, p = 0.10). On hsa05219 the 4
+relevant genes of 22 measured touch no other relevant gene: 0 modules real and permuted, p =
+1, a check that can never pass there. The pass rule and every number above are unchanged;
+the gate now also stores, from the same permutations, `measured` and `relevant` on the
+walked graph, `adjacent_pairs` {real, null_mean, p} (edges joining two relevant nodes, each
+unordered pair once) and `untestable` (no connected group of three relevant nodes, so no
+module can form on the data). The reason is reworded to match: "could not be tested on this
+data: no three of the K relevant genes on this graph are connected to one another ..." or
+"the check's walker, which steps only from relevant gene to relevant gene, found X module(s)
+on the data and Y on shuffled (permuted) data on average (p = ...) ...: it could not tell this
+data from shuffled data on this graph. Of N measured genes, K are relevant; A pairs of them
+are adjacent, B expected by chance (p = ...)". The chip of an untestable check is amber with
+a "?", neither passed nor failed, and counts as not cleared.
+
+**Advisory on a pathway walk (2026-10-28).** The check keeps its rule and its numbers, and
+keeps hiding the network walk's text when it fails. On a pathway walk a failure of its
+permutation test no longer hides anything: `service.advisory_gates` marks the gate
+`advisory: true`, `service.renders` leaves it out of `checks.rendered`, and the Walk column
+draws a failed one amber ("?" untestable, "!" otherwise) with "(advisory on a pathway walk,
+hides nothing)" on its reason. A leg through a currency metabolite is not advisory: it is a
+definite artifact rather than a low-power statistic, so the gate stays a red failure and
+hides the text on both scopes (`advisory_gates` returns nothing when `currency_legs` > 0,
+and the client checks currency first). The user
+opened a map PaintOmics' enrichment test already flagged (Bladder cancer, p = 0.018 on job
+7O521E0Y0y), and on one map with few relevant genes the check has little or nothing to
+measure: hsa05219 is untestable, and the FoxO rows above show it withholding every run, real
+ones included. It judges the scripted walker, not the AI text; checks 2 to 5 still judge
+the text on both scopes. The rendering result in the short answer (3 of 3 real rendered, 18
+of 20 permuted withheld, Fisher p = 0.006) is the network walk's and still describes it.
+The rule is applied when a stored walk is read (`service.apply_render_rule`, called by the
+status route) as well as at seal time, so a pathway walk sealed earlier and held back by
+check 1 alone shows without a re-walk. `harness.regate` and the harness's own runs seal
+with the same rule (`service.seal_render`), so a re-measurement of a pathway scope reports
+what users see; the network measurement is unaffected, and the FoxO "rendered 0 of 3" above
+is the old rule's.
 
 ### 2 · The title fits the body — PASS
 

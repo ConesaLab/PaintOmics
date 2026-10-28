@@ -4,11 +4,13 @@ the scripted policy seals a record whose checks carry five verdicts, a
 rendered flag and the anchor, and the view hands them to the client. The
 context gate and the title gate are exercised on hand-built statements and
 Results. Offline, no model."""
+import json
 import os
 import shutil
 import tempfile
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -52,7 +54,9 @@ class GatesOnARunTest(unittest.TestCase):
         for name in service.GATES:
             self.assertIsInstance(checks["gates"][name]["pass"], bool, name)
         self.assertIn("rendered", checks)
-        self.assertEqual(checks["rendered"], all(checks["gates"][n]["pass"] for n in service.GATES))
+        # a pathway walk: check 1 is advisory and does not decide
+        self.assertTrue(checks["gates"]["artifact"]["advisory"])
+        self.assertEqual(checks["rendered"], all(checks["gates"][n]["pass"] for n in service.GATES if n != "artifact"))
         # the anchor was read from the design, connected by its target edge, and measured
         anchor = checks["anchor"]
         self.assertEqual(anchor["gene"], "Aaa")
@@ -116,12 +120,140 @@ class GatesOnARunTest(unittest.TestCase):
         walker = policies.greedy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
         gate = service.artifact_gate(walker)
         self.assertEqual(gate["currency_legs"], 0)
+        null_why = gate["why"]
         # forge a leg through ATP onto the sealed chain
         walker.chain[0].src = "c:C00002"
         gate = service.artifact_gate(walker)
         self.assertEqual(gate["currency_legs"], 1)
         self.assertFalse(gate["pass"])
         self.assertIn("currency metabolite", gate["why"])
+        # the currency reason is added to the null's own, never put in its place
+        self.assertEqual(gate["why"], null_why + ("; " if null_why else "") +
+                         "1 leg(s) run through a currency metabolite")
+
+    def test_a_null_failure_keeps_its_reason_beside_a_currency_leg(self):
+        net = net_mod.build_network("tst", self.data_dir)
+        graph = net.filter_pathway("KEGG:tst00001")
+        ov = ov_mod.overlay_job(graph, fx.make_job())
+        walker = policies.greedy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
+        walker.chain[0].src = "c:C00002"
+        failed = {"pass": False, "why": "the null's reason"}
+        with mock.patch.object(service.null_mod, "structure_null", return_value=dict(failed)):
+            gate = service.artifact_gate(walker)
+        self.assertEqual(gate["why"], "the null's reason; 1 leg(s) run through a currency metabolite")
+
+    def test_check_1_decides_on_the_network_walk_only(self):
+        # The same failing null on both scopes: advisory on the pathway, a
+        # block on the network. The other gates are not applicable here.
+        failed = {"pass": False, "untestable": True, "why": "could not be tested on this data"}
+        for scope, advisory in (("pathway:tst00001", True), ("network", False)):
+            with mock.patch.object(service, "artifact_gate", return_value=dict(failed)):
+                rec, _n, _g, tag = service.run(fx.make_job(), "job5", scope, policy="greedy",
+                                               data_dir=self.data_dir, use_mongo=False)
+            gates = rec["checks"]["gates"]
+            self.assertEqual(gates["artifact"].get("advisory", False), advisory, scope)
+            self.assertTrue(all(gates[n]["pass"] for n in service.GATES if n != "artifact"), scope)
+            self.assertEqual(rec["checks"]["rendered"], advisory, scope)
+            self.assertEqual(service.view(rec)["checks"]["rendered"], advisory, scope)
+
+    def test_a_currency_leg_still_hides_a_pathway_walk(self):
+        # Only the null's half of check 1 is advisory: a leg through ATP is a
+        # definite artifact, untestable null or not.
+        failed = {"pass": False, "untestable": True, "currency_legs": 1,
+                  "why": "could not be tested on this data; 1 leg(s) run through a currency metabolite"}
+        with mock.patch.object(service, "artifact_gate", return_value=dict(failed)):
+            rec, _n, _g, _tag = service.run(fx.make_job(), "job6", "pathway:tst00001", policy="greedy",
+                                            data_dir=self.data_dir, use_mongo=False)
+        self.assertNotIn("advisory", rec["checks"]["gates"]["artifact"])
+        self.assertFalse(rec["checks"]["rendered"])
+        view = service.view(rec)
+        self.assertFalse(view["checks"]["rendered"])
+        self.assertNotIn("advisory", view["checks"]["gates"]["artifact"])
+
+    def test_regate_reads_a_pathway_record_with_the_shipped_rule(self):
+        from src.classes.AIInterpret.walker import harness
+        rec, _n, _g, _tag = service.run(fx.make_job(), "job7", "pathway:tst00001", policy="greedy",
+                                        data_dir=self.data_dir, use_mongo=False)
+        path = os.path.join(self.data_dir, "regate.json")
+        real_build = service.build
+
+        def build(job, scope, data_dir=None, use_mongo=True, card=None, aliases=None):
+            return real_build(job, scope, data_dir, False, card, aliases)      # no Mongo in a unit test
+
+        for null, shown in (({"pass": False, "untestable": True, "why": "could not be tested"}, True),
+                            ({"pass": False, "currency_legs": 2, "why": "2 leg(s) ..."}, False)):
+            harness._save(path, rec)
+            with mock.patch.object(service, "build", side_effect=build), \
+                    mock.patch.object(service, "artifact_gate", return_value=dict(null)):
+                out = harness.regate(path, fx.make_job(), "pathway:tst00001", data_dir=self.data_dir)
+            self.assertIs(out["checks"]["rendered"], shown, null)
+            self.assertIs(out["checks"]["gates"]["artifact"].get("advisory", False), shown, null)
+            self.assertEqual(harness._load(path)["checks"]["rendered"], shown, "saved as computed")
+
+
+def _gates(*failing):
+    """The five gates, those named failing and the rest passed."""
+    return {name: ({"pass": False, "why": "failed"} if name in failing else {"pass": True}) for name in service.GATES}
+
+
+def _sealed(scope, gates, rendered):
+    """The least of a sealed record view() reads."""
+    return {"schema": 2, "job": "J1", "scope": scope, "sealed_at": "2026-10-20T10:00:00",
+            "walk": {"chain": [], "seen": []}, "results": {"summary": "S", "paragraphs": [{"text": "P"}]},
+            "checks": {"gates": gates, "rendered": rendered}}
+
+
+class RenderRuleTest(unittest.TestCase):
+    """Check 1 hides the text only on the network walk; on a pathway walk it is
+    advisory. The other four always decide."""
+
+    def test_the_rule_on_both_scopes(self):
+        self.assertTrue(service.renders("KEGG:hsa05219", _gates("artifact")))
+        self.assertFalse(service.renders("network", _gates("artifact")))
+        self.assertFalse(service.renders("KEGG:hsa05219", _gates("artifact", "context")))
+        self.assertFalse(service.renders("Reactome:R-HSA-1", _gates("anchor")))
+        self.assertTrue(service.renders("network", _gates()))
+        self.assertEqual(service.advisory_gates("network", _gates("artifact")), ())
+        self.assertEqual(service.advisory_gates("KEGG:hsa05219", _gates("artifact")), ("artifact",))
+        self.assertEqual(service.advisory_gates("KEGG:hsa05219", {}), ("artifact",))
+        # a leg through a currency metabolite is not the null's low power: it blocks
+        currency = _gates("artifact")
+        currency["artifact"]["currency_legs"] = 1
+        self.assertEqual(service.advisory_gates("KEGG:hsa05219", currency), ())
+        self.assertFalse(service.renders("KEGG:hsa05219", currency))
+
+    def test_a_pathway_walk_sealed_before_the_rule_renders_now(self):
+        # job 7O521E0Y0y's hsa05219 walk: held back by check 1 alone
+        gates = _gates("artifact")
+        gates["artifact"]["untestable"] = True
+        rec = _sealed("KEGG:hsa05219", gates, False)
+        v = service.view(rec)
+        self.assertTrue(v["checks"]["rendered"])
+        self.assertTrue(v["checks"]["gates"]["artifact"]["advisory"])
+        self.assertNotIn("advisory", rec["checks"]["gates"]["artifact"], "view() leaves the record as sealed")
+        # the network walk keeps the blocking rule, and another gate still decides
+        v = service.view(_sealed("network", _gates("artifact"), False))
+        self.assertFalse(v["checks"]["rendered"])
+        self.assertNotIn("advisory", v["checks"]["gates"]["artifact"])
+        self.assertFalse(service.view(_sealed("KEGG:hsa05219", _gates("artifact", "title"), False))["checks"]["rendered"])
+
+    def test_a_view_stored_before_the_rule_is_read_with_it(self):
+        stored = json.loads(json.dumps({"scope": "KEGG:hsa05219",
+                                        "checks": {"gates": _gates("artifact"), "rendered": False}}))
+        self.assertTrue(service.apply_render_rule(stored)["checks"]["rendered"])
+        # a walk sealed before the gates keeps its flag; a view with no checks is left alone
+        self.assertTrue(service.apply_render_rule({"scope": "KEGG:x", "checks": {"gates": {}, "rendered": True}})
+                        ["checks"]["rendered"])
+        self.assertTrue(service.view(_sealed("KEGG:hsa05219", {}, True))["checks"]["rendered"])
+        self.assertEqual(service.apply_render_rule({"chain": []}), {"chain": []})
+        # a view marked advisory although a currency leg failed it (sealed
+        # before the currency half kept blocking) loses the mark and hides
+        stale = _gates("artifact")
+        stale["artifact"].update(currency_legs=1, advisory=True)
+        v = service.apply_render_rule({"scope": "KEGG:hsa05219", "checks": {"gates": stale, "rendered": True}})
+        self.assertFalse(v["checks"]["rendered"])
+        self.assertNotIn("advisory", v["checks"]["gates"]["artifact"])
+        self.assertTrue(stale["artifact"]["advisory"], "the stored gate is copied, not edited")
 
 
 class AnswerCountTest(unittest.TestCase):

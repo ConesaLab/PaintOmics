@@ -29,7 +29,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
-from src.common.KeggGraph.parser import parse_pathway, parse_directory
+from src.common.KeggGraph.parser import iter_directory, parse_pathway, parse_directory
 
 FIXTURE = """<?xml version="1.0"?>
 <pathway name="path:tst00001" org="tst" number="00001">
@@ -132,6 +132,66 @@ class ParserTest(unittest.TestCase):
         edges, types, files = parse_directory(self.dir)
         self.assertEqual(files, 1)
         self.assertTrue(edges)
+
+
+# Two maps drawing the same pair: 10 -> 20 is binding in the first and
+# activation in the second, the way every pair hsa05219 draws is drawn first
+# in a map whose file name sorts earlier (hsa01521, hsa04110, hsa05200, ...).
+SHARED_FIRST = """<?xml version="1.0"?>
+<pathway name="path:tst00010" org="tst" number="00010">
+  <entry id="1" name="tst:10" type="gene"/>
+  <entry id="2" name="tst:20" type="gene"/>
+  <entry id="3" name="tst:30" type="gene"/>
+  <relation entry1="1" entry2="2" type="PPrel"><subtype name="binding/association" value="---"/></relation>
+  <relation entry1="1" entry2="3" type="PPrel"><subtype name="activation" value="--&gt;"/></relation>
+</pathway>
+"""
+SHARED_SECOND = """<?xml version="1.0"?>
+<pathway name="path:tst00020" org="tst" number="00020">
+  <entry id="1" name="tst:10" type="gene"/>
+  <entry id="2" name="tst:20" type="gene"/>
+  <relation entry1="1" entry2="2" type="PPrel"><subtype name="activation" value="--&gt;"/></relation>
+</pathway>
+"""
+
+
+class DirectoryTest(unittest.TestCase):
+    """A pair two maps draw: iter_directory gives it once per map, and
+    parse_directory -- the hub graph's input -- still keeps one copy."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="paintomics-kgml-")
+        for name, text in (("tst00010.kgml", SHARED_FIRST), ("tst00020.kgml", SHARED_SECOND)):
+            with open(os.path.join(self.dir, name), "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_each_map_keeps_its_own_copy_of_a_shared_pair(self):
+        shared = [(e.pathway, e.subtype) for edges, _ in iter_directory(self.dir)
+                  for e in edges if (e.a, e.b) == ("10", "20")]
+        self.assertEqual(shared, [("tst00010", "binding/association"), ("tst00020", "activation")])
+
+    def test_iter_directory_yields_one_tuple_per_readable_file(self):
+        with open(os.path.join(self.dir, "broken.kgml"), "w", encoding="utf-8") as handle:
+            handle.write("<pathway><unclosed>")
+        per_file = list(iter_directory(self.dir))
+        self.assertEqual(len(per_file), 2)
+        self.assertEqual(per_file[1][1]["20"], "gene")
+
+    def test_a_missing_directory_yields_nothing(self):
+        self.assertEqual(list(iter_directory(os.path.join(self.dir, "absent"))), [])
+        self.assertEqual(parse_directory(os.path.join(self.dir, "absent")), ([], {}, 0))
+
+    def test_parse_directory_still_keeps_the_first_maps_copy(self):
+        """The hub graph and its regression baselines read this; unchanged."""
+        edges, types, files = parse_directory(self.dir)
+        self.assertEqual(files, 2)
+        by_pair = {(e.a, e.b): e for e in edges}
+        self.assertEqual(len(edges), 2)
+        self.assertEqual(by_pair[("10", "20")].pathway, "tst00010")
+        self.assertEqual(by_pair[("10", "20")].subtype, "binding/association")
 
 
 def main():

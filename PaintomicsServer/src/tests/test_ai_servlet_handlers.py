@@ -12,7 +12,8 @@ the four routes the browser already speaks keep around it:
   * /ai_interpret_report returns the sealed walk and the pathways its legs run
     through, and says so plainly while the walk is still running.
   * /ai_interpret_chat refuses before the walk is sealed, and afterwards sends
-    the gateway the walk and the design card, not an empty context.
+    the gateway the walk and the design card, not an empty context. The
+    reasoning a model leaks into its answer is not shown, stored or replayed.
 
 The gateway stand-in is a real HTTP server speaking chat-completions, so
 `llm_client` does real requests rather than being mocked out. The walk store,
@@ -39,6 +40,7 @@ from src.tests.test_walk_service_and_routes import FakeQueue, FakeWalkDAO   # no
 
 class _Handler(BaseHTTPRequestHandler):
     bodies = []
+    answer = "Stub answer about the walk."
 
     def log_message(self, *args):
         pass
@@ -48,7 +50,7 @@ class _Handler(BaseHTTPRequestHandler):
         _Handler.bodies.append(json.loads(self.rfile.read(length) or b"{}"))
         body = json.dumps({
             "choices": [{"index": 0, "finish_reason": "stop",
-                         "message": {"role": "assistant", "content": "Stub answer about the walk."}}],
+                         "message": {"role": "assistant", "content": _Handler.answer}}],
         }).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -121,6 +123,7 @@ class _RouteCase(unittest.TestCase):
         self.servlet = servlet
         FakeWalkDAO.store, FakeChatDAO.conversations, FakeChatDAO.cleared = {}, {}, []
         _Handler.bodies = []
+        _Handler.answer = "Stub answer about the walk."
         self.consent = True
         test = self
         job = fx.make_job()
@@ -279,6 +282,25 @@ class ChatHandlerTest(_RouteCase):
         self.assertIn("Design card:", sent)
         self.assertIn("get_feature_values", json.dumps(_Handler.bodies[0].get("tools")))
         self.assertEqual([m["role"] for m in FakeChatDAO.conversations["J1"]], ["user", "assistant"])
+
+    def test_leaked_reasoning_is_neither_shown_nor_stored(self):
+        """39 of 50 answers on paintomics.org opened with the model's reasoning."""
+        FakeWalkDAO().save_progress("J1", "network", {"status": "done", "viewJSON": json.dumps(_view())})
+        _Handler.answer = "Now I have the data. Let me compose the answer.</think>## Bbb\n\nAaa drives it."
+        result = self._call(jobID="J1", message="What drives Bbb?")
+        self.assertEqual(result["response"], "## Bbb\n\nAaa drives it.")
+        self.assertEqual(FakeChatDAO.conversations["J1"][-1]["content"], "## Bbb\n\nAaa drives it.")
+
+    def test_a_stored_answer_is_replayed_without_its_reasoning(self):
+        """Stored before the fix and left in the database: cleaned on read."""
+        FakeWalkDAO().save_progress("J1", "network", {"status": "done", "viewJSON": json.dumps(_view())})
+        FakeChatDAO.conversations["J1"] = [
+            {"role": "user", "content": "Why does my note say </think>?"},
+            {"role": "assistant", "content": "The user asks about a tag. Let me explain.</think>It is a model tag."}]
+        self._call(jobID="J1", message="And Bbb?")
+        sent = _Handler.bodies[0]["messages"]
+        self.assertEqual(sent[-3]["content"], "Why does my note say </think>?", "a user's own text was edited")
+        self.assertEqual(sent[-2]["content"], "It is a model tag.")
 
 
 def main():

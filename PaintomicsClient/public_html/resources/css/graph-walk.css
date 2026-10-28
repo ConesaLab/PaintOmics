@@ -22,6 +22,12 @@
 	--pa-walk-na-ink: #52525B;
 	--pa-walk-na-bg: #F1F1F3;
 	--pa-walk-other-border: #D97706;
+	/* Caution, amber like the seed: a check that could not be tested on this
+	   data, and the warning over a held-back interpretation opened on request.
+	   Neither is a pass nor a failure of the walk. Ink 6.4:1 on its fill. */
+	--pa-walk-caution-ink: #92400E;
+	--pa-walk-caution-bg: #FEF3C7;
+	--pa-walk-caution-rule: #D97706;
 }
 
 .pa-walk-panel .lateralOptionsPanel-header h2 {
@@ -200,19 +206,61 @@
 .pa-walk-gate.is-na::before {
 	content: "\2013";
 }
+/* Untested ("?") and advisory ("!", check 1 failed on a pathway walk, where
+   it hides nothing) are caveats, not failures: amber, the caution tokens. */
+.pa-walk-gate.is-untested,
+.pa-walk-gate.is-advisory {
+	background: var(--pa-walk-caution-bg);
+	color: var(--pa-walk-caution-ink);
+}
+.pa-walk-gate.is-untested::before {
+	content: "?";
+}
+.pa-walk-gate.is-advisory::before {
+	content: "!";
+}
 .pa-walk-gate-why {
 	margin: 2px 0;
 	font-size: 12px;
 	color: var(--pa-walk-fail-ink);
 }
+/* An untested or advisory check is not a failure: its reason takes the
+   chip's amber. dark.css lifts the caution ink, so the line needs no rule of
+   its own there. */
+.pa-walk-gate-why.is-untested,
+.pa-walk-gate-why.is-advisory {
+	color: var(--pa-walk-caution-ink);
+}
 
-/* What stands in for the Results when the gates held the text back. */
+/* What stands in for the Results when the gates held the text back: a note,
+   the button that shows it anyway, and once pressed a warning above it. */
+.pa-walk-withheld {
+	margin: 0 0 10px;
+}
 .pa-walk-blocked {
 	padding: 8px 10px;
 	border-radius: var(--pa-radius-sm, 6px);
 	border-left: 3px solid var(--pa-walk-fail-ink);
 	background: var(--pa-walk-fail-bg);
 	color: var(--pa-ink-body, #27272A);
+}
+/* The button is a real <button> in the column's own .button look, the one
+   "Walk again" and "Check again" wear; .pa-walk-actions drops its float. */
+.pa-walk-withheld .pa-walk-actions {
+	margin: 8px 0 0;
+}
+.pa-walk-warning {
+	margin: 0 0 10px;
+	padding: 8px 10px;
+	border-radius: var(--pa-radius-sm, 6px);
+	border-left: 3px solid var(--pa-walk-caution-rule);
+	background: var(--pa-walk-caution-bg);
+	color: var(--pa-walk-caution-ink);
+	font-size: 12px;
+}
+.pa-walk-warning:focus-visible {
+	outline: 2px solid var(--pa-focus-ring, #0A84FF);
+	outline-offset: 1px;
 }
 
 /* The Results section. */

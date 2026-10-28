@@ -300,6 +300,39 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("LEGS:", text)
         self.assertIn("Test pathway one", text)
 
+    def test_the_chat_reads_a_held_back_walk_as_hidden_by_default(self):
+        # The page opens a held-back interpretation on a click, under a
+        # warning: the chat must read its Results, labelled with the checks
+        # it did not clear, and must not tell the user they cannot see them.
+        def stored(gates, rendered):
+            view = {"checks": {"gates": gates, "rendered": rendered, "anchor": None},
+                    "results": {"summary": "Foxo1 rises.", "paragraphs": [{"text": "Foxo1 rises with Pten [e1]."}]},
+                    "statements": [{"n": 1, "claim": "Foxo1 rises.", "legs": [1]}], "papers": {}, "chain": []}
+            return service.stored_walk_text({"status": "done", "viewJSON": json.dumps(view)})
+
+        passed = {name: {"pass": True} for name in service.GATES}
+        held = dict(passed, artifact={"pass": False, "untestable": True, "why": "could not be tested"},
+                    anchor={"pass": False, "why": "far from the anchor"})
+        text = stored(held, False)
+        self.assertIn("FAILED artifact (could not be tested on this data), anchor -- the Results and statements "
+                      "are hidden from the user by default; the user can open them under a warning", text)
+        self.assertIn("RESULTS (did not clear the checks: artifact (could not be tested on this data), anchor): "
+                      "Foxo1 rises.", text)
+        self.assertIn("- Foxo1 rises with Pten [e1].", text)
+        self.assertIn("STATEMENT 1: Foxo1 rises.", text)
+        self.assertNotIn("not shown to the user", text)
+        self.assertNotIn("RESULTS (checked)", text)
+        text = stored(passed, True)
+        self.assertIn("CHECKS: all five passed", text)
+        self.assertIn("RESULTS (checked): Foxo1 rises.", text)
+        self.assertNotIn("did not clear", text)
+        # a currency leg failed check 1 outright: not "could not be tested"
+        text = stored(dict(passed, artifact={"pass": False, "untestable": True, "currency_legs": 1,
+                                             "why": "1 leg(s) run through a currency metabolite"}), False)
+        self.assertIn("FAILED artifact -- the Results", text)
+        self.assertIn("RESULTS (did not clear the checks: artifact): ", text)
+        self.assertNotIn("could not be tested", text)
+
 
 class ReactomeExpansionTest(unittest.TestCase):
     def setUp(self):
@@ -619,6 +652,28 @@ class RouteTest(unittest.TestCase):
         self.assertEqual(len(out["walk"]["chain"]), 2)
         self.assertNotIn("live", out)
         self.assertEqual(self.queue.taken, [queue_id], "a finished walk's queue entry was left behind")
+
+    def test_a_pathway_view_stored_before_the_advisory_rule_shows_its_text(self):
+        # Stored at seal time with check 1 alone failing and rendered false
+        # (job 7O521E0Y0y's hsa05219 walk): the route reads it with today's
+        # rule, so it shows without a re-walk. The network walk still blocks.
+        gates = {name: {"pass": True} for name in self.servlet.walk_service.GATES}
+        gates["artifact"] = {"pass": False, "untestable": True, "why": "could not be tested on this data"}
+        for scope, tag, shown in (("pathway:hsa05219", "KEGG:hsa05219", True), ("network", "network", False)):
+            FakeWalkDAO().save_progress("J1", scope, {"status": "done", "viewJSON": json.dumps(
+                {"scope": tag, "chain": [], "checks": {"gates": gates, "rendered": False}})})
+            walk = self.status(jobID="J1", scope=scope)["walk"]
+            self.assertIs(walk["checks"]["rendered"], shown, scope)
+            self.assertIs(walk["checks"]["gates"]["artifact"].get("advisory", False), shown, scope)
+        # a leg through a currency metabolite still hides a pathway walk, even
+        # one stored with the advisory mark before that half kept blocking
+        gates["artifact"] = {"pass": False, "untestable": True, "currency_legs": 1, "advisory": True,
+                             "why": "1 leg(s) run through a currency metabolite"}
+        FakeWalkDAO().save_progress("J1", "pathway:hsa05219", {"status": "done", "viewJSON": json.dumps(
+            {"scope": "KEGG:hsa05219", "chain": [], "checks": {"gates": gates, "rendered": True}})})
+        walk = self.status(jobID="J1", scope="pathway:hsa05219")["walk"]
+        self.assertFalse(walk["checks"]["rendered"])
+        self.assertNotIn("advisory", walk["checks"]["gates"]["artifact"])
 
     def test_a_walk_that_stopped_writing_progress_is_marked_interrupted(self):
         FakeWalkDAO().save_progress("J1", "network", {"status": "running", "stage": "writer"})

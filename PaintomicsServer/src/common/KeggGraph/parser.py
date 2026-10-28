@@ -109,20 +109,37 @@ def parse_pathway(path):
     return list(edges.values()), types
 
 
-def parse_directory(kgml_dir):
-    """(edges, entry_types, files_read) over every *.kgml in a directory."""
-    edges, types, read = {}, {}, 0
+def iter_directory(kgml_dir):
+    """(edges, entry_types) for each readable *.kgml in a directory, by file name.
+
+    One pathway at a time and nothing merged across files, so a relation drawn
+    in several maps arrives once per map with that map's ``pathway``. A file
+    that yields neither edges nor entries (unreadable, or empty) is skipped;
+    each tuple yielded is one file read.
+    """
     try:
         listing = sorted(os.listdir(kgml_dir))
     except OSError as exc:
         logger.warning("[keggraph] cannot list %s: %s", kgml_dir, exc)
-        return [], {}, 0
+        return
     for name in listing:
         if not name.endswith(".kgml"):
             continue
         found, found_types = parse_pathway(os.path.join(kgml_dir, name))
-        if not found and not found_types:
-            continue
+        if found or found_types:
+            yield found, found_types
+
+
+def parse_directory(kgml_dir):
+    """(edges, entry_types, files_read) over every *.kgml in a directory.
+
+    One edge per (a, b) pair: the first file to draw it, by name, keeps it and
+    its ``pathway``. That is the hub graph's view (store.py) and the regression
+    baselines are recorded on it. It is not a pathway membership list -- hsa05219
+    draws 16 relations and kept none here -- so the walker reads iter_directory.
+    """
+    edges, types, read = {}, {}, 0
+    for found, found_types in iter_directory(kgml_dir):
         read += 1
         types.update(found_types)
         for edge in found:

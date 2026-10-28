@@ -344,6 +344,76 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertEqual(verify.quoted_values("relevant when |value| > 1.00 or p < 0.05, within ±0.6"), [])
         self.assertEqual(verify.quoted_values("it fell by 3.24 and rose to +2.13"), ["3.24", "+2.13"])
 
+    def cited_paper_case(self):
+        """Statement 1 cites [5], whose confirmed passage states p = 0.001: the
+        sentence the pruner removed on hsa05219 (job 7O521E0Y0y, 2026-10-28),
+        after which the whole Results section was lost."""
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        stmt = {"n": 1, "claim": "c", "prose": "p [5]", "papers": [5], "beyond": [],
+                "evidence": [{"ref": 5, "section": "Results", "full_text": True,
+                              "claim": "FGFR3 mutations are mutually exclusive with RAS mutations in bladder "
+                                       "cancer (p = 0.001)",
+                              "quote": "FGFR3 mutations were strongly mutually exclusive with RAS mutations "
+                                       "(p = 0.001)"}]}
+        lead = "At the first time point in this series, the gene %s read %s [e1]. " % (self.walker.label(node), value)
+        cited = ("In a cohort of 257 primary bladder tumors, FGFR3 mutations were mutually exclusive with RAS "
+                 "mutations (p = 0.001) [5].")
+        self.assertFalse(verify._in_record("0.001", verify._record_numbers(self.walker)), "the fixture records it")
+        return stmt, lead, cited
+
+    def test_a_cited_papers_own_number_survives_the_pruner_and_the_verifier(self):
+        stmt, lead, cited = self.cited_paper_case()
+        results = {"title": "t", "summary": "s",
+                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": lead * 12 + cited}]}
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker, [stmt]), 0)
+        self.assertTrue(results["paragraphs"][0]["text"].endswith(cited))
+        self.assertEqual(verify.verify_results(results, [stmt], [], self.walker), [])
+        # Called without the statements, as before: the record is the only source.
+        bare = {"summary": "", "paragraphs": [{"from_statement": 1, "legs": [1], "text": lead + cited}]}
+        self.assertEqual(verify.drop_unrecorded_sentences(bare, self.walker), 1)
+        self.assertEqual(bare["paragraphs"][0]["text"], lead.strip())
+
+    def test_a_number_the_cited_passage_does_not_state_is_still_pruned(self):
+        stmt, lead, cited = self.cited_paper_case()
+        wrong = cited.replace("0.001", "0.004")
+        logfc = "FGFR3 rose to +7.77 in these tumors [5]."          # a misquoted logFC beside the citation
+        results = {"title": "t", "summary": "s",
+                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": lead * 12 + wrong + " " + logfc}]}
+        problems = verify.verify_results(results, [stmt], [], self.walker)
+        self.assertTrue(any("quotes 0.004, not in the record" in p for p in problems), problems)
+        self.assertTrue(any("quotes +7.77, not in the record" in p for p in problems), problems)
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker, [stmt]), 2)
+        self.assertNotIn("[5]", results["paragraphs"][0]["text"])
+        self.assertTrue(any("drops [5]" in p for p in verify.verify_results(results, [stmt], [], self.walker)))
+
+    def test_a_papers_number_needs_that_papers_citation_in_its_own_sentence(self):
+        stmt, lead, cited = self.cited_paper_case()
+        results = {"summary": "FGFR3 and RAS mutations were exclusive (p = 0.001) [5]. Aaa rose.",
+                   "paragraphs": [
+                       {"from_statement": 1, "legs": [1],
+                        "text": lead + "The two were exclusive (p = 0.001). This is documented [5]."},
+                       {"from_statement": None, "legs": [], "text": "The map draws it (p = 0.001) [5]."}]}
+        problems = verify.verify_results(results, [stmt], [], self.walker)
+        self.assertTrue(any("paragraph 1 quotes 0.001" in p for p in problems), problems)
+        self.assertTrue(any("paragraph 2 quotes 0.001" in p for p in problems), problems)
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker, [stmt]), 3)
+        self.assertEqual(results["summary"], "Aaa rose.")
+        self.assertEqual([p["text"] for p in results["paragraphs"]], [lead.strip() + " This is documented [5]."])
+
+    def test_the_repair_round_is_told_which_cited_sentence_went_and_why(self):
+        stmt, lead, cited = self.cited_paper_case()
+        results = {"summary": "It rose to 0.004.", "paragraphs": [
+            {"from_statement": 1, "legs": [1], "text": lead + cited.replace("0.001", "0.004")}]}
+        removed = []
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker, [stmt], removed), 2)
+        self.assertEqual(len(removed), 1, "only the sentence that carried its statement's citation is explained")
+        self.assertTrue(removed[0].startswith('paragraph 1 (from statement 1): the sentence "In a cohort of 257 '
+                                              'primary bladder tumors, FGFR3'), removed)
+        self.assertIn('…" citing [5] was removed because it quotes 0.004, which neither the record nor [5]\'s '
+                      'confirmed passage holds; keep [5] and quote only the record\'s values or the paper\'s',
+                      removed[0])
+
     def test_a_dropped_statements_reason_names_papers_the_list_holds(self):
         from src.classes.AIInterpret.walker import record as record_mod
         papers = {3: {"pmid": "33"}, 7: {"pmid": "77"}}

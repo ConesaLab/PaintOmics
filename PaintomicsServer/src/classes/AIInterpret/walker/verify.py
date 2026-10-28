@@ -46,6 +46,12 @@ def cited_refs(text):
             if int(number) not in refs:
                 refs.append(int(number))
     return refs
+SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\[(])")
+
+
+def sentences(text):
+    """A text's sentences, split where every pruner and check here splits them."""
+    return SENTENCE_RE.split(str(text or ""))
 STATEMENT_MIN, STATEMENT_MAX = 3, 5
 RESULTS_WORDS = {"pathway": (150, 450), "network": (300, 900)}
 # The walker's working words. In a statement or a Results section they narrate
@@ -403,7 +409,7 @@ def citing_sentences(stmt, ref):
     the reader sees them; the beyond claim citing it when the prose does not;
     the statement's claim when neither does."""
     out = []
-    for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[(])", str(stmt.get("prose") or "")):
+    for sentence in sentences(stmt.get("prose")):
         if ref in cited_refs(sentence):
             out.append(sentence.strip())
     if out:
@@ -488,7 +494,7 @@ def drop_uncited_sentences(results, kept):
 
     def keep(text, allowed):
         out = []
-        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[(])", str(text or "")):
+        for sentence in sentences(text):
             if any(ref not in allowed for ref in cited_refs(sentence)):
                 count["dropped"] += 1
                 continue
@@ -556,7 +562,7 @@ def drop_jargon_sentences(results):
 
     def keep(text):
         out = []
-        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[(])", str(text or "")):
+        for sentence in sentences(text):
             if JARGON_RE.search(sentence):
                 count["dropped"] += 1
                 continue
@@ -578,36 +584,112 @@ def drop_jargon_sentences(results):
     return count["dropped"]
 
 
-def drop_unrecorded_sentences(results, walker):
+def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
     """Remove every sentence of the Results that quotes a value the record does
     not hold, and return how many went. A misquoted number is a sentence the
     checks cannot stand behind; dropping it keeps the rest of a section that is
     otherwise grounded, where rejecting the whole section on one "+1.62" left a
-    job with statements and no Results at all. Paragraphs left empty go too."""
+    job with statements and no Results at all. Paragraphs left empty go too.
+
+    With ``kept``, the kept statements, a sentence of a paragraph retelling one
+    may also quote what a paper it cites states (unrecorded_values). With
+    ``removed``, a list, every sentence removed with a citation its statement
+    makes adds a line saying which and why, for the Narrator's repair round."""
     numbers = _record_numbers(walker)
     count = {"dropped": 0}
 
-    def keep_quoted(text):
-        kept = []
-        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[(])", str(text or "")):
-            if any(not _in_record(value, numbers) for value in quoted_values(sentence)):
-                count["dropped"] += 1
+    def keep_quoted(text, source=None, where=None):
+        out = []
+        source_refs = set(statement_refs(source)) if source is not None else set()
+        for sentence in sentences(text):
+            values = unrecorded_values(sentence, numbers, source, source_refs)
+            if not values:
+                out.append(sentence)
                 continue
-            kept.append(sentence)
-        return " ".join(kept)
+            count["dropped"] += 1
+            refs = [ref for ref in cited_refs(sentence) if ref in source_refs]
+            if removed is not None and refs:
+                removed.append(_removal_note(where, source, sentence, refs, values))
+        return " ".join(out)
 
     paragraphs = []
-    for paragraph in results.get("paragraphs") or []:
+    for i, paragraph in enumerate(results.get("paragraphs") or [], 1):
         if not isinstance(paragraph, dict):
             paragraphs.append(paragraph)          # verify_results objects to it
             continue
-        text = keep_quoted(paragraph.get("text"))
+        source = _statement_by_n(kept or (), paragraph.get("from_statement"))
+        text = keep_quoted(paragraph.get("text"), source, i)
         if text.strip():
             paragraphs.append(dict(paragraph, text=text))
     results["paragraphs"] = paragraphs
     if results.get("summary"):
         results["summary"] = keep_quoted(results["summary"])
     return count["dropped"]
+
+
+def _removal_note(where, source, sentence, refs, values):
+    """The repair round's account of a sentence the pruner took out although it
+    carried its statement's citation. Told only "paragraph 1 drops [5]", the
+    Narrator re-sent the same sentence, which already had [5]."""
+    cites = ", ".join("[%d]" % ref for ref in refs)
+    passage = ("%s's confirmed passage" % cites if len(refs) == 1
+               else "the confirmed passages of %s" % cites)
+    head = sentence.strip()
+    if len(head) > 90:
+        head = head[:90].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    return ("paragraph %d (from statement %s): the sentence \"%s\" citing %s was removed because it quotes %s, "
+            "which neither the record nor %s holds; keep %s and quote only the record's values or the paper's"
+            % (where, source.get("n"), head, cites, " and ".join(dict.fromkeys(values)), passage, cites))
+
+
+def paper_numbers(stmt, ref):
+    """The values a statement's confirmed evidence for paper ``ref`` states, in
+    the claim a paper agent checked or the passage it quoted, normalised as the
+    record's are.
+
+    A Results sentence retelling a cited finding quotes the paper's numbers,
+    and the record never holds them. On job 7O521E0Y0y (hsa05219, 2026-10-28)
+    the Narrator kept every citation; the pruner removed "FGFR3 mutations were
+    mutually exclusive with RAS mutations (p = 0.001) [5]" and "overexpressed
+    in 31.2% and downregulated in 25.0% ... [119]" as unrecorded, the
+    verifier then found [5] and [119] dropped, the repair re-sent the same
+    sentences, and both runs that day lost their whole Results section. [5]'s
+    passage reads "(p = 0.001)", [119]'s holds 31.2% and 25.0%. Only these
+    confirmed fields count, never the statement's prose: no code checks the
+    prose number by number, only the model sense check reads it."""
+    evidence = stmt.get("evidence") if isinstance(stmt.get("evidence"), (list, tuple)) else []
+    tokens = set()
+    for item in evidence:
+        if isinstance(item, dict) and paper_ref(item.get("ref")) == ref:
+            for field in ("claim", "quote"):
+                tokens.update(_norm(value) for value in quoted_values(item.get(field)))
+    return tokens
+
+
+def unrecorded_values(sentence, numbers, source=None, source_refs=None):
+    """The values a Results sentence quotes and may not: in neither the record
+    (``numbers``) nor, in a paragraph retelling statement ``source``, the
+    confirmed evidence of a paper the sentence cites and the statement cites
+    (paper_numbers). A misquoted logFC beside a citation stays unrecorded, the
+    paper's passage does not hold it; so does a paper's number in a sentence
+    that cites nothing, in the summary or in a link paragraph.
+
+    ``source_refs`` is statement_refs(source) as a set, for a caller going
+    through a paragraph sentence by sentence; computed here when omitted."""
+    out, stated = [], None
+    for value in quoted_values(sentence):
+        if _in_record(value, numbers):
+            continue
+        if stated is None:
+            stated = set()
+            if source is not None:
+                if source_refs is None:
+                    source_refs = set(statement_refs(source))
+                for ref in set(cited_refs(sentence)) & source_refs:
+                    stated |= paper_numbers(source, ref)
+        if not _in_record(value, stated):
+            out.append(value)
+    return out
 
 
 def _record_numbers(walker):
@@ -663,6 +745,7 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
             if not isinstance(leg, int) or leg < 1 or leg > len(chain):
                 problems.append("paragraph %d tags leg e%s, not on the chain" % (i, leg))
         origin = para.get("from_statement")
+        source, source_refs = None, set()
         if origin is None:
             if quoted_values(text):
                 problems.append("link paragraph %d quotes a value" % i)
@@ -674,6 +757,7 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                 problems.append("paragraph %d comes from statement %s, which was not kept" % (i, origin))
             else:
                 covered.add(int(source["n"]))
+                source_refs = set(statement_refs(source))
                 # A paragraph retells its statement's literature claims, so it
                 # keeps their citations: the network Narrator once wrote "Slc7a11
                 # encodes the xCT subunit ... central to ferroptosis" with the [1]
@@ -683,10 +767,12 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                     if ref not in quoted:
                         problems.append("paragraph %d drops [%d], which its statement cites" % (i, ref))
                 # ...and cites nothing its statement does not.
-                for ref in sorted(quoted - set(statement_refs(source))):
+                for ref in sorted(quoted - source_refs):
                     problems.append("paragraph %d cites [%d], which its statement does not cite" % (i, ref))
-        for value in quoted_values(text):
-            if not _in_record(value, numbers):
+        # Sentence by sentence, as drop_unrecorded_sentences decides, so a
+        # sentence the pruner keeps is never the one this check objects to.
+        for sentence in sentences(text):
+            for value in unrecorded_values(sentence, numbers, source, source_refs):
                 problems.append("paragraph %d quotes %s, not in the record" % (i, value))
         for label in timing_on_unlabeled(text, walker):
             problems.append("paragraph %d gives %s a timing or order word, but its layer has no column labels"

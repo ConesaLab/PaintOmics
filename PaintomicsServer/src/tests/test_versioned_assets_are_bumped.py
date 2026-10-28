@@ -169,8 +169,13 @@ PUBLISHED = {
     # reader's place survives minimise and full screen, the header controls are
     # named and keyboard-reachable, and the collapsed panel leaves the tab order.
     # It ships with ai-interpret.css v=1.9 and dark.css v=1.45.
+    # v=1.9 opens a held-back walk on request: it calls paWalkAppendText and
+    # the new paWalkBlockedNode, which PA_Step4WalkView.js v=1.6
+    # defines. A browser keeping v=1.8 would call the old renderers and never
+    # show the button. Still unreleased when it stopped keeping a reveal map
+    # (nothing redraws its bubble), so only the digest moved.
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.8", "9cdf4f870969831e2d367162eaedc3d085f55d411a6a723b779f17c98da92505"),
+        "1.9", "851c69d20dfb9423296cdb3b357c6a97a766e301528aa23da40e6490ccecab27"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -248,8 +253,18 @@ PUBLISHED = {
     # v=1.5 carries both v=1.4s: the close button's name (PR #184) and the
     # note that says a walk ran out of time instead of blaming its checks
     # (PR #172).
+    # v=1.6 hides a held-back interpretation by default instead of withholding
+    # it (a "Show the interpretation anyway" button, a warning, the text through
+    # paWalkAppendText) and draws an untestable artifact check as its own chip.
+    # It ships with graph-walk.css v=1.3 and dark.css v=1.46, where
+    # .pa-walk-warning, .pa-walk-gate.is-untested and the caution tokens live.
+    # Still unreleased when the untested check's reason line took the chip's
+    # amber (.pa-walk-gate-why.is-untested, also in graph-walk.css v=1.3), so
+    # the marker stayed at 1.6 and only the digest moved. The same again for
+    # the advisory state of check 1 on a pathway walk (.pa-walk-gate.is-advisory
+    # and its reason line, graph-walk.css v=1.3).
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.5", "9aa6f92678e367ea27f52e87b90b1212a670c5d8a2c66909521143ef0de5c675"),
+        "1.6", "b822c9678f4ffc170c116fa3cc28ae17ece00b03634758e4be37cfa715c6f376"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is
