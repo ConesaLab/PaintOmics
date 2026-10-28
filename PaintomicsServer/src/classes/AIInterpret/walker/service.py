@@ -95,14 +95,21 @@ GATES = ("artifact", "title", "direction", "context", "anchor")
 # walker, not the AI text; the four text checks still decide. D6.1 (3 of 3
 # real runs rendered, 18 of 20 permuted withheld) was measured on the network
 # walk, which keeps the blocking rule, so that measurement still describes it.
+# Only the null's half is advisory: a leg through a currency metabolite (ATP,
+# water, NAD; artifact_gate's currency_legs) is a definite artifact, not a
+# low-power statistic, and hides a pathway walk's text as it always did.
 ADVISORY_ON_PATHWAY = ("artifact",)
 
 
-def advisory_gates(tag):
+def advisory_gates(tag, gates):
     """The gates that inform without hiding the text on a walk of ``tag``
     (the sealed record's scope: "network", or a pathway tag such as
-    "KEGG:hsa05219")."""
-    return ADVISORY_ON_PATHWAY if tag and tag != "network" else ()
+    "KEGG:hsa05219"): check 1 on a pathway walk, unless it ran a leg through
+    a currency metabolite. The one place that decides; the seal, renders(),
+    apply_render_rule() and the client's ``advisory`` flag all follow it."""
+    if not tag or tag == "network":
+        return ()
+    return tuple(name for name in ADVISORY_ON_PATHWAY if not ((gates or {}).get(name) or {}).get("currency_legs"))
 
 
 def renders(tag, gates):
@@ -110,24 +117,45 @@ def renders(tag, gates):
     advisory one (advisory_gates) aside. A gate the record does not carry
     (sealed before that gate existed) has nothing to say, as the client reads
     it; at seal time every gate is present."""
-    skip = advisory_gates(tag)
+    skip = advisory_gates(tag, gates)
     return all(bool((gates.get(name) or {"pass": True}).get("pass")) for name in GATES if name not in skip)
 
 
+def seal_render(tag, gates):
+    """At seal (run(), harness.regate): the advisory gates marked
+    ``advisory: true`` in place, and whether the text renders."""
+    for name in advisory_gates(tag, gates):
+        gates[name]["advisory"] = True
+    return renders(tag, gates)
+
+
+def _marked(gate, advisory):
+    """``gate`` carrying ``advisory: true`` exactly when ``advisory``; a copy
+    when that changes it, so a view never edits the record it came from."""
+    if not isinstance(gate, dict) or bool(gate.get("advisory")) == advisory:
+        return gate
+    gate = dict(gate)
+    if advisory:
+        gate["advisory"] = True
+    else:
+        gate.pop("advisory", None)
+    return gate
+
+
 def apply_render_rule(v):
-    """The rule above on a view, in place: advisory gates marked
-    ``advisory: true`` and ``checks.rendered`` recomputed. view() calls it, and
-    so does the status route on a viewJSON stored before the rule, so a
-    pathway walk held back only by check 1 shows without a re-walk. A view
-    without gates keeps its flag: a walk sealed before them has nothing to
-    withhold. Returns ``v``."""
+    """The rule above on a view, in place: the advisory gates marked
+    ``advisory: true`` (and a stale mark dropped from any other) and
+    ``checks.rendered`` recomputed. view() calls it, and so does the status
+    route on a viewJSON stored before the rule, so a pathway walk held back
+    only by check 1's null shows without a re-walk. A view without gates
+    keeps its flag: a walk sealed before them has nothing to withhold.
+    Returns ``v``."""
     checks = (v or {}).get("checks")
     gates = (checks or {}).get("gates")
     if not isinstance(gates, dict) or not gates:
         return v
-    advisory = advisory_gates(v.get("scope"))
-    checks["gates"] = {name: dict(gate, advisory=True) if name in advisory and isinstance(gate, dict) else gate
-                       for name, gate in gates.items()}
+    advisory = advisory_gates(v.get("scope"), gates)
+    checks["gates"] = {name: _marked(gate, name in advisory) for name, gate in gates.items()}
     checks["rendered"] = renders(v.get("scope"), checks["gates"])
     return v
 
@@ -440,9 +468,7 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     gates["anchor"] = anchor_mod.anchor_gate(anchor, walker, ov, dist or {}, network=network)
     for name in GATES:
         gates.setdefault(name, {"pass": True, "not_applicable": True, "why": "no statements were written"})
-    for name in advisory_gates(tag):
-        gates[name]["advisory"] = True
-    checks["rendered"] = renders(tag, gates)
+    checks["rendered"] = seal_render(tag, gates)
     if papers:
         papers = record_mod.renumber_citations(statements, dropped, results, papers)
         attach_evidence(statements, papers)
@@ -1104,7 +1130,9 @@ def stored_walk_text(doc, limit_legs=40):
         for name in GATES:
             gate = gates.get(name) or {}
             if not gate.get("pass"):
-                failed.append(name + (" (could not be tested on this data)" if gate.get("untestable") else ""))
+                # untestable says why the null failed; a currency leg failed it outright
+                failed.append(name + (" (could not be tested on this data)"
+                                      if gate.get("untestable") and not gate.get("currency_legs") else ""))
         anchor = checks.get("anchor") or {}
         lines.append("CHECKS: %s%s" % (
             "all five passed" if not failed else "FAILED %s -- the Results and statements are hidden from the user "

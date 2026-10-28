@@ -187,7 +187,9 @@ def regate(path, job, scope, data_dir=None, permutation=None):
     if any(s.get("direction") for s in rec.get("statements") or []) or \
             any(d.get("by") == "direction check" for d in rec.get("dropped") or []):
         gates["direction"] = service.direction_gate(rec.get("statements") or [], rec.get("dropped") or [])
-    rec["checks"]["rendered"] = all(bool(gates[name].get("pass")) for name in service.GATES)
+    # the shipped rule (check 1 advisory on a pathway walk unless a currency
+    # leg failed it), so a regated record reads as the page shows it
+    rec["checks"]["rendered"] = service.seal_render(tag, gates)
     rec.setdefault("harness", {})["regated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     _save(path, rec)
     return rec

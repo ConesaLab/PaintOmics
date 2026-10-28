@@ -263,8 +263,12 @@ function paWalkGateTitle(name, gate, state) {
 		var tail = "; " + paWalkCount(gate.currency_legs, "leg") + " through currency metabolites; " +
 			paWalkCount(gate.k, "permutation");
 		if (state === "untested") {
-			return "Could not be tested: no " + PA_WALK_MODULE_MIN + " relevant nodes are connected to one another " +
-				"on this graph (" + paWalkNumber(gate.relevant) + " relevant of " + paWalkNumber(gate.measured) +
+			/* As the server's reason says it: too few relevant nodes, or enough
+			   of them but no three connected. */
+			return "Could not be tested: " + (typeof gate.relevant === "number" && gate.relevant < PA_WALK_MODULE_MIN
+				? "fewer than " + PA_WALK_MODULE_MIN + " relevant nodes are on this graph"
+				: "no " + PA_WALK_MODULE_MIN + " relevant nodes are connected to one another on this graph") +
+				" (" + paWalkNumber(gate.relevant) + " relevant of " + paWalkNumber(gate.measured) +
 				" measured" + (pairs ? ", " + paWalkCount(pairs.real, "adjacent pair") : "") +
 				"), so the check's walker can form no module on this data" + tail;
 		}
@@ -313,14 +317,19 @@ function paWalkGateTitle(name, gate, state) {
 function paWalkGateState(gate) {
 	if (!gate || gate.not_applicable) { return "na"; }
 	if (gate.pass) { return "pass"; }
+	/* A leg through a currency metabolite fails check 1 outright, whatever
+	   the null could test: a plain red failure, never a caveat, and on a
+	   pathway walk it still hides the text (service.advisory_gates). */
+	if (Number(gate.currency_legs) > 0) { return "fail"; }
 	if (gate.untestable === true) { return "untested"; }
 	return gate.advisory === true ? "advisory" : "fail";
 }
 
-/* Whether a gate held the text back: not cleared, and not advisory. */
+/* Whether a gate held the text back: a failure, or an untestable check
+   that is not advisory. */
 function paWalkGateBlocks(gate) {
 	var state = paWalkGateState(gate);
-	return (state === "fail" || state === "untested") && gate.advisory !== true;
+	return state === "fail" || (state === "untested" && gate.advisory !== true);
 }
 
 /* The labels of the gates that held the text back, in chip order. */
@@ -393,9 +402,11 @@ function paWalkRevealKey(view) {
  * The click replaces both with a warning and the text (paWalkAppendText with
  * the call site's options). The checks' reasons are already printed under
  * the chips above, so the warning names them and refers there rather than
- * repeating them. revealed is an object the calling view keeps across its
- * renders, keyed by paWalkRevealKey, so a re-render of the same walk keeps the
- * text open instead of hiding what the user asked to read.
+ * repeating them. revealed, when given, is an object the calling view keeps
+ * across its renders, keyed by paWalkRevealKey, so a re-render of the same
+ * walk keeps the text open instead of hiding what the user asked to read; the
+ * Walk column passes one (it re-renders), the AI panel none (its bubble is
+ * built once per report load).
  */
 function paWalkBlockedNode(view, options, revealed) {
 	var failed = paWalkFailedGates(view);

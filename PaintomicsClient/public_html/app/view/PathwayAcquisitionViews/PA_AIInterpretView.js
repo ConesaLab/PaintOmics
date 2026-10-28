@@ -27,11 +27,6 @@ function PA_AIInterpretView() {
     // id/name/source of the pathways the interpretation walk runs through,
     // used to turn pathway mentions in chat replies into links.
     this.pathwayIndex = [];
-    // Held-back walks the user opened, by paWalkRevealKey. The bubble is
-    // built once per report load (reportLoaded and reportLoading guard
-    // against a second), so today nothing redraws an opened walk; kept so a
-    // future redraw of the same walk opens it again rather than hiding it.
-    this.revealedWalks = {};
 
     var CHAT_PLACEHOLDER = "Ask a follow-up question...";
     var CHAT_WAIT_PLACEHOLDER = "Questions open once the walk has finished";
@@ -838,7 +833,10 @@ function PA_AIInterpretView() {
         if (shown) {
             paWalkAppendText(bubble, view, {onLeg: focusLeg});
         } else {
-            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}, this.revealedWalks));
+            // No reveal map: the bubble is built once per report load
+            // (reportLoaded and reportLoading guard against a second), so
+            // nothing redraws an opened walk here.
+            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}));
         }
         var chain = paWalkEl("details", "pa-walk-chain");
         chain.open = !shown;

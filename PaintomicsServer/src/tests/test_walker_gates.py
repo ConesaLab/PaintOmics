@@ -156,6 +156,40 @@ class GatesOnARunTest(unittest.TestCase):
             self.assertEqual(rec["checks"]["rendered"], advisory, scope)
             self.assertEqual(service.view(rec)["checks"]["rendered"], advisory, scope)
 
+    def test_a_currency_leg_still_hides_a_pathway_walk(self):
+        # Only the null's half of check 1 is advisory: a leg through ATP is a
+        # definite artifact, untestable null or not.
+        failed = {"pass": False, "untestable": True, "currency_legs": 1,
+                  "why": "could not be tested on this data; 1 leg(s) run through a currency metabolite"}
+        with mock.patch.object(service, "artifact_gate", return_value=dict(failed)):
+            rec, _n, _g, _tag = service.run(fx.make_job(), "job6", "pathway:tst00001", policy="greedy",
+                                            data_dir=self.data_dir, use_mongo=False)
+        self.assertNotIn("advisory", rec["checks"]["gates"]["artifact"])
+        self.assertFalse(rec["checks"]["rendered"])
+        view = service.view(rec)
+        self.assertFalse(view["checks"]["rendered"])
+        self.assertNotIn("advisory", view["checks"]["gates"]["artifact"])
+
+    def test_regate_reads_a_pathway_record_with_the_shipped_rule(self):
+        from src.classes.AIInterpret.walker import harness
+        rec, _n, _g, _tag = service.run(fx.make_job(), "job7", "pathway:tst00001", policy="greedy",
+                                        data_dir=self.data_dir, use_mongo=False)
+        path = os.path.join(self.data_dir, "regate.json")
+        real_build = service.build
+
+        def build(job, scope, data_dir=None, use_mongo=True, card=None, aliases=None):
+            return real_build(job, scope, data_dir, False, card, aliases)      # no Mongo in a unit test
+
+        for null, shown in (({"pass": False, "untestable": True, "why": "could not be tested"}, True),
+                            ({"pass": False, "currency_legs": 2, "why": "2 leg(s) ..."}, False)):
+            harness._save(path, rec)
+            with mock.patch.object(service, "build", side_effect=build), \
+                    mock.patch.object(service, "artifact_gate", return_value=dict(null)):
+                out = harness.regate(path, fx.make_job(), "pathway:tst00001", data_dir=self.data_dir)
+            self.assertIs(out["checks"]["rendered"], shown, null)
+            self.assertIs(out["checks"]["gates"]["artifact"].get("advisory", False), shown, null)
+            self.assertEqual(harness._load(path)["checks"]["rendered"], shown, "saved as computed")
+
 
 def _gates(*failing):
     """The five gates, those named failing and the rest passed."""
@@ -179,8 +213,14 @@ class RenderRuleTest(unittest.TestCase):
         self.assertFalse(service.renders("KEGG:hsa05219", _gates("artifact", "context")))
         self.assertFalse(service.renders("Reactome:R-HSA-1", _gates("anchor")))
         self.assertTrue(service.renders("network", _gates()))
-        self.assertEqual(service.advisory_gates("network"), ())
-        self.assertEqual(service.advisory_gates("KEGG:hsa05219"), ("artifact",))
+        self.assertEqual(service.advisory_gates("network", _gates("artifact")), ())
+        self.assertEqual(service.advisory_gates("KEGG:hsa05219", _gates("artifact")), ("artifact",))
+        self.assertEqual(service.advisory_gates("KEGG:hsa05219", {}), ("artifact",))
+        # a leg through a currency metabolite is not the null's low power: it blocks
+        currency = _gates("artifact")
+        currency["artifact"]["currency_legs"] = 1
+        self.assertEqual(service.advisory_gates("KEGG:hsa05219", currency), ())
+        self.assertFalse(service.renders("KEGG:hsa05219", currency))
 
     def test_a_pathway_walk_sealed_before_the_rule_renders_now(self):
         # job 7O521E0Y0y's hsa05219 walk: held back by check 1 alone
@@ -206,6 +246,14 @@ class RenderRuleTest(unittest.TestCase):
                         ["checks"]["rendered"])
         self.assertTrue(service.view(_sealed("KEGG:hsa05219", {}, True))["checks"]["rendered"])
         self.assertEqual(service.apply_render_rule({"chain": []}), {"chain": []})
+        # a view marked advisory although a currency leg failed it (sealed
+        # before the currency half kept blocking) loses the mark and hides
+        stale = _gates("artifact")
+        stale["artifact"].update(currency_legs=1, advisory=True)
+        v = service.apply_render_rule({"scope": "KEGG:hsa05219", "checks": {"gates": stale, "rendered": True}})
+        self.assertFalse(v["checks"]["rendered"])
+        self.assertNotIn("advisory", v["checks"]["gates"]["artifact"])
+        self.assertTrue(stale["artifact"]["advisory"], "the stored gate is copied, not edited")
 
 
 class AnswerCountTest(unittest.TestCase):

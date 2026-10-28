@@ -129,8 +129,9 @@ statements by default. A note names the checks it did not clear; **Show the inte
 anyway** replaces the note with a warning and the text, in the order a passing walk shows
 it, to be read as hypotheses drawn from the walk and the cited papers, not as findings. The
 page remembers the choice for that walk while it stays open; a new walk starts hidden. On a
-pathway walk check 1 is advisory (below): it is shown, amber when it fails, and never hides
-the text; checks 2 to 5 decide there as everywhere.
+pathway walk check 1's permutation test is advisory (below): it is shown, amber when it
+fails, and never hides the text; a leg through a currency metabolite still does, and checks 2
+to 5 decide there as everywhere.
 
 1. **Not a graph artifact.** After the walk, code runs a permutation test of the data: the
    scripted walker walks the real relevant flags once and flags permuted over the measured
@@ -165,7 +166,10 @@ the text; checks 2 to 5 decide there as everywhere.
    rendering measurement (three of three real network interpretations shown, 18 of 20 on
    permuted data held back) was made on the network walk, which keeps the blocking rule. The
    rule is applied when a walk is read as well as when it is sealed, so a pathway walk sealed
-   earlier and held back by this check alone shows without being walked again. A statement resting on
+   earlier and held back by this check alone shows without being walked again. Only the
+   permutation test is advisory: a leg through a currency metabolite (below) is a definite
+   artifact, so a pathway walk with one is not advisory and stays hidden by default, with a
+   red chip. A statement resting on
    an arrow the values move against is an association whatever the arrow says. Every edge is also
    *tiered*: a signed, directed relation (activation, inhibition, expression, a reaction, a
    transcription-factor target) is a **mechanism**; a binding, an indirect effect, a shared

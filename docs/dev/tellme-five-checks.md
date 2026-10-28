@@ -12,9 +12,9 @@ Walk column) carries five verdicts in `checks.gates` and a `checks.rendered` fla
 client shows the Results section and the statements by default only when all five pass;
 otherwise a note names the checks not cleared and a **Show the interpretation anyway**
 button opens the text under a warning (since 2026-10-28; before that it was not shown at
-all). Also since 2026-10-28, check 1 is advisory on a pathway walk and the other four decide
-`checks.rendered` there; on the network walk all five still do (see the end of check 1
-below). "Withheld" and "rendered" below mean `checks.rendered` as it was computed when these
+all). Also since 2026-10-28, check 1's permutation test is advisory on a pathway walk and the
+other four decide `checks.rendered` there unless a leg ran through a currency metabolite; on
+the network walk all five still do (see the end of check 1 below). "Withheld" and "rendered" below mean `checks.rendered` as it was computed when these
 runs were measured, from all five gates on both scopes. The harness
 (`walker/harness.py`, run by `walker/cli.py --five-checks`) measures each gate offline the way
 the checks were specified: three whole-pipeline runs at the production temperatures against
@@ -197,10 +197,14 @@ are adjacent, B expected by chance (p = ...)". The chip of an untestable check i
 a "?", neither passed nor failed, and counts as not cleared.
 
 **Advisory on a pathway walk (2026-10-28).** The check keeps its rule and its numbers, and
-keeps hiding the network walk's text when it fails. On a pathway walk it no longer hides
-anything: `service.advisory_gates` marks the gate `advisory: true`, `service.renders` leaves
-it out of `checks.rendered`, and the Walk column draws a failed one amber ("?" untestable,
-"!" otherwise) with "(advisory on a pathway walk, hides nothing)" on its reason. The user
+keeps hiding the network walk's text when it fails. On a pathway walk a failure of its
+permutation test no longer hides anything: `service.advisory_gates` marks the gate
+`advisory: true`, `service.renders` leaves it out of `checks.rendered`, and the Walk column
+draws a failed one amber ("?" untestable, "!" otherwise) with "(advisory on a pathway walk,
+hides nothing)" on its reason. A leg through a currency metabolite is not advisory: it is a
+definite artifact rather than a low-power statistic, so the gate stays a red failure and
+hides the text on both scopes (`advisory_gates` returns nothing when `currency_legs` > 0,
+and the client checks currency first). The user
 opened a map PaintOmics' enrichment test already flagged (Bladder cancer, p = 0.018 on job
 7O521E0Y0y), and on one map with few relevant genes the check has little or nothing to
 measure: hsa05219 is untestable, and the FoxO rows above show it withholding every run, real
@@ -209,8 +213,10 @@ the text on both scopes. The rendering result in the short answer (3 of 3 real r
 of 20 permuted withheld, Fisher p = 0.006) is the network walk's and still describes it.
 The rule is applied when a stored walk is read (`service.apply_render_rule`, called by the
 status route) as well as at seal time, so a pathway walk sealed earlier and held back by
-check 1 alone shows without a re-walk. `harness.regate` still recomputes `rendered` from
-all five gates, so a re-measurement of a pathway scope reports the old rule.
+check 1 alone shows without a re-walk. `harness.regate` and the harness's own runs seal
+with the same rule (`service.seal_render`), so a re-measurement of a pathway scope reports
+what users see; the network measurement is unaffected, and the FoxO "rendered 0 of 3" above
+is the old rule's.
 
 ### 2 · The title fits the body — PASS
 

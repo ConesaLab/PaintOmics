@@ -170,11 +170,12 @@ PUBLISHED = {
     # named and keyboard-reachable, and the collapsed panel leaves the tab order.
     # It ships with ai-interpret.css v=1.9 and dark.css v=1.45.
     # v=1.9 opens a held-back walk on request: it calls paWalkAppendText and
-    # the three-argument paWalkBlockedNode, which PA_Step4WalkView.js v=1.6
+    # the new paWalkBlockedNode, which PA_Step4WalkView.js v=1.6
     # defines. A browser keeping v=1.8 would call the old renderers and never
-    # show the button.
+    # show the button. Still unreleased when it stopped keeping a reveal map
+    # (nothing redraws its bubble), so only the digest moved.
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.9", "2a02b169c7c477bceabfc4720114cdc30714e94f4d60b15c1f0d1332d40ebbac"),
+        "1.9", "851c69d20dfb9423296cdb3b357c6a97a766e301528aa23da40e6490ccecab27"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -263,7 +264,7 @@ PUBLISHED = {
     # the advisory state of check 1 on a pathway walk (.pa-walk-gate.is-advisory
     # and its reason line, graph-walk.css v=1.3).
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.6", "ebe22240fd49e1527eae2c6bc5597beefc5ee09a16e1efb6b025372188db3a5b"),
+        "1.6", "b822c9678f4ffc170c116fa3cc28ae17ece00b03634758e4be37cfa715c6f376"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

@@ -326,6 +326,12 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("CHECKS: all five passed", text)
         self.assertIn("RESULTS (checked): Foxo1 rises.", text)
         self.assertNotIn("did not clear", text)
+        # a currency leg failed check 1 outright: not "could not be tested"
+        text = stored(dict(passed, artifact={"pass": False, "untestable": True, "currency_legs": 1,
+                                             "why": "1 leg(s) run through a currency metabolite"}), False)
+        self.assertIn("FAILED artifact -- the Results", text)
+        self.assertIn("RESULTS (did not clear the checks: artifact): ", text)
+        self.assertNotIn("could not be tested", text)
 
 
 class ReactomeExpansionTest(unittest.TestCase):
@@ -659,6 +665,15 @@ class RouteTest(unittest.TestCase):
             walk = self.status(jobID="J1", scope=scope)["walk"]
             self.assertIs(walk["checks"]["rendered"], shown, scope)
             self.assertIs(walk["checks"]["gates"]["artifact"].get("advisory", False), shown, scope)
+        # a leg through a currency metabolite still hides a pathway walk, even
+        # one stored with the advisory mark before that half kept blocking
+        gates["artifact"] = {"pass": False, "untestable": True, "currency_legs": 1, "advisory": True,
+                             "why": "1 leg(s) run through a currency metabolite"}
+        FakeWalkDAO().save_progress("J1", "pathway:hsa05219", {"status": "done", "viewJSON": json.dumps(
+            {"scope": "KEGG:hsa05219", "chain": [], "checks": {"gates": gates, "rendered": True}})})
+        walk = self.status(jobID="J1", scope="pathway:hsa05219")["walk"]
+        self.assertFalse(walk["checks"]["rendered"])
+        self.assertNotIn("advisory", walk["checks"]["gates"]["artifact"])
 
     def test_a_walk_that_stopped_writing_progress_is_marked_interrupted(self):
         FakeWalkDAO().save_progress("J1", "network", {"status": "running", "stage": "writer"})

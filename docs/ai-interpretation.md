@@ -57,7 +57,9 @@ minutes, usually in about five.
   Step 4 **Walk** column) *Not a graph artifact* is advisory: when it fails, its chip is
   amber (**?** or **!**) and its reason says it hides nothing, and only the other four
   checks can hide the text. You opened a map the enrichment test already flagged, and with
-  few relevant genes on one map that check has little or nothing to measure. See
+  few relevant genes on one map that check has little or nothing to measure. A walk that
+  stepped through a currency metabolite such as ATP or water still fails it outright (red
+  ✕) and is hidden by default on either kind of walk. See
   [How the walk works](ai-graph-walk.md).
 * **The Results section:** a title, a one-sentence summary, and one paragraph per
   kept statement in the order the walk found them. Each paragraph ends with chips

@@ -1201,15 +1201,15 @@ class ResultsNoteWiringTest(unittest.TestCase):
         walk = self.source("PA_Step4WalkView.js")
         panel = self.source("PA_AIInterpretView.js")
         # Each call site: the passing branch and the held-back one hand the
-        # same options to the shared helpers, and the held-back one a map the
-        # view keeps, so a re-render of the same walk keeps it open.
+        # same options to the shared helpers. The Walk column, which
+        # re-renders, also hands a map it keeps, so a re-render of the same
+        # walk keeps it open; the AI panel builds its bubble once and keeps none.
         self.assertIn("\t\t\tpaWalkAppendText(root, view, textOptions);\n\t\t} else {\n"
                       "\t\t\troot.appendChild(paWalkBlockedNode(view, textOptions, this.revealed));", walk)
         self.assertIn("this.revealed = {};", walk)
-        self.assertIn("            paWalkAppendText(bubble, view, {onLeg: focusLeg});\n        } else {\n"
-                      "            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}, this.revealedWalks));",
-                      panel)
-        self.assertIn("this.revealedWalks = {};", panel)
+        self.assertIn("            paWalkAppendText(bubble, view, {onLeg: focusLeg});\n        } else {\n", panel)
+        self.assertIn("            bubble.appendChild(paWalkBlockedNode(view, {onLeg: focusLeg}));", panel)
+        self.assertNotIn("revealedWalks", panel)
         self.assertIn("paWalkAppendText", panel.splitlines()[0], "listed in the /* global */ header")
         # The revealed branch is the same helper, behind a real button, and
         # the key is one sealed walk.
@@ -1221,7 +1221,7 @@ class ResultsNoteWiringTest(unittest.TestCase):
         # An untestable check is its own chip state and counts as not cleared
         # where it blocks (the network walk).
         self.assertIn('if (gate.untestable === true) { return "untested"; }', walk)
-        self.assertIn('return (state === "fail" || state === "untested") && gate.advisory !== true;', walk)
+        self.assertIn('return state === "fail" || (state === "untested" && gate.advisory !== true);', walk)
         # ...and its reason line wears the chip's amber, not a failure's red.
         self.assertIn('"pa-walk-gate-why" + (line.state === "fail" ? "" : " is-" + line.state)', walk)
         with open(os.path.join(self.VIEWS, "../../../resources/css/graph-walk.css"), encoding="utf-8") as handle:
@@ -1248,6 +1248,28 @@ class ResultsNoteWiringTest(unittest.TestCase):
         self.assertRegex(css, r"\.pa-walk-gate\.is-untested,\s*\.pa-walk-gate\.is-advisory \{\s*"
                               r"background: var\(--pa-walk-caution-bg\);")
         self.assertRegex(css, r'\.pa-walk-gate\.is-advisory::before \{\s*content: "!";')
+
+    def test_a_currency_leg_is_a_plain_failure_whatever_else_the_gate_says(self):
+        # A leg through ATP, water or NAD fails check 1 outright: red, and on
+        # a pathway walk still a block. The currency test comes before the
+        # untestable and advisory ones, so neither can turn it amber.
+        walk = self.source("PA_Step4WalkView.js")
+        body = walk[walk.index("function paWalkGateState(gate) {"):walk.index("function paWalkGateBlocks(gate) {")]
+        currency = body.index('if (Number(gate.currency_legs) > 0) { return "fail"; }')
+        self.assertLess(currency, body.index('if (gate.untestable === true) { return "untested"; }'))
+        self.assertLess(currency, body.index('return gate.advisory === true ? "advisory" : "fail";'))
+        # a "fail" always blocks, advisory flag or not
+        self.assertIn('return state === "fail" || (state === "untested" && gate.advisory !== true);', walk)
+
+    def test_the_untested_hover_says_which_case_it_is(self):
+        walk = self.source("PA_Step4WalkView.js")
+        self.assertIn('return "Could not be tested: " + (typeof gate.relevant === "number" && '
+                      'gate.relevant < PA_WALK_MODULE_MIN', walk)
+        self.assertIn('? "fewer than " + PA_WALK_MODULE_MIN + " relevant nodes are on this graph"', walk)
+        self.assertIn(': "no " + PA_WALK_MODULE_MIN + " relevant nodes are connected to one another on this graph")',
+                      walk)
+        from src.classes.AIInterpret.walker import null as null_mod
+        self.assertIn("var PA_WALK_MODULE_MIN = %d;" % null_mod.MODULE_MIN_RELEVANT, walk)
 
     def test_the_notes_read_the_servers_reasons(self):
         from src.classes.AIInterpret.walker import service
