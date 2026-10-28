@@ -647,6 +647,19 @@ class RouteTest(unittest.TestCase):
         self.assertNotIn("live", out)
         self.assertEqual(self.queue.taken, [queue_id], "a finished walk's queue entry was left behind")
 
+    def test_a_pathway_view_stored_before_the_advisory_rule_shows_its_text(self):
+        # Stored at seal time with check 1 alone failing and rendered false
+        # (job 7O521E0Y0y's hsa05219 walk): the route reads it with today's
+        # rule, so it shows without a re-walk. The network walk still blocks.
+        gates = {name: {"pass": True} for name in self.servlet.walk_service.GATES}
+        gates["artifact"] = {"pass": False, "untestable": True, "why": "could not be tested on this data"}
+        for scope, tag, shown in (("pathway:hsa05219", "KEGG:hsa05219", True), ("network", "network", False)):
+            FakeWalkDAO().save_progress("J1", scope, {"status": "done", "viewJSON": json.dumps(
+                {"scope": tag, "chain": [], "checks": {"gates": gates, "rendered": False}})})
+            walk = self.status(jobID="J1", scope=scope)["walk"]
+            self.assertIs(walk["checks"]["rendered"], shown, scope)
+            self.assertIs(walk["checks"]["gates"]["artifact"].get("advisory", False), shown, scope)
+
     def test_a_walk_that_stopped_writing_progress_is_marked_interrupted(self):
         FakeWalkDAO().save_progress("J1", "network", {"status": "running", "stage": "writer"})
         FakeWalkDAO.store[("J1", "network")]["updatedAt"] = datetime.utcnow() - timedelta(minutes=11)

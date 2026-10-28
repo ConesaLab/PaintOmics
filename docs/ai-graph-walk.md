@@ -126,7 +126,9 @@ relations and your values, not findings), and hides its Results section, referen
 statements by default. A note names the checks it did not clear; **Show the interpretation
 anyway** replaces the note with a warning and the text, in the order a passing walk shows
 it, to be read as hypotheses drawn from the walk and the cited papers, not as findings. The
-page remembers the choice for that walk while it stays open; a new walk starts hidden.
+page remembers the choice for that walk while it stays open; a new walk starts hidden. On a
+pathway walk check 1 is advisory (below): it is shown, amber when it fails, and never hides
+the text; checks 2 to 5 decide there as everywhere.
 
 1. **Not a graph artifact.** After the walk, code runs a permutation test of the data: the
    scripted walker walks the real relevant flags once and flags permuted over the measured
@@ -135,8 +137,8 @@ page remembers the choice for that walk while it stays open; a new walk starts h
    values at least half the time -- and how hot its seeds are. The real flags must give more
    modules than the permuted ones do (empirical p below 0.05), or, when the graph holds only
    one or two modules, seeds far hotter than chance. A pathway whose relevant genes are
-   spread as the job's genes are at large fails here, and its text is hidden by default: on
-   the STATegra example the FoxO pathway does, the whole network does not. A failure says
+   spread as the job's genes are at large fails here: on the STATegra example the FoxO
+   pathway does, the whole network does not. A failure says
    less than "no structure": the scripted walker steps only from relevant gene to relevant
    gene, so with few relevant genes it stalls after a leg or two on real and permuted data
    alike. On a human bladder cancer job (199 of 6,070 measured genes relevant) the network
@@ -150,7 +152,18 @@ page remembers the choice for that walk while it stays open; a new walk starts h
    genes of 22 touch no other relevant gene: 0 modules real and permuted, p = 1). Its reason
    says which case it is: "could not be tested on this data", or "could not tell this data
    from shuffled data on this graph" with the adjacency count beside it. The pass rule and
-   the numbers measured for it are unchanged. A statement resting on
+   the numbers measured for it are unchanged. **On the network walk this check hides the
+   text when it fails; on a pathway walk it is advisory** (`advisory: true` on the gate,
+   `service.advisory_gates`): its chip and reason turn amber and say it hides nothing, and
+   `checks.rendered` is decided by the other four. The user opened a map PaintOmics'
+   enrichment test already flagged (Bladder cancer, p = 0.018 on that job), and on one map
+   with few relevant genes the check has little or nothing to measure: hsa05219 is
+   untestable, and on the STATegra FoxO map it withheld every run, real ones included. It
+   judges the scripted walker, not the AI text, which the four text checks still judge. The
+   rendering measurement (three of three real network interpretations shown, 18 of 20 on
+   permuted data held back) was made on the network walk, which keeps the blocking rule. The
+   rule is applied when a walk is read as well as when it is sealed, so a pathway walk sealed
+   earlier and held back by this check alone shows without being walked again. A statement resting on
    an arrow the values move against is an association whatever the arrow says. Every edge is also
    *tiered*: a signed, directed relation (activation, inhibition, expression, a reaction, a
    transcription-factor target) is a **mechanism**; a binding, an indirect effect, a shared

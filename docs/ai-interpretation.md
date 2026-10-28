@@ -53,7 +53,12 @@ minutes, usually in about five.
   is always shown. A *Not a graph artifact* chip marked **?** (amber, neither passed nor
   failed) could not be tested on this data: no three relevant genes on the walked graph
   are connected to one another, so the check's walker could form no module to compare with
-  shuffled data. It counts as not cleared. See [How the walk works](ai-graph-walk.md).
+  shuffled data. On the network walk it counts as not cleared. On a **pathway walk** (the
+  Step 4 **Walk** column) *Not a graph artifact* is advisory: when it fails, its chip is
+  amber (**?** or **!**) and its reason says it hides nothing, and only the other four
+  checks can hide the text. You opened a map the enrichment test already flagged, and with
+  few relevant genes on one map that check has little or nothing to measure. See
+  [How the walk works](ai-graph-walk.md).
 * **The Results section:** a title, a one-sentence summary, and one paragraph per
   kept statement in the order the walk found them. Each paragraph ends with chips
   for the legs it rests on. Numbers in brackets such as `[1]` link to the papers

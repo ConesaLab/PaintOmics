@@ -85,6 +85,51 @@ DIRECTION_MIN_SECONDS = 30
 # smallest attainable p is 1/21, right at the threshold.
 NULL_K = 50
 GATES = ("artifact", "title", "direction", "context", "anchor")
+# Check 1 (not a graph artifact) hides the text only on the network walk. On
+# a pathway walk it is advisory: shown, never hiding anything. The user
+# opened a map PaintOmics' enrichment test already flagged (Bladder cancer,
+# p = 0.018 on job 7O521E0Y0y), and with few relevant genes the check has
+# nothing to measure: hsa05219's 4 relevant genes touch no other relevant
+# gene (untestable), and on the STATegra FoxO map it withheld every run, real
+# ones included (docs/dev/tellme-five-checks.md). It runs the scripted
+# walker, not the AI text; the four text checks still decide. D6.1 (3 of 3
+# real runs rendered, 18 of 20 permuted withheld) was measured on the network
+# walk, which keeps the blocking rule, so that measurement still describes it.
+ADVISORY_ON_PATHWAY = ("artifact",)
+
+
+def advisory_gates(tag):
+    """The gates that inform without hiding the text on a walk of ``tag``
+    (the sealed record's scope: "network", or a pathway tag such as
+    "KEGG:hsa05219")."""
+    return ADVISORY_ON_PATHWAY if tag and tag != "network" else ()
+
+
+def renders(tag, gates):
+    """Whether a walk's text is shown by default: every gate passed, an
+    advisory one (advisory_gates) aside. A gate the record does not carry
+    (sealed before that gate existed) has nothing to say, as the client reads
+    it; at seal time every gate is present."""
+    skip = advisory_gates(tag)
+    return all(bool((gates.get(name) or {"pass": True}).get("pass")) for name in GATES if name not in skip)
+
+
+def apply_render_rule(v):
+    """The rule above on a view, in place: advisory gates marked
+    ``advisory: true`` and ``checks.rendered`` recomputed. view() calls it, and
+    so does the status route on a viewJSON stored before the rule, so a
+    pathway walk held back only by check 1 shows without a re-walk. A view
+    without gates keeps its flag: a walk sealed before them has nothing to
+    withhold. Returns ``v``."""
+    checks = (v or {}).get("checks")
+    gates = (checks or {}).get("gates")
+    if not isinstance(gates, dict) or not gates:
+        return v
+    advisory = advisory_gates(v.get("scope"))
+    checks["gates"] = {name: dict(gate, advisory=True) if name in advisory and isinstance(gate, dict) else gate
+                       for name, gate in gates.items()}
+    checks["rendered"] = renders(v.get("scope"), checks["gates"])
+    return v
 
 _MONGO = {"client": None}
 _MONGO_LOCK = threading.Lock()
@@ -395,7 +440,9 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     gates["anchor"] = anchor_mod.anchor_gate(anchor, walker, ov, dist or {}, network=network)
     for name in GATES:
         gates.setdefault(name, {"pass": True, "not_applicable": True, "why": "no statements were written"})
-    checks["rendered"] = all(bool(gates[name].get("pass")) for name in GATES)
+    for name in advisory_gates(tag):
+        gates[name]["advisory"] = True
+    checks["rendered"] = renders(tag, gates)
     if papers:
         papers = record_mod.renumber_citations(statements, dropped, results, papers)
         attach_evidence(statements, papers)
@@ -901,7 +948,7 @@ def view(rec):
     seen = sorted(walk.get("seen") or [], key=lambda r: -(r.get("heat") or 0))[:SEEN_SHOWN]
     steps = sum(1 for leg in walk["chain"] if leg["kind"] == "step")
     card = rec.get("design_card") or {}
-    return {
+    return apply_render_rule({
         "schema": rec.get("schema"), "job": rec.get("job"), "scope": rec.get("scope"),
         "sealed_at": rec.get("sealed_at"), "graph": rec.get("graph"),
         "design_card": {k: card.get(k) for k in CARD_FIELDS + ("columns", "source", "axis_kind", "unlabeled")},
@@ -931,7 +978,7 @@ def view(rec):
                    "rendered": bool((rec.get("checks") or {}).get("rendered", True)),
                    "anchor": (rec.get("checks") or {}).get("anchor")},
         "model_used": rec.get("model_used"), "timings": rec.get("timings"),
-    }
+    })
 
 
 # ----------------------------------------------------------------- the job

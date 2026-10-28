@@ -206,21 +206,29 @@
 .pa-walk-gate.is-na::before {
 	content: "\2013";
 }
-.pa-walk-gate.is-untested {
+/* Untested ("?") and advisory ("!", check 1 failed on a pathway walk, where
+   it hides nothing) are caveats, not failures: amber, the caution tokens. */
+.pa-walk-gate.is-untested,
+.pa-walk-gate.is-advisory {
 	background: var(--pa-walk-caution-bg);
 	color: var(--pa-walk-caution-ink);
 }
 .pa-walk-gate.is-untested::before {
 	content: "?";
 }
+.pa-walk-gate.is-advisory::before {
+	content: "!";
+}
 .pa-walk-gate-why {
 	margin: 2px 0;
 	font-size: 12px;
 	color: var(--pa-walk-fail-ink);
 }
-/* An untested check is not a failure: its reason takes the "?" chip's amber.
-   dark.css lifts the caution ink, so the line needs no rule of its own there. */
-.pa-walk-gate-why.is-untested {
+/* An untested or advisory check is not a failure: its reason takes the
+   chip's amber. dark.css lifts the caution ink, so the line needs no rule of
+   its own there. */
+.pa-walk-gate-why.is-untested,
+.pa-walk-gate-why.is-advisory {
 	color: var(--pa-walk-caution-ink);
 }
 

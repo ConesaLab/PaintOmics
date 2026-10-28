@@ -1218,16 +1218,36 @@ class ResultsNoteWiringTest(unittest.TestCase):
         self.assertIn('reveal.type = "button";', walk)
         self.assertIn('warning.setAttribute("role", "note");', walk)
         self.assertIn("[view.job, view.scope, view.sealed_at]", walk)
-        # An untestable check is its own chip state and counts as not cleared.
-        self.assertIn('return gate.untestable === true ? "untested" : "fail";', walk)
-        self.assertEqual(walk.count('state === "fail" || state === "untested"'), 2)
+        # An untestable check is its own chip state and counts as not cleared
+        # where it blocks (the network walk).
+        self.assertIn('if (gate.untestable === true) { return "untested"; }', walk)
+        self.assertIn('return (state === "fail" || state === "untested") && gate.advisory !== true;', walk)
         # ...and its reason line wears the chip's amber, not a failure's red.
-        self.assertIn('"pa-walk-gate-why" + (line.state === "untested" ? " is-untested" : "")', walk)
+        self.assertIn('"pa-walk-gate-why" + (line.state === "fail" ? "" : " is-" + line.state)', walk)
         with open(os.path.join(self.VIEWS, "../../../resources/css/graph-walk.css"), encoding="utf-8") as handle:
-            self.assertRegex(handle.read(),
-                             r"\.pa-walk-gate-why\.is-untested \{\s*color: var\(--pa-walk-caution-ink\);")
+            self.assertRegex(handle.read(), r"\.pa-walk-gate-why\.is-untested,\s*\.pa-walk-gate-why\.is-advisory "
+                                            r"\{\s*color: var\(--pa-walk-caution-ink\);")
         for source in (walk, panel):
             self.assertNotRegex(source, r"\b(alert|confirm|prompt)\(", "a modal dialog blocks the page")
+
+    def test_an_advisory_check_is_a_caveat_that_hides_nothing(self):
+        # Check 1 on a pathway walk (service.advisory_gates): an amber "!"
+        # chip, a reason line that says it hid nothing, and no part in the
+        # "Not shown by default" note. The AI panel (network) has no such gate.
+        walk = self.source("PA_Step4WalkView.js")
+        self.assertIn('return gate.advisory === true ? "advisory" : "fail";', walk)
+        self.assertIn('var caveat = (state === "untested" || state === "advisory") && gate.advisory === true;', walk)
+        self.assertIn('(caveat ? "Advisory on a pathway walk, hides nothing. " : "")', walk)
+        self.assertIn('(caveat ? " (advisory on a pathway walk, hides nothing)" : "")', walk)
+        self.assertIn('if (state === "fail" || state === "untested" || state === "advisory") {', walk)
+        # the blocked note counts only the gates that held the text back
+        self.assertIn("\t\treturn paWalkGateBlocks(gates[entry[0]]);", walk)
+        self.assertEqual(walk.count("paWalkFailedGates(view)"), 2, "one definition, one caller: the blocked note")
+        with open(os.path.join(self.VIEWS, "../../../resources/css/graph-walk.css"), encoding="utf-8") as handle:
+            css = handle.read()
+        self.assertRegex(css, r"\.pa-walk-gate\.is-untested,\s*\.pa-walk-gate\.is-advisory \{\s*"
+                              r"background: var\(--pa-walk-caution-bg\);")
+        self.assertRegex(css, r'\.pa-walk-gate\.is-advisory::before \{\s*content: "!";')
 
     def test_the_notes_read_the_servers_reasons(self):
         from src.classes.AIInterpret.walker import service

@@ -259,9 +259,11 @@ PUBLISHED = {
     # .pa-walk-warning, .pa-walk-gate.is-untested and the caution tokens live.
     # Still unreleased when the untested check's reason line took the chip's
     # amber (.pa-walk-gate-why.is-untested, also in graph-walk.css v=1.3), so
-    # the marker stayed at 1.6 and only the digest moved.
+    # the marker stayed at 1.6 and only the digest moved. The same again for
+    # the advisory state of check 1 on a pathway walk (.pa-walk-gate.is-advisory
+    # and its reason line, graph-walk.css v=1.3).
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.6", "caf246a0a2e37efbce8832c801dbef8c7fbb602e853bee0c6618c5be9f695916"),
+        "1.6", "ebe22240fd49e1527eae2c6bc5597beefc5ee09a16e1efb6b025372188db3a5b"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

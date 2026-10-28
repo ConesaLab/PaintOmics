@@ -302,29 +302,40 @@ function paWalkGateTitle(name, gate, state) {
 }
 
 /*
- * A gate's chip state: "pass", "fail", "na" (nothing to judge), or
- * "untested": a failed artifact check whose data could form no module at all
- * (no three relevant nodes connected on the walked graph), so the check
- * neither cleared the walk nor found it an artifact. It is not cleared.
+ * A gate's chip state: "pass", "fail", "na" (nothing to judge), "untested":
+ * a failed artifact check whose data could form no module at all (no three
+ * relevant nodes connected on the walked graph), so the check neither
+ * cleared the walk nor found it an artifact, or "advisory": a failed check
+ * the server marked advisory (check 1 on a pathway walk,
+ * service.advisory_gates), a caveat that hides nothing. An untestable check
+ * keeps its "?" either way; whether it hid the text is paWalkGateBlocks's.
  */
 function paWalkGateState(gate) {
 	if (!gate || gate.not_applicable) { return "na"; }
 	if (gate.pass) { return "pass"; }
-	return gate.untestable === true ? "untested" : "fail";
+	if (gate.untestable === true) { return "untested"; }
+	return gate.advisory === true ? "advisory" : "fail";
 }
 
-/* The labels of the gates the walk did not clear (failed or untested), in chip order. */
+/* Whether a gate held the text back: not cleared, and not advisory. */
+function paWalkGateBlocks(gate) {
+	var state = paWalkGateState(gate);
+	return (state === "fail" || state === "untested") && gate.advisory !== true;
+}
+
+/* The labels of the gates that held the text back, in chip order. */
 function paWalkFailedGates(view) {
 	var gates = paWalkGates(view) || {};
 	return PA_WALK_GATES.filter(function (entry) {
-		var state = paWalkGateState(gates[entry[0]]);
-		return state === "fail" || state === "untested";
+		return paWalkGateBlocks(gates[entry[0]]);
 	}).map(function (entry) { return entry[1]; });
 }
 
 /*
  * The five checks as a row of chips, then one line per check not cleared
- * saying why. Null for a walk that predates the gates.
+ * saying why. An advisory check's line and hover say it hid nothing, so a
+ * reader does not look for text it kept back. Null for a walk that predates
+ * the gates.
  */
 function paWalkGatesNode(view) {
 	var gates = paWalkGates(view);
@@ -335,17 +346,19 @@ function paWalkGatesNode(view) {
 	PA_WALK_GATES.forEach(function (entry) {
 		var name = entry[0], label = entry[1], gate = gates[name];
 		var state = paWalkGateState(gate);
+		var caveat = (state === "untested" || state === "advisory") && gate.advisory === true;
 		var chip = paWalkEl("span", "pa-walk-gate is-" + state, label);
-		chip.title = paWalkGateTitle(name, gate, state);
+		chip.title = (caveat ? "Advisory on a pathway walk, hides nothing. " : "") + paWalkGateTitle(name, gate, state);
 		row.appendChild(chip);
-		if (state === "fail" || state === "untested") {
-			failed.push({state: state, text: label + ": " + String(gate.why || "failed")});
+		if (state === "fail" || state === "untested" || state === "advisory") {
+			failed.push({state: state, text: label + (caveat ? " (advisory on a pathway walk, hides nothing)" : "") +
+				": " + String(gate.why || "failed")});
 		}
 	});
 	box.appendChild(row);
-	// An untested check's line wears the amber of its "?" chip, not a failure's red.
+	// An untested or advisory check's line wears the amber of its chip, not a failure's red.
 	failed.forEach(function (line) {
-		box.appendChild(paWalkEl("p", "pa-walk-gate-why" + (line.state === "untested" ? " is-untested" : ""), line.text));
+		box.appendChild(paWalkEl("p", "pa-walk-gate-why" + (line.state === "fail" ? "" : " is-" + line.state), line.text));
 	});
 	return box;
 }

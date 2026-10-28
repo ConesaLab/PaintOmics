@@ -924,6 +924,11 @@ def aiWalkStatus(REQUEST, RESPONSE, QUEUE_INSTANCE):
                     content[key] = json.loads(raw)
                 except ValueError:
                     content[key] = None
+        if isinstance(content.get("walk"), dict):
+            # The view was stored when the walk was sealed; the rule that
+            # decides what it hides is applied as it is read, so a pathway
+            # walk held back by check 1 alone shows without being walked again.
+            walk_service.apply_render_rule(content["walk"])
         if status in ("not_started", "error"):
             # The card the walk will read unless the user edits it first.
             content["card"] = card_mod.job_card(jobInstance)
