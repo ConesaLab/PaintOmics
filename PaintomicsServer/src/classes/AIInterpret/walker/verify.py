@@ -600,13 +600,14 @@ def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
 
     def keep_quoted(text, source=None, where=None):
         out = []
+        source_refs = set(statement_refs(source)) if source is not None else set()
         for sentence in sentences(text):
-            values = unrecorded_values(sentence, numbers, source)
+            values = unrecorded_values(sentence, numbers, source, source_refs)
             if not values:
                 out.append(sentence)
                 continue
             count["dropped"] += 1
-            refs = [ref for ref in cited_refs(sentence) if source is not None and ref in statement_refs(source)]
+            refs = [ref for ref in cited_refs(sentence) if ref in source_refs]
             if removed is not None and refs:
                 removed.append(_removal_note(where, source, sentence, refs, values))
         return " ".join(out)
@@ -665,13 +666,16 @@ def paper_numbers(stmt, ref):
     return tokens
 
 
-def unrecorded_values(sentence, numbers, source=None):
+def unrecorded_values(sentence, numbers, source=None, source_refs=None):
     """The values a Results sentence quotes and may not: in neither the record
     (``numbers``) nor, in a paragraph retelling statement ``source``, the
     confirmed evidence of a paper the sentence cites and the statement cites
     (paper_numbers). A misquoted logFC beside a citation stays unrecorded, the
     paper's passage does not hold it; so does a paper's number in a sentence
-    that cites nothing, in the summary or in a link paragraph."""
+    that cites nothing, in the summary or in a link paragraph.
+
+    ``source_refs`` is statement_refs(source) as a set, for a caller going
+    through a paragraph sentence by sentence; computed here when omitted."""
     out, stated = [], None
     for value in quoted_values(sentence):
         if _in_record(value, numbers):
@@ -679,7 +683,9 @@ def unrecorded_values(sentence, numbers, source=None):
         if stated is None:
             stated = set()
             if source is not None:
-                for ref in set(cited_refs(sentence)) & set(statement_refs(source)):
+                if source_refs is None:
+                    source_refs = set(statement_refs(source))
+                for ref in set(cited_refs(sentence)) & source_refs:
                     stated |= paper_numbers(source, ref)
         if not _in_record(value, stated):
             out.append(value)
@@ -739,7 +745,7 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
             if not isinstance(leg, int) or leg < 1 or leg > len(chain):
                 problems.append("paragraph %d tags leg e%s, not on the chain" % (i, leg))
         origin = para.get("from_statement")
-        source = None
+        source, source_refs = None, set()
         if origin is None:
             if quoted_values(text):
                 problems.append("link paragraph %d quotes a value" % i)
@@ -751,6 +757,7 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                 problems.append("paragraph %d comes from statement %s, which was not kept" % (i, origin))
             else:
                 covered.add(int(source["n"]))
+                source_refs = set(statement_refs(source))
                 # A paragraph retells its statement's literature claims, so it
                 # keeps their citations: the network Narrator once wrote "Slc7a11
                 # encodes the xCT subunit ... central to ferroptosis" with the [1]
@@ -760,12 +767,12 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                     if ref not in quoted:
                         problems.append("paragraph %d drops [%d], which its statement cites" % (i, ref))
                 # ...and cites nothing its statement does not.
-                for ref in sorted(quoted - set(statement_refs(source))):
+                for ref in sorted(quoted - source_refs):
                     problems.append("paragraph %d cites [%d], which its statement does not cite" % (i, ref))
         # Sentence by sentence, as drop_unrecorded_sentences decides, so a
         # sentence the pruner keeps is never the one this check objects to.
         for sentence in sentences(text):
-            for value in unrecorded_values(sentence, numbers, source):
+            for value in unrecorded_values(sentence, numbers, source, source_refs):
                 problems.append("paragraph %d quotes %s, not in the record" % (i, value))
         for label in timing_on_unlabeled(text, walker):
             problems.append("paragraph %d gives %s a timing or order word, but its layer has no column labels"
