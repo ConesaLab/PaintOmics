@@ -385,7 +385,13 @@ function paWalkAppendText(parent, view, options) {
 	var references = paWalkReferencesNode(view);
 	if (references) { parent.appendChild(references); }
 	if ((view.statements || []).length || (view.dropped || []).length) {
-		parent.appendChild(paWalkStatementsNode(view, {onLeg: options.onLeg}));
+		/* Open unless a checked Results section stands above them: with none,
+		   "the statements below" the note points to are the text, and a
+		   draft's note asks the reader to check it against them. 7O521E0Y0y's
+		   hsa05146 walk said they stood alone above a closed list, and the
+		   reader found nothing to read. */
+		var shown = paWalkShownResults(view);
+		parent.appendChild(paWalkStatementsNode(view, {onLeg: options.onLeg, open: !shown || shown.draft}));
 	}
 	return parent;
 }
@@ -478,11 +484,76 @@ function paWalkModuleText(segment, anchorGene) {
 		: "module · d=" + Number(d) + " from " + anchorGene;
 }
 
-/* The checked Results section: title, summary, paragraphs in walk order. */
-function paWalkResultsNode(view, options) {
+/*
+ * The Results section the page shows, as {section, draft}, or null: the
+ * checked one, else the draft of one that failed its checks
+ * (view.results_draft, which the server sends without its "..." paragraphs
+ * and never to the chat). A walk sealed before the draft was kept has none.
+ */
+function paWalkShownResults(view) {
 	var results = view && view.results;
+	if (results && results.paragraphs && results.paragraphs.length) { return {section: results, draft: false}; }
+	var draft = view && view.results_draft;
+	if (draft && draft.paragraphs && draft.paragraphs.length) { return {section: draft, draft: true}; }
+	return null;
+}
+
+/*
+ * What stands above a draft that failed its checks: what they found, the
+ * first five and a count of the rest, and how to read what follows. The
+ * amber of the held-back warning: a caution, not a failure of the walk.
+ */
+function paWalkDraftNote(view) {
+	var reasons = ((view && view.checks && view.checks.results) || []).map(String);
+	var listed = reasons.slice(0, 5).join("; ") +
+		(reasons.length > 5 ? "; and " + (reasons.length - 5) + " more" : "");
+	var note = paWalkEl("div", "pa-walk-warning");
+	note.setAttribute("role", "note");
+	note.appendChild(paWalkEl("strong", null, "This Results section did not pass its checks"));
+	note.appendChild(document.createTextNode((listed ? ": " + listed : "") + ". It is shown as the AI wrote " +
+		"it, so check its numbers and citations against the statements below."));
+	return note;
+}
+
+/*
+ * A Results section's title, summary and paragraphs in walk order, appended
+ * to box: the checked section and a draft that failed its checks read alike.
+ */
+function paWalkAppendSection(box, section, view, options) {
+	box.appendChild(paWalkEl("h4", "pa-walk-results-title",
+		(section.title && section.title !== "Results") ? section.title : "Results"));
+	if (section.summary) {
+		var summary = paWalkEl("p", "pa-walk-summary");
+		summary.appendChild(paWalkChipText(section.summary, view.papers, options));
+		box.appendChild(summary);
+	}
+	section.paragraphs.forEach(function (paragraph) {
+		var p = paWalkEl("p", "pa-walk-paragraph");
+		p.appendChild(paWalkChipText(paragraph.text, view.papers, options));
+		/* The legs a paragraph rests on, as chips, when its text does not
+		   already tag them: the Narrator often retells a leg without writing
+		   [eN], and the reader still needs the way back to the map. */
+		var tagged = /\[e\d+/.test(String(paragraph.text || ""));
+		var legs = (paragraph.legs || []).filter(function (n) { return isFinite(n); });
+		if (!tagged && legs.length) {
+			p.appendChild(document.createTextNode(" "));
+			p.appendChild(paWalkChipText(legs.map(function (n) { return "[e" + n + "]"; }).join(""),
+				view.papers, options));
+		}
+		box.appendChild(p);
+	});
+	return box;
+}
+
+/*
+ * The Results section: the checked one, or the draft of one that failed its
+ * checks under a note saying what they found, each closed by a line saying
+ * who wrote it and what was checked. A note alone when there is neither.
+ */
+function paWalkResultsNode(view, options) {
+	var shown = paWalkShownResults(view);
 	var box = paWalkEl("section", "pa-walk-results");
-	if (!results || !results.paragraphs || !results.paragraphs.length) {
+	if (!shown) {
 		// checks.results holds the server's reason; a walk that ran out of time
 		// never had a section to check, and saying it failed its checks sent
 		// the reader looking for a fault in the statements. The reasons for no
@@ -506,30 +577,12 @@ function paWalkResultsNode(view, options) {
 		box.appendChild(paWalkEl("p", "pa-walk-note", why));
 		return box;
 	}
-	box.appendChild(paWalkEl("h4", "pa-walk-results-title",
-		(results.title && results.title !== "Results") ? results.title : "Results"));
-	if (results.summary) {
-		var summary = paWalkEl("p", "pa-walk-summary");
-		summary.appendChild(paWalkChipText(results.summary, view.papers, options));
-		box.appendChild(summary);
-	}
-	results.paragraphs.forEach(function (paragraph) {
-		var p = paWalkEl("p", "pa-walk-paragraph");
-		p.appendChild(paWalkChipText(paragraph.text, view.papers, options));
-		/* The legs a paragraph rests on, as chips, when its text does not
-		   already tag them: the Narrator often retells a leg without writing
-		   [eN], and the reader still needs the way back to the map. */
-		var tagged = /\[e\d+/.test(String(paragraph.text || ""));
-		var legs = (paragraph.legs || []).filter(function (n) { return isFinite(n); });
-		if (!tagged && legs.length) {
-			p.appendChild(document.createTextNode(" "));
-			p.appendChild(paWalkChipText(legs.map(function (n) { return "[e" + n + "]"; }).join(""),
-				view.papers, options));
-		}
-		box.appendChild(p);
-	});
-	box.appendChild(paWalkEl("p", "pa-walk-provenance",
-		"Written by a language model from the statements that passed the checks. Every number was " +
+	if (shown.draft) { box.appendChild(paWalkDraftNote(view)); }
+	paWalkAppendSection(box, shown.section, view, options);
+	box.appendChild(paWalkEl("p", "pa-walk-provenance", shown.draft
+		? "Written by a language model from the statements that passed the checks. This section itself did " +
+		"not pass the checks listed above."
+		: "Written by a language model from the statements that passed the checks. Every number was " +
 		"matched against your values and every leg against the walk. Each citation was kept only when an " +
 		"agent reading the paper found the passage that states it; the passages are under the references."));
 	return box;
@@ -592,9 +645,12 @@ function paWalkReferencesNode(view) {
 	return box;
 }
 
-/* Kept and dropped statements, each with what the pathway draws and what goes beyond it. */
+/* Kept and dropped statements, each with what the pathway draws and what goes
+   beyond it. options.open opens the list (paWalkAppendText, when no checked
+   Results section stands above it). */
 function paWalkStatementsNode(view, options) {
 	var box = paWalkEl("details", "pa-walk-statements");
+	box.open = !!(options && options.open);
 	var kept = view.statements || [], dropped = view.dropped || [];
 	box.appendChild(paWalkEl("summary", null,
 		kept.length + " statement" + (kept.length === 1 ? "" : "s") + " kept" +

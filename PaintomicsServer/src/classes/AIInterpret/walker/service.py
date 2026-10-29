@@ -166,11 +166,49 @@ def prune_stored_results(v):
     (verify.drop_meta_sentences). 5 of the 19 summaries sealed before the
     check echo the brief; the stored document is not rewritten. A title this
     empties stays "", which the page shows as "Results". No view holds a
-    ``plan``: narrate() drops it from every answer. Returns ``v``."""
-    results = v.get("results") if isinstance(v, dict) else None
-    if isinstance(results, dict):
-        verify.drop_meta_sentences(results)
+    ``plan``: narrate() drops it from every answer. The draft of a section
+    that failed its checks (results_draft) is read the same way. Returns
+    ``v``."""
+    for key in ("results", "results_draft"):
+        section = v.get(key) if isinstance(v, dict) else None
+        if isinstance(section, dict):
+            verify.drop_meta_sentences(section)
     return v
+
+
+# A tag the page draws as a chip ([e3], [2]): no word a reader reads, and
+# none verify_results counts.
+_TAG_RE = re.compile(r"\[[^\]]*\]")
+
+
+def results_draft(rec):
+    """The Results section the checks dropped (checks["results_dropped"]) as
+    the page shows it, under a note naming what the checks found: its title,
+    summary and paragraphs (each only its text, statement and legs), without
+    a paragraph that says nothing once its tags are gone, and a title or
+    summary that says nothing emptied (verify.is_placeholder). None when the
+    section passed, when none was dropped, or when no paragraph is left.
+
+    On job 7O521E0Y0y's hsa05146 walk (sealed 2026-10-29) six statements were
+    kept and the Narrator twice answered with "..." paragraphs: the section
+    failed on five uncovered statements and its 5 words, and the page said
+    "the statements below stand alone" above a closed list, with nothing to
+    read. No check cleared this text, so only the page reads it, marked as
+    such: stored_walk_text, the chat's walk, reads ``results`` alone."""
+    if rec.get("results"):
+        return None
+    dropped = (rec.get("checks") or {}).get("results_dropped")
+    if not isinstance(dropped, dict):
+        return None
+    paragraphs = [{"text": p.get("text"), "from_statement": p.get("from_statement"), "legs": p.get("legs")}
+                  for p in dropped.get("paragraphs") or []
+                  if isinstance(p, dict) and not verify.is_placeholder(_TAG_RE.sub("", str(p.get("text") or "")))]
+    if not paragraphs:
+        return None
+    draft = {key: "" if verify.is_placeholder(dropped.get(key)) else str(dropped[key]) for key in ("title", "summary")}
+    draft["paragraphs"] = paragraphs
+    verify.drop_meta_sentences(draft)
+    return draft
 
 _MONGO = {"client": None}
 _MONGO_LOCK = threading.Lock()
@@ -499,7 +537,8 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
         gates.setdefault(name, {"pass": True, "not_applicable": True, "why": "no statements were written"})
     checks["rendered"] = seal_render(tag, gates)
     if papers:
-        papers = record_mod.renumber_citations(statements, dropped, results, papers)
+        papers = record_mod.renumber_citations(statements, dropped, results, papers,
+                                               draft=checks.get("results_dropped"))
         attach_evidence(statements, papers)
     rec = record_mod.seal(job_id, tag, graph, ov, walker, card, statements, dropped, results, papers,
                           model_used, timings, checks)
@@ -1166,6 +1205,7 @@ def view(rec):
                        for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
         "results": rec.get("results"),
+        "results_draft": results_draft(rec),
         "papers": {str(ref): p for ref, p in (rec.get("papers") or {}).items()},
         "checks": {"results": (rec.get("checks") or {}).get("results"),
                    "sense": (rec.get("checks") or {}).get("sense"),

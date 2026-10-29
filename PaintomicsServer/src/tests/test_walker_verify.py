@@ -219,6 +219,20 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertEqual(statements[0]["beyond"][0]["paper"], 3)
         self.assertNotIn("11", [p["pmid"] for p in out.values()], "an uncited paper stayed in the list")
 
+    def test_a_dropped_sections_draft_cites_the_list_the_statements_number(self):
+        # The page shows the draft beside the references the statements
+        # number: its [7] must read as the list's [2], and a paper only it
+        # cites is in no list, so its citation goes. It numbers nothing.
+        from src.classes.AIInterpret.walker import record as record_mod
+        papers = {3: {"pmid": "3"}, 7: {"pmid": "7"}, 11: {"pmid": "11"}}
+        statements = [{"n": 1, "claim": "c [3]", "prose": "p [7]", "papers": [3, 7]}]
+        draft = {"title": "t", "summary": "first [11].",
+                 "paragraphs": [{"from_statement": 1, "legs": [1], "text": "then [7, 11] and [e1]."}, "not a paragraph"]}
+        out = record_mod.renumber_citations(statements, [], None, papers, draft=draft)
+        self.assertEqual({n: p["pmid"] for n, p in out.items()}, {1: "3", 2: "7"})
+        self.assertEqual(draft["summary"], "first .")
+        self.assertEqual(draft["paragraphs"][0]["text"], "then [2] and [e1].")
+
     def test_a_cited_paper_must_be_read_and_about_the_claim(self):
         node = self.chain[0]["to"]
         label = self.walker.label(node)

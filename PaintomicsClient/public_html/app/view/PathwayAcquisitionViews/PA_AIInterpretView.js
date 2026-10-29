@@ -801,8 +801,10 @@ function PA_AIInterpretView() {
      */
     this.displayWalk = function(view) {
         if (!this.$root || typeof paWalkAppendText !== "function") { return; }
+        // No "AI Assistant" label: the report is not a turn of the chat, and
+        // its own title and provenance line say what wrote it.
         var $bubble = $('<div class="ai-message ai-msg-assistant ai-walk-message">' +
-            '<div class="ai-msg-label">AI Assistant</div><div class="ai-msg-bubble ai-walk-bubble"></div></div>');
+            '<div class="ai-msg-bubble ai-walk-bubble"></div></div>');
         var bubble = $bubble.find(".ai-walk-bubble")[0];
         var focusLeg = function(n) {
             var chain = $(bubble).find("details.pa-walk-chain").attr("open", "open");

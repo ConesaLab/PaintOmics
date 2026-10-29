@@ -36,14 +36,19 @@ def seal(job_id, scope, network, overlay, walker, card, statements, dropped, res
     }
 
 
-def renumber_citations(statements, dropped, results, papers):
+def renumber_citations(statements, dropped, results, papers, draft=None):
     """Number the papers 1..n in the order the reader meets them: the Results
     section first, then the kept statements. Rewrites every [N] (and each
     number of [N, M]) in the Results text and in the statements, the
     statements' paper fields, and returns the papers map holding only the
     cited papers under their new numbers. Retrieved papers nothing cites are
     left out: a reference list numbered by retrieval order jumped to [17]
-    for a section citing three papers."""
+    for a section citing three papers.
+
+    ``draft``, a Results section the checks dropped (checks["results_dropped"]),
+    is rewritten to the same numbers and numbers nothing itself: the page
+    shows it beside the references the statements number, and a paper only it
+    cites is in no list, so its citation goes."""
     from src.classes.AIInterpret.walker import verify
 
     order = []
@@ -72,10 +77,12 @@ def renumber_citations(statements, dropped, results, papers):
             return "[%s]" % ", ".join(kept) if kept else ""
         return verify.PAPER_LIST_RE.sub(one, str(text)) if text else text
 
-    if results:
-        results["summary"] = rewrite(results.get("summary"))
-        for paragraph in results.get("paragraphs") or []:
-            paragraph["text"] = rewrite(paragraph.get("text"))
+    for section in (results, draft):
+        if section:
+            section["summary"] = rewrite(section.get("summary"))
+            for paragraph in section.get("paragraphs") or []:
+                if isinstance(paragraph, dict):
+                    paragraph["text"] = rewrite(paragraph.get("text"))
     def rewrite_why(text):
         # The Verifier's reasons name papers by their retrieval number; a
         # dropped statement's paper is usually not in the list, so it is named
