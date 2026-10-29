@@ -270,9 +270,11 @@ PUBLISHED = {
     # v=1.7 shows the draft of a Results section that failed its checks
     # (view.results_draft) under a .pa-walk-warning note, and opens the
     # statements when there is no text above them. A browser keeping v=1.6
-    # would ignore the draft and leave the statements closed.
+    # would ignore the draft and leave the statements closed. Still unreleased
+    # when the statements opened beside a draft too and the note took the
+    # draft's own problems (results_draft.problems), so only the digest moved.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.7", "138c892fa09d8560c3c376ce8ed124c68b0fc56c601a9f5e24bcee5374e156b3"),
+        "1.7", "48f4574817313fe545e124fafe0b8067caa5f8e8e18f9b4031f6fe7f739db25d"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

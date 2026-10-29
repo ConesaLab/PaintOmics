@@ -419,12 +419,13 @@ class ServiceTest(unittest.TestCase):
                            {"from_statement": 2, "legs": [2], "text": "..."},
                            {"from_statement": 3, "legs": [3], "text": "[e3]"},
                            "not a paragraph",
-                           {"from_statement": 4, "legs": [4], "text": "Ccc fell."}]})
+                           {"from_statement": 4, "legs": [1], "text": "Ccc fell."}]})
         view = service.view(rec)
         self.assertEqual(view["results_draft"], {
             "title": "", "summary": "",
             "paragraphs": [{"text": "Bbb rose 2.1-fold [e1].", "from_statement": 1, "legs": [1]},
-                           {"text": "Ccc fell.", "from_statement": 4, "legs": [4]}]})
+                           {"text": "Ccc fell.", "from_statement": 4, "legs": [1]}],
+            "problems": ["statement 2 is not covered", "5 words; between 300 and 1200 are required"]})
         self.assertIsNone(view["results"], "the draft never stands in for the checked section")
         self.assertEqual(view["checks"]["results"][0], "statement 2 is not covered")
         self.assertNotIn("results_dropped", view["checks"])
@@ -447,7 +448,43 @@ class ServiceTest(unittest.TestCase):
         del stored["results_draft"]
         self.assertNotIn("results_draft", service.prune_stored_results(stored))
 
-    def test_the_draft_is_read_without_the_narrators_brief_and_never_by_the_chat(self):
+    def test_the_drafts_problems_name_its_paragraphs_as_the_page_shows_them(self):
+        # The checks number paragraphs over the section as it was dropped,
+        # "..." ones included; the page shows it without them.
+        rec = self.sealed_with_dropped({
+            "title": "Draft", "summary": "",
+            "paragraphs": [{"from_statement": 9, "legs": [1], "text": "..."},
+                           {"from_statement": 1, "legs": [1], "text": "Bbb rose 9.9-fold [e1]."},
+                           {"from_statement": None, "legs": [1], "text": "Then Ccc."}]})
+        reasons = ["paragraph 1 comes from statement 9, which was not kept",
+                   "paragraph 2 quotes 9.9, not in the record", "link paragraph 3 quotes a value",
+                   "statement 2 is not covered"]
+        rec["checks"]["results"] = list(reasons)
+        view = service.view(rec)
+        self.assertEqual(view["results_draft"]["problems"], [
+            "an empty paragraph, not shown, comes from statement 9, which was not kept",
+            "paragraph 1 quotes 9.9, not in the record", "link paragraph 2 quotes a value",
+            "statement 2 is not covered"])
+        self.assertEqual(view["checks"]["results"], reasons, "the record's own reasons are left as they were")
+
+    def test_the_drafts_legs_are_the_ones_on_the_chain(self):
+        # The Narrator's legs were never cleared: "paragraph 1 tags leg e9,
+        # not on the chain" would leave the page a button to no leg.
+        rec = self.sealed_with_dropped(None)
+        off = len(rec["walk"]["chain"]) + 5
+        rec["checks"]["results_dropped"] = {
+            "title": "Draft", "summary": "Bbb rose [e%d] early." % off,
+            "paragraphs": [{"from_statement": 1, "legs": [1, off, 0, True, "e1"],
+                            "text": "Bbb rose [e1, e%d] and Ccc fell [e%d]." % (off, off)},
+                           {"from_statement": 2, "legs": None, "text": "Ccc fell [e1]."},
+                           {"from_statement": 3, "legs": [off], "text": "[e%d]" % off}]}
+        draft = service.view(rec)["results_draft"]
+        self.assertEqual(draft["summary"], "Bbb rose early.")
+        self.assertEqual(draft["paragraphs"], [
+            {"text": "Bbb rose [e1] and Ccc fell.", "from_statement": 1, "legs": [1, 1]},
+            {"text": "Ccc fell [e1].", "from_statement": 2, "legs": []}])
+
+    def test_the_draft_is_read_without_the_narrators_brief_and_the_chat_is_told_of_it(self):
         brief = ("Then TP53 (−1.58) and back through MDM2. The kept statements are about CDKN1A down and "
                  "CDKN2A/MDM2 unchanged.")
         view = service.view(self.sealed_with_dropped({
@@ -457,11 +494,15 @@ class ServiceTest(unittest.TestCase):
         view["results_draft"]["summary"] = brief
         self.assertEqual(service.prune_stored_results(json.loads(json.dumps(view)))["results_draft"]["summary"], "",
                          "a draft stored with the brief is read without it")
-        # The chat's walk (stored_walk_text, also the chat's walk tool) reads
-        # the checked section alone: no check cleared the draft.
+        # The chat's walk (stored_walk_text, also the chat's walk tool) is told
+        # the user can see a draft, and its summary, never its paragraphs: no
+        # check cleared them, and it answers from the statements.
+        view["results_draft"]["summary"] = "Bbb rose in the draft."
         text = service.stored_walk_text({"status": "done", "viewJSON": json.dumps(dict(view, scope="network"))})
+        self.assertIn("RESULTS (a draft that failed its checks -- shown to the user marked unchecked; answer from "
+                      "the statements): Bbb rose in the draft.", text)
+        self.assertNotIn("RESULTS (checked)", text)
         self.assertNotIn("Draft-only words", text)
-        self.assertNotIn("RESULTS", text)
         self.assertIn("LEGS:", text)
 
 

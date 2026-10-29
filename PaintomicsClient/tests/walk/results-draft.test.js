@@ -104,6 +104,17 @@ test("a draft that failed its checks is shown under a note naming them", () => {
     assert.strictEqual(find(page, "pa-walk-note").length, 0);
 });
 
+test("the note names the draft's paragraphs as the page numbers them", () => {
+    // results_draft.problems renumbers "paragraph N" over the paragraphs
+    // shown; checks.results counts the "..." ones the draft went without.
+    const page = render(walk({ checks: { results: ["paragraph 3 quotes 9.9, not in the record"] },
+        results_draft: { title: "", summary: "", problems: ["paragraph 1 quotes 9.9, not in the record"],
+            paragraphs: [{ text: "Il6 rose 9.9-fold.", from_statement: 1, legs: [] }] } }));
+    const said = find(page, "pa-walk-warning")[0].textContent;
+    assert.match(said, /did not pass its checks: paragraph 1 quotes 9\.9, not in the record\. /);
+    assert.doesNotMatch(said, /paragraph 3/);
+});
+
 test("a passing section reads as before, with no note and the statements closed", () => {
     const page = render(walk({ results: { title: "Results", summary: "Il6 rose.",
         paragraphs: [{ text: "Il6 rose [e3].", from_statement: 1, legs: [3] }] },

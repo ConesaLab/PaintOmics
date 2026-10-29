@@ -36,7 +36,7 @@ def seal(job_id, scope, network, overlay, walker, card, statements, dropped, res
     }
 
 
-def renumber_citations(statements, dropped, results, papers, draft=None):
+def renumber_citations(statements, dropped, results, papers, draft=None, problems=None):
     """Number the papers 1..n in the order the reader meets them: the Results
     section first, then the kept statements. Rewrites every [N] (and each
     number of [N, M]) in the Results text and in the statements, the
@@ -48,7 +48,13 @@ def renumber_citations(statements, dropped, results, papers, draft=None):
     ``draft``, a Results section the checks dropped (checks["results_dropped"]),
     is rewritten to the same numbers and numbers nothing itself: the page
     shows it beside the references the statements number, and a paper only it
-    cites is in no list, so its citation goes."""
+    cites is in no list, so its citation goes, with the space before it.
+
+    ``problems``, the checks' objections to the Results (checks["results"]),
+    name papers by retrieval number as the Verifier's reasons do and are
+    rewritten as those are, in place: the page lists them above the draft,
+    whose citations carry the list's numbers (a draft's "paragraph 2 cites
+    [7]" beside a paragraph showing [2])."""
     from src.classes.AIInterpret.walker import verify
 
     order = []
@@ -70,12 +76,16 @@ def renumber_citations(statements, dropped, results, papers, draft=None):
                 order.append(ref)
     mapping = {old: new for new, old in enumerate(order, 1)}
 
+    # A citation with the whitespace before it: one that loses every paper
+    # takes it along, so "Il6 rose [11]." reads "Il6 rose." and not "Il6 rose .".
+    spaced = re.compile(r"(\s?)" + verify.PAPER_LIST_RE.pattern)
+
     def rewrite(text):
         def one(match):
-            numbers = [int(x) for x in re.split(r"\s*[,;]\s*", match.group(1))]
+            numbers = [int(x) for x in re.split(r"\s*[,;]\s*", match.group(2))]
             kept = [str(mapping[n]) for n in numbers if n in mapping]
-            return "[%s]" % ", ".join(kept) if kept else ""
-        return verify.PAPER_LIST_RE.sub(one, str(text)) if text else text
+            return "%s[%s]" % (match.group(1), ", ".join(kept)) if kept else ""
+        return spaced.sub(one, str(text)) if text else text
 
     for section in (results, draft):
         if section:
@@ -102,6 +112,8 @@ def renumber_citations(statements, dropped, results, papers, draft=None):
     for stmt in dropped:
         if stmt.get("why"):
             stmt["why"] = rewrite_why(stmt["why"])
+    if isinstance(problems, list):
+        problems[:] = [rewrite_why(p) if isinstance(p, str) else p for p in problems]
     for stmt in list(statements) + list(dropped):
         for key in ("claim", "prose"):
             if stmt.get(key):

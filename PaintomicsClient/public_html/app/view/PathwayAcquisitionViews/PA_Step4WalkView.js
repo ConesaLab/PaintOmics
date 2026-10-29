@@ -502,9 +502,14 @@ function paWalkShownResults(view) {
  * What stands above a draft that failed its checks: what they found, the
  * first five and a count of the rest, and how to read what follows. The
  * amber of the held-back warning: a caution, not a failure of the walk.
+ * The draft's own problems name its paragraphs as the page numbers them;
+ * checks.results counts the "..." ones it went without (a draft sealed
+ * before the server sent them has only those).
  */
 function paWalkDraftNote(view) {
-	var reasons = ((view && view.checks && view.checks.results) || []).map(String);
+	var draft = (view && view.results_draft) || {};
+	var reasons = (Array.isArray(draft.problems) ? draft.problems
+		: (view && view.checks && view.checks.results) || []).map(String);
 	var listed = reasons.slice(0, 5).join("; ") +
 		(reasons.length > 5 ? "; and " + (reasons.length - 5) + " more" : "");
 	var note = paWalkEl("div", "pa-walk-warning");
