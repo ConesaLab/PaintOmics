@@ -513,14 +513,36 @@ def statement_papers(stmt):
     return refs
 
 
+def _worded_refs(stmt):
+    """The paper refs a statement cites in its own words: [N] in its claim or prose."""
+    return cited_refs(" ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")]))
+
+
 def statement_refs(stmt):
     """The papers a Results paragraph retelling ``stmt`` may cite: the ones the
     statement cites in its fields and in its own words."""
     refs = statement_papers(stmt)
-    for ref in cited_refs(" ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])):
+    for ref in _worded_refs(stmt):
         if ref not in refs:
             refs.append(ref)
     return refs
+
+
+def owed_refs(stmt):
+    """The papers a Results paragraph retelling ``stmt`` must cite: the ones
+    the statement cites in its own words, its claim and its prose, in order
+    (always a subset of statement_refs). A paper only in its papers list or a
+    beyond claim is one the paragraph may cite but does not owe.
+
+    The Narrator retells a statement's words, and a citation those words never
+    make has no sentence to sit in. On job Aiu6NzaoQ3 (tomato proteomics
+    network, re-run 2026-10-29) statement 1's prose cited no paper, while its
+    fields listed [101] and a beyond claim on the phenylpropanoid pathway that
+    the prose never states; the Narrator retold the prose verbatim, draft and
+    repair both failed on "paragraph 1 drops [101]" alone, and the 12-statement
+    walk lost its whole Results section. The other 11 statements carried their
+    [N] in their prose."""
+    return _worded_refs(stmt)
 
 
 def _statement_by_n(kept, origin):
@@ -712,7 +734,7 @@ def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
         """(the sentences kept, the owed citations they no longer carry)."""
         out, gone = [], set()
         source_refs = set(statement_refs(source)) if source is not None else set()
-        owed = set(statement_papers(source)) if source is not None else set()
+        owed = set(owed_refs(source)) if source is not None else set()
         for sentence in sentences(text):
             values = unrecorded_values(sentence, numbers, source, source_refs)
             if not values:
@@ -913,11 +935,13 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                 # A paragraph retells its statement's literature claims, so it
                 # keeps their citations: the network Narrator once wrote "Slc7a11
                 # encodes the xCT subunit ... central to ferroptosis" with the [1]
-                # dropped. Except the ones this paragraph let go with a
-                # misquoting sentence (LET_GO).
+                # dropped. Only the citations its statement makes in its own
+                # words are owed (owed_refs): Aiu6NzaoQ3 lost its Results on a
+                # [101] only statement 1's fields carried. Except the ones this
+                # paragraph let go with a misquoting sentence (LET_GO).
                 quoted = set(cited_refs(text))
                 let_go = set(para.get(LET_GO) or ())
-                for ref in statement_papers(source):
+                for ref in owed_refs(source):
                     if ref not in quoted and ref not in let_go:
                         problems.append("paragraph %d drops [%d], which its statement cites" % (i, ref))
                 # ...and cites nothing its statement does not.

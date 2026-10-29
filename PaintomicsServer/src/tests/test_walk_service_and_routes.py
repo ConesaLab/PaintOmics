@@ -192,6 +192,10 @@ class ServiceTest(unittest.TestCase):
         with self.assertRaises(service.WalkError) as raised:
             service.run(unmapped, "J2", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
         self.assertIn("did not map", str(raised.exception))
+        # Q5APyBNMH3 (ngo): its genes mapped, and are on no pathway map. The
+        # one message names both causes, not the identifiers alone.
+        self.assertIn("or the genes they map to are on no KEGG, Reactome or OmniPath pathway",
+                      str(raised.exception))
         # Relevant and measured, but no neighbour is: no seed candidate either.
         lone = fx.FakeJob({"6": fx.FakeFeature("6", [fx.FakeOmicValue(
             "Gene expression", "Fff", [True], [1.0, 2.0, 3.0])])})

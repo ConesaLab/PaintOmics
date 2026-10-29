@@ -444,9 +444,15 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
                         "network, or a pathway that holds relevant features.%s"
                         % (tag.split(":", 1)[-1], "marked relevant" if ov.N else "measured",
                            card_mod.relevance_hint(card.get("value_kind")) if ov.N else ""))
+    # Two causes, one message: job Q5APyBNMH3 (Neisseria gonorrhoeae, ngo,
+    # 2026-10-28) was told its identifiers did not map, yet NGO_0500 and
+    # NGO_1374 had mapped to KEGG genes; those genes are on no ngo KGML map
+    # and in no gene2pathway.list row, so no graph holds them as nodes.
     if not ov.N:
         raise WalkError("None of this job's features is on the organism's graph, so the walk has nowhere to "
-                        "start: their identifiers did not map onto its genes or compounds.")
+                        "start: either their identifiers did not map onto the organism's genes or compounds, "
+                        "or the genes they map to are on no KEGG, Reactome or OmniPath pathway with drawn "
+                        "interactions (common for bacterial genes outside every pathway map).")
     if not ov.K:
         raise WalkError("None of the %d features of this job on the graph is marked relevant, so the walk has "
                         "no seed. In Step 1, mark relevant features (a Relevant features file per omic) whose "
