@@ -219,6 +219,50 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertEqual(statements[0]["beyond"][0]["paper"], 3)
         self.assertNotIn("11", [p["pmid"] for p in out.values()], "an uncited paper stayed in the list")
 
+    def test_a_dropped_sections_draft_cites_the_list_the_statements_number(self):
+        # The page shows the draft beside the references the statements
+        # number: its [7] must read as the list's [2], and a paper only it
+        # cites is in no list, so its citation goes. It numbers nothing.
+        from src.classes.AIInterpret.walker import record as record_mod
+        papers = {3: {"pmid": "3"}, 7: {"pmid": "7"}, 11: {"pmid": "11"}}
+        statements = [{"n": 1, "claim": "c [3]", "prose": "p [7]", "papers": [3, 7]}]
+        draft = {"title": "t", "summary": "first [11].",
+                 "paragraphs": [{"from_statement": 1, "legs": [1], "text": "then [7, 11] and [e1]."}, "not a paragraph"]}
+        out = record_mod.renumber_citations(statements, [], None, papers, draft=draft)
+        self.assertEqual({n: p["pmid"] for n, p in out.items()}, {1: "3", 2: "7"})
+        # an emptied citation takes the space before it
+        self.assertEqual(draft["summary"], "first.")
+        self.assertEqual(draft["paragraphs"][0]["text"], "then [2] and [e1].")
+
+    def test_the_checks_reasons_name_papers_as_the_draft_beside_them_does(self):
+        # The page lists checks["results"] above the draft, whose [7] now
+        # reads [2]: "paragraph 2 cites [7]" pointed at another paper.
+        from src.classes.AIInterpret.walker import record as record_mod
+        papers = {3: {"pmid": "33"}, 7: {"pmid": "77"}, 11: {"pmid": "1111"}}
+        statements = [{"n": 1, "claim": "c [3]", "prose": "p [7]", "papers": [3, 7]}]
+        problems = ["paragraph 2 cites [7], which its statement does not cite",
+                    "the summary cites [11], which no kept statement cites",
+                    "paragraph 1 drops [9], which its statement cites", "statement 2 is not covered", 5]
+        same = problems
+        record_mod.renumber_citations(statements, [], None, papers, draft={"summary": "", "paragraphs": []},
+                                      problems=problems)
+        self.assertIs(problems, same, "rewritten in place: it is checks['results']")
+        self.assertEqual(problems, ["paragraph 2 cites [2], which its statement does not cite",
+                                    "the summary cites PMID 1111, which no kept statement cites",
+                                    "paragraph 1 drops [?], which its statement cites",
+                                    "statement 2 is not covered", 5])
+
+    def test_a_checked_sections_citations_keep_their_spacing(self):
+        # Only a citation that loses every paper takes the space before it.
+        from src.classes.AIInterpret.walker import record as record_mod
+        papers = {3: {"pmid": "33"}, 7: {"pmid": "77"}}
+        results = {"summary": "Il6 rose [7]; Stat3 [3, 9] too.",
+                   "paragraphs": [{"from_statement": 1, "legs": [1], "text": "Il6 rose\t[3] and [7].\n[3] Next [9]."}]}
+        statements = [{"n": 1, "claim": "c", "prose": "p", "papers": [3, 7]}]
+        record_mod.renumber_citations(statements, [], results, papers)
+        self.assertEqual(results["summary"], "Il6 rose [1]; Stat3 [2] too.")
+        self.assertEqual(results["paragraphs"][0]["text"], "Il6 rose\t[2] and [1].\n[2] Next.")
+
     def test_a_cited_paper_must_be_read_and_about_the_claim(self):
         node = self.chain[0]["to"]
         label = self.walker.label(node)

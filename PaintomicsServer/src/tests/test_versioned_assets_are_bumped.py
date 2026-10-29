@@ -176,8 +176,10 @@ PUBLISHED = {
     # defines. A browser keeping v=1.8 would call the old renderers and never
     # show the button. Still unreleased when it stopped keeping a reveal map
     # (nothing redraws its bubble), so only the digest moved.
+    # v=1.10 drops the "AI Assistant" label from the walk report's bubble; the
+    # chat's own messages keep theirs.
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.9", "851c69d20dfb9423296cdb3b357c6a97a766e301528aa23da40e6490ccecab27"),
+        "1.10", "c89be3e1c1be9c8d6dac8ba423119e4107ae692738b4ef002f90acdcd60492e3"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
@@ -265,8 +267,14 @@ PUBLISHED = {
     # the marker stayed at 1.6 and only the digest moved. The same again for
     # the advisory state of check 1 on a pathway walk (.pa-walk-gate.is-advisory
     # and its reason line, graph-walk.css v=1.3).
+    # v=1.7 shows the draft of a Results section that failed its checks
+    # (view.results_draft) under a .pa-walk-warning note, and opens the
+    # statements when there is no text above them. A browser keeping v=1.6
+    # would ignore the draft and leave the statements closed. Still unreleased
+    # when the statements opened beside a draft too and the note took the
+    # draft's own problems (results_draft.problems), so only the digest moved.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.6", "b822c9678f4ffc170c116fa3cc28ae17ece00b03634758e4be37cfa715c6f376"),
+        "1.7", "48f4574817313fe545e124fafe0b8067caa5f8e8e18f9b4031f6fe7f739db25d"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

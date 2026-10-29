@@ -166,11 +166,95 @@ def prune_stored_results(v):
     (verify.drop_meta_sentences). 5 of the 19 summaries sealed before the
     check echo the brief; the stored document is not rewritten. A title this
     empties stays "", which the page shows as "Results". No view holds a
-    ``plan``: narrate() drops it from every answer. Returns ``v``."""
-    results = v.get("results") if isinstance(v, dict) else None
-    if isinstance(results, dict):
-        verify.drop_meta_sentences(results)
+    ``plan``: narrate() drops it from every answer. The draft of a section
+    that failed its checks (results_draft) is read the same way. Returns
+    ``v``."""
+    for key in ("results", "results_draft"):
+        section = v.get(key) if isinstance(v, dict) else None
+        if isinstance(section, dict):
+            verify.drop_meta_sentences(section)
     return v
+
+
+# A tag the page draws as a chip ([e3], [2]): no word a reader reads, and
+# none verify_results counts.
+_TAG_RE = re.compile(r"\[[^\]]*\]")
+# A leg tag with the whitespace before it, for one that loses every leg.
+_SPACED_LEGS_RE = re.compile(r"(\s?)" + verify.LEG_LIST_RE.pattern)
+# How the checks' objections name a paragraph: "paragraph 3", "link paragraph
+# 3", numbered from 1 over the section's paragraph list (verify_results).
+_PARAGRAPH_RE = re.compile(r"\b(link )?paragraph (\d+)\b")
+
+
+def _legs_on_chain(text, chain_length):
+    """``text`` with each [eN] tag holding only the legs on the chain; a tag
+    left with none goes, with the space before it. A tag whose legs are all
+    on the chain is left as written."""
+    def one(match):
+        tokens = re.split(r"\s*,\s*", match.group(2))
+        legs = [int(token.lstrip("e")) for token in tokens if 1 <= int(token.lstrip("e")) <= chain_length]
+        if len(legs) == len(tokens):
+            return match.group(0)
+        return "%s[%s]" % (match.group(1), ", ".join("e%d" % n for n in legs)) if legs else ""
+    return _SPACED_LEGS_RE.sub(one, str(text or ""))
+
+
+def results_draft(rec):
+    """The Results section the checks dropped (checks["results_dropped"]) as
+    the page shows it, under a note naming what the checks found: its title,
+    summary and paragraphs (each only its text, statement and legs), without
+    a paragraph that says nothing once its tags are gone, and a title or
+    summary that says nothing emptied (verify.is_placeholder). None when the
+    section passed, when none was dropped, or when no paragraph is left.
+
+    Its legs are the ones on the chain: the Narrator's ``legs`` and [eN] tags
+    were never cleared ("paragraph 2 tags leg e9, not on the chain"), and the
+    page draws each as a button to its leg. ``problems`` is checks["results"]
+    with each paragraph named by its place among the paragraphs shown, and
+    one the page does not show named as such: the checks number them over the
+    section as it was dropped, "..." paragraphs included.
+
+    On job 7O521E0Y0y's hsa05146 walk (sealed 2026-10-29) six statements were
+    kept and the Narrator twice answered with "..." paragraphs: the section
+    failed on five uncovered statements and its 5 words, and the page said
+    "the statements below stand alone" above a closed list, with nothing to
+    read. No check cleared this text, so the page shows it marked as such,
+    and the chat (stored_walk_text) is told only that it is there and its
+    summary, and answers from the statements."""
+    if rec.get("results"):
+        return None
+    dropped = (rec.get("checks") or {}).get("results_dropped")
+    if not isinstance(dropped, dict):
+        return None
+    chain_length = len((rec.get("walk") or {}).get("chain") or [])
+    paragraphs, shown_as = [], {}
+    for i, p in enumerate(dropped.get("paragraphs") or [], 1):
+        if not isinstance(p, dict):
+            continue
+        text = _legs_on_chain(p.get("text"), chain_length)
+        if verify.is_placeholder(_TAG_RE.sub("", text)):
+            continue
+        legs = p.get("legs") if isinstance(p.get("legs"), (list, tuple)) else []
+        legs = [n for n in (verify.leg_number(leg) for leg in legs)
+                if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= chain_length]
+        shown_as[i] = len(paragraphs) + 1
+        paragraphs.append({"text": text, "from_statement": p.get("from_statement"), "legs": legs})
+    if not paragraphs:
+        return None
+
+    def renumbered(match):
+        n = shown_as.get(int(match.group(2)))
+        if n is None:
+            return "an empty %sparagraph, not shown," % (match.group(1) or "")
+        return "%sparagraph %d" % (match.group(1) or "", n)
+
+    draft = {key: "" if verify.is_placeholder(dropped.get(key)) else str(dropped[key]) for key in ("title", "summary")}
+    draft["summary"] = _legs_on_chain(draft["summary"], chain_length)
+    draft["paragraphs"] = paragraphs
+    draft["problems"] = [_PARAGRAPH_RE.sub(renumbered, str(problem))
+                         for problem in (rec.get("checks") or {}).get("results") or []]
+    verify.drop_meta_sentences(draft)
+    return draft
 
 _MONGO = {"client": None}
 _MONGO_LOCK = threading.Lock()
@@ -499,7 +583,9 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
         gates.setdefault(name, {"pass": True, "not_applicable": True, "why": "no statements were written"})
     checks["rendered"] = seal_render(tag, gates)
     if papers:
-        papers = record_mod.renumber_citations(statements, dropped, results, papers)
+        papers = record_mod.renumber_citations(statements, dropped, results, papers,
+                                               draft=checks.get("results_dropped"),
+                                               problems=checks.get("results"))
         attach_evidence(statements, papers)
     rec = record_mod.seal(job_id, tag, graph, ov, walker, card, statements, dropped, results, papers,
                           model_used, timings, checks)
@@ -1166,6 +1252,7 @@ def view(rec):
                        for s in rec.get("statements") or []],
         "dropped": [{k: d.get(k) for k in ("n", "claim", "why", "by")} for d in rec.get("dropped") or []],
         "results": rec.get("results"),
+        "results_draft": results_draft(rec),
         "papers": {str(ref): p for ref, p in (rec.get("papers") or {}).items()},
         "checks": {"results": (rec.get("checks") or {}).get("results"),
                    "sense": (rec.get("checks") or {}).get("sense"),
@@ -1275,10 +1362,12 @@ def quick_walk(job, symbol, steps=8, data_dir=None, use_mongo=True):
 
 def stored_walk_text(doc, limit_legs=40):
     """The stored universal walk as chat text: the Results section (labelled
-    with the checks it did not clear, when the gates held it back), the kept
-    statements, and the legs with their pathways. A held-back walk is hidden
-    from the user by default, not withheld: the page opens it on a click,
-    under a warning, so the chat model must know what the user can read."""
+    with the checks it did not clear, when the gates held it back), else the
+    summary of a draft that failed its checks (results_draft), labelled as
+    one, the kept statements, and the legs with their pathways. A held-back
+    walk is hidden from the user by default, not withheld: the page opens it
+    on a click, under a warning, so the chat model must know what the user
+    can read."""
     if not doc:
         return ("No universal walk has run for this job yet. It is the job's interpretation and "
                 "starts when the analysis finishes; name a gene to walk a few steps from it instead.")
@@ -1316,6 +1405,12 @@ def stored_walk_text(doc, limit_legs=40):
                          ": " + ", ".join(failed) if failed else "", results.get("summary", "")))
         for p in results["paragraphs"]:
             lines.append("- %s" % p.get("text", ""))
+    elif (v.get("results_draft") or {}).get("paragraphs"):
+        # The page shows a section that failed its checks, marked as such
+        # (results_draft): the chat is told it is there, and its summary,
+        # but answers from the statements, which passed.
+        lines.append("RESULTS (a draft that failed its checks -- shown to the user marked unchecked; answer from "
+                     "the statements): %s" % v["results_draft"].get("summary", ""))
     for s in v.get("statements") or []:
         lines.append("STATEMENT %s: %s (legs %s)" % (s.get("n"), s.get("claim"), s.get("legs")))
     papers = v.get("papers") or {}
