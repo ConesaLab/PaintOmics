@@ -934,13 +934,21 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     def covered_by_code(results, problems):
         """(results, problems, title problems) once each statement the only
         problems say is "not covered" has its own prose as its paragraph
-        (own_prose_paragraphs), pruned as a draft's paragraphs are, and
-        recorded in checks["results_repaired"]; None when any other problem
-        remains, or when the section still fails, and no other fault is
-        mended here. A section under its fewest words beside them is let
-        through too: the missing paragraphs are the words it lacks, and
+        (own_prose_paragraphs), pruned as a draft's paragraphs are, and each
+        paragraph they say comes from a statement that was not kept is
+        removed, all recorded in checks["results_repaired"]; None when any
+        other problem remains, or when the section still fails, and no other
+        fault is mended here. A section under its fewest words beside them is
+        let through too: the missing paragraphs are the words it lacks, and
         verify_results, run again, says whether they were enough. One over
         its most words is not: inserting prose can only lengthen it.
+
+        A paragraph retelling a statement that was not kept retells what the
+        checks threw out, and nothing a kept statement owes rests on it (only
+        a kept statement's paragraph covers it). On job u36I21KMxV (human,
+        adj.p.Value, network walk, 2026-10-29) the draft's one problem was
+        "paragraph 28 comes from statement 15, which was not kept"; the repair
+        came back with 22 and the 15-statement walk lost its Results.
 
         On job M3vf2UD7Ed (S. mutans network, 2026-10-29) draft and repair both
         failed on "statement 6 is not covered" alone and the 15-statement walk
@@ -953,22 +961,26 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         inserted is the statement's own verified text: the
         Verifier checked it, and the pruners and verify_results check it again
         here as they check the Narrator's."""
-        short = [p for p in problems if verify.too_few_words(p)]
-        numbers = verify.uncovered_statements([p for p in problems if p not in short])
-        if not numbers or len(short) > 1 or results is None:
+        mend = verify.mendable_by_code(problems)
+        if mend is None or results is None:
             return None
-        added = {"paragraphs": own_prose_paragraphs(statements, numbers), "summary": ""}
+        added = {"paragraphs": own_prose_paragraphs(statements, mend["uncovered"]), "summary": ""}
         counts, _meta = pruned(added, [])
-        patched = with_paragraphs(results, statements, added["paragraphs"])
+        # A copy: the Narrator's draft is what checks["results_dropped"] keeps
+        # when this does not clear the checks.
+        gone = set(mend["not_kept"])
+        remaining = [p for i, p in enumerate(results.get("paragraphs") or [], 1) if i not in gone]
+        patched = with_paragraphs(dict(results, paragraphs=remaining), statements, added["paragraphs"])
         fixed = verify.verify_results(patched, statements, dropped, walker, kind, words)
         if fixed:
-            logger.warning("[walker] inserting the uncovered statements' prose did not clear the checks: %s",
-                           fixed[:5])
+            logger.warning("[walker] mending the Results section in code did not clear the checks: %s", fixed[:5])
             return None
         keep({"counts": counts, "fallback": title_gate["fallback"]})
-        checks["results_repaired"] = ([{"statement": n, "action": "inserted its own prose"} for n in numbers]
+        checks["results_repaired"] = ([{"statement": n, "action": "inserted its own prose"} for n in mend["uncovered"]]
+                                      + [{"paragraph": i, "action": "removed: its statement was not kept"}
+                                         for i in sorted(gone)]
                                       + [{"problem": p, "action": "resolved by the inserted paragraphs"}
-                                         for p in short])
+                                         for p in mend["short"]])
         return patched, fixed, tiers.title_outruns_body(patched, statements, walker, anchor, scope_name)
 
     def checked(results):
@@ -1025,12 +1037,22 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
                                            objections=problems + effects["notes"] + title_problems,
                                            deadline=deadline)
             repaired_problems, repaired_title, repaired_effects = checked(repaired)
-            if repaired_problems and not problems:
-                # Repaired for its title alone, and the repair broke the body:
-                # the draft stands, its title goes to the code-title fallback
-                # below, and the gate says a repair was tried and not kept.
-                logger.warning("[walker] the Narrator's title repair failed its checks; keeping the draft")
+            if len(repaired_problems) > len(problems):
+                # The repair is further from passing than the draft, both
+                # counted after the same pruning: the draft stands, with its
+                # problems and its effects, for the code repairs below. On
+                # job u36I21KMxV (2026-10-29) the draft failed on one
+                # paragraph from a statement not kept, the repair on 22
+                # problems, and adopting the repair lost the Results. Repaired
+                # for its title alone (no problems), its title goes to the
+                # code-title fallback below. A tie keeps the repair. The gate
+                # says a repair was tried and not kept; checks says it too,
+                # since a section dropped after all gets a gate of its own.
+                logger.warning("[walker] the Narrator's repair has %d problems, the draft %d; keeping the draft",
+                               len(repaired_problems), len(problems))
                 title_gate.update({"repair_kept": False, "repair_problems": repaired_problems})
+                checks["results_repair_not_kept"] = {"draft_problems": list(problems),
+                                                     "repair_problems": list(repaired_problems)}
             else:
                 results, problems, title_problems = repaired, repaired_problems, repaired_title
                 keep(repaired_effects)
@@ -1039,8 +1061,9 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
             # The draft failed its checks; the repair could not be had. A
             # title that outran the body is still repaired in code below.
             unmade = "the repair was not made: %s" % _no_results_reason(exc)[len("no Results section: "):]
-    # Last, a statement no paragraph retells gets its own prose, with the
-    # repair made or not: the one fault code can mend without a model.
+    # Last, a statement no paragraph retells gets its own prose and a
+    # paragraph retelling a statement not kept goes, with the repair made or
+    # not: the faults code can mend without a model.
     covered = covered_by_code(results, problems)
     if covered is not None:
         results, problems, title_problems = covered

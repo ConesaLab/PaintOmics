@@ -908,18 +908,32 @@ def _words(text):
 
 UNCOVERED = "statement %d is not covered"
 _UNCOVERED_RE = re.compile("^%s$" % re.escape(UNCOVERED).replace("%d", r"(\d+)"))
+# The statement is printed as the Narrator tagged it (%s): it need not be a number.
+NOT_KEPT = "paragraph %d comes from statement %s, which was not kept"
+_NOT_KEPT_RE = re.compile("^%s$" % re.escape(NOT_KEPT).replace("%d", r"(\d+)").replace("%s", r".+"))
 
 
-def uncovered_statements(problems):
-    """The statements verify_results found no paragraph retelling, when that
-    is every problem it found; None when any other problem is among them."""
-    numbers = []
+def mendable_by_code(problems):
+    """What code mends in verify_results' ``problems`` without a model, when
+    that is every problem: {"uncovered": the statements no paragraph retells,
+    "not_kept": the paragraphs (numbered from 1, as the problems number them)
+    retelling a statement that was not kept, "short": the word count of a
+    section under its fewest words}. None when any other problem is among
+    them, or when there is nothing to insert or remove."""
+    found = {"uncovered": [], "not_kept": [], "short": []}
     for problem in problems or ():
-        match = _UNCOVERED_RE.match(str(problem))
-        if match is None:
+        uncovered, not_kept = _UNCOVERED_RE.match(str(problem)), _NOT_KEPT_RE.match(str(problem))
+        if uncovered:
+            found["uncovered"].append(int(uncovered.group(1)))
+        elif not_kept:
+            found["not_kept"].append(int(not_kept.group(1)))
+        elif too_few_words(problem):
+            found["short"].append(problem)
+        else:
             return None
-        numbers.append(int(match.group(1)))
-    return numbers or None
+    if not (found["uncovered"] or found["not_kept"]) or len(found["short"]) > 1:
+        return None
+    return found
 
 
 WORD_COUNT = "%d words; between %d and %d are required"
@@ -978,7 +992,7 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
         else:
             source = _statement_by_n(kept, origin)
             if source is None:
-                problems.append("paragraph %d comes from statement %s, which was not kept" % (i, origin))
+                problems.append(NOT_KEPT % (i, origin))
             else:
                 # A "..." paragraph retells nothing: its statement is not covered.
                 if not is_placeholder(text):
