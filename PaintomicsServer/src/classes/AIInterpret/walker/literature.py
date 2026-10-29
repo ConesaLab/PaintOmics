@@ -17,7 +17,6 @@ passage code found.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 import time
@@ -152,17 +151,6 @@ def _claim_key(ref, claim, sentence=None):
     return int(ref), normalise(claim)[:400], normalise(sentence or "")[:400]
 
 
-def _embedded_json(text):
-    text = str(text or "")
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        return None
-    try:
-        return json.loads(text[start:end + 1])
-    except ValueError:
-        return None
-
-
 @dataclass
 class LiteratureStore:
     """One walk's papers: retrieval numbers, the fetched full texts and every
@@ -260,7 +248,7 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
                     return _NO_TIME
                 return client.complete_json(
                     [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],
-                    "citation_check", QUOTE_SCHEMA, _embedded_json, 900, 0.0, budget_seconds=budget)
+                    "citation_check", QUOTE_SCHEMA, llm_client.embedded_json, 900, 0.0, budget_seconds=budget)
             out = await asyncio.to_thread(ask)
             if out is _NO_TIME:
                 return {"supported": False, "why": "there was no time left to read the paper", "transient": True}

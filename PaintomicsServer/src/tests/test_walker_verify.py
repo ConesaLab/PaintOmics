@@ -505,6 +505,25 @@ class WalkerVerifyTest(unittest.TestCase):
         problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
         self.assertTrue(any("dropped statement" in p for p in problems), problems)
 
+    def test_eight_words_a_kept_statement_says_too_are_no_mention_of_a_dropped_one(self):
+        """Job sG3755d52w (2026-10-29): kept 9 and dropped 13 both opened "cysD
+        (P21156, −1.83) and cysN (P23845, −1.49) are", the paragraph retold 9,
+        and the Results were refused as mentioning 13."""
+        gene = self.walker.label(self.chain[0]["to"])
+        opening = "%s and its partner here, both lower than baseline, are" % gene
+        stmt = self.good_statement()
+        stmt["claim"] = "%s relevant lower baseline values." % opening
+        results = {"title": "t", "summary": "",
+                   "paragraphs": [{"from_statement": 1, "legs": [1],
+                                   "text": ("%s relevant lower baseline values. " % opening.upper()) * 12}]}
+        dropped = [{"claim": "%s the only relevant nodes of the walk." % opening}]
+        problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
+        self.assertFalse(any("dropped statement" in p for p in problems), problems)
+        # A head only the dropped statement has still counts.
+        stmt["claim"] = "a claim"
+        problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
+        self.assertTrue(any("dropped statement" in p for p in problems), problems)
+
     def test_a_range_is_not_a_quoted_value(self):
         self.assertEqual(verify.NUMBER_RE.findall("peaks late (18-24h) and 0h-2h"), [])
         self.assertEqual(verify.NUMBER_RE.findall("from -0.35 at 0h to +2.13, within ±0.6"), ["-0.35", "+2.13"])

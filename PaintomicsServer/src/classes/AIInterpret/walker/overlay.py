@@ -29,6 +29,7 @@ class Overlay(object):
         self.labels = {}                     # omic -> [column label, ...] or None
         self.value_kind = []                 # card.value_kinds: omics with p/q-value columns
         self.significance = {}               # omic -> [column index, ...] of p/q-values
+        self.signed = {}                     # omic -> [column index, ...] a direction is read from
         self.heat = {}
         self.cap = None
         self.capped = set()
@@ -40,9 +41,10 @@ class Overlay(object):
         """The block the model reads for one node: every layer, every member,
         the flag as recorded, the values as text with the user's labels.
 
-        ``flip``: every value's sign reversed, for the direction check's
-        counter-hypothesis -- except a p-value or q-value, which has no sign
-        to reverse and would read as a negative p-value."""
+        ``flip``: every signed value's sign reversed (signed_values), for the
+        direction check's counter-hypothesis. A p-value or q-value has no sign
+        to reverse and would read as a negative p-value; nor has AveExpr or B
+        beside a logFC, and a negated mean expression is no counter-hypothesis."""
         lines = []
         for layer in self.layers.get(node_id, []):
             lines.append("%-16s %-20s %-12s %s" % (
@@ -75,12 +77,19 @@ def value_text(number):
     minus) and ``+0.00`` for an exact zero, as always; a magnitude under
     SMALL_VALUE in two significant digits, ``+3.2e-05``, ``−4.1e-03``, so a
     small p-value is never printed as zero. verify.NUMBER_RE reads both forms
-    back."""
+    back.
+
+    The form is chosen from the value as rounded, not as stored: 0.00996 in
+    two significant digits is "1.0e-02", which is 0.01, and is printed
+    ``+0.01``. Printed "+1.0e-02" it was a value a model correctly quoting as
+    0.01 could never match (verify._norm compares 0.01 and over in fixed
+    form), and its sentence was pruned as unrecorded."""
     sign = "+" if number >= 0 else "−"
     size = abs(number)
-    if size == 0 or size >= SMALL_VALUE:
+    small = "%.1e" % size
+    if size == 0 or float(small) >= SMALL_VALUE:
         return "%s%.2f" % (sign, size)
-    return "%s%.1e" % (sign, size)
+    return sign + small
 
 
 def values_text(values, labels):
@@ -98,14 +107,28 @@ def values_text(values, labels):
     return " · ".join(out)
 
 
+def _is_signed(layer):
+    """Whether a layer's column ``i`` carries a direction: one of its
+    ``signed`` columns (card.value_kinds' signed_index: the fold changes of a
+    table that also holds p-values) when the layer names them, else any column
+    that is not one of its ``significance`` columns."""
+    signed = layer.get("signed")
+    if signed is not None:
+        signed = set(signed)
+        return lambda i: i in signed
+    skip = set(layer.get("significance") or ())
+    return lambda i: i not in skip
+
+
 def signed_values(layer):
     """The numbers of a layer whose sign means something: every readable,
-    non-NaN value except those in the layer's significance columns (p-values,
-    q-values; card.significance_columns). A p-value is never negative, so
-    read as a sign every one of them said "up"."""
-    skip = set(layer.get("significance") or ())
+    non-NaN value of its signed columns (_is_signed). A p-value is never
+    negative, so read as a sign every one of them said "up"; and in a limma
+    table (logFC, AveExpr, t, P.Value, adj.P.Val, B) AveExpr -- always
+    positive, and the largest number on the row -- said "up" just the same."""
+    signed = _is_signed(layer)
     for i, value in enumerate(layer.get("values") or []):
-        if i in skip:
+        if not signed(i):
             continue
         try:
             number = float(value)
@@ -113,6 +136,19 @@ def signed_values(layer):
             continue
         if number == number:
             yield number
+
+
+def layer_sign(*layers):
+    """+1, -1 or 0: the sign of the largest-magnitude signed value
+    (signed_values) over ``layers``; 0 when they hold none. The one reading of
+    a direction from the user's values: the direction check's
+    (direction.data_direction) and the null's concordance (null.node_direction)."""
+    best = 0.0
+    for layer in layers:
+        for number in signed_values(layer):
+            if abs(number) > abs(best):
+                best = number
+    return 1 if best > 0 else (-1 if best < 0 else 0)
 
 
 _SIGN_RE = re.compile(r"(?<=\s)([+−-])(?=\d)")
@@ -127,15 +163,16 @@ def flipped_text(values_line):
 
 
 def _flipped(layer, labels):
-    """A layer's values line with its signed values reversed; its p-value and
-    q-value columns, re-rendered from the values, as they are."""
-    skip = set(layer.get("significance") or ())
-    if not skip:
+    """A layer's values line with its signed values reversed (_is_signed); the
+    other columns -- p-values, q-values, AveExpr -- re-rendered from the
+    values, as they are."""
+    if layer.get("signed") is None and not layer.get("significance"):
         return flipped_text(layer["text"])
+    signed = _is_signed(layer)
     values = []
     for i, value in enumerate(layer.get("values") or []):
         try:
-            values.append(value if i in skip else -float(value))
+            values.append(-float(value) if signed(i) else value)
         except (TypeError, ValueError):
             values.append(value)
     return values_text(values, labels)
@@ -160,10 +197,12 @@ def overlay_job(network, job_instance):
     Overlay: measured set, r, layer text, labels, heat, degree cap."""
     ov = Overlay()
     ov.labels = labels_by_omic(job_instance)
-    # The omics with p-value or q-value columns, and those columns' indices:
-    # no sign is ever read from them (signed_values).
+    # The omics with p-value or q-value columns, those columns' indices, and
+    # the columns a direction is read from (signed_values): no sign is ever
+    # read from a p-value. An omic with no entry has every column signed.
     ov.value_kind = job_value_kinds(job_instance)
     ov.significance = {entry["omic"]: entry["index"] for entry in ov.value_kind}
+    ov.signed = {entry["omic"]: entry["signed_index"] for entry in ov.value_kind}
     regulators = OrderedDict()                # mir:<name> -> {targets, relevant, values}
     seen_layers = set()
 
@@ -201,7 +240,8 @@ def overlay_job(network, job_instance):
             ov.layers.setdefault(node_id, []).append({
                 "omic": omic_name, "member": member, "relevant": relevant,
                 "values": values, "text": values_text(values, ov.labels.get(omic_name)),
-                "significance": ov.significance.get(omic_name, [])})
+                "significance": ov.significance.get(omic_name, []),
+                "signed": ov.signed.get(omic_name)})
 
     for feature in (job_instance.getInputGenesData() or {}).values():
         take(feature, "gene")
@@ -216,7 +256,8 @@ def overlay_job(network, job_instance):
         ov.layers[node_id] = [{"omic": reg["omic"], "member": label, "relevant": reg["relevant"],
                                "values": reg["values"],
                                "text": values_text(reg["values"], ov.labels.get(reg["omic"])),
-                               "significance": ov.significance.get(reg["omic"], [])}]
+                               "significance": ov.significance.get(reg["omic"], []),
+                               "signed": ov.signed.get(reg["omic"])}]
         for target in reg["targets"]:
             network.add_edge(node_id, target, -1, "job:" + reg["omic"], "miRNA target")
     ov.regulators = len(regulators)

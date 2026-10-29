@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 
-from src.classes.AIInterpret.llm_client import strip_reasoning
+from src.classes.AIInterpret.llm_client import opens_like_reasoning, strip_reasoning
 from src.classes.AIInterpret.walker.anchor import find_perturbed_genes
 
 # A column is a time point when its label carries a time token: a number with a
@@ -31,6 +31,21 @@ TIME_WORDS = ("time course", "time-course", "timecourse", "time point", "timepoi
 SIGNIFICANCE_RE = re.compile(
     r"(?<![A-Za-z0-9])(?:adj[._ -]?p(?:[._ -]?val(?:ue)?s?)?|p[._ -]?adj(?:usted)?|p[._ -]?val(?:ue)?s?"
     r"|q[._ -]?val(?:ue)?s?|fdr)(?![A-Za-z0-9])", re.I)
+# A log transform in a header: -log10(padj), neg_log10_FDR, log10_pvalue,
+# signed_-log10_pval, -lg(p), ln_qvalue, neglog_p. Such a column names a
+# p-value but holds its transform, where larger is the stronger difference and
+# a signed one carries the direction: everything SIGNIFICANCE_NOTE says about a
+# p-value ("smaller means stronger", relevance_hint's "below 0.05", no sign) is
+# exactly wrong for it, so it is no significance column and stays an ordinary
+# signed value. log2/log10 bind anywhere ("mlog10p"); the bare log, ln and lg
+# only as whole tokens, so logFC and the "lg" inside a word are not one.
+LOG_TRANSFORM_RE = re.compile(r"log(?:10|2)|(?<![A-Za-z])(?:neg|minus|m)?(?:log|ln|lg)(?![A-Za-z])", re.I)
+# A column of effect sizes, by its header: logFC, log2FC, log2FoldChange, FC,
+# fold change, Log2 fold change. Whole tokens, case-insensitive. In a table
+# that also holds p-values (a limma or DESeq2 export) only these carry the
+# direction: AveExpr or baseMean is always positive and the largest number on
+# the row, t and B are statistics, and read as a sign they made every gene "up".
+EFFECT_RE = re.compile(r"(?<![A-Za-z0-9])(?:log(?:2|10)?[._ -]?)?(?:fc|fold[._ -]?change)(?![A-Za-z0-9])", re.I)
 # Of those, the corrected ones, which a relevance cut-off should be made from.
 ADJUSTED_RE = re.compile(r"adj|fdr|(?<![A-Za-z0-9])q[._ -]?val", re.I)
 # What every agent is told about such a column (service.walk_card_text, the
@@ -95,23 +110,40 @@ def labels_by_omic(job_instance):
 
 
 def significance_columns(labels):
-    """The indices of the labels that name a p-value or q-value column."""
-    return [i for i, label in enumerate(labels or []) if SIGNIFICANCE_RE.search(str(label))]
+    """The indices of the labels that name a p-value or q-value column, and
+    not its log transform (LOG_TRANSFORM_RE)."""
+    return [i for i, label in enumerate(labels or [])
+            if SIGNIFICANCE_RE.search(str(label)) and not LOG_TRANSFORM_RE.search(str(label))]
+
+
+def effect_columns(labels):
+    """The indices of the labels that name a fold change (EFFECT_RE)."""
+    return [i for i, label in enumerate(labels or []) if EFFECT_RE.search(str(label))]
+
+
+def _columns_of(find, cells, shown):
+    """``find`` over the whole header cells and over the shortened labels: a
+    prefix every label shares ("padj_KO", "padj_WT" -> "KO", "WT") can be the
+    very word."""
+    return sorted(set(find(cells)) | set(find(shown)))
 
 
 def value_kinds(headers_by_omic, condition_names=None):
     """Which omics' values are significance values, from the data alone (like
-    axis_kind, never from a model): a list of {omic, kind, columns, index}, one
-    per omic with at least one p-value or q-value column. ``kind`` is
-    "significance" when every column is one, "mixed" otherwise (a limma table:
-    logFC, AveExpr, t, P.Value, adj.P.Val, B); ``columns`` are those columns'
-    labels as the layer text prints them, ``index`` their positions.
+    axis_kind, never from a model): a list of {omic, kind, columns, index,
+    signed_index}, one per omic with at least one p-value or q-value column.
+    ``kind`` is "significance" when every column is one, "mixed" otherwise (a
+    limma table: logFC, AveExpr, t, P.Value, adj.P.Val, B); ``columns`` are
+    those columns' labels as the layer text prints them, ``index`` their
+    positions. ``signed_index`` are the columns a direction is read from
+    (overlay.signed_values): the fold-change columns when the omic has any
+    (EFFECT_RE), every column that is no p-value or q-value when it has none.
 
     ``headers_by_omic`` maps an omic to its file's header as stored (ID column
-    first). The whole cells are read, not the shortened labels: a prefix every
-    label shares ("padj_KO", "padj_WT" -> "KO", "WT") can be the very word.
-    An omic with no header borrows the job's condition names only when it is
-    the job's sole omic; with two, they belong to some other file."""
+    first); the whole cells are read as well as the shortened labels
+    (_columns_of). An omic with no header borrows the job's condition names
+    only when it is the job's sole omic; with two, they belong to some other
+    file."""
     out = []
     for omic, header in headers_by_omic.items():
         shown = shorten_labels(header)
@@ -120,10 +152,14 @@ def value_kinds(headers_by_omic, condition_names=None):
             cells = shown = [str(c).strip() for c in condition_names]
         if not cells:
             continue
-        index = sorted(set(significance_columns(cells)) | set(significance_columns(shown)))
+        # A log transform is read off the whole cell too: a prefix that hid it
+        # ("-log10_KO_padj", "-log10_WT_padj" -> "KO_padj") makes no p-value of it.
+        index = [i for i in _columns_of(significance_columns, cells, shown) if not LOG_TRANSFORM_RE.search(cells[i])]
         if index:
+            effects = [i for i in _columns_of(effect_columns, cells, shown) if i not in index]
             out.append({"omic": omic, "kind": "significance" if len(index) == len(cells) else "mixed",
-                        "columns": [shown[i] for i in index], "index": index})
+                        "columns": [shown[i] for i in index], "index": index,
+                        "signed_index": effects or [i for i in range(len(cells)) if i not in index]})
     return out
 
 
@@ -165,12 +201,19 @@ def design_text_of(job_instance):
     llm_client.strip_reasoning (#202) can begin "The user asks for a
     description of the experiment design ... Let's craft.</think>I performed
     ..." (jobs laW30Q7bYU, u36I21KMxV, 2026-10-27), and the card took that
-    first sentence as the perturbation."""
+    first sentence as the perturbation.
+
+    A design saved under the old 300-token cap can be reasoning and nothing
+    else, cut off before its "</think>" ("The user asks for a description of
+    the experiment design ... I need to write 2-3 sentences"): there is no
+    answer in it to keep, so the job reads as one with no design text
+    (llm_client.opens_like_reasoning, the test the design draft makes too)."""
     try:
         text = job_instance.getExperimentDesign() if hasattr(job_instance, "getExperimentDesign") else ""
     except Exception:                                          # noqa: BLE001
         text = ""
-    return strip_reasoning(text or "")
+    text = strip_reasoning(text or "")
+    return "" if opens_like_reasoning(text) else text
 
 
 def axis_kind(labels, design_text=""):

@@ -100,18 +100,6 @@ def placeholder_answer(out):
     return bool(texts) and 2 * sum(1 for text in texts if is_placeholder(text)) >= len(texts)
 
 
-def _embedded_json(text):
-    """The outermost JSON object in a reply that wrapped it in prose or a fence."""
-    text = str(text or "")
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        return None
-    try:
-        return json.loads(text[start:end + 1])
-    except ValueError:
-        return None
-
-
 class OutOfTime(Exception):
     """The Narrator's time ran out before it had a readable answer."""
 
@@ -159,7 +147,7 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
         try:
             out = client.complete_json(
                 [{"role": "system", "content": brief}, {"role": "user", "content": prompt}],
-                "results_section", RESULTS_SCHEMA, _embedded_json, max_tokens=max_tokens,
+                "results_section", RESULTS_SCHEMA, llm_client.embedded_json, max_tokens=max_tokens,
                 temperature=temperature, budget_seconds=budget)
             failure = None
         except Exception as exc:                                      # noqa: BLE001

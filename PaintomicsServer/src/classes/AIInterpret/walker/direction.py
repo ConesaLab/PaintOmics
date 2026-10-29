@@ -81,12 +81,10 @@ def data_direction(layer):
     """+1, -1 or 0: the sign of the largest-magnitude value of a layer. A
     p-value or q-value column gives none (overlay.signed_values): every one is
     positive, and job u36I21KMxV's adj.p.Value layer would have read "up" on
-    every gene. A layer of nothing else is 0, so no regulator check runs on it."""
-    best = 0.0
-    for number in ov_mod.signed_values(layer):
-        if abs(number) > abs(best):
-            best = number
-    return 1 if best > 0 else (-1 if best < 0 else 0)
+    every gene. A layer of nothing else is 0, so no regulator check runs on it.
+    In a table that also holds a fold change, only the fold change speaks
+    (overlay.layer_sign)."""
+    return ov_mod.layer_sign(layer)
 
 
 def panel_hits(stmt, walker):

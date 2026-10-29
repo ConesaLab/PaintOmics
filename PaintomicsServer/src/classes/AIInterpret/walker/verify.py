@@ -861,7 +861,10 @@ def _norm(token):
     (a written exponent, or a magnitude under 0.01) in one scientific form,
     "+3.2e-05", "3.2×10⁻⁵" and "0.000032" all becoming "3.2e-5" with the sign
     they were written with. Values of 0.01 and over, and an exact 0, compare
-    as written, as they always have."""
+    as written, as they always have -- and one of those written with an
+    exponent compares in the fixed form overlay.value_text prints it in, two
+    decimals at least: 0.00996 is printed "+0.01", and "1.0e-02" and "1e-2"
+    quote it as well as "0.01" does."""
     token = token.replace(" ", "").translate(_SUPERSCRIPTS)
     match = _PARTS_RE.match(token)
     if match:
@@ -872,8 +875,16 @@ def _norm(token):
                 value = value.scaleb(int(exponent.replace("−", "-")))
         except (InvalidOperation, ValueError):
             value = None
+        sign = {"": "", "+": "+"}.get(sign, "−")
         if value is not None and (exponent or 0 < value < _SMALL):
-            return {"": "", "+": "+"}.get(sign, "−") + format(value.normalize(), "e")
+            if value < _SMALL:
+                return sign + format(value.normalize(), "e")
+            fixed = value.normalize()
+            try:
+                fixed = fixed if fixed.as_tuple().exponent < -2 else fixed.quantize(_SMALL)
+            except InvalidOperation:        # more digits than the context holds: as written
+                return token.replace("-", "−")
+            return sign + format(fixed, "f")
     return token.replace("-", "−")
 
 
@@ -884,6 +895,12 @@ def _in_record(token, numbers):
     if token[:1] in ("+", "−"):
         return token in numbers
     return token in numbers or ("+" + token) in numbers or ("−" + token) in numbers
+
+
+def _words(text):
+    """A text as the dropped-statement check compares it: whitespace runs as
+    one space, lower case."""
+    return " ".join(str(text or "").split()).lower()
 
 
 def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None):
@@ -960,14 +977,22 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                             % (i, JARGON_RE.search(text).group(0)))
     for n in kept_ids - covered:
         problems.append("statement %d is not covered" % n)
+    # What the kept statements say in their own words, for the check below.
+    kept_words = [_words(s.get(field)) for s in kept for field in ("claim", "prose")]
     for stmt in dropped:
         # The first eight words of a dropped claim, not five: "Syk gene
         # expression surges late" is how any kept statement about Syk begins,
         # and the direction check now drops statements about the same genes
-        # the kept ones name.
-        head = " ".join(str(stmt.get("claim", "")).split()[:8]).lower()
-        if len(head.split()) >= 8 and any(head in str(p.get("text", "")).lower()
-                                          for p in paragraphs if isinstance(p, dict)):
+        # the kept ones name. Nor eight words a kept statement says too: on
+        # job sG3755d52w (E. coli proteomics network, 2026-10-29) kept 9 and
+        # dropped 13 both opened "cysD (P21156, −1.83) and cysN (P23845,
+        # −1.49) are", the Narrator retold 9 faithfully, draft and repair both
+        # failed on "a dropped statement is mentioned" alone, and the 7-statement
+        # walk lost its Results. Such a head says nothing of the dropped one.
+        head = _words(" ".join(str(stmt.get("claim", "")).split()[:8]))
+        if len(head.split()) < 8 or any(head in words for words in kept_words):
+            continue
+        if any(head in _words(p.get("text")) for p in paragraphs if isinstance(p, dict)):
             problems.append("a dropped statement is mentioned: %r" % head)
     lo, hi = words_range or RESULTS_WORDS["network" if scope == "network" else "pathway"]
     if not (lo <= words <= hi):

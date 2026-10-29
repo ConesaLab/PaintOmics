@@ -10,7 +10,8 @@ from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.DAO.AIWalkDAO import AIWalkDAO
 from src.common.JobInformationManager import JobInformationManager
 from src.common.PySiQ import JobStatus
-from src.classes.AIInterpret.llm_client import LLMClient, MissingAPIKeyError, strip_reasoning
+from src.classes.AIInterpret.llm_client import (LLMClient, MissingAPIKeyError, embedded_json, opens_like_reasoning,
+                                                 strip_reasoning)
 from src.classes.AIInterpret import model_fallback
 from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT, design_guidance
 from src.classes.AIInterpret.walker import card as card_mod
@@ -544,14 +545,12 @@ _EXPDESIGN_SCHEMA = {
     "additionalProperties": False,
 }
 _EXPDESIGN_MAX_TOKENS = 1000
-# What the model writes when it is thinking aloud rather than answering. The
-# answer itself is in the first person ("I performed ..."), so "I" alone is no
-# sign; "I need to" is.
-_EXPDESIGN_REASONING_OPENER = re.compile(
-    r"^\W*(?:the user\b|user (?:asks|wants)\b|we (?:need|should|must)\b|i need to\b|i (?:should|must|will) "
-    r"(?:write|describe|produce|draft)\b|let me\b|let's\b|okay\b|ok\b|alright\b|first,|hmm\b|so,? the\b)",
-    re.I)
-# A finished description ends a sentence; a cut one stops anywhere.
+# A finished description ends a sentence; a cut one stops anywhere. Kept even
+# under the schema: a reply cut off mid-JSON ('{"description": "I compared a
+# control group (Ctr') is no JSON, comes back through _descriptionFromText as
+# the whole unterminated text, and this is what rejects it. What the model
+# writes when thinking aloud is llm_client.opens_like_reasoning, the same test
+# the walk's card makes of a stored design.
 _EXPDESIGN_TERMINAL = re.compile(r"[.!?][\"'\u201d\u2019)\]]*\s*$")
 _EXPDESIGN_UNAVAILABLE = (
     "The AI could not draft a description from these columns this time. Write the experiment design "
@@ -560,17 +559,10 @@ _EXPDESIGN_UNAVAILABLE = (
 
 def _descriptionFromText(text):
     """complete_json's fallback for an endpoint that ignores the schema: the
-    JSON object the reply wrapped in prose or a fence, else the whole reply."""
-    text = str(text or "")
-    match = re.search(r"\{.*\}", text, re.S)
-    if match:
-        try:
-            parsed = json.loads(match.group(0))
-            if isinstance(parsed, dict):
-                return parsed
-        except ValueError:
-            pass
-    return {"description": text}
+    JSON object the reply wrapped in prose or a fence (llm_client.embedded_json),
+    else the whole reply."""
+    parsed = embedded_json(text)
+    return parsed if isinstance(parsed, dict) else {"description": str(text or "")}
 
 
 def _usableDescription(answer):
@@ -581,7 +573,7 @@ def _usableDescription(answer):
     text = strip_reasoning(text).strip() if isinstance(text, str) else ""
     if not text or "</think>" in text or "<think>" in text:
         return None
-    if _EXPDESIGN_REASONING_OPENER.match(text) or not _EXPDESIGN_TERMINAL.search(text):
+    if opens_like_reasoning(text) or not _EXPDESIGN_TERMINAL.search(text):
         return None
     return text
 

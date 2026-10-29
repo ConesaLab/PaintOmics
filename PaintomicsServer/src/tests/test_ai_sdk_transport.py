@@ -318,6 +318,23 @@ class ClientPerEventLoopTest(unittest.TestCase):
                               if k.is_closed()]), 0,
                          "a closed loop's client is still cached")
 
+    def test_a_closed_loop_never_released_is_forgotten_by_the_next_loop(self):
+        """The weak key alone cannot drop it: the value (model -> client ->
+        pool) can reference the loop it is keyed by. asyncio.run in a harness,
+        or a release that raised, left such an entry for the process's life."""
+        first = asyncio.new_event_loop()
+        try:
+            first.run_until_complete(self._grab())           # no release_loop_client
+        finally:
+            first.close()
+        self.assertIn(first, self.agent._LOOP_MODELS)        # this test still holds the loop
+        second = asyncio.new_event_loop()
+        try:
+            second.run_until_complete(self._grab())
+        finally:
+            second.close()
+        self.assertNotIn(first, self.agent._LOOP_MODELS, "a closed loop's client outlived it")
+
     def test_two_clients_are_two_pools(self):
         # Pacing is not theirs to hold: test_one_rate_budget_per_gateway shows
         # every client, and LLMClient, waiting on the one pacer per gateway.

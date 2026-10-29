@@ -143,7 +143,7 @@ class SignificanceDetectorTest(unittest.TestCase):
     def test_a_limma_table_is_mixed_and_names_its_columns(self):
         kinds = card_mod.value_kinds({"Gene expression": LIMMA, "Metabolomics": ["id", "0h", "2h"]})
         self.assertEqual(kinds, [{"omic": "Gene expression", "kind": "mixed",
-                                  "columns": ["p.Value", "adj.p.Value"], "index": [3, 4]}])
+                                  "columns": ["p.Value", "adj.p.Value"], "index": [3, 4], "signed_index": [0]}])
 
     def test_an_omic_of_p_values_alone_is_significance(self):
         kinds = card_mod.value_kinds({"Gene expression": ["#gene", "adj.p.Value"]})
@@ -152,7 +152,7 @@ class SignificanceDetectorTest(unittest.TestCase):
     def test_a_word_the_shared_prefix_hides_is_still_read(self):
         kinds = card_mod.value_kinds({"Gene expression": ["#gene", "padj_KO", "padj_WT"]})
         self.assertEqual(kinds, [{"omic": "Gene expression", "kind": "significance",
-                                  "columns": ["KO", "WT"], "index": [0, 1]}])
+                                  "columns": ["KO", "WT"], "index": [0, 1], "signed_index": []}])
 
     def test_condition_names_speak_only_for_a_sole_unlabeled_omic(self):
         self.assertEqual(card_mod.value_kinds({"Gene expression": None}, ["FDR"])[0]["kind"], "significance")
@@ -214,7 +214,137 @@ class NoDirectionFromSignificanceTest(unittest.TestCase):
         self.assertIn("p.Value +3.2e-05 · adj.p.Value +4.0e-03 · logFC −1.90", flipped)
 
 
+class TransformedSignificanceTest(unittest.TestCase):
+    """A -log10 p-value names a p-value but holds its transform: larger is the
+    stronger difference, and a signed one carries the direction. Taken for a
+    p-value, the card told every agent "smaller means stronger" and the hint
+    "below 0.05" about it -- exactly wrong -- and its sign was never read."""
+
+    TRANSFORMED = ["-log10(padj)", "neg_log10_FDR", "log10_pvalue", "signed_-log10_pval", "-lg(p.value)",
+                   "ln_qvalue", "mlog10p_KO", "neglog_FDR"]
+
+    def test_a_log_transformed_p_value_is_no_significance_column(self):
+        self.assertEqual(card_mod.significance_columns(self.TRANSFORMED), [])
+        self.assertEqual(card_mod.value_kinds({"Gene expression": ["#gene"] + self.TRANSFORMED}), [],
+                         "transformed p-values were read as p-values")
+
+    def test_the_untransformed_ones_still_are_and_the_lookalikes_still_are_not(self):
+        self.assertEqual(card_mod.significance_columns(["adj.p.Value", "padj", "FDR", "qvalue", "P.Value"]),
+                         [0, 1, 2, 3, 4])
+        self.assertEqual(card_mod.significance_columns(["Ip", "pH", "Ctr_0H", "PDX", "dpi", "logFC_pvalue"]), [5])
+
+    def test_a_transform_a_shared_prefix_hid_is_still_read(self):
+        # Shortened, "-log10_KO_padj" / "-log10_WT_padj" print as KO_padj / WT_padj.
+        self.assertEqual(card_mod.value_kinds({"Gene expression": ["#gene", "-log10_KO_padj", "-log10_WT_padj"]}),
+                         [])
+
+    def test_a_signed_transform_keeps_its_sign(self):
+        data_dir = fx.make_data_dir()
+        try:
+            graph = net_mod.build_network("tst", data_dir).filter_pathway("KEGG:tst00001")
+            job = fx.make_job()
+            job._headers["Gene expression"] = ["#geneID", "signed_-log10_pval", "a", "b"]
+            ov = ov_mod.overlay_job(graph, job)
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+        layer = ov.layers["g:1"][0]
+        layer["values"] = [-6.5, 0.1, 0.2]
+        self.assertEqual(ov.value_kind, [])
+        self.assertEqual(ov_mod.layer_sign(layer), -1)
+
+
+class EffectColumnTest(unittest.TestCase):
+    """In a table that also holds p-values only the fold change carries a
+    direction. A limma export (logFC, AveExpr, t, P.Value, adj.P.Val, B) --
+    the very case value_kinds labels "mixed" -- read AveExpr, always positive
+    and the largest number on the row, as the sign: every gene went "up", and
+    the counter-hypothesis negated the mean expression."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_dir = fx.make_data_dir()
+        cls.graph = net_mod.build_network("tst", cls.data_dir).filter_pathway("KEGG:tst00001")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.data_dir, ignore_errors=True)
+
+    def limma_overlay(self, values):
+        job = fx.make_job()
+        job._headers["Gene expression"] = LIMMA
+        ov = ov_mod.overlay_job(self.graph, job)
+        layer = ov.layers["g:1"][0]
+        layer["values"] = values
+        layer["text"] = ov_mod.values_text(values, ov.labels["Gene expression"])
+        return ov, layer
+
+    def test_the_fold_change_headers(self):
+        labels = ["logFC", "log2FC", "log2FoldChange", "FC", "fold change", "Log2 fold change", "FC_KO", "logfc"]
+        self.assertEqual(card_mod.effect_columns(labels), list(range(len(labels))))
+        self.assertEqual(card_mod.effect_columns(["AveExpr", "lfcSE", "baseMean", "PFC", "FCS", "t", "B"]), [])
+
+    def test_signed_columns_by_table(self):
+        deseq = card_mod.value_kinds({"Gene expression": ["id", "baseMean", "log2FoldChange", "lfcSE", "stat",
+                                                          "pvalue", "padj"]})
+        self.assertEqual(deseq[0]["signed_index"], [1])
+        no_effect = card_mod.value_kinds({"Gene expression": ["id", "t", "B", "pvalue"]})
+        self.assertEqual(no_effect[0]["signed_index"], [0, 1], "no fold change: every other column, as before")
+
+    def test_the_direction_follows_the_fold_change(self):
+        ov, layer = self.limma_overlay([-0.8, 9.5, -3.1, 0.001, 0.01, 2.0])
+        self.assertEqual(ov.signed, {"Gene expression": [0]})
+        self.assertEqual(layer["signed"], [0])
+        self.assertEqual(list(ov_mod.signed_values(layer)), [-0.8])
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        self.assertEqual(direction_mod.data_direction(layer), -1, "AveExpr 9.5 read as the direction")
+        self.assertEqual(null_mod.node_direction(ov, "g:1"), -1)
+
+    def test_the_counter_hypothesis_flips_the_fold_change_only(self):
+        ov, _ = self.limma_overlay([-0.8, 9.5, -3.1, 0.001, 0.01, 2.0])
+        flipped = ov.layer_text("g:1", flip=True)
+        self.assertIn("logFC +0.80 · AveExpr +9.50 · t-statistic −3.10 · p.Value +1.0e-03 · "
+                      "adj.p.Value +0.01 · B-statistic +2.00", flipped)
+
+
+class HundredthBoundaryTest(unittest.TestCase):
+    """0.00996 in two significant digits is 1.0e-02, which is 0.01: printed
+    "+1.0e-02" it normalised to 1e-2, while a model's correct "0.01" normalised
+    to 0.01, and the sentence quoting it was pruned as unrecorded."""
+
+    def test_a_value_that_rounds_to_a_hundredth_is_printed_as_one(self):
+        self.assertEqual(ov_mod.value_text(0.00996), "+0.01")
+        self.assertEqual(ov_mod.value_text(-0.009951), "−0.01")
+        self.assertEqual(ov_mod.value_text(0.00994), "+9.9e-03", "below the boundary nothing changes")
+
+    def test_every_spelling_of_it_is_in_the_record(self):
+        record = {verify._norm(value) for value in verify.quoted_values("a " + ov_mod.value_text(0.00996))}
+        for written in ("0.01", "+0.01", "1.0e-02", "1e-2", "1.0E-02", "1.0 × 10⁻²"):
+            self.assertTrue(verify._in_record(written, record), written)
+        for written in ("−0.01", "0.02", "1.0e-03"):
+            self.assertFalse(verify._in_record(written, record), written)
+
+    def test_values_over_a_hundredth_written_with_an_exponent_compare_in_fixed_form(self):
+        self.assertEqual(verify._norm("1.5e-1"), "0.15")
+        self.assertEqual(verify._norm("+1.90"), "+1.90")
+        self.assertEqual(verify._norm("−4.1e-03"), "−4.1e-3")
+
+
 class DesignTextTest(unittest.TestCase):
+
+    def test_a_design_that_is_reasoning_and_nothing_else_is_no_design(self):
+        # Saved under the old 300-token cap: the reasoning ended before its "</think>".
+        job = fx.make_job()
+        job.getExperimentDesign = lambda: (
+            "The user asks for a description of the experiment design based on the column headers. "
+            "The headers are Ctr_0H, Ik_24H. I need to write 2-3 sentences")
+        self.assertEqual(card_mod.design_text_of(job), "")
+        self.assertNotIn("The user asks", card_mod.job_card(job).get("perturbation") or "")
+
+    def test_a_first_person_design_is_kept(self):
+        job = fx.make_job()
+        job.getExperimentDesign = lambda: "First, I treated HepG2 cells with sorafenib for 24 h. Values are logFC."
+        self.assertEqual(card_mod.design_text_of(job),
+                         "First, I treated HepG2 cells with sorafenib for 24 h. Values are logFC.")
 
     def test_the_card_never_reads_the_leaked_reasoning(self):
         job = fx.make_job()

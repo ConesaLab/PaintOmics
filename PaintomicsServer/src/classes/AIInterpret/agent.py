@@ -94,7 +94,9 @@ _CONFIGURE_LOCK = threading.Lock()
 # paintomics.org 26-27 Oct 2026, three times, and job vRmKBo4E60 stored "The
 # AI service failed before the walk took a step". Keyed weakly so a loop that
 # is gone takes its entry with it and a closed loop's client can never be
-# handed to another loop; release_loop_client closes it explicitly first.
+# handed to another loop; release_loop_client closes it explicitly first, and
+# _model forgets every closed loop's entry, which the weak key alone cannot
+# (_forget_closed_loops).
 _LOOP_MODELS = weakref.WeakKeyDictionary()
 _LOOP_MODELS_LOCK = threading.Lock()
 
@@ -384,15 +386,32 @@ def _build_client():
         head = model_fallback.ordered(api_base, ladder)[0]
         return kwargs if head == asked else dict(kwargs, model=head)
 
+    async def _wait_for_slot():
+        """Wait for this gateway's next request slot, shared with LLMClient
+        (pacing.py); looked up per attempt, so a limit learned from the gateway
+        after this client was built applies to it too. A wait that would leave
+        the run under RETRY_MIN_ATTEMPT_SECONDS -- the least an attempt needs,
+        the floor the retries below obey -- hands the slot back and fails the
+        call as a timeout, instead of sleeping into the deadline and posting
+        an attempt nobody will be there to read. A cancelled wait hands its
+        slot back too (Pacer.wait)."""
+        pacer = pacing.pacer_for(api_base)
+        if pacer is None:
+            return
+        left = _run_seconds_left()
+        if await pacer.wait(left, RETRY_MIN_ATTEMPT_SECONDS):
+            return
+        logger.warning("SDK transport not sending: the gateway's rate limit queued the call past the run's "
+                       "deadline (%.0fs left, an attempt needs %.0fs)", left, RETRY_MIN_ATTEMPT_SECONDS)
+        raise _oai.APITimeoutError(request=_transport.Request("POST", "%s/chat/completions" % api_base))
+
     async def _paced_create(*args, **kwargs):
         attempt = 0
         while True:
-            # The process's one budget for this gateway, shared with LLMClient
-            # (pacing.py); looked up per attempt, so a limit learned from the
-            # gateway after this client was built applies to it too.
-            pacer = pacing.pacer_for(api_base)
-            if pacer is not None:
-                await pacer.wait()
+            # One slot per attempt, taken right before it is sent: a retry's
+            # backoff (below) is slept holding none, so a retry never holds
+            # two, and one the deadline refuses never takes one.
+            await _wait_for_slot()
             sent = _route(kwargs)
             try:
                 result = await _issue(*args, **sent)
@@ -459,6 +478,19 @@ def _build_client():
     return client
 
 
+def _forget_closed_loops():
+    """Drop the entries of loops already closed; the caller holds the lock.
+
+    The weak key alone does not free them: the value (model -> AsyncOpenAI ->
+    httpx pool -> its connections) can reference the loop it is keyed by, so a
+    loop that never went through release_loop_client -- asyncio.run in a
+    harness or a test, a release that raised -- stays reachable through its
+    own entry and is never collected. A closed loop can run nothing, so its
+    client cannot be closed here either; dropping it lets both go."""
+    for loop in [loop for loop in list(_LOOP_MODELS.keys()) if loop.is_closed()]:
+        _LOOP_MODELS.pop(loop, None)
+
+
 def _model():
     """The model object for the event loop that is running now.
 
@@ -473,6 +505,7 @@ def _model():
     """
     loop = asyncio.get_running_loop()   # RuntimeError outside a loop, on purpose
     with _LOOP_MODELS_LOCK:
+        _forget_closed_loops()
         model = _LOOP_MODELS.get(loop)
         if model is None:
             provider = AI_PROVIDERS[AI_LLM_PROVIDER]

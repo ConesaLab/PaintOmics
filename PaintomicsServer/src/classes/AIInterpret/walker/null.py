@@ -71,15 +71,8 @@ def permute_flags(graph, overlay, rng):
 
 def node_direction(overlay, node_id):
     """+1, -1 or 0: the sign of the largest value among a node's relevant
-    layers, p-value and q-value columns aside (overlay.signed_values)."""
-    best = 0.0
-    for layer in overlay.layers.get(node_id, []):
-        if not layer.get("relevant"):
-            continue
-        for number in ov_mod.signed_values(layer):
-            if abs(number) > abs(best):
-                best = number
-    return 1 if best > 0 else (-1 if best < 0 else 0)
+    layers, p-value and q-value columns aside (overlay.layer_sign)."""
+    return ov_mod.layer_sign(*[layer for layer in overlay.layers.get(node_id, []) if layer.get("relevant")])
 
 
 def leg_concordance(leg, overlay):

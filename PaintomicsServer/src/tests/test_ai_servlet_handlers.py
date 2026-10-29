@@ -223,10 +223,25 @@ class ExpDesignDraftTest(_RouteCase):
         self.assertEqual(_usableDescription(_descriptionFromText(self.CLEAN)), self.CLEAN)
         fenced = "```json\n%s\n```" % json.dumps({"description": self.CLEAN})
         self.assertEqual(_usableDescription(_descriptionFromText(fenced)), self.CLEAN)
-        for bad in ("Okay, so the headers are", "First, list the groups.", "We should say two groups.", ""):
+        for bad in ("Okay, so the headers are", "Let me list the groups.", "We should say two groups.", ""):
             self.assertIsNone(_usableDescription({"description": bad}), bad)
         self.assertEqual(_usableDescription({"description": "We have two groups, sampled at 0 h and 24 h."}),
                          "We have two groups, sampled at 0 h and 24 h.")
+
+    def test_a_description_that_opens_with_first_is_a_description(self):
+        from src.servlets.AIInterpretServlet import _usableDescription
+        first = "First, I treated HepG2 cells with sorafenib for 24 h and compared them with untreated controls."
+        self.assertEqual(_usableDescription({"description": first}), first)
+        so = "So the design has two arms: Ikaros-induced and control cells, at 0 h and 24 h."
+        self.assertEqual(_usableDescription({"description": so}), so)
+
+    def test_a_reply_cut_off_mid_json_is_no_description(self):
+        # Not JSON, so the fallback parser hands back the whole text; only the
+        # missing end of its sentence tells it from a description.
+        from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
+        cut = '{"description": "I compared a control group (Ctr'
+        self.assertEqual(_descriptionFromText(cut), {"description": cut})
+        self.assertIsNone(_usableDescription(_descriptionFromText(cut)))
 
 
 class InitiateTest(_RouteCase):

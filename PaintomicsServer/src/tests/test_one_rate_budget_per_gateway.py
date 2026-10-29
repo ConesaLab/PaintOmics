@@ -16,6 +16,7 @@ import os
 import sys
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -31,11 +32,13 @@ class _Recording(pacing.Pacer):
         pacing.Pacer.__init__(self, rpm, clock=lambda: 1000.0)
         self.seen = []
 
-    def acquire(self):
+    def acquire(self, seconds_left=None, floor=0.0):
         self.seen.append(("thread", self.reserve()))
+        return True
 
-    async def wait(self):
+    async def wait(self, seconds_left=None, floor=0.0):
         self.seen.append(("loop", self.reserve()))
+        return True
 
 
 class _Response(object):
@@ -175,6 +178,134 @@ class CeilingTest(_Case):
         pacing.learn("http://gw/v1/", {"x-litellm-key-rpm-limit": "100"})
         self.assertIs(pacing.pacer_for("http://gw/v1"), pacing.pacer_for("http://gw/v1/"))
         self.assertEqual(pacing.ceiling("http://gw/v1"), 90)
+
+
+
+class _Clock(object):
+    """A monotonic clock that moves only when something sleeps on it."""
+
+    def __init__(self, t=1000.0):
+        self.t = t
+        self.slept = []
+
+    def now(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.t += seconds
+
+
+class SlotsHandedBackTest(unittest.TestCase):
+    """A slot is taken before its caller sleeps. A Writer cancelled at its
+    stage's deadline while it waited, or a call that gave its wait up, used to
+    keep its slot, and the stages after it (the Narrator) waited out slots
+    nobody would send in."""
+
+    def test_cancelled_waiters_hand_their_slots_back(self):
+        pacer = pacing.Pacer(6, clock=lambda: 1000.0)       # a slot every 10 s, a clock that stands still
+        seen = {}
+
+        async def go():
+            waiters = [asyncio.ensure_future(pacer.wait()) for _ in range(5)]
+            await asyncio.sleep(0)                           # every one has reserved: 0, 10, 20, 30, 40 s
+            for waiter in waiters[2:]:
+                waiter.cancel()
+            await asyncio.gather(*waiters[2:], return_exceptions=True)
+            seen["delay"] = pacer.reserve()
+            waiters[1].cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
+        asyncio.run(go())
+        self.assertEqual(seen["delay"], 50.0 - 3 * 10.0, "the cancelled waiters' slots were never given back")
+
+    def test_a_slot_handed_back_mid_queue_never_puts_two_requests_in_one(self):
+        clock = {"t": 0.0}
+        pacer = pacing.Pacer(6, clock=lambda: clock["t"])
+        held = [pacer._take()[0] for _ in range(4)]          # 0, 10, 20, 30
+        pacer.release(held.pop(1))                           # the waiter at 10 s is cancelled
+        sent = held + [pacer._take()[0] for _ in range(12)]
+        self.assertEqual(len(set(sent)), len(sent), "two requests on one slot")
+        worst = max(sum(1 for s in sent if t <= s < t + 60.0) for t in sent)
+        self.assertLessEqual(worst, 6)
+
+    def test_a_wait_the_budget_cannot_afford_is_refused_and_its_slot_given_back(self):
+        clock = _Clock()
+        pacer = pacing.Pacer(6, clock=clock.now)
+        for _ in range(3):
+            pacer.reserve()                                  # the next slot is 30 s away
+        with mock.patch.object(pacing.time, "sleep", clock.sleep):
+            self.assertFalse(pacer.acquire(seconds_left=10, floor=3))
+            self.assertEqual(clock.slept, [], "it slept into a budget it could not use")
+            self.assertTrue(pacer.acquire(seconds_left=40, floor=3))
+        self.assertEqual(clock.slept, [30.0], "the refused slot was not the next one taken")
+
+    def test_a_slot_open_now_is_never_refused(self):
+        pacer = pacing.Pacer(6, clock=lambda: 1000.0)
+        self.assertTrue(pacer.acquire(seconds_left=1, floor=3))
+
+
+class PacedCallKeepsItsBudgetTest(_Case):
+    """Pacing is on by default (54/min learned from the key): a call with 10 s
+    of budget could sleep 28 s queued behind a walk's fan-out, then post with
+    the 10 s timeout computed before it slept."""
+
+    def setUp(self):
+        _Case.setUp(self)
+        os.environ["AI_LLM_MAX_RPM"] = "6"
+        self.clock = _Clock()
+        self.pacer = pacing._PACERS[pacing._key(self.provider["api_base"])] = pacing.Pacer(6, clock=self.clock.now)
+        for _ in range(3):
+            self.pacer.reserve()                             # 30 s of queue ahead of the call
+        self.posts = []
+
+        def post(*args, **kwargs):
+            self.posts.append(kwargs)
+            return _Response(self.headers)
+        self.llm_client.requests.post = post
+
+    def ask_within(self, budget):
+        client = self.llm_client.LLMClient(self.provider, self.provider_name)
+        with mock.patch("time.monotonic", self.clock.now), mock.patch("time.sleep", self.clock.sleep):
+            return client.complete([{"role": "user", "content": "hi"}], max_tokens=5, budget_seconds=budget)
+
+    def test_a_wait_past_the_budget_fails_as_out_of_budget_and_sends_nothing(self):
+        with self.assertRaises(self.llm_client.requests.exceptions.Timeout) as raised:
+            self.ask_within(10)
+        self.assertTrue(self.llm_client.ran_out_of_budget(raised.exception))
+        self.assertEqual(self.posts, [])
+        self.assertEqual(self.clock.slept, [])
+        self.assertEqual(self.pacer.reserve(), 30.0, "the unused slot was kept")
+
+    def test_the_read_timeout_is_what_is_left_after_the_wait(self):
+        self.assertEqual(self.ask_within(60), "ok")
+        self.assertEqual(self.clock.slept, [30.0])
+        self.assertEqual(self.posts[0]["timeout"], (15, 30.0), "the timeout was computed before the wait")
+
+
+class SdkCallKeepsTheRunDeadlineTest(_Case):
+
+    def test_a_wait_past_the_run_deadline_is_not_sent(self):
+        import openai
+        from src.classes.AIInterpret import agent
+        os.environ["AI_LLM_MAX_RPM"] = "6"
+        pacer = pacing._PACERS[pacing._key(self.provider["api_base"])] = pacing.Pacer(6, clock=lambda: 1000.0)
+        for _ in range(3):
+            pacer.reserve()                                  # 30 s of queue
+        client = agent._build_client()
+        sent = []
+
+        async def fake_orig(*args, **kwargs):
+            sent.append(kwargs)
+            raise AssertionError("sent past the run's deadline")
+        client.chat.completions._pa_orig_create = fake_orig
+
+        async def go():
+            agent.set_run_deadline(time.time() + 25)         # an attempt needs RETRY_MIN_ATTEMPT_SECONDS (20)
+            await client.chat.completions.create(model=self.provider["model"], messages=[])
+        with self.assertRaises(openai.APITimeoutError):
+            asyncio.run(go())
+        self.assertEqual(sent, [])
+        self.assertEqual(pacer.reserve(), 30.0, "the unused slot was kept")
 
 
 if __name__ == "__main__":

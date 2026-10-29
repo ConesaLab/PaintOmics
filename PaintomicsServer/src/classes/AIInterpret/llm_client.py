@@ -51,6 +51,20 @@ _SCHEMA_SUPPORT_LOCK = threading.Lock()
 # SDK transport in agent.py.
 
 
+def embedded_json(text):
+    """The outermost JSON object in a reply that wrapped it in prose or a
+    fence (from its first "{" to its last "}"), or None: complete_json's
+    usual fallback parser, for an endpoint that ignored the schema."""
+    text = str(text or "")
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        return json.loads(text[start:end + 1])
+    except ValueError:
+        return None
+
+
 def json_schema_format(name, schema):
     """Build the response_format payload for a strict JSON schema."""
     return {"type": "json_schema",
@@ -82,6 +96,26 @@ def strip_reasoning(text):
         return text
     answer = _THINK_BLOCK.sub("", text).rpartition(_THINK_CLOSE)[2].strip()
     return answer or text
+
+
+# How a model's reasoning opens when it reached the answer with no "</think>"
+# to cut it at: the same DeepSeek-V4-Flash drafts an experiment design as "The
+# user asks for a description of the experiment design based on the column
+# headers. ... I need to write 2-3 sentences", and under the old 300-token cap
+# the answer ended before the tag (jobs laW30Q7bYU, u36I21KMxV, 2026-10-27).
+# An answer in the first person ("I performed ...", "First, I treated ...") is
+# not one: "I" and "first," alone are no sign; "I need to" and "let me" are.
+REASONING_OPENER_RE = re.compile(
+    r"^\W*(?:the user\b|user (?:asks|wants)\b|we (?:need|should|must)\b|i need to\b|i (?:should|must|will) "
+    r"(?:write|describe|produce|draft)\b|let me\b|let's\b|okay\b|ok\b|alright\b|hmm\b)",
+    re.I)
+
+
+def opens_like_reasoning(text):
+    """True when a text, once strip_reasoning has had it, still begins the way
+    a model's thinking aloud does (REASONING_OPENER_RE): reasoning with no
+    closing tag, which no stripping can separate from an answer."""
+    return isinstance(text, str) and bool(REASONING_OPENER_RE.match(text.strip()))
 
 
 class MissingAPIKeyError(RuntimeError):
@@ -263,6 +297,12 @@ class LLMClient:
         retried_streamed = False
 
         for attempt in range(attempts):
+            # The slot first, then the budget: the wait for it is spent out of
+            # the call's budget, so what is left -- and the read timeout cut
+            # to it below -- is measured after it. Before, both were computed
+            # first, and a call with 10 s left could queue 28 s behind a walk's
+            # fan-out and then post with a 10 s timeout.
+            self._wait_for_slot(model, deadline)
             attempt_timeout = timeout or DEFAULT_TIMEOUT
             if deadline is not None:
                 remaining = deadline - time.monotonic()
@@ -286,9 +326,6 @@ class LLMClient:
                     payload["response_format"] = response_format
                 if stream:
                     payload["stream"] = True
-                pacer = pacing.pacer_for(self.api_base)
-                if pacer is not None:
-                    pacer.acquire()
                 r = requests.post(
                     f"{self.api_base}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}",
@@ -372,6 +409,25 @@ class LLMClient:
         # demotion), which used to return None into a JSON parser.
         raise requests.exceptions.HTTPError(
             "LLM request to %s gave no answer in %d attempts" % (model, attempts))
+
+    def _wait_for_slot(self, model, deadline):
+        """Wait for this gateway's next request slot (pacing.py). When the
+        wait would leave the call under MIN_CALL_SECONDS of its budget, the
+        slot goes back unused and the attempt fails as a call whose budget ran
+        out does: a Timeout marked gave_up_at_deadline, which ran_out_of_budget
+        reads and no fallback model is asked after. Raised outside the
+        attempt's try, so it is never retried as the gateway's timeout."""
+        pacer = pacing.pacer_for(self.api_base)
+        if pacer is None:
+            return
+        left = None if deadline is None else deadline - time.monotonic()
+        if pacer.acquire(left, MIN_CALL_SECONDS):
+            return
+        err = requests.exceptions.Timeout(
+            "LLM call to %s not sent: the gateway's rate limit queued it past its budget (%.0fs left)"
+            % (model, left))
+        err.gave_up_at_deadline = True
+        raise err
 
     @staticmethod
     def _fold_stream(response, deadline):

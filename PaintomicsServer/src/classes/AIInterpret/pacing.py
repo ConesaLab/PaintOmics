@@ -28,6 +28,7 @@ agents past 60/min; seven paper agents gave up on "429 Client Error", no
 statement got confirmed evidence, and the walk kept none.
 """
 import asyncio
+import heapq
 import logging
 import os
 import threading
@@ -42,34 +43,86 @@ LEARNED_SHARE = 0.9
 
 
 class Pacer(object):
-    """Admits one request every 60/rpm seconds, across threads and loops."""
+    """Admits one request every 60/rpm seconds, across threads and loops.
+
+    A slot is taken before its caller sleeps, so a caller that never sends --
+    a Writer cancelled at its stage's deadline while it waited (parallel._wait),
+    a call whose budget the wait would have spent -- hands its slot back
+    (release), and the next reservation takes it. Without that a walk's
+    cancelled fan-out left phantom slots the Narrator queued behind. The very
+    slot is reused, rather than the schedule pulled one interval earlier: with
+    a slot handed back from the middle of the queue, pulling the schedule in
+    lands the next reservation on a slot a waiter still holds, and some 60 s
+    window then holds one request more than rpm.
+    """
 
     def __init__(self, rpm, clock=time.monotonic):
         self.rpm = int(rpm)
         self.interval = 60.0 / self.rpm
         self._clock = clock
         self._next = None
+        self._free = []                # heap of the start times handed back
         self._lock = threading.Lock()
+
+    def _take(self):
+        """(start, delay): the earliest slot handed back that is still ahead,
+        else the next one on the schedule, taken now."""
+        with self._lock:
+            now = self._clock()
+            while self._free and self._free[0] < now:
+                heapq.heappop(self._free)          # its time passed unused
+            if self._free:
+                start = heapq.heappop(self._free)
+            else:
+                start = now if self._next is None else max(now, self._next)
+                self._next = start + self.interval
+            return start, start - now
 
     def reserve(self):
         """Take the next free slot now; the seconds to wait until it opens."""
-        with self._lock:
-            now = self._clock()
-            start = now if self._next is None else max(now, self._next)
-            self._next = start + self.interval
-            return start - now
+        return self._take()[1]
 
-    def acquire(self):
-        """Block this thread until its slot opens."""
-        delay = self.reserve()
+    def release(self, start):
+        """Hand back the slot that opens at ``start`` (as _take gave it), unsent."""
+        with self._lock:
+            if start >= self._clock():
+                heapq.heappush(self._free, start)
+
+    def _admit(self, seconds_left, floor):
+        """A slot and its delay, or (start, None) -- the slot handed back --
+        when waiting for it would leave the caller under ``floor`` of its
+        ``seconds_left``. A slot open now is never refused: the caller's own
+        floor decides that, as it did before pacing."""
+        start, delay = self._take()
+        if delay > 0 and seconds_left is not None and seconds_left - delay < floor:
+            self.release(start)
+            return start, None
+        return start, delay
+
+    def acquire(self, seconds_left=None, floor=0.0):
+        """Block this thread until its slot opens; True. False at once, with
+        the slot handed back, when the wait would leave under ``floor`` of the
+        caller's ``seconds_left`` (None: no budget, always wait)."""
+        delay = self._admit(seconds_left, floor)[1]
+        if delay is None:
+            return False
         if delay > 0:
             time.sleep(delay)
+        return True
 
-    async def wait(self):
-        """Wait for a slot without blocking the event loop."""
-        delay = self.reserve()
+    async def wait(self, seconds_left=None, floor=0.0):
+        """acquire without blocking the event loop. A waiter cancelled before
+        its slot opens hands the slot back."""
+        start, delay = self._admit(seconds_left, floor)
+        if delay is None:
+            return False
         if delay > 0:
-            await asyncio.sleep(delay)
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                self.release(start)
+                raise
+        return True
 
 
 _PACERS = {}               # api_base -> Pacer
