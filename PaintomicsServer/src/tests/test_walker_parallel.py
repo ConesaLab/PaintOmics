@@ -1428,8 +1428,8 @@ class NarratorRepairCasesTest(_Fixture):
     # its Results section.
     def narrate_uncovered(self, paragraphs, prose2=None, repair=None):
         """_narrate, every check real but the title's, on two statements and a
-        draft of ``paragraphs`` (the repair answers the same, or ``repair``).
-        (out, checks, prompts)."""
+        draft of ``paragraphs`` (the repair answers the same, or raises
+        ``repair``, or answers ``repair``'s paragraphs). (out, checks, prompts)."""
         import copy
         from src.classes.AIInterpret.walker import service
         walker, _ = self.walk()
@@ -1441,8 +1441,10 @@ class NarratorRepairCasesTest(_Fixture):
         class Client(object):
             def complete_json(self, messages, *args, **kwargs):
                 prompts.append(messages[-1]["content"])
-                if len(prompts) > 1 and repair is not None:
+                if len(prompts) > 1 and isinstance(repair, Exception):
                     raise repair
+                if len(prompts) > 1 and repair is not None:
+                    return copy.deepcopy(dict(draft, paragraphs=repair))
                 return copy.deepcopy(draft)
         checks = {"gates": {}}
         with patched((service.tiers, "title_outruns_body", lambda *a, **k: [])):
@@ -1553,6 +1555,80 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertFalse(verify.too_few_words("290 words; between 300 and 1200 are required, and more"))
         self.assertEqual(verify.WORD_COUNT % (290, 300, 1200), "290 words; between 300 and 1200 are required",
                          "the text the page shows is unchanged")
+
+    # ---- a paragraph from a statement not kept goes; a worse repair does not
+    # u36I21KMxV (human, adj.p.Value, network walk, 2026-10-29): the draft's
+    # one problem was "paragraph 28 comes from statement 15, which was not
+    # kept", the repair came back with 22, it was adopted, and the 15-statement
+    # walk lost its Results.
+    NOT_KEPT_DRAFT = [{"from_statement": 1, "legs": [1], "text": TOGETHER * 7},
+                      {"from_statement": 2, "legs": [1], "text": TOGETHER * 6},
+                      {"from_statement": 15, "legs": [1], "text": TOGETHER * 2}]
+    # statement 2 not covered and a leg off the chain: two problems
+    WORSE_REPAIR = [{"from_statement": 1, "legs": [1], "text": TOGETHER * 13 + "Then Ccc follows [e99]."}]
+    NOT_KEPT = "paragraph 3 comes from statement 15, which was not kept"
+
+    def test_a_repair_worse_than_the_draft_is_not_kept_and_the_unkept_paragraph_goes(self):
+        out, checks, prompts = self.narrate_uncovered(self.NOT_KEPT_DRAFT, repair=self.WORSE_REPAIR)
+        self.assertEqual(len(prompts), 2, "the model repair is asked first")
+        self.assertIsNotNone(out, checks.get("results"))
+        self.assertEqual(checks["results"], [])
+        self.assertEqual([p["from_statement"] for p in out["paragraphs"]], [1, 2])
+        self.assertEqual(checks["results_repaired"],
+                         [{"paragraph": 3, "action": "removed: its statement was not kept"}])
+        not_kept = checks["results_repair_not_kept"]
+        self.assertEqual(not_kept["draft_problems"], [self.NOT_KEPT])
+        self.assertEqual(len(not_kept["repair_problems"]), 2, not_kept)
+        self.assertIn("statement 2 is not covered", not_kept["repair_problems"])
+        gate = checks["gates"]["title"]
+        self.assertEqual((gate["pass"], gate["rewritten"], gate["repair_kept"]), (True, False, False))
+
+    def test_a_repair_with_fewer_problems_than_the_draft_is_kept(self):
+        out, checks, _ = self.narrate_uncovered(self.WORSE_REPAIR, repair=self.NOT_KEPT_DRAFT)
+        self.assertIsNotNone(out, checks.get("results"))
+        self.assertEqual([p["from_statement"] for p in out["paragraphs"]], [1, 2])
+        self.assertTrue(checks["gates"]["title"]["rewritten"])
+        self.assertNotIn("repair_kept", checks["gates"]["title"])
+        self.assertNotIn("results_repair_not_kept", checks)
+        self.assertEqual(checks["results_repaired"],
+                         [{"paragraph": 3, "action": "removed: its statement was not kept"}])
+
+    def test_a_repair_with_as_many_problems_as_the_draft_is_kept(self):
+        from src.classes.AIInterpret.walker import service
+        repair = [{"from_statement": 1, "legs": [1], "text": "The repair's paragraph."}]
+        verdicts = iter([["paragraph 1 cites leg e9, not on the chain"],
+                         ["paragraph 1 cites leg e8, not on the chain"]])
+        with patched((service.verify, "verify_results", lambda *a, **k: next(verdicts))):
+            out, checks, _ = self.narrate_uncovered([{"from_statement": 1, "legs": [1], "text": "The draft's."}],
+                                                    repair=repair)
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"], ["paragraph 1 cites leg e8, not on the chain"])
+        self.assertEqual(checks["results_dropped"]["paragraphs"][0]["text"], "The repair's paragraph.")
+        self.assertNotIn("results_repair_not_kept", checks)
+
+    def test_a_paragraph_not_kept_beside_another_problem_drops_the_section(self):
+        first = dict(self.NOT_KEPT_DRAFT[0], text=self.TOGETHER * 7 + "Then Ccc follows [e99].")
+        draft = [first] + self.NOT_KEPT_DRAFT[1:]
+        out, checks, _ = self.narrate_uncovered(draft)
+        self.assertIsNone(out)
+        self.assertIn(self.NOT_KEPT, checks["results"])
+        self.assertTrue(any("e99" in problem for problem in checks["results"]), checks["results"])
+        self.assertNotIn("results_repaired", checks)
+        self.assertEqual([p["from_statement"] for p in checks["results_dropped"]["paragraphs"]], [1, 2, 15],
+                         "the dropped draft is the Narrator's, not the patched copy")
+
+    def test_what_code_mends_is_read_from_the_problems_the_checks_write(self):
+        from src.classes.AIInterpret.walker import verify
+        self.assertEqual(verify.NOT_KEPT % (28, 15), "paragraph 28 comes from statement 15, which was not kept",
+                         "the text the page shows is unchanged")
+        short = verify.WORD_COUNT % (90, 100, 300)
+        self.assertEqual(verify.mendable_by_code([verify.NOT_KEPT % (28, 15), verify.NOT_KEPT % (3, "S1"),
+                                                  verify.UNCOVERED % 12, short]),
+                         {"uncovered": [12], "not_kept": [28, 3], "short": [short]})
+        self.assertIsNone(verify.mendable_by_code([verify.NOT_KEPT % (28, 15), "paragraph 1 drops [2], which its "
+                                                   "statement cites"]))
+        self.assertIsNone(verify.mendable_by_code([short]), "nothing to insert or remove")
+        self.assertIsNone(verify.mendable_by_code([]))
 
 
 class _Gateway(object):
