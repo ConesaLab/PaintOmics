@@ -17,14 +17,14 @@ passage code found.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass, field
 
-from src.classes.AIInterpret import llm_client
+from src.classes.AIInterpret import llm_client, pacing
 
 logger = logging.getLogger(__name__)
 
@@ -152,17 +152,6 @@ def _claim_key(ref, claim, sentence=None):
     return int(ref), normalise(claim)[:400], normalise(sentence or "")[:400]
 
 
-def _embedded_json(text):
-    text = str(text or "")
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end <= start:
-        return None
-    try:
-        return json.loads(text[start:end + 1])
-    except ValueError:
-        return None
-
-
 @dataclass
 class LiteratureStore:
     """One walk's papers: retrieval numbers, the fetched full texts and every
@@ -175,6 +164,10 @@ class LiteratureStore:
     fetching: dict = field(default_factory=dict)        # pmid -> asyncio.Lock
     checks: int = 0
     trace: list = field(default_factory=list)
+    # Set when the Writers' stage ends (parallel.write_in_parallel): a paper
+    # agent's thread still queued in the gateway's pacer gives its slot back
+    # instead of sleeping on to send a check nobody will read.
+    stopped: threading.Event = field(default_factory=threading.Event)
 
     def add(self, paper):
         """Number a retrieved paper, or return the number it already has."""
@@ -254,13 +247,16 @@ async def check_citation(store, client, pubmed, ref, claim, slots, deadline=None
             # is read when the thread starts: a call that waited for a free
             # worker, or a slot that came free too late, has less time left
             # than when it was queued, and none is not a call worth sending.
+            # A wait in the gateway's pacer ends with the stage (store.stopped):
+            # cancelling the coroutine leaves the thread asleep toward its slot.
             def ask():
                 budget = None if deadline is None else deadline - time.time()
-                if budget is not None and budget < llm_client.MIN_CALL_SECONDS:
+                if store.stopped.is_set() or (budget is not None and budget < llm_client.MIN_CALL_SECONDS):
                     return _NO_TIME
-                return client.complete_json(
-                    [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],
-                    "citation_check", QUOTE_SCHEMA, _embedded_json, 900, 0.0, budget_seconds=budget)
+                with pacing.stopped_by(store.stopped):
+                    return client.complete_json(
+                        [{"role": "system", "content": PAPER_AGENT_BRIEF}, {"role": "user", "content": prompt}],
+                        "citation_check", QUOTE_SCHEMA, llm_client.embedded_json, 900, 0.0, budget_seconds=budget)
             out = await asyncio.to_thread(ask)
             if out is _NO_TIME:
                 return {"supported": False, "why": "there was no time left to read the paper", "transient": True}

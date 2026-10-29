@@ -1,8 +1,9 @@
 """The OpenAI Agents SDK runtime the graph walk's model loops run on.
 
 The walker (``walker/sdk.py``) and the Writer (``walker/writer.py``) are agent
-loops on the SDK. This module points the SDK at the configured gateway once per
-process and wraps its transport: every completion is issued as a stream and
+loops on the SDK. This module configures the SDK once per process, gives each
+event loop a client of its own for the configured gateway (``_model``), and
+wraps that client's transport: every completion is issued as a stream and
 folded back, calls are paced, transient gateway errors are retried, a model
 that is not being served falls back to the next one, and a run's deadline
 (``set_run_deadline``) stops retries that could not finish in time.
@@ -14,10 +15,10 @@ import os
 import re
 import threading
 import time
+import weakref
 
 from agents import (
-    OpenAIChatCompletionsModel, set_default_openai_api, set_default_openai_client,
-    set_tracing_disabled,
+    OpenAIChatCompletionsModel, set_default_openai_api, set_tracing_disabled,
 )
 import httpx
 # openai 3.x moved its HTTP transport off `httpx` onto `httpx2`, a SEPARATE
@@ -40,6 +41,7 @@ from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
 from src.classes.AIInterpret import model_fallback
+from src.classes.AIInterpret import pacing
 from src.conf.serverconf import AI_LLM_PROVIDER, AI_PROVIDERS
 
 logger = logging.getLogger(__name__)
@@ -82,42 +84,21 @@ def _run_seconds_left():
     return None if when is None else when - time.time()
 
 _sdk_configured = False
-# The configured client, kept reachable so the retry shim can be driven in a
-# test: its worst case is longer than a whole run, so it needs one.
-_CLIENT = None
-_MODEL_OBJ = None
-
-
-class _AsyncPacer:
-    """Space gateway calls to AI_LLM_MAX_RPM requests/min (0 disables).
-
-    The SDK drives its own AsyncOpenAI client, so LLMClient's token bucket --
-    the thing that took the live arm from 6 lost sub-agents to 0 -- never sees
-    these calls. Without this shim an SDK run is unpaced against a gateway
-    with a measured ceiling of 60/min, and its scores are not comparable to a
-    paced live run (round 1p: same agent, pacing alone moved the gap +0.27).
-
-    The pace is one process-wide schedule: every walk owns a fresh event loop
-    on its own queue worker thread, all against the same gateway. The reservation below has
-    no await inside it, so a plain threading.Lock guards it correctly across
-    loops and threads alike -- an asyncio.Lock would bind to one loop and
-    either leak per job or trip over a reused loop id.
-    """
-
-    def __init__(self, rpm):
-        self._interval = 60.0 / rpm if rpm > 0 else 0.0
-        self._next = 0.0
-        self._lock = threading.Lock()
-
-    async def wait(self):
-        if not self._interval:
-            return
-        with self._lock:
-            now = time.monotonic()
-            delay = self._next - now
-            self._next = max(now, self._next) + self._interval
-        if delay > 0:
-            await asyncio.sleep(delay)
+_CONFIGURE_LOCK = threading.Lock()
+# One client, and the model object bound to it, per event loop. httpx's async
+# pool binds a connection to the loop that opened it, and every walk runs in a
+# loop of its own (parallel.run_pipeline) on its own queue worker thread, up
+# to AI_WALK_MAX_ACTIVE of them in one uWSGI process. A single process-wide
+# client handed walk B a connection walk A's loop had opened; when A finished
+# and closed its loop, B died on "RuntimeError: Event loop is closed" --
+# paintomics.org 26-27 Oct 2026, three times, and job vRmKBo4E60 stored "The
+# AI service failed before the walk took a step". Keyed weakly so a loop that
+# is gone takes its entry with it and a closed loop's client can never be
+# handed to another loop; release_loop_client closes it explicitly first, and
+# _model forgets every closed loop's entry, which the weak key alone cannot
+# (_forget_closed_loops).
+_LOOP_MODELS = weakref.WeakKeyDictionary()
+_LOOP_MODELS_LOCK = threading.Lock()
 
 
 class _EmptyStream(Exception):
@@ -283,11 +264,50 @@ def _log_context(kwargs, completion):
                getattr(completion, "model", "") or kwargs.get("model"))
 
 
+# The transport's settings, logged once per process when the SDK is configured.
+_ATTEMPTS = 4  # one call plus three retries
+# 429 has a policy of its own. A throttled request answers instantly and
+# costs nothing to retry, where a 408 already cost minutes on the wire; and
+# with the client's own retries off (max_retries=0) this shim is all that
+# stands between a 60 rpm key and a verification phase that fans out 28
+# citations at once. Four quick tries there redacted citations the gateway
+# had merely throttled (live run 11n0VMC305). Retry-After is honoured when
+# the gateway sends it; otherwise the wait grows to a 30 s cap.
+_RATE_ATTEMPTS = 8
+
+
 def configure_sdk():
-    """Point the SDK at our OpenAI-compatible gateway. Idempotent."""
-    global _sdk_configured, _MODEL_OBJ, _CLIENT
-    if _sdk_configured:
-        return
+    """Set the SDK's process-wide state once: the chat-completions API and no
+    tracing. Idempotent and thread-safe.
+
+    No default client is set (set_default_openai_client): it is process-global
+    in the SDK and a client is per event loop here (see _LOOP_MODELS), so every
+    agent is handed its loop's model object by _model() instead.
+    """
+    global _sdk_configured
+    with _CONFIGURE_LOCK:
+        if _sdk_configured:
+            return
+        logger.info("Agents SDK transport armed: pacing %s, streaming %s, "
+                    "retry x%d on 5xx/timeouts and x%d on 429, read timeout %ss",
+                    pacing.describe(), "on" if SDK_STREAM else "off",
+                    _ATTEMPTS - 1, _RATE_ATTEMPTS - 1, SDK_HTTP_READ_TIMEOUT)
+        # chat_completions, not the Responses API: the CSIC gateway is vLLM, which
+        # speaks /chat/completions only.
+        set_default_openai_api("chat_completions")
+        set_tracing_disabled(True)  # never ship job data to OpenAI's trace backend
+        _sdk_configured = True
+        provider = AI_PROVIDERS[AI_LLM_PROVIDER]
+        logger.info("Agents SDK configured: provider=%s model=%s fallbacks=%s",
+                    AI_LLM_PROVIDER, provider["model"],
+                    model_fallback.candidates(provider, AI_LLM_PROVIDER)[1:] or "none")
+
+
+def _build_client():
+    """A new AsyncOpenAI client for the configured gateway, with the retry and
+    pacing shim on its ``create``. Holds nothing bound to a loop until it is
+    first used, so a test can build one and drive the shim directly."""
+    configure_sdk()
     provider = AI_PROVIDERS[AI_LLM_PROVIDER]
     # max_retries=0: the shim below is the ONE retry policy. The client's own
     # default (2) stacked under the shim's 4 attempts turned a single 408 --
@@ -296,17 +316,12 @@ def configure_sdk():
     # The read timeout is per read: with streaming (SDK_STREAM) it bounds the
     # silence between tokens, and a stalled request surfaces as
     # APITimeoutError instead of holding the phase open.
-    client = _CLIENT = AsyncOpenAI(
+    client = AsyncOpenAI(
         base_url=provider["api_base"], api_key=provider["api_key"],
         max_retries=0,
         timeout=_transport.Timeout(connect=30.0, read=SDK_HTTP_READ_TIMEOUT,
                                    write=60.0, pool=30.0))
 
-    # Honour the same pacing knob as LLMClient. Applied at the transport
-    # method the SDK actually calls, so every agent turn and tool round-trip
-    # is spaced -- not just the calls this module makes directly.
-    rpm = int(os.getenv("AI_LLM_MAX_RPM", "0") or 0)
-    pacer = _AsyncPacer(rpm)
     completions = client.chat.completions
     completions._pa_orig_create = completions.create
 
@@ -333,16 +348,6 @@ def configure_sdk():
         return (isinstance(e, _oai.APIStatusError)
                 and getattr(e, "status_code", None) in _RETRY_STATUSES)
 
-    _ATTEMPTS = 4  # one call plus three retries
-    # 429 has a policy of its own. A throttled request answers instantly and
-    # costs nothing to retry, where a 408 already cost minutes on the wire; and
-    # with the client's own retries off (max_retries=0) this shim is all that
-    # stands between a 60 rpm key and a verification phase that fans out 28
-    # citations at once. Four quick tries there redacted citations the gateway
-    # had merely throttled (live run 11n0VMC305). Retry-After is honoured when
-    # the gateway sends it; otherwise the wait grows to a 30 s cap.
-    _RATE_ATTEMPTS = 8
-
     def _retry_after(e):
         response = getattr(e, "response", None)
         headers = getattr(response, "headers", None)
@@ -363,6 +368,7 @@ def configure_sdk():
         kwargs = dict(kwargs, stream=True,
                       stream_options={"include_usage": True})
         stream = await orig(*args, **kwargs)
+        pacing.learn(api_base, getattr(getattr(stream, "response", None), "headers", None))
         return await _stream_to_completion(stream)
 
     # The model ladder (see model_fallback). The SDK passes the model by
@@ -380,10 +386,32 @@ def configure_sdk():
         head = model_fallback.ordered(api_base, ladder)[0]
         return kwargs if head == asked else dict(kwargs, model=head)
 
+    async def _wait_for_slot():
+        """Wait for this gateway's next request slot, shared with LLMClient
+        (pacing.py); looked up per attempt, so a limit learned from the gateway
+        after this client was built applies to it too. A wait that would leave
+        the run under RETRY_MIN_ATTEMPT_SECONDS -- the least an attempt needs,
+        the floor the retries below obey -- hands the slot back and fails the
+        call as a timeout, instead of sleeping into the deadline and posting
+        an attempt nobody will be there to read. A cancelled wait hands its
+        slot back too (Pacer.wait)."""
+        pacer = pacing.pacer_for(api_base)
+        if pacer is None:
+            return
+        left = _run_seconds_left()
+        if await pacer.wait(left, RETRY_MIN_ATTEMPT_SECONDS):
+            return
+        logger.warning("SDK transport not sending: the gateway's rate limit queued the call past the run's "
+                       "deadline (%.0fs left, an attempt needs %.0fs)", left, RETRY_MIN_ATTEMPT_SECONDS)
+        raise _oai.APITimeoutError(request=_transport.Request("POST", "%s/chat/completions" % api_base))
+
     async def _paced_create(*args, **kwargs):
         attempt = 0
         while True:
-            await pacer.wait()
+            # One slot per attempt, taken right before it is sent: a retry's
+            # backoff (below) is slept holding none, so a retry never holds
+            # two, and one the deadline refuses never takes one.
+            await _wait_for_slot()
             sent = _route(kwargs)
             try:
                 result = await _issue(*args, **sent)
@@ -402,6 +430,7 @@ def configure_sdk():
                 # "the run is over" into "sleep, then try again".
                 raise
             except (_oai.APIError, *_TRANSPORT_ERRORS, _EmptyStream) as e:
+                pacing.learn(api_base, getattr(getattr(e, "response", None), "headers", None))
                 if not _transient(e):
                     raise
                 attempt += 1
@@ -446,29 +475,61 @@ def configure_sdk():
     # The original stays reachable as _pa_orig_create: tests substitute it,
     # and a provider that cannot stream is pointed back at it by AI_SDK_STREAM=0.
     completions.create = _paced_create
-    logger.info("Agents SDK transport armed: pacing %s rpm, streaming %s, "
-                "retry x%d on 5xx/timeouts and x%d on 429, read timeout %ss",
-                rpm or "off", "on" if SDK_STREAM else "off",
-                _ATTEMPTS - 1, _RATE_ATTEMPTS - 1, SDK_HTTP_READ_TIMEOUT)
-    # chat_completions, not the Responses API: the CSIC gateway is vLLM, which
-    # speaks /chat/completions only.
-    set_default_openai_api("chat_completions")
-    set_default_openai_client(client)
-    set_tracing_disabled(True)  # never ship job data to OpenAI's trace backend
+    return client
 
-    # Passing the model as a *string* routes through the SDK's MultiProvider,
-    # which splits on "/" and reads the left side as a provider prefix. Every
-    # CSIC model id contains a slash ("default/llm", "deepseek-ai/…"), so that
-    # path dies with UserError: Unknown prefix: default. Handing the
-    # SDK a concrete model object bypasses provider resolution entirely.
-    _MODEL_OBJ = OpenAIChatCompletionsModel(model=provider["model"],
-                                            openai_client=client)
-    _sdk_configured = True
-    logger.info("Agents SDK configured: provider=%s model=%s fallbacks=%s",
-                AI_LLM_PROVIDER, provider["model"], ladder[1:] or "none")
+
+def _forget_closed_loops():
+    """Drop the entries of loops already closed; the caller holds the lock.
+
+    The weak key alone does not free them: the value (model -> AsyncOpenAI ->
+    httpx pool -> its connections) can reference the loop it is keyed by, so a
+    loop that never went through release_loop_client -- asyncio.run in a
+    harness or a test, a release that raised -- stays reachable through its
+    own entry and is never collected. A closed loop can run nothing, so its
+    client cannot be closed here either; dropping it lets both go."""
+    for loop in [loop for loop in list(_LOOP_MODELS.keys()) if loop.is_closed()]:
+        _LOOP_MODELS.pop(loop, None)
 
 
 def _model():
-    if _MODEL_OBJ is None:
-        configure_sdk()
-    return _MODEL_OBJ
+    """The model object for the event loop that is running now.
+
+    Built on first use in that loop: a client of its own (_build_client) and
+    the model bound to it, so no two loops ever share a pooled connection.
+
+    Passing the model as a *string* routes through the SDK's MultiProvider,
+    which splits on "/" and reads the left side as a provider prefix. Every
+    CSIC model id contains a slash ("default/llm", "deepseek-ai/…"), so that
+    path dies with UserError: Unknown prefix: default. Handing the
+    SDK a concrete model object bypasses provider resolution entirely.
+    """
+    loop = asyncio.get_running_loop()   # RuntimeError outside a loop, on purpose
+    with _LOOP_MODELS_LOCK:
+        _forget_closed_loops()
+        model = _LOOP_MODELS.get(loop)
+        if model is None:
+            provider = AI_PROVIDERS[AI_LLM_PROVIDER]
+            model = OpenAIChatCompletionsModel(model=provider["model"],
+                                               openai_client=_build_client())
+            _LOOP_MODELS[loop] = model
+    return model
+
+
+async def release_loop_client():
+    """Close the running loop's client, while the loop can still run the close.
+
+    Called by whoever owns the loop just before closing it (parallel.run_pipeline).
+    Its pooled connections are shut down inside the loop that opened them,
+    instead of being collected later from a loop that is already closed; the
+    weak key drops the entry anyway, this only makes the release prompt.
+    """
+    loop = asyncio.get_running_loop()
+    with _LOOP_MODELS_LOCK:
+        model = _LOOP_MODELS.pop(loop, None)
+    if model is None:
+        return
+    try:
+        await model._client.close()
+    except Exception:                                                 # noqa: BLE001
+        # Closing a client must never fail the walk that has just finished.
+        logger.debug("[AI] could not close this loop's SDK client", exc_info=True)

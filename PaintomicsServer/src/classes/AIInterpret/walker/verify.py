@@ -7,12 +7,18 @@ or it does not, a number is in the record verbatim or it is not.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 
 # A quoted value is a decimal: signed as the layer text prints it (+2.13, −0.35),
 # or unsigned when a sentence gives a magnitude ("fell by 3.24"), which must be
 # the record's value with either sign. "18-24h" is a range, not a value, and a
 # number after ±, < or > (±0.6, |value| > 1.00) is a bound, not a reading.
-NUMBER_RE = re.compile(r"(?<![\w.±<>≤≥|])[+\-−]?\d+\.\d+")
+# A small value is printed in scientific form (overlay.value_text: +3.2e-05),
+# and a model quoting it back may write 3.2e-05, 3.2e-5, 3.2E-05, 3.2 × 10⁻⁵
+# or 3.2x10^-5: all are one value. Only a negative exponent makes one -- the
+# record prints nothing else that way, and "2 x 10^3 cells" stays what it was.
+_EXPONENT = r"(?:[eE][\-−]\d+|\s?[×x]\s?10(?:\^[\-−]\d+|⁻[⁰¹²³⁴⁵⁶⁷⁸⁹]+))"
+NUMBER_RE = re.compile(r"(?<![\w.±<>≤≥|])[+\-−]?(?:\d+\.\d+%s?|\d+%s)" % (_EXPONENT, _EXPONENT))
 BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 
 
@@ -507,14 +513,36 @@ def statement_papers(stmt):
     return refs
 
 
+def _worded_refs(stmt):
+    """The paper refs a statement cites in its own words: [N] in its claim or prose."""
+    return cited_refs(" ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")]))
+
+
 def statement_refs(stmt):
     """The papers a Results paragraph retelling ``stmt`` may cite: the ones the
     statement cites in its fields and in its own words."""
     refs = statement_papers(stmt)
-    for ref in cited_refs(" ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])):
+    for ref in _worded_refs(stmt):
         if ref not in refs:
             refs.append(ref)
     return refs
+
+
+def owed_refs(stmt):
+    """The papers a Results paragraph retelling ``stmt`` must cite: the ones
+    the statement cites in its own words, its claim and its prose, in order
+    (always a subset of statement_refs). A paper only in its papers list or a
+    beyond claim is one the paragraph may cite but does not owe.
+
+    The Narrator retells a statement's words, and a citation those words never
+    make has no sentence to sit in. On job Aiu6NzaoQ3 (tomato proteomics
+    network, re-run 2026-10-29) statement 1's prose cited no paper, while its
+    fields listed [101] and a beyond claim on the phenylpropanoid pathway that
+    the prose never states; the Narrator retold the prose verbatim, draft and
+    repair both failed on "paragraph 1 drops [101]" alone, and the 12-statement
+    walk lost its whole Results section. The other 11 statements carried their
+    [N] in their prose."""
+    return _worded_refs(stmt)
 
 
 def _statement_by_n(kept, origin):
@@ -706,7 +734,7 @@ def drop_unrecorded_sentences(results, walker, kept=None, removed=None):
         """(the sentences kept, the owed citations they no longer carry)."""
         out, gone = [], set()
         source_refs = set(statement_refs(source)) if source is not None else set()
-        owed = set(statement_papers(source)) if source is not None else set()
+        owed = set(owed_refs(source)) if source is not None else set()
         for sentence in sentences(text):
             values = unrecorded_values(sentence, numbers, source, source_refs)
             if not values:
@@ -814,16 +842,53 @@ def unrecorded_values(sentence, numbers, source=None, source_refs=None):
 
 
 def _record_numbers(walker):
-    """Every value token that appears in any chain node's layer text."""
+    """Every value token that appears in any chain node's layer text: every
+    layer's, not the MEMBERS_SHOWN a model reads (overlay.capped_layers). The
+    record holds what the user measured; a sentence quoting a member's value
+    the walker's cap left out is quoting the user's data, not inventing it."""
     tokens = set()
     for node_id in chain_nodes(walker.record()["chain"]):
-        for value in quoted_values(walker.overlay.layer_text(node_id)):
+        for value in quoted_values(walker.overlay.layer_text(node_id, limit=None)):
             tokens.add(_norm(value))
     return tokens
 
 
+_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")
+_PARTS_RE = re.compile(r"^([+\-−]?)(\d+(?:\.\d+)?)(?:[eE]|[×x]10\^?)?([\-−]\d+)?$")
+# Below this a value is compared in scientific form, however it was written.
+_SMALL = Decimal("0.01")
+
+
 def _norm(token):
-    return token.replace(" ", "").replace("-", "−").replace("+", "+")
+    """One spelling per value: spaces out, a minus as "−", and a small value
+    (a written exponent, or a magnitude under 0.01) in one scientific form,
+    "+3.2e-05", "3.2×10⁻⁵" and "0.000032" all becoming "3.2e-5" with the sign
+    they were written with. Values of 0.01 and over, and an exact 0, compare
+    as written, as they always have -- and one of those written with an
+    exponent compares in the fixed form overlay.value_text prints it in, two
+    decimals at least: 0.00996 is printed "+0.01", and "1.0e-02" and "1e-2"
+    quote it as well as "0.01" does."""
+    token = token.replace(" ", "").translate(_SUPERSCRIPTS)
+    match = _PARTS_RE.match(token)
+    if match:
+        sign, mantissa, exponent = match.groups()
+        try:
+            value = Decimal(mantissa)
+            if exponent:
+                value = value.scaleb(int(exponent.replace("−", "-")))
+        except (InvalidOperation, ValueError):
+            value = None
+        sign = {"": "", "+": "+"}.get(sign, "−")
+        if value is not None and (exponent or 0 < value < _SMALL):
+            if value < _SMALL:
+                return sign + format(value.normalize(), "e")
+            fixed = value.normalize()
+            try:
+                fixed = fixed if fixed.as_tuple().exponent < -2 else fixed.quantize(_SMALL)
+            except InvalidOperation:        # more digits than the context holds: as written
+                return token.replace("-", "−")
+            return sign + format(fixed, "f")
+    return token.replace("-", "−")
 
 
 def _in_record(token, numbers):
@@ -833,6 +898,28 @@ def _in_record(token, numbers):
     if token[:1] in ("+", "−"):
         return token in numbers
     return token in numbers or ("+" + token) in numbers or ("−" + token) in numbers
+
+
+def _words(text):
+    """A text as the dropped-statement check compares it: whitespace runs as
+    one space, lower case."""
+    return " ".join(str(text or "").split()).lower()
+
+
+UNCOVERED = "statement %d is not covered"
+_UNCOVERED_RE = re.compile("^%s$" % re.escape(UNCOVERED).replace("%d", r"(\d+)"))
+
+
+def uncovered_statements(problems):
+    """The statements verify_results found no paragraph retelling, when that
+    is every problem it found; None when any other problem is among them."""
+    numbers = []
+    for problem in problems or ():
+        match = _UNCOVERED_RE.match(str(problem))
+        if match is None:
+            return None
+        numbers.append(int(match.group(1)))
+    return numbers or None
 
 
 def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None):
@@ -884,11 +971,13 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
                 # A paragraph retells its statement's literature claims, so it
                 # keeps their citations: the network Narrator once wrote "Slc7a11
                 # encodes the xCT subunit ... central to ferroptosis" with the [1]
-                # dropped. Except the ones this paragraph let go with a
-                # misquoting sentence (LET_GO).
+                # dropped. Only the citations its statement makes in its own
+                # words are owed (owed_refs): Aiu6NzaoQ3 lost its Results on a
+                # [101] only statement 1's fields carried. Except the ones this
+                # paragraph let go with a misquoting sentence (LET_GO).
                 quoted = set(cited_refs(text))
                 let_go = set(para.get(LET_GO) or ())
-                for ref in statement_papers(source):
+                for ref in owed_refs(source):
                     if ref not in quoted and ref not in let_go:
                         problems.append("paragraph %d drops [%d], which its statement cites" % (i, ref))
                 # ...and cites nothing its statement does not.
@@ -905,16 +994,24 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
         if JARGON_RE.search(text):
             problems.append("paragraph %d narrates the walk (%s); report the biology and name the genes"
                             % (i, JARGON_RE.search(text).group(0)))
-    for n in kept_ids - covered:
-        problems.append("statement %d is not covered" % n)
+    for n in sorted(kept_ids - covered):
+        problems.append(UNCOVERED % n)
+    # What the kept statements say in their own words, for the check below.
+    kept_words = [_words(s.get(field)) for s in kept for field in ("claim", "prose")]
     for stmt in dropped:
         # The first eight words of a dropped claim, not five: "Syk gene
         # expression surges late" is how any kept statement about Syk begins,
         # and the direction check now drops statements about the same genes
-        # the kept ones name.
-        head = " ".join(str(stmt.get("claim", "")).split()[:8]).lower()
-        if len(head.split()) >= 8 and any(head in str(p.get("text", "")).lower()
-                                          for p in paragraphs if isinstance(p, dict)):
+        # the kept ones name. Nor eight words a kept statement says too: on
+        # job sG3755d52w (E. coli proteomics network, 2026-10-29) kept 9 and
+        # dropped 13 both opened "cysD (P21156, −1.83) and cysN (P23845,
+        # −1.49) are", the Narrator retold 9 faithfully, draft and repair both
+        # failed on "a dropped statement is mentioned" alone, and the 7-statement
+        # walk lost its Results. Such a head says nothing of the dropped one.
+        head = _words(" ".join(str(stmt.get("claim", "")).split()[:8]))
+        if len(head.split()) < 8 or any(head in words for words in kept_words):
+            continue
+        if any(head in _words(p.get("text")) for p in paragraphs if isinstance(p, dict)):
             problems.append("a dropped statement is mentioned: %r" % head)
     lo, hi = words_range or RESULTS_WORDS["network" if scope == "network" else "pathway"]
     if not (lo <= words <= hi):

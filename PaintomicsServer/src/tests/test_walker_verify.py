@@ -236,11 +236,37 @@ class WalkerVerifyTest(unittest.TestCase):
         text = ("At the first time point in this series, the gene %s read %s [e1]. " % (
             self.walker.label(node), value)) * 12
         results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1], "text": text}]}
-        problems = verify.verify_results(results, [{"n": 1, "papers": [2]}], [], self.walker)
-        self.assertTrue(any("drops [2]" in p for p in problems), problems)
+        stmt = {"n": 1, "prose": "It is documented [2].", "papers": [2]}
+        problems = verify.verify_results(results, [stmt], [], self.walker)
+        self.assertIn("paragraph 1 drops [2], which its statement cites", problems)
         results["paragraphs"][0]["text"] = text + "It is documented [2]."
-        self.assertFalse(any("drops" in p for p in verify.verify_results(results, [{"n": 1, "papers": [2]}], [],
-                                                                         self.walker)))
+        self.assertFalse(any("drops" in p for p in verify.verify_results(results, [stmt], [], self.walker)))
+
+    def test_a_paper_only_in_the_statements_fields_is_not_owed(self):
+        """Job Aiu6NzaoQ3 (tomato proteomics network, 2026-10-29): statement 1's
+        prose cited nothing, its papers list and a beyond claim the prose never
+        states cited [101], and a paragraph retelling the prose verbatim lost
+        the whole Results section to "drops [101]". It may still cite it; a
+        paper its claim cites in words is owed as one its prose cites."""
+        node = self.chain[0]["to"]
+        value = self.ov.layer_text(node).split("·")[0].split()[-1]
+        prose = "At the first time point in this series, the gene %s read %s [e1]. " % (
+            self.walker.label(node), value)
+        stmt = {"n": 1, "claim": "c", "prose": prose.strip(), "papers": [1],
+                "beyond": [{"paper": 1, "hypothesis": False,
+                            "claim": "In plants, the general phenylpropanoid pathway provides precursors"}]}
+        self.assertEqual((verify.owed_refs(stmt), verify.statement_refs(stmt)), ([], [1]))
+        for text in (prose * 12, prose * 12 + "Phenylpropanoids derive from it [1]."):
+            results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1],
+                                                                     "text": text}]}
+            problems = verify.verify_results(results, [stmt], [], self.walker)
+            self.assertFalse([p for p in problems if "[1]" in p], problems)
+        results = {"title": "t", "summary": "s", "paragraphs": [{"from_statement": 1, "legs": [1],
+                                                                 "text": prose * 12}]}
+        for cited in (dict(stmt, prose=prose + "Phenylpropanoids derive from it [1]."),
+                      dict(stmt, claim="Phenylpropanoids derive from it [1]")):
+            self.assertIn("paragraph 1 drops [1], which its statement cites",
+                          verify.verify_results(results, [cited], [], self.walker))
 
     def test_a_placeholder_paragraph_covers_no_statement(self):
         """7O521E0Y0y's 20-statement Narrator wrote "..." for every paragraph
@@ -265,7 +291,8 @@ class WalkerVerifyTest(unittest.TestCase):
         the same statement still owes the citation, and one the Narrator never
         wrote is owed everywhere, as on master."""
         stmt, lead, cited = self.cited_paper_case()
-        stmt = dict(stmt, beyond=[{"paper": 7, "claim": "c", "hypothesis": False}])
+        # [7] in its prose: a paper only in the fields is not owed (owed_refs).
+        stmt = dict(stmt, prose="p [5]. q [7].", beyond=[{"paper": 7, "claim": "c", "hypothesis": False}])
         results = {"title": "t", "summary": "s", "paragraphs": [
             {"from_statement": 1, "legs": [1], "text": lead * 7 + cited.replace("0.001", "0.004")},
             {"from_statement": 1, "legs": [1], "text": lead * 7}]}
@@ -475,6 +502,25 @@ class WalkerVerifyTest(unittest.TestCase):
         self.assertFalse(any("dropped statement" in p for p in problems), problems)
         # the first eight words verbatim are
         dropped = [{"claim": "%s gene expression surges late in the course, a rise" % gene}]
+        problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
+        self.assertTrue(any("dropped statement" in p for p in problems), problems)
+
+    def test_eight_words_a_kept_statement_says_too_are_no_mention_of_a_dropped_one(self):
+        """Job sG3755d52w (2026-10-29): kept 9 and dropped 13 both opened "cysD
+        (P21156, −1.83) and cysN (P23845, −1.49) are", the paragraph retold 9,
+        and the Results were refused as mentioning 13."""
+        gene = self.walker.label(self.chain[0]["to"])
+        opening = "%s and its partner here, both lower than baseline, are" % gene
+        stmt = self.good_statement()
+        stmt["claim"] = "%s relevant lower baseline values." % opening
+        results = {"title": "t", "summary": "",
+                   "paragraphs": [{"from_statement": 1, "legs": [1],
+                                   "text": ("%s relevant lower baseline values. " % opening.upper()) * 12}]}
+        dropped = [{"claim": "%s the only relevant nodes of the walk." % opening}]
+        problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
+        self.assertFalse(any("dropped statement" in p for p in problems), problems)
+        # A head only the dropped statement has still counts.
+        stmt["claim"] = "a claim"
         problems = verify.verify_results(results, [stmt], dropped, self.walker, "pathway", (10, 5000))
         self.assertTrue(any("dropped statement" in p for p in problems), problems)
 

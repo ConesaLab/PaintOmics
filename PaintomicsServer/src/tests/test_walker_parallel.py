@@ -235,6 +235,48 @@ class ToolTurnsTest(_Fixture):
         fresh.stop("done", "test")
         self.assertTrue(walk_agent.tool_use_behavior(ctx, result).is_final_output)
 
+    def test_a_full_context_window_ends_the_segment_not_the_walk(self):
+        """y712svrXTf (2026-10-29): a 400 ContextWindowExceededError was a loop
+        error, and the walk failed. It now ends the loop as the turn limit
+        does, the reason recorded; any other error is still a loop error."""
+        from src.classes.AIInterpret import llm_client
+        from src.classes.AIInterpret.walker import sdk
+
+        class BadRequestError(Exception):
+            pass
+        full = BadRequestError("Error code: 400 - {'error': {'message': 'litellm.ContextWindowExceededError: "
+                               "litellm.BadRequestError: ... your prompt contains at least 260645 input tokens'}}")
+        self.assertTrue(llm_client.context_window_exceeded(full))
+        self.assertFalse(llm_client.context_window_exceeded(RuntimeError("Error code: 400 - bad tool schema")))
+
+        def raising(exc):
+            async def run(agent, context, max_turns):
+                raise exc
+            return run
+
+        _seen, saved = self._agents(raising(full))
+        try:
+            planner = Walker(self.net, self.ov, "network", params_for("network"))
+            asyncio.run(sdk.run_plan_async(planner, "card", model="stub"))
+            walker = Walker(self.net, self.ov, "network", params_for("network"))
+            opening = walker.start_at("g:1", 4, "test")
+            asyncio.run(sdk.run_segment_async(walker, "card", opening, "", 6, model="stub"))
+        finally:
+            self._restore(saved)
+        self.assertIsNone(planner.loop_error)
+        self.assertIsNone(walker.loop_error)
+        self.assertTrue(walker.done)
+        self.assertIn("context window", walker.stop_reason)
+
+        _seen, saved = self._agents(raising(RuntimeError("401 Malformed API Key")))
+        try:
+            walker = Walker(self.net, self.ov, "network", params_for("network"))
+            opening = walker.start_at("g:1", 4, "test")
+            asyncio.run(sdk.run_segment_async(walker, "card", opening, "", 6, model="stub"))
+        finally:
+            self._restore(saved)
+        self.assertIn("Malformed", walker.loop_error)
+
     def test_a_writer_turn_is_a_tool_call_and_its_finish_offers_none(self):
         from src.classes.AIInterpret.walker import writer as writer_mod
 
@@ -382,6 +424,25 @@ class PaperAgentTest(unittest.TestCase):
         store = literature.LiteratureStore()
         store.add({"pmid": "111", "title": "Aaa phosphorylates Bbb", "abstract": "Aaa is a kinase of the test pathway."})
         return store
+
+    def test_a_paper_agent_of_an_ended_stage_sends_nothing(self):
+        """Its thread outlives the cancelled coroutine: the stage's end
+        (store.stopped) stops it before the call, and its pacer wait in the
+        call runs under pacing.stopped_by the same event."""
+        from src.classes.AIInterpret import pacing
+        claim = "Aaa phosphorylates Bbb and drives its degradation"
+        seen = []
+
+        class _Watching(_Client):
+            def complete_json(self, *args, **kwargs):
+                seen.append(pacing.current_stop())
+                return _Client.complete_json(self, *args, **kwargs)
+        store, client = self.store(), _Watching({})
+        self.check(store, client, claim)
+        self.assertEqual(seen, [store.stopped], "the call's pacer wait does not end with the stage")
+        store.stopped.set()
+        verdict = self.check(store, client, "another claim")
+        self.assertEqual((verdict["supported"], verdict.get("transient"), client.calls), (False, True, 1))
 
     def test_a_citation_is_kept_only_with_its_passage_from_the_paper(self):
         claim = "Aaa phosphorylates Bbb and drives its degradation"
@@ -1361,6 +1422,81 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertIsNotNone(out)
         self.assertTrue(checks["gates"]["title"]["rewritten"])
 
+    # ---- a statement no paragraph retells gets its own prose ----------------
+    # M3vf2UD7Ed (S. mutans network, 2026-10-29): draft and repair both failed
+    # on "statement 6 is not covered" alone, and the 15-statement walk lost
+    # its Results section.
+    def narrate_uncovered(self, paragraphs, prose2=None, repair=None):
+        """_narrate, every check real but the title's, on two statements and a
+        draft of ``paragraphs`` (the repair answers the same, or ``repair``).
+        (out, checks, prompts)."""
+        import copy
+        from src.classes.AIInterpret.walker import service
+        walker, _ = self.walk()
+        statements = [{"n": 1, "claim": "c1", "prose": self.TOGETHER * 4, "legs": [1]},
+                      {"n": 2, "claim": "c2", "prose": prose2 or self.TOGETHER * 4, "legs": [1]}]
+        draft = {"title": "Results", "summary": "s.", "paragraphs": paragraphs}
+        prompts = []
+
+        class Client(object):
+            def complete_json(self, messages, *args, **kwargs):
+                prompts.append(messages[-1]["content"])
+                if len(prompts) > 1 and repair is not None:
+                    raise repair
+                return copy.deepcopy(draft)
+        checks = {"gates": {}}
+        with patched((service.tiers, "title_outruns_body", lambda *a, **k: [])):
+            out = service._narrate(Client(), "card", "chain", statements, [], walker, {}, "pathway:x", checks,
+                                   (100, 200), deadline=time.time() + 400)
+        return out, checks, prompts
+
+    def test_an_uncovered_statement_gets_its_own_prose_and_the_section_stays(self):
+        out, checks, prompts = self.narrate_uncovered(
+            [{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 13},
+             {"from_statement": None, "legs": [], "text": "The map then turns to the next gene."}])
+        self.assertEqual(len(prompts), 2, "the model repair is asked first")
+        self.assertIsNotNone(out, checks.get("results"))
+        self.assertEqual(checks["results"], [])
+        self.assertEqual(checks["results_repaired"], [{"statement": 2, "action": "inserted its own prose"}])
+        # after statement 1's paragraph, so the link still leads to what follows it
+        self.assertEqual([p["from_statement"] for p in out["paragraphs"]], [1, 2, None])
+        inserted = out["paragraphs"][1]
+        self.assertEqual((inserted["from_statement"], inserted["legs"], inserted["text"].strip()),
+                         (2, [1], (self.TOGETHER * 4).strip()))
+
+    def test_an_uncovered_statement_is_inserted_when_the_repair_could_not_be_had(self):
+        out, checks, _ = self.narrate_uncovered([{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 13}],
+                                                repair=self.throttled())
+        self.assertIsNotNone(out, checks.get("results"))
+        self.assertEqual(checks["results"], [])
+        self.assertEqual([p["from_statement"] for p in out["paragraphs"]], [1, 2])
+
+    def test_uncovered_beside_another_problem_still_drops_the_section(self):
+        out, checks, _ = self.narrate_uncovered(
+            [{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 13 + "Then Ccc follows [e99]."}])
+        self.assertIsNone(out)
+        self.assertIn("statement 2 is not covered", checks["results"])
+        self.assertTrue(any("e99" in problem for problem in checks["results"]), checks["results"])
+        self.assertNotIn("results_repaired", checks)
+
+    def test_inserted_prose_that_fails_a_check_drops_the_section(self):
+        out, checks, _ = self.narrate_uncovered([{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 13}],
+                                                prose2=self.TOGETHER * 4 + "Then Ccc follows [e99].")
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"], ["statement 2 is not covered"])
+        self.assertNotIn("results_repaired", checks)
+        self.assertEqual([p["from_statement"] for p in checks["results_dropped"]["paragraphs"]], [1],
+                         "the dropped draft is the Narrator's, not the patched copy")
+
+    def test_inserted_prose_goes_through_the_draft_pruners(self):
+        """A sentence of the statement's prose the jargon pruner removes goes,
+        and is counted, exactly as in a draft."""
+        out, checks, _ = self.narrate_uncovered([{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 13}],
+                                                prose2=self.TOGETHER * 4 + "The walk then reached Ccc.")
+        self.assertIsNotNone(out, checks.get("results"))
+        self.assertEqual(out["paragraphs"][1]["text"], (self.TOGETHER * 4).strip())
+        self.assertEqual(checks["jargon_sentences_dropped"], 1)
+
 
 class PipelineCleanupTest(unittest.TestCase):
     """run_pipeline returns at once, yet leaves nothing half-unwound."""
@@ -1662,6 +1798,7 @@ class WriterTest(_Fixture):
         kept, dropped, store, contexts = asyncio.run(parallel.write_in_parallel(
             self.merged, "card", _PubMed(), None, plan, time.time() + 60, write_one=write_one))
         self.assertGreaterEqual(len(contexts), 1)
+        self.assertTrue(store.stopped.is_set(), "the stage ended without telling its paper agents")
         self.assertEqual(len(store.papers), 1, "two Writers numbered the same paper twice")
         self.assertEqual([s["n"] for s in kept], list(range(1, len(kept) + 1)))
         covered = [c.legs for c in contexts]

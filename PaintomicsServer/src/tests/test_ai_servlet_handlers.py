@@ -41,6 +41,8 @@ from src.tests.test_walk_service_and_routes import FakeQueue, FakeWalkDAO   # no
 class _Handler(BaseHTTPRequestHandler):
     bodies = []
     answer = "Stub answer about the walk."
+    # Answers given one per request, in order, before `answer` takes over.
+    answers = []
 
     def log_message(self, *args):
         pass
@@ -50,7 +52,8 @@ class _Handler(BaseHTTPRequestHandler):
         _Handler.bodies.append(json.loads(self.rfile.read(length) or b"{}"))
         body = json.dumps({
             "choices": [{"index": 0, "finish_reason": "stop",
-                         "message": {"role": "assistant", "content": _Handler.answer}}],
+                         "message": {"role": "assistant",
+                                     "content": _Handler.answers.pop(0) if _Handler.answers else _Handler.answer}}],
         }).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -124,6 +127,7 @@ class _RouteCase(unittest.TestCase):
         FakeWalkDAO.store, FakeChatDAO.conversations, FakeChatDAO.cleared = {}, {}, []
         _Handler.bodies = []
         _Handler.answer = "Stub answer about the walk."
+        _Handler.answers = []
         self.consent = True
         test = self
         job = fx.make_job()
@@ -160,6 +164,152 @@ class _RouteCase(unittest.TestCase):
         # calls jsonify(), which needs a Flask application context.
         from src.paintomicsserver import Response
         return Response()
+
+
+class ExpDesignDraftTest(_RouteCase):
+    """Step 1's drafted experiment design is a description or nothing.
+
+    Probed on the production gateway on 2026-10-28 with the 300-token free-text
+    request: 4 of 8 drafts were the model's reasoning ("The user asks for a
+    description of the experiment design ..."), 3 stopped mid-sentence, and two
+    stored jobs carry such text as their design."""
+
+    CLEAN = "I compared Ikaros-induced cells with controls at 0 h and 24 h, in triplicate."
+
+    def draft(self):
+        form = {"aiConsent": "true", "organism": "mmu",
+                "omics": json.dumps([{"omicName": "Gene expression",
+                                      "columns": ["Ctr_0H", "Ctr_24H", "Ik_0H", "Ik_24H"]}])}
+        return self.servlet.aiGenerateExpDesign(_Request(form, {"userID": "u1"}), self._response()).content
+
+    def test_a_clean_json_reply_is_the_suggestion_asked_for_once(self):
+        _Handler.answers = [json.dumps({"description": self.CLEAN})]
+        out = self.draft()
+        self.assertTrue(out["success"])
+        self.assertEqual(out["suggestion"], self.CLEAN)
+        self.assertEqual(out["columnsSent"][0]["columns"], ["Ctr_0H", "Ctr_24H", "Ik_0H", "Ik_24H"])
+        self.assertEqual(out["columnsDropped"], 0)
+        self.assertEqual(len(_Handler.bodies), 1)
+        body = _Handler.bodies[0]
+        self.assertEqual(body["response_format"]["type"], "json_schema")
+        self.assertEqual(body["response_format"]["json_schema"]["schema"]["required"], ["description"])
+        self.assertGreaterEqual(body["max_tokens"], 800, "a cap the reasoning preamble can eat")
+
+    def test_reasoning_twice_is_a_plain_refusal_never_the_suggestion(self):
+        reasoning = ("The user asks for a description of the experiment design based on the column headers. "
+                     "The headers are: Ctr_0H, Ctr_24H, Ik_0H, Ik_24H. I need to write 2-3 sentences")
+        _Handler.answers = [reasoning, json.dumps({"description": "We need to describe a two-arm design."})]
+        out = self.draft()
+        self.assertFalse(out["success"])
+        self.assertEqual(out["suggestion"], "")
+        self.assertIn("could not draft a description", out["message"])
+        self.assertIn("columnsSent", out)
+        self.assertEqual(len(_Handler.bodies), 2, "asked once again, then gave up")
+
+    def test_a_truncated_reply_is_asked_again(self):
+        _Handler.answers = ['{"description": "I compared a control group (Ctr', json.dumps({"description": self.CLEAN})]
+        out = self.draft()
+        self.assertTrue(out["success"])
+        self.assertEqual(out["suggestion"], self.CLEAN)
+        self.assertEqual(len(_Handler.bodies), 2)
+
+    def test_a_parsed_json_description_needs_no_final_full_stop(self):
+        """The model closed the object itself, so the description is whole;
+        only the text path can be cut off. Reasoning is refused on both."""
+        from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
+        whole = "I compared Ikaros-induced cells with controls at 0 h and 24 h (n = 3 per group)"
+        _Handler.answers = [json.dumps({"description": whole})]
+        out = self.draft()
+        self.assertEqual((out["success"], out["suggestion"], len(_Handler.bodies)), (True, whole, 1))
+        self.assertIsNone(_usableDescription(_descriptionFromText(whole)), "the text path still needs its end")
+        fenced = "Here it is: %s" % json.dumps({"description": whole})
+        self.assertEqual(_usableDescription(_descriptionFromText(fenced)), whole)
+        self.assertIsNone(_usableDescription({"description": "The user asks for the design of two groups"}))
+        self.assertIsNone(_usableDescription(_descriptionFromText("The user asks for the design of two groups.")))
+
+    def test_a_draft_whose_budget_runs_out_answers_could_not_draft(self):
+        """Pacing is on by default; a request-thread draft waiting in the pacer
+        behind a walk's fan-out held one of the site's four threads for about
+        a minute per attempt. It now has 60 s over both attempts, and a budget
+        spent is the plain refusal, not an error page."""
+        import requests
+        servlet = self.servlet
+        clock = {"t": 0.0}
+        budgets = []
+
+        class _Paced(object):
+            """complete_json behind a pacer whose queue costs 40 s an attempt."""
+            def __init__(self, answers):
+                self.answers = list(answers)
+
+            def complete_json(self, messages, *args, **kwargs):
+                budgets.append(kwargs.get("budget_seconds"))
+                clock["t"] += 40.0
+                if kwargs.get("budget_seconds") is None or kwargs["budget_seconds"] < 40.0:
+                    err = requests.exceptions.Timeout("the pacer's wait outlasts the budget")
+                    err.gave_up_at_deadline = True
+                    raise err
+                return self.answers.pop(0)
+        now = lambda: clock["t"]                                         # noqa: E731
+        out = servlet._draftExpDesign(_Paced([{"description": "The user asks for a design."}]), [], clock=now)
+        self.assertIsNone(out)
+        self.assertEqual(budgets, [60.0, 20.0], "the second attempt gets what the first left")
+
+        clock["t"], budgets[:] = 0.0, []
+        self.assertEqual(servlet._draftExpDesign(_Paced([{"description": self.CLEAN}]), [], clock=now), self.CLEAN)
+        self.assertEqual(budgets, [60.0])
+
+        clock["t"], budgets[:] = 0.0, []
+        self.assertIsNone(servlet._draftExpDesign(_Paced([]), [], budget_seconds=2, clock=now))
+        self.assertEqual(budgets, [], "under MIN_CALL_SECONDS no call is made")
+
+        # through the route: a budget spent is success False with the message
+        saved = servlet._draftExpDesign
+        servlet._draftExpDesign = lambda llm, messages: saved(_Paced([]), messages, budget_seconds=30, clock=now)
+        try:
+            routed = self.draft()
+        finally:
+            servlet._draftExpDesign = saved
+        self.assertFalse(routed["success"])
+        self.assertIn("could not draft a description", routed["message"])
+
+    def test_a_gateway_error_is_still_an_error(self):
+        servlet = self.servlet
+
+        class _Broken(object):
+            def complete_json(self, *args, **kwargs):
+                raise RuntimeError("HTTP 500")
+        with self.assertRaises(RuntimeError):
+            servlet._draftExpDesign(_Broken(), [])
+
+    def test_reasoning_closed_before_the_answer_still_gives_the_answer(self):
+        _Handler.answers = ["Let me read the headers.</think>" + json.dumps({"description": self.CLEAN})]
+        self.assertEqual(self.draft()["suggestion"], self.CLEAN)
+
+    def test_an_endpoint_without_schema_support_answers_in_prose(self):
+        from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
+        self.assertEqual(_usableDescription(_descriptionFromText(self.CLEAN)), self.CLEAN)
+        fenced = "```json\n%s\n```" % json.dumps({"description": self.CLEAN})
+        self.assertEqual(_usableDescription(_descriptionFromText(fenced)), self.CLEAN)
+        for bad in ("Okay, so the headers are", "Let me list the groups.", "We should say two groups.", ""):
+            self.assertIsNone(_usableDescription({"description": bad}), bad)
+        self.assertEqual(_usableDescription({"description": "We have two groups, sampled at 0 h and 24 h."}),
+                         "We have two groups, sampled at 0 h and 24 h.")
+
+    def test_a_description_that_opens_with_first_is_a_description(self):
+        from src.servlets.AIInterpretServlet import _usableDescription
+        first = "First, I treated HepG2 cells with sorafenib for 24 h and compared them with untreated controls."
+        self.assertEqual(_usableDescription({"description": first}), first)
+        so = "So the design has two arms: Ikaros-induced and control cells, at 0 h and 24 h."
+        self.assertEqual(_usableDescription({"description": so}), so)
+
+    def test_a_reply_cut_off_mid_json_is_no_description(self):
+        # Not JSON, so the fallback parser hands back the whole text; only the
+        # missing end of its sentence tells it from a description.
+        from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
+        cut = '{"description": "I compared a control group (Ctr'
+        self.assertEqual(_descriptionFromText(cut)["description"], cut)
+        self.assertIsNone(_usableDescription(_descriptionFromText(cut)))
 
 
 class InitiateTest(_RouteCase):

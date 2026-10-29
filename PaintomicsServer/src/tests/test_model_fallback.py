@@ -300,15 +300,13 @@ class SdkShimFallsBack(unittest.TestCase):
             self.skipTest("agents SDK not importable here: %s" % ex)
         self.agent = agent
         self.provider = agent.AI_PROVIDERS[agent.AI_LLM_PROVIDER]
-        self._saved = (agent._sdk_configured, agent._MODEL_OBJ,
+        self._saved = (agent._sdk_configured,
                        self.provider.get("fallback_models"), self.provider.get("api_key"))
         self.provider["fallback_models"] = "spare/model"
         self.provider["api_key"] = self.provider.get("api_key") or "test-key"
         agent._sdk_configured = False
-        agent._MODEL_OBJ = None
         mf.reset()
-        agent.configure_sdk()
-        self.client = agent._MODEL_OBJ._client
+        self.client = agent._build_client()
         self.sleeps = []
         self._real_sleep = asyncio.sleep
 
@@ -318,8 +316,7 @@ class SdkShimFallsBack(unittest.TestCase):
 
     def tearDown(self):
         self.agent.asyncio.sleep = self._real_sleep
-        (self.agent._sdk_configured, self.agent._MODEL_OBJ,
-         fallbacks, key) = self._saved
+        (self.agent._sdk_configured, fallbacks, key) = self._saved
         if fallbacks is None:
             self.provider.pop("fallback_models", None)
         else:

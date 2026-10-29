@@ -8,8 +8,8 @@ Chat tools (for follow-up Q&A):
   - walk: the job's universal graph walk, or a short walk from a named gene
 """
 import logging
-from src.classes.AIInterpret.walker.card import labels_by_omic
-from src.classes.AIInterpret.walker.overlay import values_text
+from src.classes.AIInterpret.walker.card import job_value_kinds, labels_by_omic
+from src.classes.AIInterpret.walker.overlay import capped_layers, more_text, values_text
 
 logger = logging.getLogger(__name__)
 
@@ -131,20 +131,32 @@ def _find_gene_by_symbol(job_instance, symbol):
     return None
 
 
-def _format_gene_omics(gene_obj, header_map):
+def _format_gene_omics(gene_obj, header_map, value_kind=()):
     """One line per omic layer: the relevant flag and the values under the
     user's labels. An omic whose file had no header, or whose header does not
     fit its values, prints numbered columns and says so; it never borrows the
     labels of another omic, which is how the miRNA columns of a job used to be
-    called time points."""
+    called time points.
+
+    At most MEMBERS_SHOWN layers of one omic, as the walker reads a node
+    (overlay.capped_layers): a gene of job y712svrXTf carries 241 "miRNA
+    unmapped" layers. ``value_kind``: card.job_value_kinds, so a p-value
+    column never ranks a member as the largest."""
+    significance = {entry["omic"]: entry["index"] for entry in value_kind or ()}
+    signed = {entry["omic"]: entry["signed_index"] for entry in value_kind or ()}
+    layers = [{"omic": ov.getOmicName(), "relevant": bool(ov.isRelevant()), "values": list(ov.getValues() or []),
+               "significance": significance.get(ov.getOmicName(), []), "signed": signed.get(ov.getOmicName())}
+              for ov in gene_obj.getOmicsValues()]
     lines = []
-    for ov in gene_obj.getOmicsValues():
-        omic_name = ov.getOmicName()
-        values = list(ov.getValues() or [])
+    for layer in capped_layers(layers):
+        if not isinstance(layer, dict):
+            lines.append(f"  {layer[0]} {more_text(*layer[1:])}")
+            continue
+        omic_name, values = layer["omic"], layer["values"]
         labels = header_map.get(omic_name)
         if labels and len(labels) != len(values):
             labels = None
-        flag = "relevant" if ov.isRelevant() else "not relevant"
+        flag = "relevant" if layer["relevant"] else "not relevant"
         text = values_text(values, labels) or "no values"
         if labels is None and values:
             text += "  (columns unlabeled)"
@@ -167,7 +179,7 @@ def _exec_get_feature_values(job_instance, args):
 
     gene_id, gene_obj = result
     header_map = _build_header_map(job_instance)
-    omics_text = _format_gene_omics(gene_obj, header_map)
+    omics_text = _format_gene_omics(gene_obj, header_map, job_value_kinds(job_instance))
 
     return (
         f"Gene: {gene_obj.getName()} (ID: {gene_id})\n"
@@ -242,6 +254,7 @@ def _exec_compare_genes(job_instance, args):
         symbols = symbols[:10]
 
     header_map = _build_header_map(job_instance)
+    value_kind = job_value_kinds(job_instance)
     parts = []
     for sym in symbols:
         result = _find_gene_by_symbol(job_instance, sym.strip())
@@ -249,7 +262,7 @@ def _exec_compare_genes(job_instance, args):
             parts.append(f"Gene: {sym} — NOT FOUND")
         else:
             gene_id, gene_obj = result
-            omics_text = _format_gene_omics(gene_obj, header_map)
+            omics_text = _format_gene_omics(gene_obj, header_map, value_kind)
             parts.append(f"Gene: {gene_obj.getName()} (ID: {gene_id})\n{omics_text}")
 
     return "\n\n".join(parts)

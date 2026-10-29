@@ -1,6 +1,5 @@
 import requests
 import json
-import os
 import logging
 import random
 import re
@@ -8,6 +7,7 @@ import threading
 import time
 
 from . import model_fallback
+from . import pacing
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,22 @@ def ran_out_of_budget(exc):
     return bool(getattr(exc, "gave_up_at_deadline", False))
 
 
+# What a gateway says when a prompt outgrew the model's window. LiteLLM raises
+# ContextWindowExceededError and the OpenAI client re-raises its 400 as
+# BadRequestError with that text: job y712svrXTf (2026-10-29), "Error code:
+# 400 ... litellm.ContextWindowExceededError ... your prompt contains at least
+# 260645 input tokens"; vLLM and OpenAI word it "maximum context length" or
+# code it context_length_exceeded.
+CONTEXT_WINDOW_RE = re.compile(r"ContextWindowExceeded|context_length_exceeded|maximum context length|"
+                               r"context window|prompt contains at least \d+ input tokens", re.I)
+
+
+def context_window_exceeded(exc):
+    """True when a call failed because its prompt did not fit the model's
+    window: not a gateway that failed, and no retry of the same prompt helps."""
+    return bool(CONTEXT_WINDOW_RE.search("%s: %s" % (type(exc).__name__, exc)))
+
+
 def rate_limited(exc):
     """True for the gateway's own 429, as raised once the retries ran out."""
     response = getattr(exc, "response", None)
@@ -46,76 +62,23 @@ _SCHEMA_SUPPORT = {}       # api_base -> bool
 _SCHEMA_SUPPORT_LOCK = threading.Lock()
 
 
-# ---------------------------------------------------------------------------
-# Aggregate admission control
-# ---------------------------------------------------------------------------
-# The 429 handler below retries, and that is not the same thing as staying
-# under a limit. Every phase here fans out across a ThreadPoolExecutor, so N
-# workers hit the ceiling within the same second, each sleeps the SAME fixed
-# 5s, and all N retry in the same instant -- a thundering herd that re-triggers
-# the limit it is backing off from. Measured on the CSIC gateway (60 req/min):
-# six verification sub-agents exhausted all three attempts and the run finished
-# with fewer verified citations than it planned.
-#
-# Retrying is recovery. This is prevention: one token bucket per endpoint,
-# shared across every thread in the process, so the AGGREGATE request rate
-# cannot exceed the ceiling in the first place.
-#
-# Default off. A limiter that silently paces production would be a behaviour
-# change nobody asked for, and the right ceiling is a property of the token,
-# not of the code -- so it is opt-in per deployment via AI_LLM_MAX_RPM.
-_LIMITERS = {}             # api_base -> _RateLimiter
-_LIMITERS_LOCK = threading.Lock()
+# Admission control (staying under the key's rate limit rather than retrying
+# into it) lives in pacing.py: one budget per endpoint, shared with the Agents
+# SDK transport in agent.py.
 
 
-class _RateLimiter:
-    """Token bucket. `acquire()` blocks until a request may be sent.
-
-    Capacity is one minute's worth of tokens, so a burst after an idle period
-    is allowed to run at full width -- the ceiling being respected is a RATE,
-    and refusing to burst would cost throughput without protecting anything.
-    """
-
-    def __init__(self, rpm):
-        self.rate = float(rpm) / 60.0          # tokens per second
-        self.capacity = float(rpm)
-        self._tokens = float(rpm)
-        self._last = time.monotonic()
-        self._lock = threading.Lock()
-
-    def acquire(self):
-        # Held across the sleep deliberately. Releasing it would let every
-        # waiting thread compute the same wait from the same empty bucket and
-        # wake together, which is the herd this exists to prevent; serialising
-        # the waiters makes them leave one at a time, at the bucket's rate.
-        with self._lock:
-            while True:
-                now = time.monotonic()
-                self._tokens = min(self.capacity,
-                                   self._tokens + (now - self._last) * self.rate)
-                self._last = now
-                if self._tokens >= 1.0:
-                    self._tokens -= 1.0
-                    return
-                time.sleep((1.0 - self._tokens) / self.rate)
-
-
-def _limiter_for(api_base):
-    """The shared limiter for an endpoint, or None when pacing is off."""
+def embedded_json(text):
+    """The outermost JSON object in a reply that wrapped it in prose or a
+    fence (from its first "{" to its last "}"), or None: complete_json's
+    usual fallback parser, for an endpoint that ignored the schema."""
+    text = str(text or "")
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
     try:
-        rpm = int(os.getenv("AI_LLM_MAX_RPM", "0"))
-    except (TypeError, ValueError):
+        return json.loads(text[start:end + 1])
+    except ValueError:
         return None
-    if rpm <= 0:
-        return None
-    with _LIMITERS_LOCK:
-        lim = _LIMITERS.get(api_base)
-        # Rebuild when the setting changes, so a harness can retune between
-        # runs in one process without restarting it.
-        if lim is None or lim.capacity != float(rpm):
-            lim = _RateLimiter(rpm)
-            _LIMITERS[api_base] = lim
-        return lim
 
 
 def json_schema_format(name, schema):
@@ -149,6 +112,26 @@ def strip_reasoning(text):
         return text
     answer = _THINK_BLOCK.sub("", text).rpartition(_THINK_CLOSE)[2].strip()
     return answer or text
+
+
+# How a model's reasoning opens when it reached the answer with no "</think>"
+# to cut it at: the same DeepSeek-V4-Flash drafts an experiment design as "The
+# user asks for a description of the experiment design based on the column
+# headers. ... I need to write 2-3 sentences", and under the old 300-token cap
+# the answer ended before the tag (jobs laW30Q7bYU, u36I21KMxV, 2026-10-27).
+# An answer in the first person ("I performed ...", "First, I treated ...") is
+# not one: "I" and "first," alone are no sign; "I need to" and "let me" are.
+REASONING_OPENER_RE = re.compile(
+    r"^\W*(?:the user\b|user (?:asks|wants)\b|we (?:need|should|must)\b|i need to\b|i (?:should|must|will) "
+    r"(?:write|describe|produce|draft)\b|let me\b|let's\b|okay\b|ok\b|alright\b|hmm\b)",
+    re.I)
+
+
+def opens_like_reasoning(text):
+    """True when a text, once strip_reasoning has had it, still begins the way
+    a model's thinking aloud does (REASONING_OPENER_RE): reasoning with no
+    closing tag, which no stripping can separate from an answer."""
+    return isinstance(text, str) and bool(REASONING_OPENER_RE.match(text.strip()))
 
 
 class MissingAPIKeyError(RuntimeError):
@@ -330,6 +313,12 @@ class LLMClient:
         retried_streamed = False
 
         for attempt in range(attempts):
+            # The slot first, then the budget: the wait for it is spent out of
+            # the call's budget, so what is left -- and the read timeout cut
+            # to it below -- is measured after it. Before, both were computed
+            # first, and a call with 10 s left could queue 28 s behind a walk's
+            # fan-out and then post with a 10 s timeout.
+            self._wait_for_slot(model, deadline)
             attempt_timeout = timeout or DEFAULT_TIMEOUT
             if deadline is not None:
                 remaining = deadline - time.monotonic()
@@ -353,9 +342,6 @@ class LLMClient:
                     payload["response_format"] = response_format
                 if stream:
                     payload["stream"] = True
-                limiter = _limiter_for(self.api_base)
-                if limiter is not None:
-                    limiter.acquire()
                 r = requests.post(
                     f"{self.api_base}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}",
@@ -364,6 +350,8 @@ class LLMClient:
                     timeout=attempt_timeout,
                     stream=stream,
                 )
+                # Before raise_for_status: a 429 carries the key's limit too.
+                pacing.learn(self.api_base, r.headers)
                 r.raise_for_status()
                 if stream:
                     content = self._fold_stream(r, deadline)
@@ -437,6 +425,31 @@ class LLMClient:
         # demotion), which used to return None into a JSON parser.
         raise requests.exceptions.HTTPError(
             "LLM request to %s gave no answer in %d attempts" % (model, attempts))
+
+    def _wait_for_slot(self, model, deadline):
+        """Wait for this gateway's next request slot (pacing.py). When the
+        wait would leave the call under MIN_CALL_SECONDS of its budget, the
+        slot goes back unused and the attempt fails as a call whose budget ran
+        out does: a Timeout marked gave_up_at_deadline, which ran_out_of_budget
+        reads and no fallback model is asked after. Raised outside the
+        attempt's try, so it is never retried as the gateway's timeout. So
+        does a wait the caller's stage ended (pacing.stopped_by)."""
+        pacer = pacing.pacer_for(self.api_base)
+        if pacer is None:
+            return
+        left = None if deadline is None else deadline - time.monotonic()
+        stop = pacing.current_stop()
+        if pacer.acquire(left, MIN_CALL_SECONDS, cancel=stop):
+            return
+        if stop is not None and stop.is_set():
+            err = requests.exceptions.Timeout(
+                "LLM call to %s not sent: its stage ended while it waited for the gateway's rate limit" % model)
+        else:
+            err = requests.exceptions.Timeout(
+                "LLM call to %s not sent: the gateway's rate limit queued it past its budget (%.0fs left)"
+                % (model, left))
+        err.gave_up_at_deadline = True
+        raise err
 
     @staticmethod
     def _fold_stream(response, deadline):

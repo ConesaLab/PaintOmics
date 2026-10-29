@@ -41,6 +41,7 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 
 from src.classes.AIInterpret.walker import heat as heat_mod
+from src.classes.AIInterpret.walker import overlay as ov_mod
 from src.classes.AIInterpret.walker import policies
 from src.classes.AIInterpret.walker.walk import Walker
 
@@ -69,19 +70,9 @@ def permute_flags(graph, overlay, rng):
 
 
 def node_direction(overlay, node_id):
-    """+1, -1 or 0: the sign of the largest value among a node's relevant layers."""
-    best = 0.0
-    for layer in overlay.layers.get(node_id, []):
-        if not layer.get("relevant"):
-            continue
-        for value in layer.get("values") or []:
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                continue
-            if number == number and abs(number) > abs(best):
-                best = number
-    return 1 if best > 0 else (-1 if best < 0 else 0)
+    """+1, -1 or 0: the sign of the largest value among a node's relevant
+    layers, p-value and q-value columns aside (overlay.layer_sign)."""
+    return ov_mod.layer_sign(*[layer for layer in overlay.layers.get(node_id, []) if layer.get("relevant")])
 
 
 def leg_concordance(leg, overlay):

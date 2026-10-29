@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from agents import (Agent, MaxTurnsExceeded, ModelSettings, RunContextWrapper, Runner, ToolsToFinalOutputResult,
                     function_tool)
 
+from src.classes.AIInterpret import llm_client
 from src.classes.AIInterpret.agent import _model
 from src.classes.AIInterpret.walker.errors import tool_failure
 from src.classes.AIInterpret.walker.walk import Walker
@@ -135,8 +136,13 @@ def anchor_line(walker):
                 "" if here is None else ", %d step(s) from where you stand" % here))
 
 
+TURNS_SPENT = "turns spent"
+CONTEXT_FULL = "the model's context window was full"
+
+
 async def _run_loop(agent, walker, prompt, max_turns):
-    """Run the loop; True when it ended on its turn limit."""
+    """Run the loop; why it ended without the model ending it (TURNS_SPENT,
+    CONTEXT_FULL), or None."""
     ctx = WalkContext(walker=walker, card="")
     try:
         await Runner.run(agent, prompt, context=ctx, max_turns=max_turns)
@@ -147,12 +153,21 @@ async def _run_loop(agent, walker, prompt, max_turns):
         # runs out of turns: the planner's code plan and the segment's stop
         # follow, as for a model that stopped. Not a gateway that failed.
         logger.info("[walker] %s used its %d turns", agent.name, max_turns)
-        return True
+        return TURNS_SPENT
     except Exception as exc:                                          # noqa: BLE001
+        if llm_client.context_window_exceeded(exc):
+            # The last resort behind overlay.MEMBERS_SHOWN: a turn whose
+            # prompt outgrew the model's window ends the loop as its turn
+            # limit does, keeping the legs already walked. As a loop error it
+            # failed the whole walk of job y712svrXTf (2026-10-29), and no
+            # retry of the same prompt could have fitted.
+            logger.warning("[walker] %s ended on the context window: %s", agent.name, str(exc)[:300])
+            return CONTEXT_FULL
         logger.warning("[walker] the model loop ended early: %s", exc)
         # Kept so the service can tell a gateway that failed from a model that
         # chose to stop: the first is an error the user can retry.
         walker.loop_error = "%s: %s" % (type(exc).__name__, str(exc)[:200])
+    return None
 
 
 async def run_plan_async(walker, card_text, max_turns=8, model=None, temperature=0.2):
@@ -179,8 +194,8 @@ async def run_segment_async(walker, card_text, opening, others, max_turns, model
     kickoff = ("DESIGN CARD\n%s\n%s\nGraph: %s. You walk from %s; %s.\nOther walkers, at the same time: %s.\n\n"
                "WHERE YOU STAND\n%s" % (card_text, anchor_line(walker), walker.scope, walker.label(walker.current),
                                          walker._budget_line(), others or "none", opening))
-    spent = await _run_loop(agent, walker, kickoff, max_turns)
+    ended = await _run_loop(agent, walker, kickoff, max_turns)
     if not walker.done:
         walker.stop("the model stopped calling tools", "loop ended without stop: %s"
-                    % ("turns spent" if spent or len(walker.turns) >= max_turns - 1 else "no tool call"))
+                    % (ended or (TURNS_SPENT if len(walker.turns) >= max_turns - 1 else "no tool call")))
     return walker

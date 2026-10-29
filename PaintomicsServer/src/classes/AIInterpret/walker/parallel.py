@@ -178,6 +178,16 @@ def writer_parts(segments, n_legs, parts, min_legs=MIN_PART_LEGS):
     return out
 
 
+async def _release_sdk_client():
+    """agent.release_loop_client, imported late: the SDK is optional for the
+    offline parts of the walk, and a failed release must not fail the walk."""
+    try:
+        from src.classes.AIInterpret.agent import release_loop_client
+        await release_loop_client()
+    except Exception:                                                 # noqa: BLE001
+        logger.debug("[walker] could not release the loop's SDK client", exc_info=True)
+
+
 def run_pipeline(coro):
     """asyncio.run, except that it does not wait for worker threads.
 
@@ -202,6 +212,9 @@ def run_pipeline(coro):
                 task.cancel()
             if left:
                 loop.run_until_complete(asyncio.gather(*left, return_exceptions=True))
+            # This loop's SDK client (agent._model) closes its connections here,
+            # inside the loop that opened them, never after the loop is closed.
+            loop.run_until_complete(_release_sdk_client())
             loop.run_until_complete(loop.shutdown_asyncgens())
         finally:
             executor.shutdown(wait=False)
@@ -345,7 +358,12 @@ async def write_in_parallel(walker, card_text, pubmed, client, plan, deadline, c
                         % (finished["n"], len(parts), store.checks))
 
     tasks = [asyncio.ensure_future(run_one(i)) for i in range(len(parts))]
-    await _wait(tasks, deadline, cancelled)
+    try:
+        await _wait(tasks, deadline, cancelled)
+    finally:
+        # The stage is over, by its deadline, a deleted job or every Writer
+        # done: a paper agent still queued for a gateway slot gives it back.
+        store.stopped.set()
     kept, dropped = [], []
     for c in contexts:
         if c.done:

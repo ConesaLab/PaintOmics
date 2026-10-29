@@ -342,7 +342,7 @@ def design_card(job, labels, policy, client=None, override=None, aliases=None):
         conditions = list(job.conditionNames or [])
     except (AttributeError, TypeError):
         pass
-    design_text = job.getExperimentDesign() if hasattr(job, "getExperimentDesign") else ""
+    design_text = card_mod.design_text_of(job)
     if override:
         card = card_mod.deterministic_card(design_text, conditions, labels, aliases)
         card.update(override)
@@ -356,19 +356,27 @@ def design_card(job, labels, policy, client=None, override=None, aliases=None):
     # The omics whose file carried no header: the walker may make no timing
     # claim on them until the user confirms the columns.
     card["unlabeled"] = sorted(name for name, l in labels.items() if l is None)
+    # The omics whose values are p-values or q-values, read from the column
+    # headers: they carry no direction (walk_card_text says so to every agent).
+    card["value_kind"] = card_mod.job_value_kinds(job)
     card["organism"] = card_mod.organism_word(job.getOrganism())
     return card
 
 
 def walk_card_text(card):
-    """The card as the walker, the Writer and the Narrator read it, with what the
-    axis allows: trajectories only on an ordered axis."""
+    """The card as the walker, the Writer, the checks and the Narrator read it,
+    with what the axis allows (trajectories only on an ordered axis) and, when
+    some values are p-values or q-values, that they carry no direction."""
     kind = card.get("axis_kind", "groups")
     allowed = {"time": "time points in order; timing words are allowed",
                "ordered": "ordered values (doses or concentrations); say higher or lower, not earlier or later",
                "groups": "conditions with no order; compare them by name, never as a trajectory",
                "unlabeled": "no labels; make no timing or order claim"}[kind]
-    return card_mod.card_text(card) + "\n%-13s %s" % ("axis kind", allowed)
+    text = card_mod.card_text(card) + "\n%-13s %s" % ("axis kind", allowed)
+    significance = card_mod.value_kind_text(card.get("value_kind"))
+    if significance:
+        text += "\n%-13s %s" % ("value kind", significance)
+    return text
 
 
 def _pct(stage, walker=None):
@@ -433,15 +441,23 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
     # whose data could never seed (2026-10: 22 of 28 failed walks).
     if tag != "network" and not ov.K:
         raise WalkError("No feature of this job in pathway %s is %s, so a walk of it has no seed. Walk the "
-                        "network, or a pathway that holds relevant features."
-                        % (tag.split(":", 1)[-1], "marked relevant" if ov.N else "measured"))
+                        "network, or a pathway that holds relevant features.%s"
+                        % (tag.split(":", 1)[-1], "marked relevant" if ov.N else "measured",
+                           card_mod.relevance_hint(card.get("value_kind")) if ov.N else ""))
+    # Two causes, one message: job Q5APyBNMH3 (Neisseria gonorrhoeae, ngo,
+    # 2026-10-28) was told its identifiers did not map, yet NGO_0500 and
+    # NGO_1374 had mapped to KEGG genes; those genes are on no ngo KGML map
+    # and in no gene2pathway.list row, so no graph holds them as nodes.
     if not ov.N:
         raise WalkError("None of this job's features is on the organism's graph, so the walk has nowhere to "
-                        "start: their identifiers did not map onto its genes or compounds.")
+                        "start: either their identifiers did not map onto the organism's genes or compounds, "
+                        "or the genes they map to are on no KEGG, Reactome or OmniPath pathway with drawn "
+                        "interactions (common for bacterial genes outside every pathway map).")
     if not ov.K:
         raise WalkError("None of the %d features of this job on the graph is marked relevant, so the walk has "
                         "no seed. In Step 1, mark relevant features (a Relevant features file per omic) whose "
-                        "identifiers map onto the organism's genes or compounds, and run the job again." % ov.N)
+                        "identifiers map onto the organism's genes or compounds, and run the job again.%s"
+                        % (ov.N, card_mod.relevance_hint(card.get("value_kind"))))
     params = params_for("network" if tag == "network" else "pathway")
     # A seed is also a relevant node with a measured neighbour that is neither a
     # hub nor a currency metabolite. Without one the planner, made to call a
@@ -847,6 +863,37 @@ def _no_results_reason(exc):
     return RESULTS_RATE_LIMITED if getattr(exc, "rate_limited", False) else RESULTS_NO_ANSWER
 
 
+def own_prose_paragraphs(statements, numbers):
+    """A paragraph per statement in ``numbers``, in statement order: its own
+    verified prose, tagged with it and the legs it rests on."""
+    wanted = set(numbers)
+    return [{"from_statement": int(s["n"]), "legs": list(s.get("legs") or []), "text": str(s.get("prose") or "")}
+            for s in statements if int(s["n"]) in wanted]
+
+
+def with_paragraphs(results, statements, added):
+    """A copy of ``results`` with each statement paragraph of ``added`` placed
+    after the last paragraph of an earlier statement (statement order), so a
+    link paragraph leading into a later statement still leads into it."""
+    order = {int(s["n"]): i for i, s in enumerate(statements)}
+
+    def rank(paragraph):
+        try:
+            return order.get(int(paragraph.get("from_statement")))
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    paragraphs = list(results.get("paragraphs") or [])
+    for new in added:
+        at = 0
+        for i, paragraph in enumerate(paragraphs):
+            here = rank(paragraph)
+            if here is not None and here < order[new["from_statement"]]:
+                at = i + 1
+        paragraphs.insert(at, new)
+    return dict(results, paragraphs=paragraphs)
+
+
 def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag, checks, words, deadline=None,
              anchor=None, card=None, scope_name="Results"):
     kind = "network" if tag == "network" else "pathway"
@@ -871,6 +918,49 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     title_gate = {"pass": True, "not_applicable": False, "verbs_found": [], "rewritten": False, "fallback": False,
                   "why": ""}
 
+    def pruned(results, removed):
+        """Every pruner a draft's sentences go through, in place: (what each
+        removed, the meta sentences that went)."""
+        counts = {"connectives_pruned": narrate_mod.prune_connectives(results)}
+        counts["misquoted_sentences_dropped"] = verify.drop_unrecorded_sentences(results, walker, statements,
+                                                                                 removed)
+        counts["uncited_sentences_dropped"] = verify.drop_uncited_sentences(results, statements)
+        counts["jargon_sentences_dropped"] = verify.drop_jargon_sentences(results)
+        # The summary and title sentences in the brief's own words.
+        meta = verify.drop_meta_sentences(results)
+        counts["meta_sentences_dropped"] = len(meta)
+        return counts, meta
+
+    def covered_by_code(results, problems):
+        """(results, problems, title problems) once each statement the only
+        problems say is "not covered" has its own prose as its paragraph
+        (own_prose_paragraphs), pruned as a draft's paragraphs are, and
+        recorded in checks["results_repaired"]; None when any other problem
+        remains, or when the section still fails, and no other fault is
+        mended here.
+
+        On job M3vf2UD7Ed (S. mutans network, 2026-10-29) draft and repair both
+        failed on "statement 6 is not covered" alone and the 15-statement walk
+        lost its Results. (STATegra 1dh162k57a, 10-28, had "statement 8 is not
+        covered" beside a citation problem: still dropped.) The prose
+        inserted is the statement's own verified text: the
+        Verifier checked it, and the pruners and verify_results check it again
+        here as they check the Narrator's."""
+        numbers = verify.uncovered_statements(problems)
+        if not numbers or results is None:
+            return None
+        added = {"paragraphs": own_prose_paragraphs(statements, numbers), "summary": ""}
+        counts, _meta = pruned(added, [])
+        patched = with_paragraphs(results, statements, added["paragraphs"])
+        fixed = verify.verify_results(patched, statements, dropped, walker, kind, words)
+        if fixed:
+            logger.warning("[walker] inserting the uncovered statements' prose did not clear the checks: %s",
+                           fixed[:5])
+            return None
+        keep({"counts": counts, "fallback": title_gate["fallback"]})
+        checks["results_repaired"] = [{"statement": n, "action": "inserted its own prose"} for n in numbers]
+        return patched, fixed, tiers.title_outruns_body(patched, statements, walker, anchor, scope_name)
+
     def checked(results):
         """(problems, title problems, effects) for one draft, pruned in place.
         What the pruners counted and the title state reach checks and the gate
@@ -881,14 +971,7 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         # Why the draft lost a sentence that carried its statement's citation:
         # the repair round is told, not only that the citation is gone.
         removed = []
-        counts = {"connectives_pruned": narrate_mod.prune_connectives(results)}
-        counts["misquoted_sentences_dropped"] = verify.drop_unrecorded_sentences(results, walker, statements,
-                                                                                 removed)
-        counts["uncited_sentences_dropped"] = verify.drop_uncited_sentences(results, statements)
-        counts["jargon_sentences_dropped"] = verify.drop_jargon_sentences(results)
-        # The summary and title sentences in the brief's own words.
-        meta = verify.drop_meta_sentences(results)
-        counts["meta_sentences_dropped"] = len(meta)
+        counts, meta = pruned(results, removed)
         # None written, only the brief's words or "...": the title code writes
         # when the Narrator's cannot stand (the title gate's fallback), and the
         # gate's record says so. Each draft decides it anew.
@@ -924,6 +1007,7 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     # A summary that restated the brief is pruned, silently, and asks for no
     # repair of its own: a re-narration put a draft that had passed at risk.
     # When the section's problems ask for one, the repair is told what went.
+    unmade = None
     if (problems or title_problems) and results is not None and (
             deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
         try:
@@ -944,9 +1028,14 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         except (narrate_mod.OutOfTime, narrate_mod.Unanswered) as exc:
             # The draft failed its checks; the repair could not be had. A
             # title that outran the body is still repaired in code below.
-            if problems:
-                problems = problems + ["the repair was not made: %s"
-                                       % _no_results_reason(exc)[len("no Results section: "):]]
+            unmade = "the repair was not made: %s" % _no_results_reason(exc)[len("no Results section: "):]
+    # Last, a statement no paragraph retells gets its own prose, with the
+    # repair made or not: the one fault code can mend without a model.
+    covered = covered_by_code(results, problems)
+    if covered is not None:
+        results, problems, title_problems = covered
+    if problems and unmade:
+        problems = problems + [unmade]
     if title_problems and results is not None and not problems:
         # Check 2's last word: the title code writes, and the summary without
         # the sentences that still outran the body.
@@ -997,12 +1086,13 @@ def _plan_view(plan, labels):
 
 
 def live_view(walker):
-    """What the browser shows while the model walks: the plan and the chain so far."""
+    """What the browser shows while the model walks: the plan and the chain so
+    far, each chain node with every layer, as the sealed record shows it."""
     rec = walker.record()
     return {"scope": walker.scope, "plan": _plan_view(rec["plan"], walker.label),
             "chain": [_leg_view(leg, walker.label) for leg in rec["chain"]],
             "notes": rec["notes"], "counts": walker.counts_line(), "done": rec["done"],
-            "nodes": {node_id: {"label": walker.label(node_id), "text": walker.overlay.layer_text(node_id)}
+            "nodes": {node_id: {"label": walker.label(node_id), "text": walker.overlay.layer_text(node_id, limit=None)}
                       for leg in rec["chain"] for node_id in (leg["from"], leg["to"])}}
 
 
