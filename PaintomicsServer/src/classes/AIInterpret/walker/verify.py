@@ -922,6 +922,22 @@ def uncovered_statements(problems):
     return numbers or None
 
 
+WORD_COUNT = "%d words; between %d and %d are required"
+_WORD_COUNT_RE = re.compile("^%s$" % re.escape(WORD_COUNT).replace("%d", r"(\d+)"))
+
+
+def too_few_words(problem):
+    """True when ``problem`` is verify_results' word count for a section
+    under its fewest words; False for one over its most, and for any other
+    problem. Read from the numbers the problem carries, not its wording
+    alone."""
+    match = _WORD_COUNT_RE.match(str(problem))
+    if match is None:
+        return False
+    words, lo, _hi = (int(g) for g in match.groups())
+    return words < lo
+
+
 def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None):
     """Objections to the Narrator's Results section. ``words_range`` = (fewest,
     most) words; RESULTS_WORDS by scope otherwise."""
@@ -1015,5 +1031,5 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
             problems.append("a dropped statement is mentioned: %r" % head)
     lo, hi = words_range or RESULTS_WORDS["network" if scope == "network" else "pathway"]
     if not (lo <= words <= hi):
-        problems.append("%d words; between %d and %d are required" % (words, lo, hi))
+        problems.append(WORD_COUNT % (words, lo, hi))
     return problems

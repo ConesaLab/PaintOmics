@@ -1497,6 +1497,63 @@ class NarratorRepairCasesTest(_Fixture):
         self.assertEqual(out["paragraphs"][1]["text"], (self.TOGETHER * 4).strip())
         self.assertEqual(checks["jargon_sentences_dropped"], 1)
 
+    # ---- ... and a section short only for want of those paragraphs ----------
+    # vRmKBo4E60 re-run (mmu00230, 2026-10-29): dropped on statements 3 and 4
+    # not covered and "290 words; between 300 and 1200 are required". Here the
+    # range is (100, 300) and TOGETHER counts 9 words.
+    WORD_COUNT = r"^\d+ words; between 100 and 300 are required$"
+
+    def test_an_uncovered_statement_in_a_short_section_is_inserted_and_the_length_resolved(self):
+        out, checks, prompts = self.narrate_uncovered([{"from_statement": 1, "legs": [1],
+                                                        "text": self.TOGETHER * 10}])
+        self.assertEqual(len(prompts), 2, "the model repair is asked first")
+        self.assertIsNotNone(out, checks.get("results"))
+        self.assertEqual(checks["results"], [])
+        self.assertEqual([p["from_statement"] for p in out["paragraphs"]], [1, 2])
+        repaired = checks["results_repaired"]
+        self.assertEqual(repaired[0], {"statement": 2, "action": "inserted its own prose"})
+        self.assertEqual(len(repaired), 2, repaired)
+        self.assertEqual(repaired[1]["action"], "resolved by the inserted paragraphs")
+        self.assertRegex(repaired[1]["problem"], self.WORD_COUNT)
+        self.assertLess(int(repaired[1]["problem"].split()[0]), 100)
+
+    def test_an_uncovered_statement_in_a_long_section_drops_it(self):
+        """Inserting prose cannot shorten a section: too many words is never
+        mended, so it is dropped with its problems as the checks wrote them,
+        and no prose is inserted to find that out."""
+        from src.classes.AIInterpret.walker import service
+        inserted = []
+        own_prose = service.own_prose_paragraphs
+        with patched((service, "own_prose_paragraphs", lambda *a: inserted.append(a) or own_prose(*a))):
+            out, checks, _ = self.narrate_uncovered([{"from_statement": 1, "legs": [1],
+                                                      "text": self.TOGETHER * 34}])
+        self.assertEqual(inserted, [])
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"][0], "statement 2 is not covered")
+        self.assertEqual(len(checks["results"]), 2, checks["results"])
+        self.assertRegex(checks["results"][1], self.WORD_COUNT)
+        self.assertGreater(int(checks["results"][1].split()[0]), 300)
+        self.assertNotIn("results_repaired", checks)
+
+    def test_inserted_prose_that_leaves_the_section_short_drops_it(self):
+        out, checks, _ = self.narrate_uncovered([{"from_statement": 1, "legs": [1], "text": self.TOGETHER * 6}])
+        self.assertIsNone(out)
+        self.assertEqual(checks["results"][0], "statement 2 is not covered")
+        self.assertEqual(len(checks["results"]), 2, checks["results"])
+        self.assertRegex(checks["results"][1], self.WORD_COUNT)
+        self.assertNotIn("results_repaired", checks)
+        self.assertEqual([p["from_statement"] for p in checks["results_dropped"]["paragraphs"]], [1],
+                         "the dropped draft is the Narrator's, not the patched copy")
+
+    def test_only_a_count_under_the_fewest_words_reads_as_too_few(self):
+        from src.classes.AIInterpret.walker import verify
+        self.assertTrue(verify.too_few_words("290 words; between 300 and 1200 are required"))
+        self.assertFalse(verify.too_few_words("1300 words; between 300 and 1200 are required"))
+        self.assertFalse(verify.too_few_words("statement 3 is not covered"))
+        self.assertFalse(verify.too_few_words("290 words; between 300 and 1200 are required, and more"))
+        self.assertEqual(verify.WORD_COUNT % (290, 300, 1200), "290 words; between 300 and 1200 are required",
+                         "the text the page shows is unchanged")
+
 
 class PipelineCleanupTest(unittest.TestCase):
     """run_pipeline returns at once, yet leaves nothing half-unwound."""
