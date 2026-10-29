@@ -937,17 +937,25 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
         (own_prose_paragraphs), pruned as a draft's paragraphs are, and
         recorded in checks["results_repaired"]; None when any other problem
         remains, or when the section still fails, and no other fault is
-        mended here.
+        mended here. A section under its fewest words beside them is let
+        through too: the missing paragraphs are the words it lacks, and
+        verify_results, run again, says whether they were enough. One over
+        its most words is not: inserting prose can only lengthen it.
 
         On job M3vf2UD7Ed (S. mutans network, 2026-10-29) draft and repair both
         failed on "statement 6 is not covered" alone and the 15-statement walk
         lost its Results. (STATegra 1dh162k57a, 10-28, had "statement 8 is not
-        covered" beside a citation problem: still dropped.) The prose
+        covered" beside a citation problem: still dropped.) On a re-run of
+        vRmKBo4E60 (mmu00230, mouse Sirt1 RNA-seq and metabolomics, 10-29)
+        six statements were kept and the section was dropped on statements 3
+        and 4 not covered and "290 words; between 300 and 1200 are required":
+        ten words short for want of the two paragraphs this inserts. The prose
         inserted is the statement's own verified text: the
         Verifier checked it, and the pruners and verify_results check it again
         here as they check the Narrator's."""
-        numbers = verify.uncovered_statements(problems)
-        if not numbers or results is None:
+        short = [p for p in problems if verify.too_few_words(p)]
+        numbers = verify.uncovered_statements([p for p in problems if p not in short])
+        if not numbers or len(short) > 1 or results is None:
             return None
         added = {"paragraphs": own_prose_paragraphs(statements, numbers), "summary": ""}
         counts, _meta = pruned(added, [])
@@ -958,7 +966,9 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
                            fixed[:5])
             return None
         keep({"counts": counts, "fallback": title_gate["fallback"]})
-        checks["results_repaired"] = [{"statement": n, "action": "inserted its own prose"} for n in numbers]
+        checks["results_repaired"] = ([{"statement": n, "action": "inserted its own prose"} for n in numbers]
+                                      + [{"problem": p, "action": "resolved by the inserted paragraphs"}
+                                         for p in short])
         return patched, fixed, tiers.title_outruns_body(patched, statements, walker, anchor, scope_name)
 
     def checked(results):
