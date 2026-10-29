@@ -251,6 +251,7 @@ this.submitForm = function (URL, form) {
 		showInfoMessage("Uploading and processing files...", {logMessage: "New Job created, submitting files...", showSpin: true});
 		form.submit({
 			method: 'POST', url: URL,
+			submitEmptyText: false,
 			success: function (form, action) {
 				var response = JSON.parse(action.response.responseText);
 				showSuccessMessage("Your Job was sent to queue successfully (job ID " + response.jobID + ")", {

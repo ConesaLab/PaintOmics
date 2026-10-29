@@ -206,6 +206,8 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             logging.info("STEP1 - SELECTED SPECIES IS " + specie)
 
             jobInstance.setAIConsent(formFields.get("aiConsent", "false"))
+            # The setter stores "" for the field's own placeholder, which an
+            # older client submits for an empty field (FormPlaceholders).
             jobInstance.setExperimentDesign(formFields.get("experimentDesign", ""))
 
             logging.info("STEP1 - READING FILES....")

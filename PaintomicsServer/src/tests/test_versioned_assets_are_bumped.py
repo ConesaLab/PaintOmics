@@ -150,8 +150,10 @@ PUBLISHED = {
     # (`shadow: false` on Ext.window.Window): main.css draws the window's
     # shadow, and the framework's 5px-radius one only showed as a grey box
     # under each 8px corner. That is #132's shape.
+    # v=1.0: the grid's Excel export submits with submitEmptyText: false, like
+    # every form submit in the app (test_form_placeholder_is_not_a_design).
     "app/view/common/ExtJS_extensions.js": (
-        "0.9", "632709a5cc3b28db2bfe227cf1fc1762d9d2969c2958499cce0699f2aed9d2ee"),
+        "1.0", "6e14af5505d55527e5f93af90422a1bda8350730d545d4176952a5725f4806a7"),
     "app/view/common/CookieConsent.js": (
         "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (

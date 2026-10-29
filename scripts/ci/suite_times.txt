@@ -261,3 +261,7 @@ test_zero_matched_omic_says_so	1.5
 # suites were unrecorded, and test_shard_split_is_balanced allows fewer than 24.
 test_llm_reasoning_is_not_the_answer	0.1
 test_walker_network_tags_every_map	1.2
+# Added with fix/design-placeholder (2026-10-29), charged like
+# test_job_endpoint_validation, which imports the same servlet: on Drago the
+# two took 3.2 and 3.0 s.
+test_form_placeholder_is_not_a_design	1.7
