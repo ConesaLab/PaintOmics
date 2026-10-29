@@ -550,6 +550,7 @@ function JobController() {
 
 				temporalForm.getForm().submit({
 					method: 'POST',
+					submitEmptyText: false,
 					url: formURL,
 					success: function (form, action) {
 						var response = JSON.parse(action.response.responseText);
@@ -689,6 +690,15 @@ function JobController() {
 			showInfoMessage("Uploading files...", {logMessage: "New Job created, submitting files...", showSpin: true});
 			form.submit({
 				method: 'POST', url: URL,
+				/* Ext JS 4 submits an empty field's emptyText as its value
+				   unless told not to. 32 of 64 jobs on paintomics.org
+				   (2026-10-28) stored the Experiment design placeholder
+				   ("e.g. RNA-seq of wildtype vs knockout mouse liver ...") as
+				   their design, and the AI walk called zebrafish and potato
+				   data "knockout mouse liver". Every form.submit in the app
+				   says this (test_form_placeholder_is_not_a_design pins it);
+				   the server drops the placeholder too, for older clients. */
+				submitEmptyText: false,
 				success: function (form, action) {
 					var response = JSON.parse(action.response.responseText);
 					console.log("JOB " + response.jobID + " is queued ");
@@ -1500,6 +1510,7 @@ function JobController() {
 			showInfoMessage("Uploading and processing files...", {logMessage: "New Job created, submitting files...", showSpin: true});
 			form.submit({
 				method: 'POST', url: URL,
+				submitEmptyText: false,
 				success: function (form, action) {
 					var response = JSON.parse(action.response.responseText);
 					console.log("JOB " + response.jobID + " is queued ");
@@ -1550,6 +1561,7 @@ function JobController() {
 			showInfoMessage("Uploading and processing files...", {logMessage: "New Job created, submitting files...", showSpin: true});
 			form.submit({
 				method: 'POST', url: URL,
+				submitEmptyText: false,
 				success: function (form, action) {
 					var response = JSON.parse(action.response.responseText);
 					console.log("JOB " + response.jobID + " is queued ");

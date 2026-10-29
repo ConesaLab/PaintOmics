@@ -40,6 +40,7 @@ from src.common.Statistics import calculateSignificance, calculateCombinedSignif
 from src.common.Util import chunks, getImageSize
 from src.common.ReplicateDetection import detect_replicates, aggregate_replicates
 from src.common.DesignFile import parse_design, derive_groupings
+from src.common.FormPlaceholders import designWithoutPlaceholder
 
 from src.common.KeggInformationManager import KeggInformationManager
 from src.common.FeatureNamesToKeggIDsMapper import _joinAllWithinDeadline
@@ -419,10 +420,15 @@ class PathwayAcquisitionJob(Job):
         return self.aiConsent
     def setAIConsent(self, v):
         self.aiConsent = (v == True or v == "true" or v == "True")
+    # Both ends drop the Step 1 form's own placeholder (FormPlaceholders): the
+    # setter so a new job never stores it, the getter because 32 of 64 jobs on
+    # paintomics.org (2026-10-28) already did, and parseBSON restores fields
+    # without going through the setter. Every reader -- the walk's design card,
+    # compound suggestion, the Step 2 response -- comes through the getter.
     def getExperimentDesign(self):
-        return self.experimentDesign
+        return designWithoutPlaceholder(self.experimentDesign)
     def setExperimentDesign(self, v):
-        self.experimentDesign = str(v) if v else ""
+        self.experimentDesign = designWithoutPlaceholder(v)
 
     def getJobDescription(self, generate=False, isExampleJob=False):
         if generate:

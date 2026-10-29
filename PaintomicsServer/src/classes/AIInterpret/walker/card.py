@@ -14,6 +14,7 @@ import re
 
 from src.classes.AIInterpret.llm_client import opens_like_reasoning, strip_reasoning
 from src.classes.AIInterpret.walker.anchor import find_perturbed_genes
+from src.common.FormPlaceholders import designWithoutPlaceholder
 
 # A column is a time point when its label carries a time token: a number with a
 # unit ("24h", "0.5 min", "Ikaros_24h_rep1") or a unit with a number ("T0",
@@ -249,12 +250,19 @@ def design_text_of(job_instance):
     when it also speaks of the drafting task (is_leaked_draft_reasoning): a
     design the user typed may open "We need to compare ..." and is the design.
     The draft itself refuses any reasoning opener (the servlet's
-    _usableDescription), since nothing a user wrote is at stake there."""
+    _usableDescription), since nothing a user wrote is at stake there.
+
+    The Step 1 form's placeholder is no design either: 32 of 64 jobs on
+    paintomics.org (2026-10-28) stored "e.g. RNA-seq of wildtype vs knockout
+    mouse liver ..." because the form submitted it for an empty field, and the
+    card made "mouse liver" the system of zebrafish and potato jobs. The job
+    class drops it already; the guard is repeated here for any object that
+    reaches the card without going through that getter."""
     try:
         text = job_instance.getExperimentDesign() if hasattr(job_instance, "getExperimentDesign") else ""
     except Exception:                                          # noqa: BLE001
         text = ""
-    text = strip_reasoning(text or "")
+    text = strip_reasoning(designWithoutPlaceholder(text))
     return "" if is_leaked_draft_reasoning(text) else text
 
 

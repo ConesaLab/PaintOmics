@@ -710,7 +710,7 @@ Ext.define('Ext.view.override.Grid', {
                         value: vExportContent
                     }]
             });
-            form.getForm().submit();
+            form.getForm().submit({submitEmptyText: false});
         }
     },
     /**
