@@ -32,6 +32,22 @@ def ran_out_of_budget(exc):
     return bool(getattr(exc, "gave_up_at_deadline", False))
 
 
+# What a gateway says when a prompt outgrew the model's window. LiteLLM raises
+# ContextWindowExceededError and the OpenAI client re-raises its 400 as
+# BadRequestError with that text: job y712svrXTf (2026-10-29), "Error code:
+# 400 ... litellm.ContextWindowExceededError ... your prompt contains at least
+# 260645 input tokens"; vLLM and OpenAI word it "maximum context length" or
+# code it context_length_exceeded.
+CONTEXT_WINDOW_RE = re.compile(r"ContextWindowExceeded|context_length_exceeded|maximum context length|"
+                               r"context window|prompt contains at least \d+ input tokens", re.I)
+
+
+def context_window_exceeded(exc):
+    """True when a call failed because its prompt did not fit the model's
+    window: not a gateway that failed, and no retry of the same prompt helps."""
+    return bool(CONTEXT_WINDOW_RE.search("%s: %s" % (type(exc).__name__, exc)))
+
+
 def rate_limited(exc):
     """True for the gateway's own 429, as raised once the retries ran out."""
     response = getattr(exc, "response", None)

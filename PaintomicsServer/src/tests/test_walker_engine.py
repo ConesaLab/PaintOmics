@@ -16,6 +16,7 @@ from src.classes.AIInterpret.walker import heat as heat_mod      # noqa: E402
 from src.classes.AIInterpret.walker import network as net_mod    # noqa: E402
 from src.classes.AIInterpret.walker import overlay as ov_mod     # noqa: E402
 from src.classes.AIInterpret.walker import policies              # noqa: E402
+from src.classes.AIInterpret.walker import verify                # noqa: E402
 from src.classes.AIInterpret.walker.walk import Walker, params_for  # noqa: E402
 from src.tests import walker_fixture as fx                       # noqa: E402
 
@@ -308,6 +309,103 @@ class WalkerEngineTest(unittest.TestCase):
         w = policies.random_walk(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
         self.assertTrue(w.done)
         self.assertEqual(w.refusals, 0)
+
+
+class LayerCapTest(unittest.TestCase):
+    """A node's layer text costs the model at most MEMBERS_SHOWN members of
+    one omic. On y712svrXTf (2026-10-29) one gene carried 241 "miRNA unmapped"
+    layers, 28,473 characters, and the walk overflowed the model's window."""
+    MIRNA = "miRNA unmapped"
+    HIDDEN = "−7.77"           # the value of member 0, which is not relevant
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_dir = fx.make_data_dir()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.data_dir, ignore_errors=True)
+
+    @classmethod
+    def member(cls, i):
+        """Member i: relevant every sixth (40 of 241), value (i + 1) / 10."""
+        values = [-7.77] if i == 0 else [(i + 1) / 10.0]
+        return {"omic": cls.MIRNA, "member": "mmu-miR-%d" % i, "relevant": i % 6 == 1, "values": values,
+                "text": ov_mod.values_text(values, None), "significance": [], "signed": None}
+
+    def fresh(self):
+        graph = net_mod.build_network("tst", self.data_dir)
+        ov = ov_mod.overlay_job(graph, fx.make_job())
+        ov.layers["g:1"].extend(self.member(i) for i in range(241))
+        return graph, ov
+
+    def mirna_lines(self, text):
+        return [line for line in text.splitlines() if line.startswith(self.MIRNA)]
+
+    def test_241_members_of_one_omic_render_in_a_few_lines_relevant_first(self):
+        _graph, ov = self.fresh()
+        text = ov.layer_text("g:1")
+        lines = self.mirna_lines(text)
+        self.assertEqual(len(text.splitlines()), 1 + ov_mod.MEMBERS_SHOWN + 1, text)
+        shown, more = lines[:-1], lines[-1]
+        self.assertEqual({line.split()[3] for line in shown}, {"relevant"}, shown)   # never "not"
+        # the largest relevant values first: members 235, 229, ...
+        self.assertEqual([line.split()[2] for line in shown],
+                         ["mmu-miR-%d" % i for i in range(235, 235 - 6 * ov_mod.MEMBERS_SHOWN, -6)])
+        self.assertTrue(more.endswith("… and 233 more members (32 relevant)"), more)
+        self.assertEqual(verify.quoted_values(more), [], "the summary line must quote no value")
+        self.assertIn("0h +0.10 · 2h +1.50 · 6h +2.20", text, "the other omic is untouched")
+        self.assertLess(len(text), 2000)
+        self.assertEqual(len(ov.layer_text("g:1", limit=None).splitlines()), 242)
+
+    def test_a_node_with_few_layers_renders_unchanged(self):
+        graph = net_mod.build_network("tst", self.data_dir)
+        ov = ov_mod.overlay_job(graph, fx.make_job())
+        for node_id in ov.layers:
+            self.assertEqual(ov.layer_text(node_id), ov.layer_text(node_id, limit=None), node_id)
+        self.assertEqual(ov.layer_text("g:1").splitlines()[0].split()[:3], ["Gene", "expression", "Aaa"])
+
+    def test_a_p_value_column_does_not_decide_the_largest_member(self):
+        _graph, ov = self.fresh()
+        rows = [[0.01, 0.99]] + [[0.1 * k, 0.001] for k in range(1, 9)]
+        ov.layers["g:2"] = [{"omic": "Limma", "member": "m%d" % k, "relevant": False, "values": values,
+                             "text": ov_mod.values_text(values, ["logFC", "P.Value"]), "significance": [1],
+                             "signed": [0]} for k, values in enumerate(rows)]
+        text = ov.layer_text("g:2")
+        self.assertNotIn(" m0 ", text, "a p-value of 0.99 ranked a logFC of 0.01 as the largest")
+        self.assertTrue(text.endswith("… and 1 more member (0 relevant)"), text)
+
+    def test_a_kept_layer_is_shown_whatever_the_cap(self):
+        _graph, ov = self.fresh()
+        hidden = next(layer for layer in ov.layers["g:1"] if layer.get("member") == "mmu-miR-0")
+        self.assertNotIn(self.HIDDEN, ov.layer_text("g:1"))
+        text = ov.layer_text("g:1", keep=[hidden])
+        self.assertIn(self.HIDDEN, text)
+        self.assertEqual(len(self.mirna_lines(text)), ov_mod.MEMBERS_SHOWN + 1)
+
+    def test_the_walkers_answer_carries_the_capped_text(self):
+        graph, ov = self.fresh()
+        opening = Walker(graph, ov, "network", params_for("network")).start_at("g:1", 4, "test")
+        self.assertLessEqual(opening.count("mmu-miR-"), ov_mod.MEMBERS_SHOWN)
+        self.assertIn("… and 233 more members", opening)
+
+    def test_verify_reads_a_member_the_text_no_longer_shows(self):
+        graph, ov = self.fresh()
+        walker = policies.greedy_from(Walker(graph, ov, "network", params_for("network")), "g:1", 2)
+        self.assertIn("g:1", verify.chain_nodes(walker.record()["chain"]))
+        self.assertNotIn(self.HIDDEN, ov.layer_text("g:1"))
+        numbers = verify._record_numbers(walker)
+        self.assertIn(verify._norm(self.HIDDEN), numbers)
+        self.assertEqual(verify.unrecorded_values("miR-0 read %s on Aaa." % self.HIDDEN, numbers), [])
+        self.assertEqual(verify.unrecorded_values("miR-0 read −7.78 on Aaa.", numbers), ["−7.78"])
+
+    def test_the_chat_tools_cap_a_genes_layers_too(self):
+        from src.classes.AIInterpret import tools
+        gene = fx.FakeFeature("1", [fx.FakeOmicValue(self.MIRNA, "mmu-miR-%d" % i, i % 6 == 1, [(i + 1) / 10.0])
+                                    for i in range(241)], name="Aaa")
+        lines = tools._format_gene_omics(gene, {}).splitlines()
+        self.assertEqual(len(lines), ov_mod.MEMBERS_SHOWN + 1)
+        self.assertTrue(lines[-1].endswith("… and 233 more members (32 relevant)"), lines[-1])
 
 
 if __name__ == "__main__":

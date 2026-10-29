@@ -842,10 +842,13 @@ def unrecorded_values(sentence, numbers, source=None, source_refs=None):
 
 
 def _record_numbers(walker):
-    """Every value token that appears in any chain node's layer text."""
+    """Every value token that appears in any chain node's layer text: every
+    layer's, not the MEMBERS_SHOWN a model reads (overlay.capped_layers). The
+    record holds what the user measured; a sentence quoting a member's value
+    the walker's cap left out is quoting the user's data, not inventing it."""
     tokens = set()
     for node_id in chain_nodes(walker.record()["chain"]):
-        for value in quoted_values(walker.overlay.layer_text(node_id)):
+        for value in quoted_values(walker.overlay.layer_text(node_id, limit=None)):
             tokens.add(_norm(value))
     return tokens
 
@@ -901,6 +904,22 @@ def _words(text):
     """A text as the dropped-statement check compares it: whitespace runs as
     one space, lower case."""
     return " ".join(str(text or "").split()).lower()
+
+
+UNCOVERED = "statement %d is not covered"
+_UNCOVERED_RE = re.compile("^%s$" % re.escape(UNCOVERED).replace("%d", r"(\d+)"))
+
+
+def uncovered_statements(problems):
+    """The statements verify_results found no paragraph retelling, when that
+    is every problem it found; None when any other problem is among them."""
+    numbers = []
+    for problem in problems or ():
+        match = _UNCOVERED_RE.match(str(problem))
+        if match is None:
+            return None
+        numbers.append(int(match.group(1)))
+    return numbers or None
 
 
 def verify_results(results, kept, dropped, walker, scope="pathway", words_range=None):
@@ -975,8 +994,8 @@ def verify_results(results, kept, dropped, walker, scope="pathway", words_range=
         if JARGON_RE.search(text):
             problems.append("paragraph %d narrates the walk (%s); report the biology and name the genes"
                             % (i, JARGON_RE.search(text).group(0)))
-    for n in kept_ids - covered:
-        problems.append("statement %d is not covered" % n)
+    for n in sorted(kept_ids - covered):
+        problems.append(UNCOVERED % n)
     # What the kept statements say in their own words, for the check below.
     kept_words = [_words(s.get(field)) for s in kept for field in ("claim", "prose")]
     for stmt in dropped:

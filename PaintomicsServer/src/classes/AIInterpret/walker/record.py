@@ -16,7 +16,8 @@ def seal(job_id, scope, network, overlay, walker, card, statements, dropped, res
              "N": overlay.N, "K": overlay.K, "regulators": overlay.regulators,
              "degree_cap": overlay.cap, "capped": len(overlay.capped)}
     walk = walker.record()
-    # the layer text of every chain node, so the record is self-contained
+    # the layer text of every chain node, so the record is self-contained:
+    # every layer, not the members a model was shown (overlay.MEMBERS_SHOWN)
     layers = {}
     for leg in walk["chain"]:
         for node_id in (leg["from"], leg["to"]):
@@ -26,7 +27,7 @@ def seal(job_id, scope, network, overlay, walker, card, statements, dropped, res
                                    "r": int(bool(overlay.r.get(node_id))) if node_id in overlay.measured else None,
                                    "heat": round(overlay.heat.get(node_id, {}).get("heat", 0.0), 2),
                                    "layers": overlay.layers.get(node_id, []),
-                                   "text": overlay.layer_text(node_id)}
+                                   "text": overlay.layer_text(node_id, limit=None)}
     return {
         "schema": SCHEMA, "job": job_id, "scope": scope, "sealed_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "graph": graph, "design_card": card, "walk": walk, "nodes": layers,

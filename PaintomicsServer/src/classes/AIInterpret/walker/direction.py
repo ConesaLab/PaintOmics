@@ -218,12 +218,15 @@ def direction_check(client, statements, walker, deadline=None):
                        "data_sign": hit["sign"], "implied": implied, "claimed": None, "quote": "",
                        "fits": None, "fits_flipped": None, "consistent": True, "insensitive": False}
             claim = fit = flipped = None
-            text = walker.overlay.layer_text(hit["node"])
+            # The cited layer is shown whatever the member cap: its values
+            # are the ones data_sign was read from.
+            text = walker.overlay.layer_text(hit["node"], keep=[hit["layer"]])
             kinds = _value_kind_of(walker.overlay, hit["node"])
             try:
                 claim = claimed_direction(client, stmt, hit, budget_seconds=budget())
                 fit = fits_values(client, stmt, hit, text, budget_seconds=budget(), value_kind=kinds)
-                flipped = fits_values(client, stmt, hit, walker.overlay.layer_text(hit["node"], flip=True),
+                flipped = fits_values(client, stmt, hit,
+                                      walker.overlay.layer_text(hit["node"], flip=True, keep=[hit["layer"]]),
                                       budget_seconds=budget(), value_kind=kinds)
                 if claim is None or fit is None or flipped is None:
                     verdict["unchecked"] = UNCHECKED_NO_ANSWER

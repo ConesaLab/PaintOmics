@@ -18,6 +18,17 @@ from src.classes.AIInterpret.walker.card import job_value_kinds, labels_by_omic,
 
 REGULATOR_OMICS = ("miRNA-seq", "miRNA", "microRNA")
 
+# How many members of one omic a model reads on one node (capped_layers). On
+# job y712svrXTf (the public STATegra "miRNA to genes (real)" example, network
+# walk, 2026-10-29) the omic "miRNA unmapped" attaches a miRNA member to a
+# gene, so its 118,296 rows became layers ON genes: g:12581 carried 241 of
+# them, 28,473 characters of layer text, g:16443 124; and a walker's every
+# answer shows the layers of the node and of up to 40 relevant open
+# neighbours. A seed walker's first turn was already 74,087-85,759 prompt
+# tokens, and the walk died on the model's 262,144-token window ("your prompt
+# contains at least 260645 input tokens").
+MEMBERS_SHOWN = 8
+
 
 class Overlay(object):
     """Everything the walk reads about the job, keyed by network node id."""
@@ -37,21 +48,72 @@ class Overlay(object):
         self.K = 0
         self.regulators = 0
 
-    def layer_text(self, node_id, flip=False):
-        """The block the model reads for one node: every layer, every member,
-        the flag as recorded, the values as text with the user's labels.
+    def layer_text(self, node_id, flip=False, limit=MEMBERS_SHOWN, keep=()):
+        """The block the model reads for one node: its layers, the flag as
+        recorded, the values as text with the user's labels; at most ``limit``
+        members of any one omic (capped_layers), every layer with None.
+
+        The cap is the default, so no prompt can carry a node's every layer by
+        omission; the record, the views and the verifier's record of numbers
+        (verify._record_numbers) pass None and read every layer. ``keep``:
+        layers shown whatever the cap (the direction check's cited layer).
 
         ``flip``: every signed value's sign reversed (signed_values), for the
         direction check's counter-hypothesis. A p-value or q-value has no sign
         to reverse and would read as a negative p-value; nor has AveExpr or B
         beside a logFC, and a negated mean expression is no counter-hypothesis."""
         lines = []
-        for layer in self.layers.get(node_id, []):
-            lines.append("%-16s %-20s %-12s %s" % (
-                layer["omic"], layer["member"][:20],
-                "relevant" if layer["relevant"] else "not relevant",
-                _flipped(layer, self.labels.get(layer["omic"])) if flip else layer["text"]))
+        for entry in capped_layers(self.layers.get(node_id, []), limit, keep):
+            if isinstance(entry, dict):
+                lines.append("%-16s %-20s %-12s %s" % (
+                    entry["omic"], entry["member"][:20],
+                    "relevant" if entry["relevant"] else "not relevant",
+                    _flipped(entry, self.labels.get(entry["omic"])) if flip else entry["text"]))
+            else:
+                lines.append("%-16s %s" % (entry[0], more_text(*entry[1:])))
         return "\n".join(lines) if lines else "not measured"
+
+
+def _salience(layer):
+    """The largest |signed value| of a layer (signed_values), 0 for none: a
+    p-value column is never the "largest" reading."""
+    return max((abs(number) for number in signed_values(layer)), default=0.0)
+
+
+def capped_layers(layers, limit=MEMBERS_SHOWN, keep=()):
+    """``layers`` as the model reads them: every one when no omic holds more
+    than ``limit`` members (or ``limit`` is None), in their order. Otherwise
+    omic by omic in the order first met, an omic over the cap showing the
+    layers in ``keep`` (by identity), then its relevant members, then the rest
+    by largest |signed value| (_salience), ``limit`` in all, followed by the
+    tuple (omic, members not shown, of which relevant) for its summary line
+    (more_text)."""
+    layers = list(layers or [])
+    by_omic = OrderedDict()
+    for layer in layers:
+        by_omic.setdefault(layer["omic"], []).append(layer)
+    if limit is None or all(len(group) <= limit for group in by_omic.values()):
+        return layers
+    pinned = {id(layer) for layer in keep or ()}
+    out = []
+    for omic, group in by_omic.items():
+        if len(group) <= limit:
+            out.extend(group)
+            continue
+        ranked = [layer for _i, layer in sorted(enumerate(group), key=lambda item: (
+            id(item[1]) not in pinned, not item[1]["relevant"], -_salience(item[1]), item[0]))]
+        shown = ranked[:max(limit, sum(1 for layer in group if id(layer) in pinned))]
+        out.extend(shown)
+        out.append((omic, len(group) - len(shown),
+                    sum(1 for layer in ranked[len(shown):] if layer["relevant"])))
+    return out
+
+
+def more_text(hidden, relevant):
+    """The line standing for the members capped_layers did not show. It quotes
+    no value (verify.NUMBER_RE reads none in it), so nothing that reads the
+    record's values back out of a layer text could take a count for one."""
+    return "… and %d more member%s (%d relevant)" % (hidden, "" if hidden == 1 else "s", relevant)
 
 
 def _any_relevant(value):
