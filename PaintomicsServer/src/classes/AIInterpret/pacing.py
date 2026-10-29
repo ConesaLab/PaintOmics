@@ -28,6 +28,7 @@ agents past 60/min; seven paper agents gave up on "429 Client Error", no
 statement got confirmed evidence, and the walk kept none.
 """
 import asyncio
+import contextlib
 import heapq
 import logging
 import os
@@ -57,12 +58,19 @@ class Pacer(object):
     """
 
     def __init__(self, rpm, clock=time.monotonic):
-        self.rpm = int(rpm)
-        self.interval = 60.0 / self.rpm
         self._clock = clock
         self._next = None
         self._free = []                # heap of the start times handed back
         self._lock = threading.Lock()
+        self.retune(rpm)
+
+    def retune(self, rpm):
+        """Space the slots taken from now on 60/rpm apart. The schedule
+        already handed out stands: the slots reserved and the next one on the
+        schedule (``_next``) are kept, so a waiter's slot is never given again."""
+        with self._lock:
+            self.rpm = int(rpm)
+            self.interval = 60.0 / self.rpm
 
     def _take(self):
         """(start, delay): the earliest slot handed back that is still ahead,
@@ -99,15 +107,28 @@ class Pacer(object):
             return start, None
         return start, delay
 
-    def acquire(self, seconds_left=None, floor=0.0):
+    def acquire(self, seconds_left=None, floor=0.0, cancel=None):
         """Block this thread until its slot opens; True. False at once, with
         the slot handed back, when the wait would leave under ``floor`` of the
-        caller's ``seconds_left`` (None: no budget, always wait)."""
-        delay = self._admit(seconds_left, floor)[1]
+        caller's ``seconds_left`` (None: no budget, always wait).
+
+        ``cancel``, a threading.Event: set while the thread waits (its stage
+        ended), the wait ends and the slot goes back; False. A thread cannot
+        be cancelled as a coroutine is (wait), so a paper agent whose Writers'
+        stage was over slept on to its slot and then sent a request whose
+        answer nobody read, on the key's budget."""
+        start, delay = self._admit(seconds_left, floor)
         if delay is None:
             return False
+        if cancel is not None and cancel.is_set():
+            self.release(start)
+            return False
         if delay > 0:
-            time.sleep(delay)
+            if cancel is None:
+                time.sleep(delay)
+            elif cancel.wait(delay):
+                self.release(start)
+                return False
         return True
 
     async def wait(self, seconds_left=None, floor=0.0):
@@ -123,6 +144,28 @@ class Pacer(object):
                 self.release(start)
                 raise
         return True
+
+
+_LOCAL = threading.local()
+
+
+@contextlib.contextmanager
+def stopped_by(event):
+    """Within the block, a pacer wait on this thread ends when ``event`` (a
+    threading.Event) is set: acquire's ``cancel`` for a caller that cannot
+    pass one through the transport. The paper agents' calls run on threads
+    their Writers' stage cannot cancel; the stage sets the event as it ends."""
+    saved = getattr(_LOCAL, "stop", None)
+    _LOCAL.stop = event
+    try:
+        yield
+    finally:
+        _LOCAL.stop = saved
+
+
+def current_stop():
+    """The event stopped_by set on this thread, or None."""
+    return getattr(_LOCAL, "stop", None)
 
 
 _PACERS = {}               # api_base -> Pacer
@@ -156,16 +199,21 @@ def ceiling(api_base):
 
 
 def pacer_for(api_base):
-    """The endpoint's one Pacer, or None when it is unpaced. Rebuilt when the
-    ceiling changes (a header learned, a harness retuning between runs)."""
+    """The endpoint's one Pacer, or None when it is unpaced. Retuned in place
+    when the ceiling changes (a header learned, a harness retuning between
+    runs): a new Pacer forgot the slots the old one had handed out, and the
+    callers still sleeping toward them, so the next caller was admitted at
+    once beside them."""
     rpm = ceiling(api_base)
     if not rpm:
         return None
     key = _key(api_base)
     with _LOCK:
         pacer = _PACERS.get(key)
-        if pacer is None or pacer.rpm != rpm:
+        if pacer is None:
             pacer = _PACERS[key] = Pacer(rpm)
+        elif pacer.rpm != rpm:
+            pacer.retune(rpm)
         return pacer
 
 

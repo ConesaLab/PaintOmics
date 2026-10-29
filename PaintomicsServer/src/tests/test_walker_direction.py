@@ -262,6 +262,19 @@ class DirectionTest(unittest.TestCase):
         verdicts, objections = direction.direction_check(StubClient("up"), [stmt], walker)
         self.assertIn("reports the pathway down, not up", objections[1][0])
 
+    def test_a_p_value_only_member_does_not_hide_one_with_a_fold_change(self):
+        """Two relevant members of the cited omic: the first holds p-values
+        only (sign 0), the second a fold change. The first was taken, gave no
+        sign, and the regulator went unchecked."""
+        symbol = self.feedback["symbol"]
+        walker = self.walker_with("g:2", symbol, [-0.1, -2.0, -1.5])
+        signed = walker.overlay.layers["g:2"][0]
+        p_only = dict(signed, member=symbol + "-p", values=[0.001, 0.0004, 0.03], significance=[0, 1, 2])
+        p_only["text"] = ov_mod.values_text(p_only["values"], ["0h", "2h", "6h"])
+        walker.overlay.layers["g:2"].insert(0, p_only)
+        hits = direction.panel_hits(self.statement(symbol, "%s fell, derepressing the pathway" % symbol), walker)
+        self.assertEqual([(h["layer"]["member"], h["sign"]) for h in hits], [(symbol, -1)])
+
     def test_no_panel_gene_means_not_applicable(self):
         walker = self.walker_with("g:2", "Bbb", [-0.1, -2.0, -1.5])
         verdicts, objections = direction.direction_check(StubClient("up"), [self.statement("Bbb", "Bbb fell")], walker)

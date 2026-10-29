@@ -207,12 +207,80 @@ class ExpDesignDraftTest(_RouteCase):
         self.assertEqual(len(_Handler.bodies), 2, "asked once again, then gave up")
 
     def test_a_truncated_reply_is_asked_again(self):
-        _Handler.answers = [json.dumps({"description": "I compared a control group (Ctr"}),
-                            json.dumps({"description": self.CLEAN})]
+        _Handler.answers = ['{"description": "I compared a control group (Ctr', json.dumps({"description": self.CLEAN})]
         out = self.draft()
         self.assertTrue(out["success"])
         self.assertEqual(out["suggestion"], self.CLEAN)
         self.assertEqual(len(_Handler.bodies), 2)
+
+    def test_a_parsed_json_description_needs_no_final_full_stop(self):
+        """The model closed the object itself, so the description is whole;
+        only the text path can be cut off. Reasoning is refused on both."""
+        from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
+        whole = "I compared Ikaros-induced cells with controls at 0 h and 24 h (n = 3 per group)"
+        _Handler.answers = [json.dumps({"description": whole})]
+        out = self.draft()
+        self.assertEqual((out["success"], out["suggestion"], len(_Handler.bodies)), (True, whole, 1))
+        self.assertIsNone(_usableDescription(_descriptionFromText(whole)), "the text path still needs its end")
+        fenced = "Here it is: %s" % json.dumps({"description": whole})
+        self.assertEqual(_usableDescription(_descriptionFromText(fenced)), whole)
+        self.assertIsNone(_usableDescription({"description": "The user asks for the design of two groups"}))
+        self.assertIsNone(_usableDescription(_descriptionFromText("The user asks for the design of two groups.")))
+
+    def test_a_draft_whose_budget_runs_out_answers_could_not_draft(self):
+        """Pacing is on by default; a request-thread draft waiting in the pacer
+        behind a walk's fan-out held one of the site's four threads for about
+        a minute per attempt. It now has 60 s over both attempts, and a budget
+        spent is the plain refusal, not an error page."""
+        import requests
+        servlet = self.servlet
+        clock = {"t": 0.0}
+        budgets = []
+
+        class _Paced(object):
+            """complete_json behind a pacer whose queue costs 40 s an attempt."""
+            def __init__(self, answers):
+                self.answers = list(answers)
+
+            def complete_json(self, messages, *args, **kwargs):
+                budgets.append(kwargs.get("budget_seconds"))
+                clock["t"] += 40.0
+                if kwargs.get("budget_seconds") is None or kwargs["budget_seconds"] < 40.0:
+                    err = requests.exceptions.Timeout("the pacer's wait outlasts the budget")
+                    err.gave_up_at_deadline = True
+                    raise err
+                return self.answers.pop(0)
+        now = lambda: clock["t"]                                         # noqa: E731
+        out = servlet._draftExpDesign(_Paced([{"description": "The user asks for a design."}]), [], clock=now)
+        self.assertIsNone(out)
+        self.assertEqual(budgets, [60.0, 20.0], "the second attempt gets what the first left")
+
+        clock["t"], budgets[:] = 0.0, []
+        self.assertEqual(servlet._draftExpDesign(_Paced([{"description": self.CLEAN}]), [], clock=now), self.CLEAN)
+        self.assertEqual(budgets, [60.0])
+
+        clock["t"], budgets[:] = 0.0, []
+        self.assertIsNone(servlet._draftExpDesign(_Paced([]), [], budget_seconds=2, clock=now))
+        self.assertEqual(budgets, [], "under MIN_CALL_SECONDS no call is made")
+
+        # through the route: a budget spent is success False with the message
+        saved = servlet._draftExpDesign
+        servlet._draftExpDesign = lambda llm, messages: saved(_Paced([]), messages, budget_seconds=30, clock=now)
+        try:
+            routed = self.draft()
+        finally:
+            servlet._draftExpDesign = saved
+        self.assertFalse(routed["success"])
+        self.assertIn("could not draft a description", routed["message"])
+
+    def test_a_gateway_error_is_still_an_error(self):
+        servlet = self.servlet
+
+        class _Broken(object):
+            def complete_json(self, *args, **kwargs):
+                raise RuntimeError("HTTP 500")
+        with self.assertRaises(RuntimeError):
+            servlet._draftExpDesign(_Broken(), [])
 
     def test_reasoning_closed_before_the_answer_still_gives_the_answer(self):
         _Handler.answers = ["Let me read the headers.</think>" + json.dumps({"description": self.CLEAN})]
@@ -240,7 +308,7 @@ class ExpDesignDraftTest(_RouteCase):
         # missing end of its sentence tells it from a description.
         from src.servlets.AIInterpretServlet import _descriptionFromText, _usableDescription
         cut = '{"description": "I compared a control group (Ctr'
-        self.assertEqual(_descriptionFromText(cut), {"description": cut})
+        self.assertEqual(_descriptionFromText(cut)["description"], cut)
         self.assertIsNone(_usableDescription(_descriptionFromText(cut)))
 
 

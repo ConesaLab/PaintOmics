@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import threading
+import time
 from datetime import datetime, timedelta
 
 from src.common.ServerErrorManager import handleException
@@ -10,8 +11,8 @@ from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.DAO.AIWalkDAO import AIWalkDAO
 from src.common.JobInformationManager import JobInformationManager
 from src.common.PySiQ import JobStatus
-from src.classes.AIInterpret.llm_client import (LLMClient, MissingAPIKeyError, embedded_json, opens_like_reasoning,
-                                                 strip_reasoning)
+from src.classes.AIInterpret.llm_client import (MIN_CALL_SECONDS, LLMClient, MissingAPIKeyError, embedded_json,
+                                                 opens_like_reasoning, ran_out_of_budget, strip_reasoning)
 from src.classes.AIInterpret import model_fallback
 from src.classes.AIInterpret.prompts import SYSTEM_PROMPT_CHAT, design_guidance
 from src.classes.AIInterpret.walker import card as card_mod
@@ -545,13 +546,22 @@ _EXPDESIGN_SCHEMA = {
     "additionalProperties": False,
 }
 _EXPDESIGN_MAX_TOKENS = 1000
-# A finished description ends a sentence; a cut one stops anywhere. Kept even
-# under the schema: a reply cut off mid-JSON ('{"description": "I compared a
+# A finished description ends a sentence; a cut one stops anywhere. Asked only
+# of the text path: a reply cut off mid-JSON ('{"description": "I compared a
 # control group (Ctr') is no JSON, comes back through _descriptionFromText as
-# the whole unterminated text, and this is what rejects it. What the model
-# writes when thinking aloud is llm_client.opens_like_reasoning, the same test
-# the walk's card makes of a stored design.
+# the whole unterminated text, and this is what rejects it. A description
+# read out of a JSON object that parsed was closed by the model itself, and is
+# complete without a final full stop ("... in triplicate (n = 3)"). What the
+# model writes when thinking aloud is llm_client.opens_like_reasoning, asked of
+# both.
 _EXPDESIGN_TERMINAL = re.compile(r"[.!?][\"'\u201d\u2019)\]]*\s*$")
+# Marks a draft _descriptionFromText took from the whole reply, not a JSON object.
+_EXPDESIGN_FROM_TEXT = "_fromText"
+# The wall clock over every attempt of one draft. It runs on a request thread,
+# of which four serve the site, and pacing is on by default (54/min learned
+# from the key): unbudgeted, each attempt could sleep about a minute in the
+# pacer queued behind a walk's fan-out while the thread was held.
+_EXPDESIGN_BUDGET_SECONDS = 60
 _EXPDESIGN_UNAVAILABLE = (
     "The AI could not draft a description from these columns this time. Write the experiment design "
     "yourself, or press the button again.")
@@ -560,31 +570,49 @@ _EXPDESIGN_UNAVAILABLE = (
 def _descriptionFromText(text):
     """complete_json's fallback for an endpoint that ignores the schema: the
     JSON object the reply wrapped in prose or a fence (llm_client.embedded_json),
-    else the whole reply."""
+    else the whole reply, marked as such (_EXPDESIGN_FROM_TEXT)."""
     parsed = embedded_json(text)
-    return parsed if isinstance(parsed, dict) else {"description": str(text or "")}
+    if isinstance(parsed, dict):
+        return parsed
+    return {"description": str(text or ""), _EXPDESIGN_FROM_TEXT: True}
 
 
 def _usableDescription(answer):
     """The description in a draft reply, or None when it is not one: empty,
     still reasoning (a "</think>" left in it, or an opening like "The user
-    asks ..." / "We need ..."), or cut off before its last sentence ended."""
+    asks ..." / "We need ..."), or, taken from the whole reply text, cut off
+    before its last sentence ended."""
     text = answer.get("description") if isinstance(answer, dict) else None
     text = strip_reasoning(text).strip() if isinstance(text, str) else ""
-    if not text or "</think>" in text or "<think>" in text:
+    if not text or "</think>" in text or "<think>" in text or opens_like_reasoning(text):
         return None
-    if opens_like_reasoning(text) or not _EXPDESIGN_TERMINAL.search(text):
+    if answer.get(_EXPDESIGN_FROM_TEXT) and not _EXPDESIGN_TERMINAL.search(text):
         return None
     return text
 
 
-def _draftExpDesign(llm, messages, attempts=2):
-    """The drafted description, or None when no attempt gave a usable one.
-    A reply that is reasoning or a half sentence is asked again once; it is
-    never handed to the user as their experiment design."""
+def _draftExpDesign(llm, messages, attempts=2, budget_seconds=_EXPDESIGN_BUDGET_SECONDS, clock=time.monotonic):
+    """The drafted description, or None when no attempt gave a usable one
+    within ``budget_seconds`` over all of them. A reply that is reasoning or a
+    half sentence is asked again once; it is never handed to the user as their
+    experiment design. A budget spent, in the pacer's queue or on the gateway,
+    is no usable draft: the caller's "could not draft" answer, not an error."""
+    deadline = clock() + budget_seconds
     for attempt in range(1, attempts + 1):
-        answer = llm.complete_json(messages, "experiment_design", _EXPDESIGN_SCHEMA, _descriptionFromText,
-                                   max_tokens=_EXPDESIGN_MAX_TOKENS, temperature=0.3)
+        left = deadline - clock()
+        if left < MIN_CALL_SECONDS:
+            logging.warning("aiGenerateExpDesign: the %d s budget is spent before attempt %d/%d",
+                            budget_seconds, attempt, attempts)
+            return None
+        try:
+            answer = llm.complete_json(messages, "experiment_design", _EXPDESIGN_SCHEMA, _descriptionFromText,
+                                       max_tokens=_EXPDESIGN_MAX_TOKENS, temperature=0.3, budget_seconds=left)
+        except Exception as exc:                                      # noqa: BLE001
+            if not ran_out_of_budget(exc):
+                raise
+            logging.warning("aiGenerateExpDesign: attempt %d/%d ran out of the %d s budget (%s)",
+                            attempt, attempts, budget_seconds, type(exc).__name__)
+            return None
         text = _usableDescription(answer)
         if text is not None:
             return text

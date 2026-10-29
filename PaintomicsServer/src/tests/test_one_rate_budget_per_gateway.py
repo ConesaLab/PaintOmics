@@ -32,7 +32,7 @@ class _Recording(pacing.Pacer):
         pacing.Pacer.__init__(self, rpm, clock=lambda: 1000.0)
         self.seen = []
 
-    def acquire(self, seconds_left=None, floor=0.0):
+    def acquire(self, seconds_left=None, floor=0.0, cancel=None):
         self.seen.append(("thread", self.reserve()))
         return True
 
@@ -174,6 +174,20 @@ class CeilingTest(_Case):
         os.environ["AI_LLM_MAX_RPM"] = ""
         self.assertEqual(pacing.pacer_for(self.provider["api_base"]).rpm, 54, "an empty setting is unset")
 
+    def test_a_new_ceiling_retunes_the_pacer_and_keeps_the_slots_it_gave(self):
+        """Rebuilt on a new ceiling, the pacer forgot the slots its callers
+        were sleeping toward, and the next caller went at once beside them."""
+        os.environ["AI_LLM_MAX_RPM"] = "6"
+        key = pacing._key(self.provider["api_base"])
+        pacer = pacing._PACERS[key] = pacing.Pacer(6, clock=lambda: 1000.0)
+        for _ in range(3):
+            pacer.reserve()                                  # slots at 1000, 1010, 1020
+        os.environ["AI_LLM_MAX_RPM"] = "12"
+        self.assertIs(pacing.pacer_for(self.provider["api_base"]), pacer)
+        self.assertEqual((pacer.rpm, pacer.interval), (12, 5.0))
+        self.assertEqual(pacer.reserve(), 30.0, "the next slot is after the ones already handed out")
+        self.assertEqual(pacer.reserve(), 35.0, "and the ones after it at the new spacing")
+
     def test_a_trailing_slash_is_the_same_gateway(self):
         pacing.learn("http://gw/v1/", {"x-litellm-key-rpm-limit": "100"})
         self.assertIs(pacing.pacer_for("http://gw/v1"), pacing.pacer_for("http://gw/v1/"))
@@ -239,6 +253,20 @@ class SlotsHandedBackTest(unittest.TestCase):
             self.assertTrue(pacer.acquire(seconds_left=40, floor=3))
         self.assertEqual(clock.slept, [30.0], "the refused slot was not the next one taken")
 
+    def test_a_thread_waiting_for_its_slot_wakes_when_its_stage_ends(self):
+        import threading
+        pacer = pacing.Pacer(6, clock=lambda: 1000.0)
+        for _ in range(3):
+            pacer.reserve()                                  # 30 s of queue
+        stop = threading.Event()
+        threading.Timer(0.05, stop.set).start()
+        started = time.monotonic()
+        self.assertFalse(pacer.acquire(100, 3, cancel=stop))
+        self.assertLess(time.monotonic() - started, 5, "slept on toward its slot")
+        self.assertEqual(pacer.reserve(), 30.0, "its slot went back")
+        self.assertFalse(pacer.acquire(100, 3, cancel=stop), "an ended stage takes no slot at all")
+        self.assertEqual(pacer.reserve(), 40.0, "the slot it was offered is the next one given")
+
     def test_a_slot_open_now_is_never_refused(self):
         pacer = pacing.Pacer(6, clock=lambda: 1000.0)
         self.assertTrue(pacer.acquire(seconds_left=1, floor=3))
@@ -275,6 +303,21 @@ class PacedCallKeepsItsBudgetTest(_Case):
         self.assertEqual(self.posts, [])
         self.assertEqual(self.clock.slept, [])
         self.assertEqual(self.pacer.reserve(), 30.0, "the unused slot was kept")
+
+    def test_a_wait_its_stage_ended_is_not_sent_and_gives_its_slot_back(self):
+        """A paper agent's thread outlives its Writers' stage: cancelling the
+        coroutine left it asleep in the pacer, and it later sent a check
+        nobody read, on the key's budget."""
+        import threading
+        stop = threading.Event()
+        stop.set()
+        with pacing.stopped_by(stop), self.assertRaises(self.llm_client.requests.exceptions.Timeout) as raised:
+            self.ask_within(60)
+        self.assertTrue(self.llm_client.ran_out_of_budget(raised.exception))
+        self.assertIn("stage ended", str(raised.exception))
+        self.assertEqual((self.posts, self.clock.slept), ([], []))
+        self.assertEqual(self.pacer.reserve(), 30.0, "the unused slot was kept")
+        self.assertIsNone(pacing.current_stop(), "the signal is the block's only")
 
     def test_the_read_timeout_is_what_is_left_after_the_wait(self):
         self.assertEqual(self.ask_within(60), "ok")

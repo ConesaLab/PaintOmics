@@ -41,11 +41,23 @@ SIGNIFICANCE_RE = re.compile(
 # only as whole tokens, so logFC and the "lg" inside a word are not one.
 LOG_TRANSFORM_RE = re.compile(r"log(?:10|2)|(?<![A-Za-z])(?:neg|minus|m)?(?:log|ln|lg)(?![A-Za-z])", re.I)
 # A column of effect sizes, by its header: logFC, log2FC, log2FoldChange, FC,
-# fold change, Log2 fold change. Whole tokens, case-insensitive. In a table
-# that also holds p-values (a limma or DESeq2 export) only these carry the
-# direction: AveExpr or baseMean is always positive and the largest number on
-# the row, t and B are statistics, and read as a sign they made every gene "up".
-EFFECT_RE = re.compile(r"(?<![A-Za-z0-9])(?:log(?:2|10)?[._ -]?)?(?:fc|fold[._ -]?change)(?![A-Za-z0-9])", re.I)
+# fold change, Log2 fold change; a log ratio (log2 Ratio, logratio) and
+# limma's M; an estimate; a diff or difference. Whole tokens, case-insensitive
+# but for M, so a lowercase "m" is no column of it. In a table that also
+# holds p-values (a limma or DESeq2 export) only these carry the direction:
+# AveExpr or baseMean is always positive and the largest number on the row, B
+# is a log-odds, and read as a sign they made every gene "up". A plain ratio
+# is never negative and is not one.
+EFFECT_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:(?:log(?:2|10)?[._ -]?)?(?:fc|fold[._ -]?change)|log(?:2|10)?[._ -]?ratios?|(?-i:M)"
+    r"|estimates?|diff(?:erence)?s?)(?![A-Za-z0-9])", re.I)
+# A signed test statistic: t, t-statistic, DESeq2's stat, z, z-score. Its sign
+# is the effect's, so a table with no effect-size column reads its direction
+# here; beside a logFC it is not read, as before. "stat" only as the whole
+# label: limma's B-statistic is the log-odds that a gene changed, whose sign
+# says nothing of which way.
+STATISTIC_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:t(?:[._ -]?stat(?:istic)?s?)?|z(?:[._ -]?scores?)?)(?![A-Za-z0-9])|^\s*stat\s*$", re.I)
 # Of those, the corrected ones, which a relevance cut-off should be made from.
 ADJUSTED_RE = re.compile(r"adj|fdr|(?<![A-Za-z0-9])q[._ -]?val", re.I)
 # What every agent is told about such a column (service.walk_card_text, the
@@ -117,8 +129,13 @@ def significance_columns(labels):
 
 
 def effect_columns(labels):
-    """The indices of the labels that name a fold change (EFFECT_RE)."""
+    """The indices of the labels that name an effect size (EFFECT_RE)."""
     return [i for i, label in enumerate(labels or []) if EFFECT_RE.search(str(label))]
+
+
+def statistic_columns(labels):
+    """The indices of the labels that name a signed test statistic (STATISTIC_RE)."""
+    return [i for i, label in enumerate(labels or []) if STATISTIC_RE.search(str(label))]
 
 
 def _columns_of(find, cells, shown):
@@ -136,8 +153,11 @@ def value_kinds(headers_by_omic, condition_names=None):
     limma table: logFC, AveExpr, t, P.Value, adj.P.Val, B); ``columns`` are
     those columns' labels as the layer text prints them, ``index`` their
     positions. ``signed_index`` are the columns a direction is read from
-    (overlay.signed_values): the fold-change columns when the omic has any
-    (EFFECT_RE), every column that is no p-value or q-value when it has none.
+    (overlay.signed_values): the effect-size columns (EFFECT_RE), else the
+    signed statistics (STATISTIC_RE), else none. Every other column of a
+    table with p-values in it is no direction to read: falling back to them
+    read AveExpr or baseMean, the largest and always positive number on the
+    row, as every gene "up".
 
     ``headers_by_omic`` maps an omic to its file's header as stored (ID column
     first); the whole cells are read as well as the shortened labels
@@ -156,10 +176,11 @@ def value_kinds(headers_by_omic, condition_names=None):
         # ("-log10_KO_padj", "-log10_WT_padj" -> "KO_padj") makes no p-value of it.
         index = [i for i in _columns_of(significance_columns, cells, shown) if not LOG_TRANSFORM_RE.search(cells[i])]
         if index:
-            effects = [i for i in _columns_of(effect_columns, cells, shown) if i not in index]
+            effects = ([i for i in _columns_of(effect_columns, cells, shown) if i not in index]
+                       or [i for i in _columns_of(statistic_columns, cells, shown) if i not in index])
             out.append({"omic": omic, "kind": "significance" if len(index) == len(cells) else "mixed",
                         "columns": [shown[i] for i in index], "index": index,
-                        "signed_index": effects or [i for i in range(len(cells)) if i not in index]})
+                        "signed_index": effects})
     return out
 
 
@@ -195,6 +216,24 @@ def relevance_hint(value_kind):
             "would give the walk its seeds." % (column, column))
 
 
+# What a model's reasoning about the design draft says of its own task, and a
+# researcher's design never does: the column headers it was given, the
+# instruction to describe the experiment in 2-3 sentences in the first person,
+# what "the user" asks. An opening like "We need to" is not enough alone: "We
+# need to compare KO vs WT at 0h, 2h and 6h after LPS" is a design a user typed.
+DRAFTING_TASK_RE = re.compile(
+    r"\bcolumn headers?\b|\bthe headers\b|\bdescri(?:be|ption of) the experiment(?: design)?\b|"
+    r"\b(?:2|two)\s*(?:-|–|to)\s*(?:3|three) sentences\b|\bfirst person\b|\bthe user (?:asks|wants)\b|"
+    r"\bi need to write\b", re.I)
+
+
+def is_leaked_draft_reasoning(text):
+    """True when a stored design is a model's reasoning about drafting it:
+    it opens the way thinking aloud does (llm_client.opens_like_reasoning)
+    and talks about the drafting task itself (DRAFTING_TASK_RE)."""
+    return opens_like_reasoning(text) and bool(DRAFTING_TASK_RE.search(str(text or "")))
+
+
 def design_text_of(job_instance):
     """The job's stored design text without the reasoning a model leaked into
     it. Designs written before every completion went through
@@ -206,14 +245,17 @@ def design_text_of(job_instance):
     A design saved under the old 300-token cap can be reasoning and nothing
     else, cut off before its "</think>" ("The user asks for a description of
     the experiment design ... I need to write 2-3 sentences"): there is no
-    answer in it to keep, so the job reads as one with no design text
-    (llm_client.opens_like_reasoning, the test the design draft makes too)."""
+    answer in it to keep, so the job reads as one with no design text. Only
+    when it also speaks of the drafting task (is_leaked_draft_reasoning): a
+    design the user typed may open "We need to compare ..." and is the design.
+    The draft itself refuses any reasoning opener (the servlet's
+    _usableDescription), since nothing a user wrote is at stake there."""
     try:
         text = job_instance.getExperimentDesign() if hasattr(job_instance, "getExperimentDesign") else ""
     except Exception:                                          # noqa: BLE001
         text = ""
     text = strip_reasoning(text or "")
-    return "" if opens_like_reasoning(text) else text
+    return "" if is_leaked_draft_reasoning(text) else text
 
 
 def axis_kind(labels, design_text=""):

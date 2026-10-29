@@ -432,16 +432,22 @@ class LLMClient:
         slot goes back unused and the attempt fails as a call whose budget ran
         out does: a Timeout marked gave_up_at_deadline, which ran_out_of_budget
         reads and no fallback model is asked after. Raised outside the
-        attempt's try, so it is never retried as the gateway's timeout."""
+        attempt's try, so it is never retried as the gateway's timeout. So
+        does a wait the caller's stage ended (pacing.stopped_by)."""
         pacer = pacing.pacer_for(self.api_base)
         if pacer is None:
             return
         left = None if deadline is None else deadline - time.monotonic()
-        if pacer.acquire(left, MIN_CALL_SECONDS):
+        stop = pacing.current_stop()
+        if pacer.acquire(left, MIN_CALL_SECONDS, cancel=stop):
             return
-        err = requests.exceptions.Timeout(
-            "LLM call to %s not sent: the gateway's rate limit queued it past its budget (%.0fs left)"
-            % (model, left))
+        if stop is not None and stop.is_set():
+            err = requests.exceptions.Timeout(
+                "LLM call to %s not sent: its stage ended while it waited for the gateway's rate limit" % model)
+        else:
+            err = requests.exceptions.Timeout(
+                "LLM call to %s not sent: the gateway's rate limit queued it past its budget (%.0fs left)"
+                % (model, left))
         err.gave_up_at_deadline = True
         raise err
 

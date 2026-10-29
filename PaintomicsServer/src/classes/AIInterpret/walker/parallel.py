@@ -358,7 +358,12 @@ async def write_in_parallel(walker, card_text, pubmed, client, plan, deadline, c
                         % (finished["n"], len(parts), store.checks))
 
     tasks = [asyncio.ensure_future(run_one(i)) for i in range(len(parts))]
-    await _wait(tasks, deadline, cancelled)
+    try:
+        await _wait(tasks, deadline, cancelled)
+    finally:
+        # The stage is over, by its deadline, a deleted job or every Writer
+        # done: a paper agent still queued for a gateway slot gives it back.
+        store.stopped.set()
     kept, dropped = [], []
     for c in contexts:
         if c.done:

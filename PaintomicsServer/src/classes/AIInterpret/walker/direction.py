@@ -89,8 +89,9 @@ def data_direction(layer):
 
 def panel_hits(stmt, walker):
     """The regulators of the panel among a statement's cites: one hit per gene,
-    with its first cited layer the user flagged relevant. A gene whose cited
-    layers are all not relevant is no hit (see the module docstring)."""
+    with its first cited layer the user flagged relevant that has a direction
+    (data_direction not 0). A gene whose cited layers are all not relevant,
+    or carry no sign, is no hit (see the module docstring)."""
     hits = {}
     for cite in stmt.get("cites") or []:
         if not isinstance(cite, (list, tuple)) or len(cite) != 2:
@@ -107,11 +108,14 @@ def panel_hits(stmt, walker):
                 row = regulators.panel_row(layer.get("member"))
         if row is None:
             continue
-        layer = next((l for l in layers if l.get("relevant")), None)
-        if layer is None or node_id in hits:
+        if node_id in hits:
             continue
-        sign = data_direction(layer)
-        if sign == 0:
+        # The first relevant layer that HAS a direction: a member with only
+        # a p-value (sign 0) came first and hid one of the same omic whose
+        # fold change gave it, and the regulator went unchecked.
+        layer, sign = next(((l, data_direction(l)) for l in layers
+                            if l.get("relevant") and data_direction(l) != 0), (None, 0))
+        if layer is None:
             continue
         hits[node_id] = {"node": node_id, "gene": walker.label(node_id), "row": row, "layer": layer, "sign": sign}
     return list(hits.values())

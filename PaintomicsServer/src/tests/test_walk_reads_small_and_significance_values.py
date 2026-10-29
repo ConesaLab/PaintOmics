@@ -288,7 +288,36 @@ class EffectColumnTest(unittest.TestCase):
                                                           "pvalue", "padj"]})
         self.assertEqual(deseq[0]["signed_index"], [1])
         no_effect = card_mod.value_kinds({"Gene expression": ["id", "t", "B", "pvalue"]})
-        self.assertEqual(no_effect[0]["signed_index"], [0, 1], "no fold change: every other column, as before")
+        self.assertEqual(no_effect[0]["signed_index"], [0], "no fold change: the t statistic, never B")
+
+    def test_effects_under_other_names_carry_the_direction(self):
+        """A mixed table whose effect is named M, log2 Ratio, estimate or diff
+        fell back to every non-p column, AveExpr and baseMean among them, and
+        every gene read "up" again."""
+        for effect in ("M", "log2 Ratio", "logratio", "estimate", "diff", "difference", "Estimate"):
+            with self.subTest(effect=effect):
+                kinds = card_mod.value_kinds({"Gene expression": ["id", "AveExpr", effect, "P.Value", "B"]})
+                self.assertEqual(kinds[0]["signed_index"], [1])
+        for statistic in ("t", "t-statistic", "t.stat", "stat", "z", "z-score", "zscore"):
+            with self.subTest(statistic=statistic):
+                kinds = card_mod.value_kinds({"Gene expression": ["id", "baseMean", statistic, "padj", "B-statistic"]})
+                self.assertEqual(kinds[0]["signed_index"], [1])
+        self.assertEqual(card_mod.effect_columns(["m", "ratio", "Mean", "AveExpr", "Mdiff"]), [],
+                         "a lowercase m, a plain ratio and words containing the letters are not")
+        self.assertEqual(card_mod.statistic_columns(["B-statistic", "test", "zone", "Ctr_0H"]), [])
+
+    def test_a_mixed_table_with_no_effect_column_carries_no_sign(self):
+        kinds = card_mod.value_kinds({"Gene expression": ["id", "AveExpr", "baseMean", "P.Value", "adj.P.Val", "B"]})
+        self.assertEqual((kinds[0]["kind"], kinds[0]["signed_index"]), ("mixed", []))
+        job = fx.make_job()
+        job._headers["Gene expression"] = ["#gene", "AveExpr", "P.Value", "B"]
+        ov = ov_mod.overlay_job(self.graph, job)
+        layer = ov.layers["g:1"][0]
+        layer["values"] = [9.5, 0.001, 2.0]
+        self.assertEqual(list(ov_mod.signed_values(layer)), [])
+        from src.classes.AIInterpret.walker import direction as direction_mod
+        self.assertEqual(direction_mod.data_direction(layer), 0, "AveExpr 9.5 read as up")
+        self.assertEqual(null_mod.node_direction(ov, "g:1"), 0)
 
     def test_the_direction_follows_the_fold_change(self):
         ov, layer = self.limma_overlay([-0.8, 9.5, -3.1, 0.001, 0.01, 2.0])
@@ -339,6 +368,23 @@ class DesignTextTest(unittest.TestCase):
             "The headers are Ctr_0H, Ik_24H. I need to write 2-3 sentences")
         self.assertEqual(card_mod.design_text_of(job), "")
         self.assertNotIn("The user asks", card_mod.job_card(job).get("perturbation") or "")
+
+    def test_a_typed_design_that_opens_like_reasoning_is_kept(self):
+        """Only a text about the drafting task is the model's reasoning; a
+        user may well write "We need to compare ..." as the design."""
+        job = fx.make_job()
+        for typed in ("We need to compare KO vs WT at 0h, 2h and 6h after LPS.",
+                      "OK, three groups: vehicle, 1 µM and 10 µM drug, in triplicate.",
+                      "Let me be brief: knockout against wild-type liver, 4 mice each."):
+            with self.subTest(typed=typed):
+                job.getExperimentDesign = lambda typed=typed: typed
+                self.assertEqual(card_mod.design_text_of(job), typed)
+        for leaked in ("We need to describe the experiment design these columns represent.",
+                       "Okay, the column headers are Ctr_0H and Ik_24H; write it in the first person.",
+                       "Let me write 2-3 sentences about the groups."):
+            with self.subTest(leaked=leaked):
+                job.getExperimentDesign = lambda leaked=leaked: leaked
+                self.assertEqual(card_mod.design_text_of(job), "")
 
     def test_a_first_person_design_is_kept(self):
         job = fx.make_job()

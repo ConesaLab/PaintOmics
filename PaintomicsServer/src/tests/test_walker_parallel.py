@@ -425,6 +425,25 @@ class PaperAgentTest(unittest.TestCase):
         store.add({"pmid": "111", "title": "Aaa phosphorylates Bbb", "abstract": "Aaa is a kinase of the test pathway."})
         return store
 
+    def test_a_paper_agent_of_an_ended_stage_sends_nothing(self):
+        """Its thread outlives the cancelled coroutine: the stage's end
+        (store.stopped) stops it before the call, and its pacer wait in the
+        call runs under pacing.stopped_by the same event."""
+        from src.classes.AIInterpret import pacing
+        claim = "Aaa phosphorylates Bbb and drives its degradation"
+        seen = []
+
+        class _Watching(_Client):
+            def complete_json(self, *args, **kwargs):
+                seen.append(pacing.current_stop())
+                return _Client.complete_json(self, *args, **kwargs)
+        store, client = self.store(), _Watching({})
+        self.check(store, client, claim)
+        self.assertEqual(seen, [store.stopped], "the call's pacer wait does not end with the stage")
+        store.stopped.set()
+        verdict = self.check(store, client, "another claim")
+        self.assertEqual((verdict["supported"], verdict.get("transient"), client.calls), (False, True, 1))
+
     def test_a_citation_is_kept_only_with_its_passage_from_the_paper(self):
         claim = "Aaa phosphorylates Bbb and drives its degradation"
         found = {"supported": True, "section": "results",
@@ -1779,6 +1798,7 @@ class WriterTest(_Fixture):
         kept, dropped, store, contexts = asyncio.run(parallel.write_in_parallel(
             self.merged, "card", _PubMed(), None, plan, time.time() + 60, write_one=write_one))
         self.assertGreaterEqual(len(contexts), 1)
+        self.assertTrue(store.stopped.is_set(), "the stage ended without telling its paper agents")
         self.assertEqual(len(store.papers), 1, "two Writers numbered the same paper twice")
         self.assertEqual([s["n"] for s in kept], list(range(1, len(kept) + 1)))
         covered = [c.legs for c in contexts]
