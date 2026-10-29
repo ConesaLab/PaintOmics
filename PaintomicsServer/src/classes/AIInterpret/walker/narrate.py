@@ -10,7 +10,7 @@ import logging
 import time
 
 from src.classes.AIInterpret import llm_client
-from src.classes.AIInterpret.walker.verify import is_placeholder
+from src.classes.AIInterpret.walker.verify import SENTENCE_RE, is_placeholder
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +24,37 @@ logger = logging.getLogger(__name__)
 # 12-statement walk of the same job had passed before #203. The planning that
 # still lands in the summary is pruned (verify.drop_meta_sentences), and an
 # answer of placeholders is asked again (placeholder_answer).
+#
+# A cap on every free-text field. Pruning the brief out of the summary bounds
+# what a reader sees, not what the model writes: on the final re-walk of
+# iwfy4Udv2m (mouse aorta RNA-seq, network walk, 19 statements kept,
+# 2026-10-29) the first call ran 95 s and returned 61,216 characters, its
+# summary restating the brief in a loop ("We never used the walker's words
+# seed, jump or walk; ... We quoted values exactly ...") until the 14,250-token
+# cap cut the JSON off unreadable; the retry had 18 s left and the walk stored
+# no Results. #204 left the fields uncapped on the guess that guided decoding
+# may not honour a maxLength. It does: on the production gateway (CSIC LiteLLM,
+# vLLM, DeepSeek-V4-Flash-0731) a strict schema with maxLength 40 and 120 under
+# a request for a 400-word summary parsed 2 of 2 times, the summary exactly 120
+# characters. The caps sit well above every field of the 53 Results sections
+# the 2026-10-28/29 survey stored (title 196, summary 1,146, paragraph 1,708
+# characters and 225 words at most) and above a paragraph's share of the word
+# budget (service.WORDS_PER_STATEMENT_MAX, 150 words, about 1,150 characters
+# at the 7.6 characters a stored word takes with its [eN] and values), and at
+# the runaway's 4.3 characters a token a capped field costs at most about 70,
+# 470 and 930 tokens of the 2,500 the smallest section is given. A field
+# guided decoding stops at its cap ends mid-sentence; narrate() cuts it back
+# (trim_at_cap). An endpoint that rejects the schema, caps and all, with a 400
+# is asked without one, for the rest of the process (llm_client.complete), and
+# has no cap; the caps are read nowhere else.
+TITLE_MAX_CHARS = 300
+SUMMARY_MAX_CHARS = 2000
+PARAGRAPH_MAX_CHARS = 4000
 RESULTS_SCHEMA = {
     "type": "object",
     "properties": {
-        "title": {"type": "string"},
-        "summary": {"type": "string"},
+        "title": {"type": "string", "maxLength": TITLE_MAX_CHARS},
+        "summary": {"type": "string", "maxLength": SUMMARY_MAX_CHARS},
         "paragraphs": {
             "type": "array",
             "items": {
@@ -36,7 +62,7 @@ RESULTS_SCHEMA = {
                 "properties": {
                     "from_statement": {"type": ["integer", "null"]},
                     "legs": {"type": "array", "items": {"type": "integer"}},
-                    "text": {"type": "string"},
+                    "text": {"type": "string", "maxLength": PARAGRAPH_MAX_CHARS},
                 },
                 "required": ["from_statement", "legs", "text"],
                 "additionalProperties": False,
@@ -100,6 +126,49 @@ def placeholder_answer(out):
     return bool(texts) and 2 * sum(1 for text in texts if is_placeholder(text)) >= len(texts)
 
 
+def trim_at_cap(text, cap):
+    """``text`` cut back to the end of its last complete sentence when it is
+    exactly ``cap`` characters long, or None when no sentence of it is
+    complete; any other text comes back as it was, byte for byte.
+
+    Guided decoding never writes past a maxLength, so a field exactly at its
+    cap was stopped there, mid-sentence; its last sentence goes. A field over
+    its cap came from an endpoint that took no schema (complete_json's
+    fallback) and wrote it whole, so it is left to the checks, as before.
+    Sentences end where verify.sentences splits them (SENTENCE_RE), and the
+    text before the last split is kept as written, spacing included."""
+    if not isinstance(text, str) or len(text) != cap:
+        return text
+    ends = [match.start() for match in SENTENCE_RE.finditer(text)]
+    return text[:ends[-1]] if ends else None
+
+
+def trim_capped_fields(out):
+    """Cut the summary and each paragraph text of a parsed answer that reached
+    its cap back to its last complete sentence (trim_at_cap), in place. A
+    summary with no complete sentence becomes "", which the page shows as no
+    summary; such a paragraph is left as it is, for verify_results to refuse
+    or the code repair to replace like any other uncovering paragraph. The
+    title is not cut: it is one sentence, and the title gate judges it."""
+    trimmed = []
+    if isinstance(out.get("summary"), str):
+        summary = trim_at_cap(out["summary"], SUMMARY_MAX_CHARS)
+        if summary != out["summary"]:
+            out["summary"] = summary or ""
+            trimmed.append("summary")
+    for i, paragraph in enumerate(out.get("paragraphs") or [], 1):
+        if isinstance(paragraph, dict):
+            text = paragraph.get("text")
+            cut = trim_at_cap(text, PARAGRAPH_MAX_CHARS)
+            if cut != text:
+                trimmed.append("paragraph %d" % i)
+                if cut is not None:
+                    paragraph["text"] = cut
+    if trimmed:
+        logger.warning("[walker] the Narrator's %s reached its cap; cut back to its last complete sentence "
+                       "where it had one", ", ".join(trimmed))
+
+
 class OutOfTime(Exception):
     """The Narrator's time ran out before it had a readable answer."""
 
@@ -128,7 +197,8 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
 
     An answer half of whose paragraphs are placeholders is asked again
     (placeholder_answer); a placeholder summary comes back empty; keys the
-    schema does not name (a "plan") are dropped."""
+    schema does not name (a "plan") are dropped; a summary or paragraph cut
+    at its cap is cut back to its last complete sentence (trim_capped_fields)."""
     prompt = "DESIGN CARD\n%s\n\nCHAIN\n%s\n\nKEPT STATEMENTS\n%s\n\nPAPERS\n%s" % (
         card_text, chain_text,
         json.dumps([{"n": s["n"], "claim": s.get("claim"), "prose": s.get("prose"),
@@ -158,6 +228,7 @@ def narrate(client, card_text, kept, chain_text, papers_text, words=(150, 450),
                 out, placeholders = None, placeholders + 1
                 continue
             out = {key: out[key] for key in RESULTS_SCHEMA["properties"] if key in out}
+            trim_capped_fields(out)
             if "summary" in out and is_placeholder(out["summary"]):
                 out["summary"] = ""
             return out
