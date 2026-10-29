@@ -1555,6 +1555,146 @@ class NarratorRepairCasesTest(_Fixture):
                          "the text the page shows is unchanged")
 
 
+class _Gateway(object):
+    """requests.Response double for a 200 carrying ``content``, or an error status."""
+    headers = {}
+
+    def __init__(self, content="", status=200):
+        self.status_code, self.text, self._content = status, content, content
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            err = requests.exceptions.HTTPError("HTTP %d" % self.status_code)
+            err.response = self
+            raise err
+
+    def json(self):
+        return {"choices": [{"message": {"content": self._content}}]}
+
+
+class NarratorFieldCapsTest(unittest.TestCase):
+    """iwfy4Udv2m's final re-walk (19 statements, 2026-10-29): the summary
+    restated the brief for 61,216 characters, the JSON was cut off at the
+    token cap and the walk stored no Results. Each free-text field is capped
+    in the schema, and one cut at its cap loses only its unfinished sentence."""
+
+    # Whole sentences as stored sections write them, spacing included: what
+    # comes before the cut must survive byte for byte.
+    WHOLE = "Cdkn1a fell (−1.20) [e1].  Ccl2 rose (+0.84) [e2].\nTnf rose at 6 h [e3]."
+    UNFINISHED = "Bbb fell while Ccc rose and Ddd held "
+
+    def cut_at(self, cap, whole=WHOLE):
+        """``whole`` then a sentence that never ends, exactly ``cap`` characters."""
+        return (whole + " " + self.UNFINISHED * (cap // len(self.UNFINISHED) + 1))[:cap]
+
+    def narrate(self, draft):
+        """narrate()'s answer to one stub reply, and the schema it was asked with."""
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        asked = []
+
+        class Client(object):
+            def complete_json(self, messages, name, schema, parser, **kwargs):
+                asked.append(schema)
+                return json.loads(json.dumps(draft))
+        return narrate_mod.narrate(Client(), "card", [{"n": 1}, {"n": 2}], "chain", ""), asked[0]
+
+    def paragraphs(self, *texts):
+        return [{"from_statement": n, "legs": [n], "text": text} for n, text in enumerate(texts, 1)]
+
+    def test_the_schema_caps_every_free_text_field(self):
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        _, schema = self.narrate({"title": "t", "summary": "s.", "paragraphs": self.paragraphs("A.", "B.")})
+        self.assertIs(schema, narrate_mod.RESULTS_SCHEMA)
+        props = schema["properties"]
+        self.assertEqual((props["title"]["maxLength"], props["summary"]["maxLength"],
+                          props["paragraphs"]["items"]["properties"]["text"]["maxLength"]),
+                         (narrate_mod.TITLE_MAX_CHARS, narrate_mod.SUMMARY_MAX_CHARS,
+                          narrate_mod.PARAGRAPH_MAX_CHARS))
+        # above the longest field the 2026-10-28/29 survey stored (196, 1,146, 1,708)
+        self.assertGreater(narrate_mod.TITLE_MAX_CHARS, 196)
+        self.assertGreater(narrate_mod.SUMMARY_MAX_CHARS, 1146)
+        self.assertGreater(narrate_mod.PARAGRAPH_MAX_CHARS, 2 * 1708)
+
+    def test_a_summary_cut_at_its_cap_keeps_its_complete_sentences(self):
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        summary = self.cut_at(narrate_mod.SUMMARY_MAX_CHARS)
+        self.assertEqual(len(summary), narrate_mod.SUMMARY_MAX_CHARS)
+        out, _ = self.narrate({"title": "t", "summary": summary, "paragraphs": self.paragraphs("A.", "B.")})
+        self.assertEqual(out["summary"], self.WHOLE)
+
+    def test_a_summary_at_its_cap_with_no_complete_sentence_is_none(self):
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        summary = (self.UNFINISHED * 100)[:narrate_mod.SUMMARY_MAX_CHARS]
+        out, _ = self.narrate({"title": "t", "summary": summary, "paragraphs": self.paragraphs("A.", "B.")})
+        self.assertEqual(out["summary"], "")
+
+    def test_a_paragraph_cut_at_its_cap_keeps_its_complete_sentences(self):
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        cap = narrate_mod.PARAGRAPH_MAX_CHARS
+        hopeless = (self.UNFINISHED * 200)[:cap]
+        out, _ = self.narrate({"title": "t", "summary": "Tnf rose.",
+                               "paragraphs": self.paragraphs(self.cut_at(cap), hopeless, "Il6 rose [e4].")})
+        self.assertEqual([p["text"] for p in out["paragraphs"]], [self.WHOLE, hopeless, "Il6 rose [e4]."],
+                         "a paragraph with no complete sentence is left for the verifier")
+        self.assertEqual([p["from_statement"] for p in out["paragraphs"]], [1, 2, 3])
+
+    def test_fields_under_or_over_the_cap_are_untouched(self):
+        """Under it: the model finished the field, even mid-sentence. Over it:
+        an endpoint that took no schema wrote it whole."""
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        for summary_len, text_len in ((narrate_mod.SUMMARY_MAX_CHARS - 1, narrate_mod.PARAGRAPH_MAX_CHARS - 1),
+                                      (narrate_mod.SUMMARY_MAX_CHARS + 1, narrate_mod.PARAGRAPH_MAX_CHARS + 1),
+                                      (len(self.WHOLE) + 20, len(self.WHOLE) + 20)):
+            draft = {"title": "t", "summary": self.cut_at(summary_len),
+                     "paragraphs": self.paragraphs(self.cut_at(text_len), "Il6 rose [e4].")}
+            out, _ = self.narrate(draft)
+            self.assertEqual(out, draft, (summary_len, text_len))
+
+    def test_a_title_at_its_cap_is_left_to_the_title_gate(self):
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        title = self.cut_at(narrate_mod.TITLE_MAX_CHARS)
+        out, _ = self.narrate({"title": title, "summary": "Tnf rose.", "paragraphs": self.paragraphs("A.", "B.")})
+        self.assertEqual(out["title"], title)
+
+    def test_a_normal_answer_passes_through_as_before(self):
+        draft = {"title": "Cdkn1a fell in the knockout", "summary": self.WHOLE,
+                 "paragraphs": [{"from_statement": 1, "legs": [1], "text": self.WHOLE},
+                                {"from_statement": None, "legs": [], "text": "The map draws Ccl2 activating Tnf."},
+                                {"from_statement": 2, "legs": [2, 3], "text": "Tnf rose at 6 h [e3]."}]}
+        out, _ = self.narrate(draft)
+        self.assertEqual(out, draft)
+
+    def test_an_endpoint_that_rejects_the_capped_schema_still_answers(self):
+        """complete_json's fallback: a 400 to the schema is asked again with
+        none, and the free reply, a summary over the cap included, is read
+        by the embedded-JSON parser and kept whole."""
+        from src.classes.AIInterpret import llm_client as lc
+        from src.classes.AIInterpret.walker import narrate as narrate_mod
+        api_base = "https://caps-rejected.example/v1"
+        summary = (self.WHOLE + " ") * (narrate_mod.SUMMARY_MAX_CHARS // len(self.WHOLE) + 1) + "Il6 rose."
+        draft = {"title": "t", "summary": summary, "paragraphs": self.paragraphs("Ccl2 rose [e2].", "Tnf rose [e3].")}
+        posts = []
+
+        def post(url, **kwargs):
+            posts.append(kwargs["json"])
+            if "response_format" in kwargs["json"]:
+                return _Gateway("maxLength is not supported", status=400)
+            return _Gateway("Here is the section:\n```json\n%s\n```" % json.dumps(draft))
+        client = lc.LLMClient({"api_base": api_base, "api_key": "k", "model": "m", "fallback_models": []})
+        try:
+            with patched((lc.requests, "post", post)):
+                out = narrate_mod.narrate(client, "card", [{"n": 1}, {"n": 2}], "chain", "")
+        finally:
+            with lc._SCHEMA_SUPPORT_LOCK:
+                lc._SCHEMA_SUPPORT.pop(api_base, None)
+        self.assertEqual(posts[0]["response_format"]["json_schema"]["schema"]["properties"]["summary"]["maxLength"],
+                         narrate_mod.SUMMARY_MAX_CHARS)
+        self.assertNotIn("response_format", posts[1])
+        self.assertGreater(len(summary), narrate_mod.SUMMARY_MAX_CHARS)
+        self.assertEqual(out, draft)
+
+
 class PipelineCleanupTest(unittest.TestCase):
     """run_pipeline returns at once, yet leaves nothing half-unwound."""
 
