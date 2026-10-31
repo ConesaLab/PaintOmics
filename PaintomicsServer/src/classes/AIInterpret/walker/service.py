@@ -74,10 +74,11 @@ NARRATE_MAX_SECONDS = 130
 # at its budget returns a little after it (the connect precedes the read
 # timer), and with no margin that little skipped the Narrator.
 STAGE_SLACK_SECONDS = 5
-# The sense stage is entered when its own deadline is at least this far off:
-# 20 s, what the gate "SENSE_MIN_SECONDS left in the run" gave it before the
-# Narrator's reserve grew past NARRATE_MIN_SECONDS.
-SENSE_OWN_MIN_SECONDS = SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS - STAGE_SLACK_SECONDS
+# The sense stage is entered when its own deadline is at least this far off.
+# 20 s is what the old gate ("SENSE_MIN_SECONDS left in the run", 70 s, with
+# a flat 45 s Narrator and 5 s slack after it) left the stage on its own. A
+# literal, so retuning the Narrator or the slack does not move this gate.
+SENSE_OWN_MIN_SECONDS = 20
 # The least a Results section must say per kept statement when the scope's
 # own floor would ask for more than the statements hold.
 WORDS_PER_STATEMENT = 50
@@ -707,8 +708,11 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         # (parallel.expected_statements). Not the cap: on a pathway walk,
         # which keeps about six statements, 130 s against 70 s could end the
         # Writers a minute early for a reserve the Narrator never needs.
-        # Writers that keep more take the difference from the sense check,
-        # whose deadline counts the kept statements, never from the Narrator.
+        # Writers that keep more than expected grow the reserve the later
+        # stages count from the kept statements: 21 kept against 18 expected
+        # is 130 s against 120 s, 10 s taken first from the direction
+        # check's window (its deadline is reached first), then from the
+        # sense stage's, never from the Narrator.
         writer_deadline = min(time.time() + plan["writer_seconds"],
                               run_deadline - SENSE_MIN_SECONDS - DIRECTION_MIN_SECONDS
                               - narrate_reserve(parallel.expected_statements(merged, plan)))

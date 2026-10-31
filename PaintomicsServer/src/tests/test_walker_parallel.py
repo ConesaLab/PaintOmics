@@ -22,6 +22,7 @@ around the models:
     cd PaintomicsServer && PYTHONPATH=. python -m src.tests.test_walker_parallel
 """
 import asyncio
+import inspect
 import json
 import os
 import shutil
@@ -1966,6 +1967,8 @@ class ModelWalkStagesTest(unittest.TestCase):
         statements = [{"n": n, "claim": "c", "prose": "p", "legs": []} for n in range(1, n_statements + 1)]
         written = (statements, [], store, [context])
         real_run_pipeline = parallel.run_pipeline
+        # read by name: the stub stands in for _narrate while it runs
+        narrate_signature = inspect.signature(service._narrate)
 
         def run_pipeline(coro):
             if pipeline:
@@ -1995,7 +1998,8 @@ class ModelWalkStagesTest(unittest.TestCase):
 
         def narrate(*args, **kwargs):
             seen["narrate"] += 1
-            seen["narrate_left"].append(args[10] - clock.t)
+            deadline = narrate_signature.bind(*args, **kwargs).arguments["deadline"]
+            seen["narrate_left"].append(deadline - clock.t)
 
         checks = {"gates": {}}
         with patched((parallel, "run_pipeline", run_pipeline),
