@@ -596,6 +596,14 @@ class HeatIsNotAValueTest(unittest.TestCase):
             answer = w.step("Ccc", reading, "on")
             self.assertTrue(answer.startswith("e1"), (reading, answer))
 
+    def test_a_heat_hyphened_to_its_word_passes_the_guard(self):
+        """"M1CVD2, the remaining heat-1.32 sibling, is two steps away" was
+        refused in round heat5 (2026-10-31): the heat, read as a value."""
+        w, _opening = self.walker()
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant",
+                        "Ccc, the remaining heat-2.43 sibling, is next")
+        self.assertTrue(answer.startswith("e1"), answer)
+
     def test_a_value_is_reported_once_whichever_text_quotes_it(self):
         w, _opening = self.walker()
         answer = w.step("Ccc", "Ccc Gene expression shows +2.43", "Ccc at +2.43 leads")

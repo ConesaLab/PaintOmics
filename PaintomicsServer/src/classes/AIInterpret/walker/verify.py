@@ -24,9 +24,16 @@ BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 
 
 # A number written as a heat: "heat 2.43", "heat of 2.43", "heat score 2.43",
-# "(heat: 2.43)". The walker prints a node's heat after its name, and naming
-# it a heat is the one way to quote it that cannot pass for a reading.
-HEAT_BEFORE_RE = re.compile(r"\bheat(?:\s+score)?(?:\s+(?:of|is|was))?\s*[:=≈]?\s*$", re.I)
+# "(heat: 2.43)", "heat=1.32". The walker prints a node's heat after its name,
+# and naming it a heat is the one way to quote it that cannot pass for a
+# reading. Walkers also write "the heat-1.32 sibling", "a heat–2.56 protein",
+# "the hub heats are 2.11", "neighbourhood heat (3.20 for CDK5R1": 7 to 11 of
+# the 42-48 value refusals in each of rounds heat2, heat4 and heat5
+# (2026-10-31) were such a heat. A hyphen after the word never signs the
+# number: NUMBER_RE takes no sign after a letter, so "heat-1.32" quotes 1.32.
+# One fragment for both patterns, so they read the same words.
+_HEAT_WORDS = r"\bheats?(?:\s+scores?)?(?:\s+(?:of|is|was|are|were|at))?\s*[:=≈(\-–−]?\s*"
+HEAT_BEFORE_RE = re.compile(_HEAT_WORDS + r"$", re.I)
 
 
 def _is_bound(text, start):
@@ -1068,7 +1075,7 @@ HOT_WINDOW = 60
 # nodes are hot without gene layers: C00074 heat 4.91, C00206 3.88, C00236
 # 3.87" (74Qe0uN7n6, round heat1, 2026-10-31; 3.87 is C00236's heat). The
 # whole clause is read, not HOT_WINDOW: a list runs long.
-HEAT_NUMBER_RE = re.compile(r"\bheat(?:\s+score)?(?:\s+(?:of|is|was))?\s*[:=≈]?\s*\d+\.\d+", re.I)
+HEAT_NUMBER_RE = re.compile(_HEAT_WORDS + r"\d+\.\d+", re.I)
 MEASURE_AFTER_RE = re.compile(r"^(?:\s*-?\s*fold\b|\s*[×%]|\s*x\b|\s*(?:[µunpm]M|kDa)\b)", re.I)
 MEASURE_BEFORE_RE = re.compile(
     r"\b(?:ris(?:e|es|ing|en)|rose|fall(?:s|ing|en)?|fell|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)"
