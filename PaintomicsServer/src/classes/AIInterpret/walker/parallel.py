@@ -178,6 +178,17 @@ def writer_parts(segments, n_legs, parts, min_legs=MIN_PART_LEGS):
     return out
 
 
+def expected_statements(walker, plan):
+    """The statements a walk's Writers are expected to keep, known before
+    they write: the fewest the plan asks of each of the walk's parts. Six
+    network parts give 18, four pathway parts 8. Network walks kept 15-17
+    statements on the 29 Oct 2026 survey's walks that ran out of time, 20
+    on 7O521E0Y0y (28 Oct), 21 and 17 on STATegra (26 Oct); pathway walks
+    six (Rap1, 29 Sep; vRmKBo4E60, 29 Oct). The service sets the Narrator's
+    reserve at the Writers' deadline from it (service.narrate_reserve)."""
+    return len(writer_parts(walker.segments, len(walker.chain), plan["parts"])) * plan["statements"][0]
+
+
 async def _release_sdk_client():
     """agent.release_loop_client, imported late: the SDK is optional for the
     offline parts of the walk, and a failed release must not fail the walk."""
