@@ -478,10 +478,35 @@ class HeatIsNotAValueTest(unittest.TestCase):
             w, _opening = self.walker()
             answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
             self.assertTrue(answer.startswith("e1"), (reason, answer))
-        for reason in ("Ccc (+2.43, 2 of 19)", "the hottest neighbour; Ccc shows 2.43"):
+        for reason in ("Ccc (+2.43, 2 of 19)", "the hottest neighbour; Ccc shows 2.43",
+                       "Ccc, the hottest node, rises 2.43-fold"):
             w, _opening = self.walker()
             answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
             self.assertTrue(answer.startswith("REFUSED"), (reason, answer))
+
+    def test_layers_shown_moves_ago_may_still_be_quoted(self):
+        """Aaa's layers were printed at Bbb as a relevant neighbour's; two
+        moves on, Aaa is neither adjacent nor on the chain."""
+        w, opening = self.walker()
+        self.assertIn("Aaa (r=1", opening)
+        w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "read it")
+        answer = w.step("Eee", "Eee Proteomics 2h +2.10, as Aaa reached +2.20 at 6h", "on")
+        self.assertTrue(answer.startswith("e2"), answer)
+        self.assertNotIn("g:1", w.network.neighbours("g:3"))              # not adjacent to Ccc
+        self.assertNotIn("g:1", {n for leg in w.chain for n in (leg.src, leg.dst)})   # nor on the chain
+        self.assertIn("g:1", w.layers_shown)
+
+    def test_a_heat_a_scan_printed_is_held_to_the_heat_check(self):
+        w, _opening = self.walker()
+        w.overlay.heat["g:5"] = dict(w.overlay.heat["g:5"], heat=3.15)   # Eee: two steps from Bbb
+        reason = "Eee rises 3.15 two steps out"
+        self.assertNotIn("g:5", w._readable("g:3"))
+        self.assertIn("Eee", w.scan("here", 2))
+        self.assertIn("g:5", w.heats_shown)
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("3.15 is the heat of Eee", answer)
+        self.assertNotIn("g:5", w._readable("g:3"))                      # a heat, never a value source
 
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()

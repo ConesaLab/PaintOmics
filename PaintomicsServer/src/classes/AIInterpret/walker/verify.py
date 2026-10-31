@@ -475,7 +475,8 @@ def _invented_problems(stmt, walker, papers):
     (invented_values) that no chain node's layers hold and no paper it cites
     states in the text the Writer has of it (title, abstract, every section
     fetched), naming the node the value is given to: the node whose heat it
-    equals, else the chain node named nearest before it. The Writer resubmits;
+    equals, else (without saying it is that node's) the chain node named
+    nearest before it. The Writer resubmits;
     a statement still quoting one on its last submission is dropped."""
     text = " ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
     if not data_values(text):
@@ -499,18 +500,20 @@ def _invented_problems(stmt, walker, papers):
     for value, at in found:
         before = [m[2] for m in mentions if m[1] <= at]
         owners = heat_owners(value, heats)
-        node_id = next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None) \
-            or (before[-1] if before else None)
-        if node_id is None:
+        node_id = next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
+        if node_id is not None:
+            label = walker.label(node_id)
+            out.append("quotes %s for %s, which its layers do not hold (%s); %s is %s's heat, not a measured value"
+                       % (value, label, layers_line(walker.overlay, node_id), _norm(value).lstrip("+−"), label))
+        elif before:
+            # Not "for" that node: the sentence may give the value to one off
+            # the chain ("Bbb falls, as does its partner Xyz (−0.70)").
+            out.append("quotes %s, which no chain node's layers hold (the nearest chain node named before it, "
+                       "%s, reads %s); quote values as the layers print them" % (
+                           value, walker.label(before[-1]), layers_line(walker.overlay, before[-1])))
+        else:
             out.append("quotes %s, which no layer on the chain holds; quote values as the layers print them"
                        % value)
-            continue
-        label = walker.label(node_id)
-        problem = "quotes %s for %s, which its layers do not hold (%s)" % (
-            value, label, layers_line(walker.overlay, node_id))
-        if node_id in owners:
-            problem += "; %s is %s's heat, not a measured value" % (_norm(value).lstrip("+−"), label)
-        out.append(problem)
     return out
 
 
@@ -923,8 +926,27 @@ def node_numbers(overlay, node_ids):
     """Every value token in these nodes' layer text, every layer of each."""
     tokens = set()
     for node_id in node_ids:
-        for value in quoted_values(overlay.layer_text(node_id, limit=None)):
-            tokens.add(_norm(value))
+        tokens |= node_tokens(overlay, node_id)
+    return tokens
+
+
+def node_tokens(overlay, node_id):
+    """One node's value tokens (every layer), kept in ``overlay.value_tokens``.
+    The walker guard asks for every readable node on every move and the
+    Verifier for the chain on every statement; rendering and scanning the
+    layer text each time is what this saves. The entry is keyed by what
+    layer_text prints of each layer, so a layer edited or added in place
+    (the direction tests rewrite one after the walk) is read afresh."""
+    cache = getattr(overlay, "value_tokens", None)
+    layers = (getattr(overlay, "layers", None) or {}).get(node_id) or []
+    key = tuple((l.get("omic"), l.get("member"), l.get("relevant"), l.get("text")) if isinstance(l, dict) else l
+                for l in layers)
+    hit = cache.get(node_id) if cache is not None else None
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    tokens = frozenset(_norm(value) for value in quoted_values(overlay.layer_text(node_id, limit=None)))
+    if cache is not None:
+        cache[node_id] = (key, tokens)
     return tokens
 
 
@@ -978,22 +1000,34 @@ def invented_values(text, numbers, heats, also=()):
 # (cysC/cysQ at 2.68, cysA/P/U/W at 3.15)". In the final3 records of 2026-10-31
 # 55 of 1846 legs would have been refused for nothing else. HOT_WINDOW is wide
 # enough for that 3.15, 49 characters after "hottest"; a sentence end (". ")
-# or a semicolon closes the clause, a decimal point does not.
+# or a semicolon closes the clause, a decimal point does not. "Hot" does not
+# make a measurement a heat: "Ccc, the hottest node, rises 2.43-fold" gives the
+# number a unit (MEASURE_AFTER_RE) and a verb of change or a value label
+# between "hottest" and it (MEASURE_BEFORE_RE); either keeps it data. The count
+# rule stands alone: a number with "2 of 19" after it is a heat however worded.
 HEAT_COUNT_AFTER_RE = re.compile(r"^\s*[,(]\s*\d+\s+of\s+\d+(?:\s+(?:relevant|neighbours))?")
 HOT_RE = re.compile(r"\bhot(?:ter|test)?\b", re.I)
 CLAUSE_END_RE = re.compile(r"[.!?](?=\s)|;")
 HOT_WINDOW = 60
+MEASURE_AFTER_RE = re.compile(r"^(?:\s*-?\s*fold\b|\s*[×%]|\s*x\b|\s*(?:[µunpm]M|kDa)\b)", re.I)
+MEASURE_BEFORE_RE = re.compile(
+    r"\b(?:ris(?:e|es|ing|en)|rose|fall(?:s|ing|en)?|fell|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)"
+    r"|up|down|show(?:s|ed|ing)?|log2?\s?FC|log2?\s?fold\s?change|log2FoldChange|FC|fold change)\b", re.I)
 
 
 def heat_phrased(text, start, end):
     """Whether the unsigned number at text[start:end] is written as a heat
     without the word: followed by its count, or after "hot", "hotter" or
-    "hottest" in its clause. A signed number never is: "+2.43" is data."""
+    "hottest" in its clause with nothing that writes it as a measurement
+    (a unit after it, a verb of change or a value label between). A signed
+    number never is: "+2.43" is data."""
     if HEAT_COUNT_AFTER_RE.match(text[end:]):
         return True
-    before = text[max(0, start - HOT_WINDOW):start]
-    clause = CLAUSE_END_RE.split(before)[-1]
-    return bool(HOT_RE.search(clause))
+    if MEASURE_AFTER_RE.match(text[end:]):
+        return False
+    clause = CLAUSE_END_RE.split(text[max(0, start - HOT_WINDOW):start])[-1]
+    hot = list(HOT_RE.finditer(clause))
+    return bool(hot) and not MEASURE_BEFORE_RE.search(clause[hot[-1].end():])
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")

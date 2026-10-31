@@ -85,6 +85,11 @@ class Walker:
     on_turn: object = None                       # called with the walker after every logged turn
     dist: dict | None = None                     # node -> steps from the anchor, when the run is anchored
     anchor: dict | None = None                   # {gene, node, direction, ...} or None
+    # Per walker, never shared as ``visited`` is: the nodes whose layers an
+    # answer printed (_show_node), and whose heat any answer printed (_show_node
+    # and both scans). _invented reads values from the first, heats from both.
+    layers_shown: set = field(default_factory=set)
+    heats_shown: set = field(default_factory=set)
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -174,6 +179,8 @@ class Walker:
         for row in rows:
             self.seen.setdefault(row["id"], []).append(after)
         shown = rows[:self.params["names_shown"]]
+        self.layers_shown.add(node_id)
+        self.heats_shown.update([node_id] + [row["id"] for row in shown])
         # "heat 2.43", never a bare number beside the name: an r=0 neighbour
         # shows no layers, and a reading stepping onto one quoted the number
         # it had as the node's value (invented_values).
@@ -188,6 +195,8 @@ class Walker:
         # full layer text"); the rest are known by name, r and heat only.
         detail = []
         for row in [r for r in rows if r["r"] == 1 and r["open"]][:self.params["candidates"]]:
+            self.layers_shown.add(row["id"])
+            self.heats_shown.add(row["id"])
             detail.append("  %s (r=1, heat %.2f):\n%s" % (
                 row["label"], row["heat"], _indent(self.overlay.layer_text(row["id"]), "    ")))
         return "%s\nlayers:\n%s\nneighbours (%d): %s%s\n%s%s" % (
@@ -217,6 +226,7 @@ class Walker:
                     "" if row.get("dist") is None else " · d=%d from %s" % (
                         row["dist"], (self.anchor or {}).get("gene", "the anchor"))))
             hot = [r for r in self.ranked if not r["candidate"]][:8]
+            self.heats_shown.update(row["id"] for row in cands + hot)
             if hot:
                 lines.append("  not candidates, hottest: " + " · ".join(
                     "%s r=%d heat %.2f%s" % (r["label"], r["r"], r["heat"],
@@ -237,6 +247,7 @@ class Walker:
         self.scans += 1
         lines = ["%d measured nodes within %d step(s) of %s, hottest first:" % (
             len(rows), radius, self.label(self.current))]
+        self.heats_shown.update(row["id"] for row in rows[:12])
         for row in rows[:12]:
             lines.append("  %s · r=%d · heat %.2f (%d of %d) · %d step%s%s%s" % (
                 row["label"], row["r"], row["heat"], row["x"], row["n"], row["distance"],
@@ -333,9 +344,12 @@ class Walker:
 
     def _readable(self, target=None):
         """The nodes whose layers a text may quote values from: the target of
-        the move, where the walker stands, its neighbours and every node on
-        this walker's chain. Not ``visited``: parallel walkers share it."""
+        the move, where the walker stands, its neighbours, every node on this
+        walker's chain and every node whose layers an answer printed
+        (layers_shown: a relevant neighbour read two moves back is still read).
+        Not ``visited``: parallel walkers share it."""
         nodes = [target, self.current] + [n for leg in self.chain for n in (leg.src, leg.dst)]
+        nodes += sorted(self.layers_shown)
         if self.current is not None:
             nodes += [row["id"] for row in self.neighbour_rows()]
         return [n for n in dict.fromkeys(nodes) if n is not None]
@@ -351,7 +365,9 @@ class Walker:
         log2FC +2.43 (relevant)": 2.43 was rrm1's heat, its layer reads +0.12,
         not relevant. Two kept statements quoted it on."""
         nodes = self._readable(target)
-        heats = verify.heats_of(self.overlay, nodes)
+        # A heat any answer printed, the scans' included, is a number the
+        # walker may misread as a value; only the layers' tokens are values.
+        heats = verify.heats_of(self.overlay, list(dict.fromkeys(nodes + sorted(self.heats_shown))))
         numbers = verify.node_numbers(self.overlay, nodes)
         found = OrderedDict()
         for name, text in texts.items():

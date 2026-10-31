@@ -821,8 +821,32 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
     def test_a_signed_value_no_layer_holds_is_sent_back(self):
         found = self.problems("Bbb falls while Ccc climbs to +3.10, not relevant.")
         self.assertEqual(len(found), 1, found)
-        self.assertTrue(found[0].startswith("quotes +3.10 for Ccc, which its layers do not hold ("), found)
+        self.assertTrue(found[0].startswith("quotes +3.10, which no chain node's layers hold (the nearest chain "
+                                            "node named before it, Ccc, reads "), found)
         self.assertNotIn("heat", found[0])
+
+    def test_a_value_given_to_a_node_off_the_chain_is_not_blamed_on_the_one_before(self):
+        found = self.problems("Bbb falls, as does its partner Xyz (−0.70); Ccc is not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("quotes −0.70, which no chain node's layers hold (the nearest chain "
+                                            "node named before it, Bbb, reads Gene expression"), found)
+        self.assertNotIn("for Bbb", found[0])
+        self.assertTrue(found[0].endswith("; quote values as the layers print them"), found)
+
+    def test_value_tokens_are_cached_and_the_record_is_unchanged(self):
+        expected = set()
+        for node_id in verify.chain_nodes(self.walker.record()["chain"]):
+            expected.update(verify._norm(v) for v in verify.quoted_values(self.ov.layer_text(node_id, limit=None)))
+        self.assertEqual(verify._record_numbers(self.walker), expected)
+        self.assertIn("g:3", self.ov.value_tokens)
+        layer = self.ov.layers["g:2"][0]
+        saved = layer["text"]
+        try:
+            layer["text"] = saved + " · 9h +9.99"             # edited in place: read afresh
+            self.assertIn("+9.99", verify._record_numbers(self.walker))
+        finally:
+            layer["text"] = saved
+        self.assertEqual(verify._record_numbers(self.walker), expected)
 
     def test_the_records_values_pass_in_any_spelling(self):
         for prose in ("Bbb falls to -1.20 at 2h while Ccc stays at 7.7e-3, not relevant.",
@@ -845,7 +869,9 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
                      "sits on the hottest branch (cysC/cysQ at 2.68, cysA/P/U/W at 3.15)"):
             self.assertEqual(verify.invented_values(text, set(), heats), [], text)
         for text, value in (("the hottest node; rrm1 shows 2.43", "2.43"),     # the clause ended
-                            ("rrm1 (+2.43, 2 of 19)", "+2.43")):              # signed: written as data
+                            ("rrm1 (+2.43, 2 of 19)", "+2.43"),               # signed: written as data
+                            ("Ccc, the hottest node, rises 2.43-fold", "2.43"),   # a measurement
+                            ("the hottest node, rrm1, shows log2FC 2.43", "2.43")):
             self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], [value], text)
         self.assertEqual(self.problems("Ccc, the hottest gene here (2.43, 2 of 4 relevant), is not relevant."), [])
         self.assertEqual(len(self.problems("Ccc (+2.43, 2 of 4) is not relevant.")), 1)
