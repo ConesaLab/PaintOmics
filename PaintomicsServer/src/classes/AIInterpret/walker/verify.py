@@ -1009,6 +1009,11 @@ HEAT_COUNT_AFTER_RE = re.compile(r"^\s*[,(]\s*\d+\s+of\s+\d+(?:\s+(?:relevant|ne
 HOT_RE = re.compile(r"\bhot(?:ter|test)?\b", re.I)
 CLAUSE_END_RE = re.compile(r"[.!?](?=\s)|;")
 HOT_WINDOW = 60
+# A list a walker opens with one heat named and continues bare: "Metabolite
+# nodes are hot without gene layers: C00074 heat 4.91, C00206 3.88, C00236
+# 3.87" (74Qe0uN7n6, round heat1, 2026-10-31; 3.87 is C00236's heat). The
+# whole clause is read, not HOT_WINDOW: a list runs long.
+HEAT_NUMBER_RE = re.compile(r"\bheat(?:\s+score)?(?:\s+(?:of|is|was))?\s*[:=≈]?\s*\d+\.\d+", re.I)
 MEASURE_AFTER_RE = re.compile(r"^(?:\s*-?\s*fold\b|\s*[×%]|\s*x\b|\s*(?:[µunpm]M|kDa)\b)", re.I)
 MEASURE_BEFORE_RE = re.compile(
     r"\b(?:ris(?:e|es|ing|en)|rose|fall(?:s|ing|en)?|fell|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)"
@@ -1018,13 +1023,18 @@ MEASURE_BEFORE_RE = re.compile(
 def heat_phrased(text, start, end):
     """Whether the unsigned number at text[start:end] is written as a heat
     without the word: followed by its count, or after "hot", "hotter" or
-    "hottest" in its clause with nothing that writes it as a measurement
-    (a unit after it, a verb of change or a value label between). A signed
-    number never is: "+2.43" is data."""
+    "hottest" or after an earlier "heat <number>" in its clause, with
+    nothing that writes it as a measurement (a unit after it, a verb of
+    change or a value label between). A signed number never is: "+2.43" is
+    data."""
     if HEAT_COUNT_AFTER_RE.match(text[end:]):
         return True
     if MEASURE_AFTER_RE.match(text[end:]):
         return False
+    whole = CLAUSE_END_RE.split(text[:start])[-1]
+    listed = list(HEAT_NUMBER_RE.finditer(whole))
+    if listed and not MEASURE_BEFORE_RE.search(whole[listed[-1].end():]):
+        return True
     clause = CLAUSE_END_RE.split(text[max(0, start - HOT_WINDOW):start])[-1]
     hot = list(HOT_RE.finditer(clause))
     return bool(hot) and not MEASURE_BEFORE_RE.search(clause[hot[-1].end():])
