@@ -6,6 +6,7 @@ scans, the six tools' rules, and the scripted policies. Offline; no Mongo.
 """
 import math
 import os
+import re
 import shutil
 import sys
 import unittest
@@ -406,6 +407,87 @@ class LayerCapTest(unittest.TestCase):
         lines = tools._format_gene_omics(gene, {}).splitlines()
         self.assertEqual(len(lines), ov_mod.MEMBERS_SHOWN + 1)
         self.assertTrue(lines[-1].endswith("… and 233 more members (32 relevant)"), lines[-1])
+
+
+class HeatIsNotAValueTest(unittest.TestCase):
+    """The walker printed a neighbour as "rrm1 r=0 2.43", showed an r=0
+    neighbour's layers nowhere, and a reading stepping onto it wrote "log2FC
+    +2.43 (relevant)": the heat, quoted as the user's value (74Qe0uN7n6,
+    2026-10-31). Here Ccc plays rrm1: r=0, heat 2.43, values +0.05 +0.02 −0.10."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_dir = fx.make_data_dir()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.data_dir, ignore_errors=True)
+
+    def walker(self):
+        graph = net_mod.build_network("tst", self.data_dir).filter_pathway("KEGG:tst00001")
+        ov = ov_mod.overlay_job(graph, fx.make_job())
+        for node_id, heat in (("g:2", 1.11), ("g:3", 2.43)):
+            ov.heat[node_id] = dict(ov.heat[node_id], heat=heat)
+        w = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
+        opening = w.start_at("g:2", 6, "test")                     # standing on Bbb; Ccc is a neighbour
+        return w, opening
+
+    def test_a_neighbours_heat_is_labelled_heat(self):
+        w, opening = self.walker()
+        self.assertIn("Ccc r=0 heat 2.43 [", opening)
+        self.assertIsNone(re.search(r"r=[\d—] \d", opening), opening)
+        w.ranked = None
+        scan = w.scan("graph")
+        if "not candidates, hottest:" in scan:
+            self.assertIsNone(re.search(r"r=\d \d", scan), scan)
+            self.assertIn(" heat ", scan.split("not candidates, hottest:")[1])
+
+    def test_a_reading_quoting_the_heat_as_a_value_is_refused_with_the_layers(self):
+        w, _opening = self.walker()
+        for reading in ("Gene expression on Ccc shows log2FC +2.43 (relevant), a strong induction",
+                        "Ccc Gene expression rises to 2.43"):
+            answer = w.step("Ccc", reading, "the hottest neighbour")
+            self.assertTrue(answer.startswith("REFUSED"), answer)
+            self.assertIn("2.43 is the heat of Ccc, not a measured value", answer)
+            self.assertIn("Ccc's layers:", answer)
+            self.assertIn(w.overlay.layer_text("g:3").splitlines()[0].split()[-1], answer)   # its real value
+            self.assertTrue(answer.endswith("Nothing spent."), answer)
+        answer = w.step("Ccc", "Ccc Gene expression stays flat", "Bbb's neighbour at +3.10")
+        self.assertTrue(answer.startswith("REFUSED"), answer)        # the reason is read too
+        self.assertIn("The reason quotes +3.10", answer)
+        self.assertEqual((w.chain, w.budget["steps"], w.refusals), ([], 6, 3))
+
+    def test_a_reading_quoting_a_layers_value_or_the_heat_as_heat_is_accepted(self):
+        for reading in ("Ccc Gene expression 0h +0.05 · 6h −0.10, not relevant",          # the target's
+                        "Ccc Gene expression is flat while Bbb sits at −1.20 at 2h",         # where it stands
+                        "Ccc Gene expression is not relevant; heat 2.43 comes from its neighbours",
+                        "Ccc Gene expression is not relevant, with a heat of 2.43"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", reading, "the hottest neighbour (heat 2.43)")
+            self.assertTrue(answer.startswith("e1"), (reading, answer))
+        w.step("Eee", "Eee Proteomics 2h +2.10 · 6h +2.50", "on")
+        answer = w.step("Ddd", "Ddd Gene expression 0h -2.00, as Bbb fell to -1.20", "a chain node's value")
+        self.assertTrue(answer.startswith("e3"), answer)
+        self.assertEqual(w.refusals, 0)
+
+    def test_note_stop_and_jump_are_held_to_the_layers_too(self):
+        w, _opening = self.walker()
+        answer = w.note("Ccc +2.43 (relevant) leads this neighbourhood")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("2.43 is the heat of Ccc", answer)
+        self.assertIn("Ccc's layers:", answer)
+        self.assertEqual((w.notes, w.budget["notes"]), ([], 3))
+        self.assertTrue(w.note("Ccc has heat 2.43 but its own values are flat").startswith("noted"))
+        w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "read it")
+        answer = w.jump("Bbb", "Bbb Gene expression +2.43", "back")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("Bbb's layers:", answer)                    # the target's, to quote instead
+        self.assertIn("−1.20", answer)
+        self.assertTrue(w.jump("Bbb", "Bbb Gene expression 2h −1.20", "back").startswith("J2"))
+        answer = w.stop("Ccc rises +2.43", "done")
+        self.assertTrue(answer.startswith("REFUSED") and not w.done, answer)
+        self.assertTrue(w.stop("Bbb 2h −1.20 and Ccc flat (heat 2.43)", "done").startswith("done ·"))
+        self.assertEqual(w.refusals, 3)
 
 
 if __name__ == "__main__":

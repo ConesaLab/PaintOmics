@@ -780,5 +780,62 @@ class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
             "the rules, the statements or how the section was planned")
 
 
+class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
+    """The Writer kept "rrm1 (+2.43) and rrm2b (+2.30) are strongly induced"
+    on 74Qe0uN7n6 (2026-10-31): 2.43 was rrm1's heat, its layer reads +0.12,
+    not relevant. Here Ccc plays rrm1 (heat 2.43, first value +7.7e-03, so a
+    small value's spellings are tried too) on the chain Bbb -> Ccc."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_dir = fx.make_data_dir()
+        graph = net_mod.build_network("tst", cls.data_dir).filter_pathway("KEGG:tst00001")
+        job = fx.make_job()
+        job._genes["3"]._omics[0]._values = [0.0077, 0.02, -0.1]
+        cls.ov = ov_mod.overlay_job(graph, job)
+        for node_id, heat in (("g:2", 1.11), ("g:3", 2.43)):
+            cls.ov.heat[node_id] = dict(cls.ov.heat[node_id], heat=heat)
+        cls.walker = Walker(graph, cls.ov, "KEGG:tst00001", params_for("pathway"))
+        cls.walker.start_at("g:2", 4, "test")
+        answer = cls.walker.step("Ccc", "Ccc Gene expression 0h +7.7e-03, not relevant", "test")
+        assert answer.startswith("e1"), answer
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.data_dir, ignore_errors=True)
+
+    def problems(self, prose, papers=None, listed=()):
+        stmt = {"n": 1, "claim": "Ccc follows Bbb", "prose": prose, "cites": [["Ccc", "Gene expression"]],
+                "legs": [1], "grounded_in": [{"leg": 1, "db": "KEGG"}], "beyond": [], "papers": list(listed)}
+        return verify.verify_statement(stmt, self.walker, papers or {})
+
+    def test_a_heat_quoted_as_a_value_is_sent_back_naming_the_node(self):
+        layers = " ".join(self.ov.layer_text("g:3").split())
+        self.assertEqual(self.problems("Ccc Gene expression is strongly induced (+2.43), not relevant."), [
+            "quotes +2.43 for Ccc, which its layers do not hold (%s); 2.43 is Ccc's heat, not a measured value"
+            % layers])
+        unsigned = self.problems("Ccc rises 2.43-fold, not relevant.")
+        self.assertEqual(len(unsigned), 1, unsigned)
+        self.assertIn("2.43 is Ccc's heat", unsigned[0])
+
+    def test_a_signed_value_no_layer_holds_is_sent_back(self):
+        found = self.problems("Bbb falls while Ccc climbs to +3.10, not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("quotes +3.10 for Ccc, which its layers do not hold ("), found)
+        self.assertNotIn("heat", found[0])
+
+    def test_the_records_values_pass_in_any_spelling(self):
+        for prose in ("Bbb falls to -1.20 at 2h while Ccc stays at 7.7e-3, not relevant.",
+                      "Bbb falls to −1.20 at 2h; Ccc reads +0.0077 and 7.7 × 10⁻³, not relevant.",
+                      "Ccc is not relevant, its heat of 2.43 coming from its neighbours."):
+            self.assertEqual(self.problems(prose), [], prose)
+
+    def test_a_cited_papers_number_and_an_unsigned_figure_pass(self):
+        papers = {1: {"title": "Ccc in knockout cells", "abstract": "Ccc fell by −0.85 after the knockout."}}
+        self.assertEqual(self.problems("Ccc fell by −0.85 in knockout cells [1], not relevant.", papers, [1]), [])
+        self.assertEqual(len(self.problems("Ccc fell by −0.85 in knockout cells, not relevant.")), 1)
+        self.assertEqual(self.problems("Ccc is lost in 31.2% of tumours (p = 0.001), not relevant."), [])
+
+
 if __name__ == "__main__":
     unittest.main()
