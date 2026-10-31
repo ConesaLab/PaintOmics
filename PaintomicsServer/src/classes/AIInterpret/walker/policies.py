@@ -20,7 +20,10 @@ def _scan_and_plan(walker, seeds, steps, reason):
     """The opening every scripted policy shares: scan the graph, default the
     seeds to every candidate (up to max_seeds) and the steps to five per seed
     within the ceiling, stop when there is nothing to seed, else plan.
-    Returns (seeds, steps), or None when the walk stopped."""
+    Returns (seeds, steps), or None when the walk stopped. A policy's
+    readings are layer lines, so the walker's value guard is off
+    (Walker.guard_values)."""
+    walker.guard_values = False
     walker.scan("graph")
     candidates = [r["id"] for r in walker.ranked if r["candidate"]]
     seeds = list(seeds or candidates[:walker.params["max_seeds"]])
@@ -67,6 +70,7 @@ def greedy_from(walker, node_id, steps):
     """A short greedy walk from one named node, for the chat: the hottest
     relevant unvisited neighbour each turn, then back along the chain to the
     last node that still has one; stops when none is left or steps are spent."""
+    walker.guard_values = False              # its readings are layer lines (_scan_and_plan)
     walker.start_at(node_id, steps, "chat: walk from a gene the user named")
     while not walker.done:
         pick = _pick_greedy(walker.neighbour_rows()) if walker.budget["steps"] > 0 else None

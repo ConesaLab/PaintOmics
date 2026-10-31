@@ -90,6 +90,10 @@ class Walker:
     # and both scans). _invented reads values from the first, heats from both.
     layers_shown: set = field(default_factory=set)
     heats_shown: set = field(default_factory=set)
+    # False for a scripted policy (policies.py), whose readings are layer
+    # lines it copied: nothing for _invented to catch, and on a network walk's
+    # catalog the check is what made the structure null take 335 s (heat4).
+    guard_values: bool = True
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -366,7 +370,7 @@ class Walker:
         and the reading stepping onto it wrote "Gene expression on rrm1 shows
         log2FC +2.43 (relevant)": 2.43 was rrm1's heat, its layer reads +0.12,
         not relevant. Two kept statements quoted it on."""
-        if not any(verify.data_values(text) for text in texts.values()):
+        if not self.guard_values or not any(verify.data_values(text) for text in texts.values()):
             return None
         nodes = self._readable(target)
         # A heat any answer printed, the scans' included, is a number the

@@ -10,6 +10,7 @@ import re
 import shutil
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -310,6 +311,40 @@ class WalkerEngineTest(unittest.TestCase):
         w = policies.random_walk(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
         self.assertTrue(w.done)
         self.assertEqual(w.refusals, 0)
+
+    def test_a_scripted_walk_never_runs_the_value_guard(self):
+        """A policy's readings are layer lines; the guard on every scripted
+        step made the structure null take 335 s on vRmKBo4E60 (heat4)."""
+        def boom(*args, **kwargs):
+            raise AssertionError("the value guard ran on a scripted walk")
+        with mock.patch.object(verify, "invented_values", side_effect=boom) as invented, \
+                mock.patch.object(verify, "heats_given_as_values", side_effect=boom) as given:
+            for policy in (policies.greedy, policies.random_walk):
+                graph, ov = self.fresh()
+                w = policy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
+                self.assertTrue(w.chain and w.done and not w.guard_values)
+            graph, ov = self.fresh()
+            w = policies.greedy_from(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")), "g:1", 3)
+            self.assertTrue(w.chain and not w.guard_values)
+        invented.assert_not_called()
+        given.assert_not_called()
+        graph, ov = self.fresh()
+        self.assertTrue(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")).guard_values)   # a model's
+
+    def test_a_name_is_compiled_once_and_only_when_the_text_holds_it(self):
+        verify._name_pattern.cache_clear()
+        catalog = [("g:1", "Qzxa1"), ("g:2", "Qzxb2"), ("g:3", "Qzxc3"), ("g:3", "QZXC3-AS")]
+        text = "Qzxa1 rises while qzxb2 falls; Qzxa1 again."
+        first = verify._mentions(text, catalog)
+        self.assertEqual([(m[2], text[m[0]:m[1]]) for m in first],
+                         [("g:1", "Qzxa1"), ("g:2", "qzxb2"), ("g:1", "Qzxa1")])
+        self.assertEqual(verify._name_pattern.cache_info().misses, 2)        # Qzxc3 and QZXC3-AS: absent
+        for _ in range(5):
+            self.assertEqual(verify._mentions(text, catalog), first)
+        self.assertEqual(verify._name_pattern.cache_info().misses, 2)        # never compiled twice
+        self.assertEqual(verify._mentions("nothing named here", catalog), [])
+        self.assertEqual(verify._name_pattern.cache_info().misses, 2)
+        self.assertEqual([m[2] for m in verify._mentions("mmu-Qzxc3 and Qzxc3x", catalog)], ["g:3"])
 
 
 class LayerCapTest(unittest.TestCase):

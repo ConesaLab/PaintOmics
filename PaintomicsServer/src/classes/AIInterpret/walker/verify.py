@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 
 # A quoted value is a decimal: signed as the layer text prints it (+2.13, −0.35),
 # or unsigned when a sentence gives a magnitude ("fell by 3.24"), which must be
@@ -169,6 +170,16 @@ def _names_re(name):
     return r"(?<![A-Za-z0-9-])(?:[a-z]{2,4}-)?%s(?![A-Za-z0-9])" % re.escape(name)
 
 
+@lru_cache(maxsize=1 << 16)
+def _name_pattern(name):
+    """_names_re(name) compiled case-insensitive, once per name. A network
+    walk's catalog runs to ~950 nodes and several names each, past re's own
+    512-pattern cache: on vRmKBo4E60 (round heat4, 2026-10-31) every scripted
+    step recompiled every name, 70,228 compiles in one 91-leg walk, and the
+    structure null took 335 s and left the Writers none."""
+    return re.compile(_names_re(name), re.I)
+
+
 def _node_names(walker, node_id):
     """The bare names a text may call a node by, walker's label first: the
     label, the network label's members and every layer member."""
@@ -201,10 +212,16 @@ def unlabeled_nodes(walker):
 
 def _mentions(sentence, catalog):
     """(start, end, node id) of every chain node a sentence names, left to right;
-    at one position the longest name wins and overlapping matches are dropped."""
+    at one position the longest name wins and overlapping matches are dropped.
+    A name the sentence does not contain (case-insensitive) is never matched,
+    and a pattern is compiled once per name (_name_pattern)."""
+    sentence = str(sentence or "")
+    lowered = sentence.lower()
     found = []
     for node_id, name in catalog:
-        for match in re.finditer(_names_re(name), sentence, re.I):
+        if str(name).lower() not in lowered:
+            continue
+        for match in _name_pattern(name).finditer(sentence):
             found.append((match.start(), match.end(), node_id))
     found.sort(key=lambda f: (f[0], f[0] - f[1]))
     kept, end = [], -1
@@ -252,7 +269,7 @@ def _named_genes(text, walker):
     for node_id in chain_nodes(walker.record()["chain"]):
         for part in str(walker.network.nodes.get(node_id, {}).get("label", "")).split(","):
             part = bare_name(part)
-            if len(part) >= 3 and re.search(_names_re(part), text, re.I):
+            if len(part) >= 3 and _name_pattern(part).search(text):
                 names.add(part)
     return names
 
@@ -260,7 +277,7 @@ def _named_genes(text, walker):
 def _paper_names_any(paper, genes):
     blob = " ".join([str(paper.get("title") or ""), str(paper.get("abstract") or ""),
                      str((paper.get("sections") or {}).get("abstract") or "")])
-    return any(re.search(_names_re(g), blob, re.I) for g in genes)
+    return any(_name_pattern(g).search(blob) for g in genes)
 
 
 # A leg as the chain text labels it: "e3" for a step, "J3" for a jump.
