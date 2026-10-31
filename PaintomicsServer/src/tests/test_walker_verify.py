@@ -880,6 +880,27 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.addCleanup(self.ov.heat.update, saved)
         self.addCleanup(self.walker.heats_shown.difference_update, added)
 
+    def test_a_heat_in_the_walkers_other_words_is_not_a_value(self):
+        """Value refusals of rounds heat2, heat4 and heat5 (2026-10-31) that
+        were a heat, written in words the patterns did not read."""
+        heats = {"1.32": ["M1CVD2"], "2.56": ["M1B8D5"], "2.11": ["102591392"], "3.20": ["CDK5R1"],
+                 "3.70": ["CAPN2"]}
+        for text in ("M1CVD2, the remaining heat-1.32 sibling, is two steps away",
+                     "M1B8D5 is a heat-2.56 protein neighbour of C00492",
+                     "All three heat-2.11 hubs (102591392, 102592055, 107062250) share",
+                     "the strongest local signal by neighbourhood heat (3.20 for CDK5R1, 3.70 for CAPN2)",
+                     "the hub heats are 2.11, 2.11 and 1.32",
+                     "M1B8D5 is a heat–2.56 protein",                                   # an en dash
+                     "at heat 2.11", "(heat 3.20)", "(heat: 3.70)", "heat=1.32"):      # these always passed
+            self.assertEqual(verify.invented_values(text, set(), heats), [], text)
+        # a hyphen after the word never signs the number
+        self.assertEqual(verify.quoted_values("the remaining heat-1.32 sibling"), ["1.32"])
+        self.assertEqual(verify.quoted_values("a heat–2.56 protein"), ["2.56"])
+        self.assertEqual(verify.data_values("the remaining heat-1.32 sibling"), [])
+        for text in ("Ccc logFC −1.32", "Ccc falls (−1.32)"):                          # still data
+            self.assertEqual([v for v, _at in verify.data_values(text)], ["−1.32"], text)
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], ["−1.32"], text)
+
     def test_a_value_after_a_group_of_names_is_not_given_to_the_nearest(self):
         """"Ranbp9 and Pkm both rise (+0.52, +0.04)": the values go to the
         names in order, not both to Pkm. Ccc is Pkm (heat 1.50), Aaa Ranbp9."""
