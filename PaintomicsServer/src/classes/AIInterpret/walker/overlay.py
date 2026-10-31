@@ -47,6 +47,7 @@ class Overlay(object):
         self.N = 0
         self.K = 0
         self.regulators = 0
+        self.value_tokens = {}               # node -> (layers as printed, value tokens): verify.node_tokens
 
     def layer_text(self, node_id, flip=False, limit=MEMBERS_SHOWN, keep=()):
         """The block the model reads for one node: its layers, the flag as

@@ -91,6 +91,10 @@ def merge_segments(planner, segments):
     merged.scans, merged.refusals = planner.scans, planner.refusals
     merged.seen = OrderedDict((node, list(after)) for node, after in planner.seen.items())
     merged.visited, merged.closed = set(planner.visited), set(planner.closed)
+    # What any walker was shown: the Verifier and the Narrator read values from
+    # every layers block the walk printed (verify.read_nodes), not the chain's
+    # alone; dropped here, the Writers' true "Gli2 (+1.75)" was refused (heat2).
+    merged.layers_shown, merged.heats_shown = set(planner.layers_shown), set(planner.heats_shown)
     merged.current = planner.current
     merged.loop_error = planner.loop_error
     stops, readings, errors = [], [], []
@@ -102,6 +106,8 @@ def merge_segments(planner, segments):
         merged.refusals += sub.refusals
         merged.visited |= sub.visited
         merged.closed |= sub.closed
+        merged.layers_shown |= sub.layers_shown
+        merged.heats_shown |= sub.heats_shown
         if sub.loop_error:
             errors.append(sub.loop_error)
         if sub.stop_reason and not sub.chain and seed is not None:

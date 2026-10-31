@@ -15,6 +15,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from src.classes.AIInterpret.walker import heat as heat_mod
+from src.classes.AIInterpret.walker import verify
 from src.classes.AIInterpret.walker.heat import ANCHOR_RADIUS
 from src.classes.AIInterpret.walker.tiers import edge_tier, is_currency
 
@@ -84,6 +85,15 @@ class Walker:
     on_turn: object = None                       # called with the walker after every logged turn
     dist: dict | None = None                     # node -> steps from the anchor, when the run is anchored
     anchor: dict | None = None                   # {gene, node, direction, ...} or None
+    # Per walker, never shared as ``visited`` is: the nodes whose layers an
+    # answer printed (_show_node), and whose heat any answer printed (_show_node
+    # and both scans). _invented reads values from the first, heats from both.
+    layers_shown: set = field(default_factory=set)
+    heats_shown: set = field(default_factory=set)
+    # False for a scripted policy (policies.py), whose readings are layer
+    # lines it copied: nothing for _invented to catch, and on a network walk's
+    # catalog the check is what made the structure null take 335 s (heat4).
+    guard_values: bool = True
 
     # ------------------------------------------------------------ helpers
     def label(self, node_id):
@@ -173,7 +183,12 @@ class Walker:
         for row in rows:
             self.seen.setdefault(row["id"], []).append(after)
         shown = rows[:self.params["names_shown"]]
-        names = " · ".join("%s r=%s %.2f%s [%s%s%s]" % (
+        self.layers_shown.add(node_id)
+        self.heats_shown.update([node_id] + [row["id"] for row in shown])
+        # "heat 2.43", never a bare number beside the name: an r=0 neighbour
+        # shows no layers, and a reading stepping onto one quoted the number
+        # it had as the node's value (invented_values).
+        names = " · ".join("%s r=%s heat %.2f%s [%s%s%s]" % (
             row["label"], "—" if row["r"] is None else row["r"], row["heat"],
             "" if row.get("dist") is None else " d=%d" % row["dist"],
             sign_glyph(row["sign"]), "" if row["open"] else ", closed",
@@ -184,6 +199,8 @@ class Walker:
         # full layer text"); the rest are known by name, r and heat only.
         detail = []
         for row in [r for r in rows if r["r"] == 1 and r["open"]][:self.params["candidates"]]:
+            self.layers_shown.add(row["id"])
+            self.heats_shown.add(row["id"])
             detail.append("  %s (r=1, heat %.2f):\n%s" % (
                 row["label"], row["heat"], _indent(self.overlay.layer_text(row["id"]), "    ")))
         return "%s\nlayers:\n%s\nneighbours (%d): %s%s\n%s%s" % (
@@ -213,9 +230,10 @@ class Walker:
                     "" if row.get("dist") is None else " · d=%d from %s" % (
                         row["dist"], (self.anchor or {}).get("gene", "the anchor"))))
             hot = [r for r in self.ranked if not r["candidate"]][:8]
+            self.heats_shown.update(row["id"] for row in cands + hot)
             if hot:
                 lines.append("  not candidates, hottest: " + " · ".join(
-                    "%s r=%d %.2f%s" % (r["label"], r["r"], r["heat"],
+                    "%s r=%d heat %.2f%s" % (r["label"], r["r"], r["heat"],
                                         " (adjacent to %s)" % r["skipped"] if r["skipped"]
                                         else (" (hub)" if r["hub"] else "")) for r in hot))
             return self._log("scan", args, "\n".join(lines))
@@ -233,6 +251,7 @@ class Walker:
         self.scans += 1
         lines = ["%d measured nodes within %d step(s) of %s, hottest first:" % (
             len(rows), radius, self.label(self.current))]
+        self.heats_shown.update(row["id"] for row in rows[:12])
         for row in rows[:12]:
             lines.append("  %s · r=%d · heat %.2f (%d of %d) · %d step%s%s%s" % (
                 row["label"], row["r"], row["heat"], row["x"], row["n"], row["distance"],
@@ -327,6 +346,81 @@ class Walker:
         node = self.network.nodes.get(node_id, {})
         return any(part.strip().lower() in text for part in str(node.get("label", "")).split(","))
 
+    def _readable(self, target=None):
+        """The nodes whose layers a text may quote values from: the target of
+        the move, where the walker stands, its neighbours, every node on this
+        walker's chain and every node whose layers an answer printed
+        (layers_shown: a relevant neighbour read two moves back is still read).
+        Not ``visited``: parallel walkers share it."""
+        nodes = [target, self.current] + [n for leg in self.chain for n in (leg.src, leg.dst)]
+        nodes += sorted(self.layers_shown)
+        if self.current is not None:
+            nodes += [row["id"] for row in self.neighbour_rows()]
+        return [n for n in dict.fromkeys(nodes) if n is not None]
+
+    def _invented(self, tool, args, texts, target=None):
+        """The refusal for texts (name -> text) quoting a value as data that no
+        layer the walker could have read holds (verify.invented_values), or
+        giving a node a value that is its printed heat and not its own
+        (verify.heats_given_as_values), with what to quote instead; None
+        otherwise.
+
+        On the zebrafish job 74Qe0uN7n6 (re-run 2026-10-31) the neighbour list
+        printed "rrm1 r=0 2.43", an r=0 neighbour's layers were shown nowhere,
+        and the reading stepping onto it wrote "Gene expression on rrm1 shows
+        log2FC +2.43 (relevant)": 2.43 was rrm1's heat, its layer reads +0.12,
+        not relevant. Two kept statements quoted it on."""
+        if not self.guard_values or not any(verify.data_values(text) for text in texts.values()):
+            return None
+        nodes = self._readable(target)
+        # A heat any answer printed, the scans' included, is a number the
+        # walker may misread as a value; only the layers' tokens are values.
+        named = verify.heat_nodes(self, nodes)
+        heats = verify.heats_of(self.overlay, named)
+        numbers = verify.node_numbers(self.overlay, nodes)
+        # value -> the texts quoting it; ``quoted``: its first place, for the snippet
+        found, given, quoted = OrderedDict(), OrderedDict(), {}
+        for name, text in texts.items():
+            for value, at in verify.invented_values(text, numbers, heats):
+                found.setdefault(value, []).append(name)
+                quoted.setdefault(value, verify.snippet(text, at, at + len(value)))
+        # Then, over every text, a value another node holds given to the node
+        # whose heat it is (Pkm, heat2) -- never one already reported above,
+        # in any spelling, so a reading and a reason cannot say both.
+        unheld = {verify._norm(value) for value in found}
+        catalog = verify.name_catalog(self, named)
+        for name, text in texts.items():
+            for value, at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay):
+                if verify._norm(value) not in unheld:
+                    given.setdefault((value, node_id), []).append(name)
+                    quoted.setdefault((value, node_id), verify.snippet(text, at, at + len(value)))
+        if not found and not given:
+            return None
+        why, owners = [], []
+        if found:
+            where = list(dict.fromkeys(name for names in found.values() for name in names))
+            why.append("The %s %s %s, which no layer you can read holds." % (
+                " and the ".join(where), "quotes" if len(where) == 1 else "quote",
+                ", ".join("%s (\"%s\")" % (value, quoted[value]) for value in found)))
+        for (value, node_id), names in given.items():
+            why.append("The %s %s %s %s (\"%s\"), which its layers do not hold: %s is %s's heat, not a "
+                       "measured value." % (" and the ".join(names), "gives" if len(names) == 1 else "give",
+                                            self.label(node_id), value, quoted[(value, node_id)],
+                                            verify._norm(value).lstrip("+−"), self.label(node_id)))
+            owners.append(node_id)
+        for value in found:
+            mine = verify.heat_owners(value, heats)
+            if mine:
+                why.append("%s is the heat of %s, not a measured value." % (
+                    verify._norm(value).lstrip("+−"), ", ".join(self.label(n) for n in mine)))
+                owners += mine
+        why.append("The number after \"heat\" beside a neighbour's name is how surprising its neighbourhood's "
+                   "relevant count is; a node's values are only those its layers block prints.")
+        for node_id in [n for n in dict.fromkeys([target] + owners) if n is not None][:3]:
+            why.append("%s's layers:\n%s" % (self.label(node_id), _indent(self.overlay.layer_text(node_id))))
+        why.append("Quote those values, or describe the node without numbers.")
+        return self._refuse(tool, args, "\n".join(why))
+
     def step(self, to, reading, reason=""):
         """Move one edge to a neighbour, with or against the arrow; close that
         edge in that direction; append a leg with the reading and the reason."""
@@ -358,6 +452,9 @@ class Walker:
             return self._refuse("step", args, "The reading must name a layer or member of %s: %s"
                                 % (self.label(target), ", ".join(sorted({
                                     l["omic"] for l in self.overlay.layers.get(target, [])})) or "unmeasured"))
+        refused = self._invented("step", args, {"reading": reading, "reason": reason}, target)
+        if refused:
+            return refused
         self.closed.add((self.current, target))
         self.budget["steps"] -= 1
         self.steps_here += 1
@@ -390,6 +487,9 @@ class Walker:
                                         for r in self.neighbour_rows()):
             return self._refuse("jump", args, "Step first: %s still has a relevant unvisited neighbour. "
                                 "A jump is for an exhausted neighbourhood." % self.label(self.current))
+        refused = self._invented("jump", args, {"reading": reading, "reason": reason}, target)
+        if refused:
+            return refused
         self.budget["jumps"] -= 1
         self.steps_here = 0
         leg = Leg(len(self.chain) + 1, "jump", self.current, target, str(reading), str(reason), None)
@@ -410,6 +510,9 @@ class Walker:
             return self._refuse("note", args, "Notes are at most %d characters." % NOTE_MAX_CHARS)
         if self.budget["notes"] <= 0:
             return self._refuse("note", args, "Notes are spent.")
+        refused = self._invented("note", args, {"note": text})
+        if refused:
+            return refused
         self.budget["notes"] -= 1
         self.notes.append({"after_leg": len(self.chain), "node": self.current, "text": text})
         return self._log("note", args, "noted after e%d · %d notes left" % (
@@ -420,6 +523,9 @@ class Walker:
         args = {"reading": reading, "reason": reason}
         if self.done:
             return self._refuse("stop", args, "The walk is over.")
+        refused = self._invented("stop", args, {"reading": reading, "reason": reason})
+        if refused:
+            return refused
         self.done = True
         self.stop_reason = str(reason or "")
         self.stop_reading = str(reading or "")

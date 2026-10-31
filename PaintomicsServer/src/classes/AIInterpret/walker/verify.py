@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 
 # A quoted value is a decimal: signed as the layer text prints it (+2.13, −0.35),
 # or unsigned when a sentence gives a magnitude ("fell by 3.24"), which must be
@@ -22,12 +23,36 @@ NUMBER_RE = re.compile(r"(?<![\w.±<>≤≥|])[+\-−]?(?:\d+\.\d+%s?|\d+%s)" % 
 BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 
 
+# A number written as a heat: "heat 2.43", "heat of 2.43", "heat score 2.43",
+# "(heat: 2.43)", "heat=1.32". The walker prints a node's heat after its name,
+# and naming it a heat is the one way to quote it that cannot pass for a
+# reading. Walkers also write "the heat-1.32 sibling", "a heat–2.56 protein",
+# "the hub heats are 2.11", "neighbourhood heat (3.20 for CDK5R1": 7 to 11 of
+# the 42-48 value refusals in each of rounds heat2, heat4 and heat5
+# (2026-10-31) were such a heat. A hyphen after the word never signs the
+# number: NUMBER_RE takes no sign after a letter, so "heat-1.32" quotes 1.32.
+# One fragment for both patterns, so they read the same words.
+_HEAT_WORDS = r"\bheats?(?:\s+scores?)?(?:\s+(?:of|is|was|are|were|at))?\s*[:=≈(\-–−]?\s*"
+HEAT_BEFORE_RE = re.compile(_HEAT_WORDS + r"$", re.I)
+
+
+def _is_bound(text, start):
+    return bool(BOUND_BEFORE_RE.search(text[max(0, start - 3):start]))
+
+
 def quoted_values(text):
     """The values a text quotes, as written: NUMBER_RE's matches less the bounds
     written with a space after the comparator ("> 1.00", "p < 0.05")."""
     text = str(text or "")
-    return [m.group(0) for m in NUMBER_RE.finditer(text)
-            if not BOUND_BEFORE_RE.search(text[max(0, m.start() - 3):m.start()])]
+    return [m.group(0) for m in NUMBER_RE.finditer(text) if not _is_bound(text, m.start())]
+
+
+def data_values(text):
+    """(value, position) for every value a text quotes as data: quoted_values
+    less the numbers written as a heat (HEAT_BEFORE_RE)."""
+    text = str(text or "")
+    return [(m.group(0), m.start()) for m in NUMBER_RE.finditer(text)
+            if not _is_bound(text, m.start()) and not HEAT_BEFORE_RE.search(text[max(0, m.start() - 24):m.start()])]
 LEG_LIST_RE = re.compile(r"\[(e\d+(?:\s*,\s*e?\d+)*)\]")
 
 
@@ -152,6 +177,16 @@ def _names_re(name):
     return r"(?<![A-Za-z0-9-])(?:[a-z]{2,4}-)?%s(?![A-Za-z0-9])" % re.escape(name)
 
 
+@lru_cache(maxsize=1 << 16)
+def _name_pattern(name):
+    """_names_re(name) compiled case-insensitive, once per name. A network
+    walk's catalog runs to ~950 nodes and several names each, past re's own
+    512-pattern cache: on vRmKBo4E60 (round heat4, 2026-10-31) every scripted
+    step recompiled every name, 70,228 compiles in one 91-leg walk, and the
+    structure null took 335 s and left the Writers none."""
+    return re.compile(_names_re(name), re.I)
+
+
 def _node_names(walker, node_id):
     """The bare names a text may call a node by, walker's label first: the
     label, the network label's members and every layer member."""
@@ -184,10 +219,16 @@ def unlabeled_nodes(walker):
 
 def _mentions(sentence, catalog):
     """(start, end, node id) of every chain node a sentence names, left to right;
-    at one position the longest name wins and overlapping matches are dropped."""
+    at one position the longest name wins and overlapping matches are dropped.
+    A name the sentence does not contain (case-insensitive) is never matched,
+    and a pattern is compiled once per name (_name_pattern)."""
+    sentence = str(sentence or "")
+    lowered = sentence.lower()
     found = []
     for node_id, name in catalog:
-        for match in re.finditer(_names_re(name), sentence, re.I):
+        if str(name).lower() not in lowered:
+            continue
+        for match in _name_pattern(name).finditer(sentence):
             found.append((match.start(), match.end(), node_id))
     found.sort(key=lambda f: (f[0], f[0] - f[1]))
     kept, end = [], -1
@@ -235,7 +276,7 @@ def _named_genes(text, walker):
     for node_id in chain_nodes(walker.record()["chain"]):
         for part in str(walker.network.nodes.get(node_id, {}).get("label", "")).split(","):
             part = bare_name(part)
-            if len(part) >= 3 and re.search(_names_re(part), text, re.I):
+            if len(part) >= 3 and _name_pattern(part).search(text):
                 names.add(part)
     return names
 
@@ -243,7 +284,7 @@ def _named_genes(text, walker):
 def _paper_names_any(paper, genes):
     blob = " ".join([str(paper.get("title") or ""), str(paper.get("abstract") or ""),
                      str((paper.get("sections") or {}).get("abstract") or "")])
-    return any(re.search(_names_re(g), blob, re.I) for g in genes)
+    return any(_name_pattern(g).search(blob) for g in genes)
 
 
 # A leg as the chain text labels it: "e3" for a step, "J3" for a jump.
@@ -449,7 +490,92 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
                                    " ".join(w for w in (context.get("organism"), context.get("system"))
                                             if w and w != "unknown"),
                                    "this organism and system"))
+    problems.extend(_invented_problems(stmt, walker, papers))
     return problems
+
+
+def _invented_problems(stmt, walker, papers):
+    """One objection per value the statement's claim or prose quotes as data
+    (invented_values) that no layer the walk read holds (read_nodes) and no
+    paper it cites states in the text the Writer has of it (title, abstract,
+    every section fetched), naming the node the value is given to: the node
+    whose heat it equals, else (without saying it is that node's) the node
+    the walk read named nearest before it; and one per value a read node
+    holds that is given to a node whose heat it is (heats_given_as_values).
+    The Writer resubmits; a statement still quoting one on its last
+    submission is dropped."""
+    # "; ": the claim is its own clause, so its names make no group with the
+    # prose's first value (heats_given_as_values) and its "hottest" no heat.
+    text = "; ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
+    values = data_values(text)
+    if not values:
+        return []
+    read = read_nodes(walker, chain_nodes(walker.record()["chain"]))
+    # The walker guard's heat set (heat_nodes): a heat printed only in a scan
+    # or a neighbour list is as misreadable here as in a reading.
+    named = heat_nodes(walker, read)
+    heats = heats_of(walker.overlay, named)
+    stated = set()
+    for ref in statement_refs(stmt):
+        paper = (papers or {}).get(ref) or {}
+        blob = " ".join([str(paper.get("title") or ""), str(paper.get("abstract") or "")]
+                        + [str(v or "") for v in (paper.get("sections") or {}).values()])
+        for value in quoted_values(blob):
+            size = _norm(value).lstrip("+−")      # a paper's figure, with either sign
+            stated.update((size, "+" + size, "−" + size))
+    found = invented_values(text, _record_numbers(walker, read), heats, stated)
+    # A value some read node holds, given to a node whose printed heat it is
+    # (heats_given_as_values): any node the walk printed a heat for.
+    mentions = _mentions(text, name_catalog(walker, named))
+    unheld = {at for _value, at in found}
+    given = {at: (value, node_id) for value, at, node_id in heats_given_as_values(
+        text, None, heats, walker.overlay, stated, values, mentions) if at not in unheld}
+    if not found and not given:
+        return []
+    readable = set(read)
+    out = []
+    for value, at in sorted(found + [(value, at) for at, (value, _n) in given.items()], key=lambda f: f[1]):
+        before = [m[2] for m in mentions if m[1] <= at and m[2] in readable]
+        owners = heat_owners(value, heats)
+        node_id = given[at][1] if at in given else \
+            next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
+        if node_id is not None:
+            label = walker.label(node_id)
+            out.append("quotes %s for %s (\"%s\"), which its layers do not hold (%s); %s is %s's heat, not a "
+                       "measured value" % (value, label, snippet(text, at, at + len(value)),
+                                           layers_line(walker.overlay, node_id), _norm(value).lstrip("+−"), label))
+        elif before:
+            # Not "for" that node: the sentence may give the value to one the
+            # walk never read ("Bbb falls, as does its partner Xyz (−0.70)").
+            out.append("quotes %s (\"%s\"), which no layer the walk read holds (the nearest node named before "
+                       "it, %s, reads %s); quote values as the layers print them" % (
+                           value, snippet(text, at, at + len(value)), walker.label(before[-1]),
+                           layers_line(walker.overlay, before[-1])))
+        else:
+            out.append("quotes %s (\"%s\"), which no layer the walk read holds; quote values as the layers "
+                       "print them" % (value, snippet(text, at, at + len(value))))
+    return out
+
+
+def snippet(text, start, end, width=40):
+    """About ``width`` characters of ``text`` around text[start:end], cut at
+    words, for a refusal or an objection to quote. Told only "gives M1D1P2
+    0.96", the walker of 1WytoKdgT4 (round heat6) re-sent the same step 23
+    times without finding which number was meant."""
+    text = str(text or "")
+    pad = max(0, (width - (end - start)) // 2)
+    lo, hi = max(0, start - pad), min(len(text), end + pad)
+    if lo > 0 and not text[lo - 1].isspace() and " " in text[lo:start]:      # cut mid-word: drop it
+        lo = text.index(" ", lo, start) + 1
+    if hi < len(text) and not text[hi].isspace() and " " in text[end:hi]:
+        hi = text.rindex(" ", end, hi)
+    return "%s%s%s" % ("…" if lo > 0 else "", " ".join(text[lo:hi].split()), "…" if hi < len(text) else "")
+
+
+def layers_line(overlay, node_id, lines=3):
+    """A node's layer text (as the model reads it) on one line, for an objection."""
+    rows = [" ".join(row.split()) for row in overlay.layer_text(node_id).splitlines()]
+    return "; ".join(rows[:lines]) + ("; …" if len(rows) > lines else "")
 
 
 def citing_sentences(stmt, ref):
@@ -804,8 +930,10 @@ def paper_numbers(stmt, ref):
     verifier then found [5] and [119] dropped, the repair re-sent the same
     sentences, and both runs that day lost their whole Results section. [5]'s
     passage reads "(p = 0.001)", [119]'s holds 31.2% and 25.0%. Only these
-    confirmed fields count, never the statement's prose: no code checks the
-    prose number by number, only the model sense check reads it."""
+    confirmed fields count, never the statement's prose: the Verifier checks
+    only the prose numbers that read as data, signed or a heat's size
+    (invented_values), and an unsigned figure such as "31.2%" passes it
+    unchecked."""
     evidence = stmt.get("evidence") if isinstance(stmt.get("evidence"), (list, tuple)) else []
     tokens = set()
     for item in evidence:
@@ -841,16 +969,236 @@ def unrecorded_values(sentence, numbers, source=None, source_refs=None):
     return out
 
 
-def _record_numbers(walker):
-    """Every value token that appears in any chain node's layer text: every
-    layer's, not the MEMBERS_SHOWN a model reads (overlay.capped_layers). The
-    record holds what the user measured; a sentence quoting a member's value
-    the walker's cap left out is quoting the user's data, not inventing it."""
+def _record_numbers(walker, nodes=None):
+    """Every value token that appears in the layer text of any node the walk
+    read (``nodes``, read_nodes when None): every layer's, not the
+    MEMBERS_SHOWN a model reads (overlay.capped_layers). The record holds
+    what the user measured; a sentence quoting a member's value the walker's
+    cap left out is quoting the user's data, not inventing it."""
+    return node_numbers(walker.overlay, read_nodes(walker) if nodes is None else nodes)
+
+
+def heat_nodes(walker, value_nodes):
+    """The nodes whose printed heat a text may misread as a value: the value
+    nodes (read_nodes, or the walker guard's readable set), then every node
+    any answer printed a heat for (Walker.heats_shown). The one definition
+    the walker guard and the Verifier share, so their heat sets cannot drift."""
+    return list(dict.fromkeys(list(value_nodes) + sorted(getattr(walker, "heats_shown", ()) or ())))
+
+
+def read_nodes(walker, chain=None):
+    """The nodes whose layers the walk read: every chain node, in walk order,
+    then every node whose layers block an answer printed (Walker.layers_shown,
+    the walker guard's own set; a relevant neighbour is shown and never
+    stepped onto). Chain-only, the Verifier dropped three true statements of
+    round heat2 (2026-10-31): "Gli2 (+1.75) and Gli3 (+1.75)" on vRmKBo4E60,
+    "Cyp51 (Control +0.51) and Msmo1 (Control +0.61)" twice on Bgm0v4EU01,
+    each a value of a relevant neighbour the walker had quoted in a reading.
+    getattr: a walker rebuilt from a record or by a test may lack the set.
+    ``chain``: chain_nodes, when the caller has them."""
+    nodes = list(chain) if chain is not None else chain_nodes(walker.record()["chain"])
+    chained = set(nodes)
+    return nodes + sorted(n for n in getattr(walker, "layers_shown", ()) or () if n not in chained)
+
+
+def node_numbers(overlay, node_ids):
+    """Every value token in these nodes' layer text, every layer of each."""
     tokens = set()
-    for node_id in chain_nodes(walker.record()["chain"]):
-        for value in quoted_values(walker.overlay.layer_text(node_id, limit=None)):
-            tokens.add(_norm(value))
+    for node_id in node_ids:
+        tokens |= node_tokens(overlay, node_id)
     return tokens
+
+
+def node_tokens(overlay, node_id):
+    """One node's value tokens (every layer), kept in ``overlay.value_tokens``.
+    The walker guard asks for every readable node on every move and the
+    Verifier for the chain on every statement; rendering and scanning the
+    layer text each time is what this saves. The entry is keyed by what
+    layer_text prints of each layer, so a layer edited or added in place
+    (the direction tests rewrite one after the walk) is read afresh."""
+    cache = getattr(overlay, "value_tokens", None)
+    layers = (getattr(overlay, "layers", None) or {}).get(node_id) or []
+    key = tuple((l.get("omic"), l.get("member"), l.get("relevant"), l.get("text")) if isinstance(l, dict) else l
+                for l in layers)
+    hit = cache.get(node_id) if cache is not None else None
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    tokens = frozenset(_norm(value) for value in quoted_values(overlay.layer_text(node_id, limit=None)))
+    if cache is not None:
+        cache[node_id] = (key, tokens)
+    return tokens
+
+
+def heats_of(overlay, node_ids):
+    """{a heat as the walker prints it, normalised: [node ids with that heat]}
+    for these nodes; a heat of 0.00 says nothing and is left out."""
+    out = {}
+    for node_id in node_ids:
+        heat = round(((getattr(overlay, "heat", None) or {}).get(node_id) or {}).get("heat", 0.0), 2)
+        if heat > 0:
+            out.setdefault(_norm("%.2f" % heat), []).append(node_id)
+    return out
+
+
+def heat_owners(value, heats):
+    """The nodes whose heat a quoted value's size equals."""
+    return heats.get(_norm(value).lstrip("+−"), [])
+
+
+def invented_values(text, numbers, heats, also=()):
+    """(value, position) for every value ``text`` quotes as data (data_values)
+    that is in neither ``numbers``, the layers' value tokens, nor ``also``,
+    and that reads as a measurement: signed, as a layer prints every reading,
+    or, unsigned, the size of a heat in ``heats`` (heats_of) written as a
+    measurement (heat_misread).
+
+    The walker printed a neighbour's heat after its name, "rrm1 r=0 2.43", and
+    showed an r=0 neighbour's layers to no one; on the zebrafish job
+    74Qe0uN7n6 (re-run 2026-10-31) a reading stepping there wrote "Gene
+    expression on rrm1 shows log2FC +2.43 (relevant), a strong induction",
+    where the layer reads +0.12, not relevant, and the Writer kept "rrm1
+    (+2.43) and rrm2b (+2.30) are strongly induced". 15 of that round's 19
+    network walks quoted a heat as a value. An unsigned number unlike any
+    heat is left alone: "31.2%", "p = 0.001" and "2.5 µM" are a paper's or the
+    design's, and the Narrator's check (unrecorded_values) still reads every
+    number of the Results. Nor is an unsigned heat written as one without the
+    word (heat_phrased)."""
+    text = str(text or "")
+    out = []
+    values = data_values(text)
+    for value, at in values:
+        if _in_record(value, numbers) or _in_record(value, also):
+            continue
+        if _norm(value)[:1] in ("+", "−"):
+            out.append((value, at))
+        elif heat_owners(value, heats) and heat_misread(text, at, at + len(value), values):
+            out.append((value, at))
+    return out
+
+
+# How a walker writes a heat without the word: with its count after it, "(2.43,
+# 2 of 19 relevant)", or after "hot" in the same clause, "the hottest branch
+# (cysC/cysQ at 2.68, cysA/P/U/W at 3.15)". In the final3 records of 2026-10-31
+# 55 of 1846 legs would have been refused for nothing else. HOT_WINDOW is wide
+# enough for that 3.15, 49 characters after "hottest"; a sentence end (". ")
+# or a semicolon closes the clause, a decimal point does not. "Hot" does not
+# make a measurement a heat: "Ccc, the hottest node, rises 2.43-fold" gives the
+# number a unit (MEASURE_AFTER_RE) and a verb of change or a value label
+# between "hottest" and it (MEASURE_BEFORE_RE); either keeps it data. The count
+# rule stands alone: a number with "2 of 19" after it is a heat however worded.
+HEAT_COUNT_AFTER_RE = re.compile(r"^\s*[,(]\s*\d+\s+of\s+\d+(?:\s+(?:relevant|neighbours))?")
+HOT_RE = re.compile(r"\bhot(?:ter|test)?\b", re.I)
+CLAUSE_END_RE = re.compile(r"[.!?](?=\s)|;")
+HOT_WINDOW = 60
+# A list a walker opens with one heat named and continues bare: "Metabolite
+# nodes are hot without gene layers: C00074 heat 4.91, C00206 3.88, C00236
+# 3.87" (74Qe0uN7n6, round heat1, 2026-10-31; 3.87 is C00236's heat). The
+# whole clause is read, not HOT_WINDOW: a list runs long.
+HEAT_NUMBER_RE = re.compile(_HEAT_WORDS + r"\d+\.\d+", re.I)
+MEASURE_AFTER_RE = re.compile(r"^(?:\s*-?\s*fold\b|\s*[×%]|\s*x\b|\s*(?:[µunpm]M|kDa)\b)", re.I)
+MEASURE_BEFORE_RE = re.compile(
+    r"\b(?:ris(?:e|es|ing|en)|rose|fall(?:s|ing|en)?|fell|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)"
+    r"|up|down|show(?:s|ed|ing)?|log2?\s?FC|log2?\s?fold\s?change|log2FoldChange|FC|fold change"
+    r"|(?:value|level)s?\s+of)\b", re.I)
+# A heat word right after the number: "the 0.83-heat tier", "same 2.19-heat
+# proteins", "the 0.96 heat".
+HEAT_AFTER_RE = re.compile(r"^[\s\-–]*heats?\b", re.I)
+
+
+def measured(text, start, end, values):
+    """Whether the number at text[start:end] is written as a measurement: a
+    unit right after it (MEASURE_AFTER_RE), or a verb of change or a value
+    label (MEASURE_BEFORE_RE) since the later of its clause's start and the
+    end of the value before it (``values``, data_values)."""
+    if MEASURE_AFTER_RE.match(text[end:]):
+        return True
+    opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, start)]
+    since = max([opened[-1] if opened else 0] + [at + len(v) for v, at in values if at + len(v) <= start])
+    return bool(MEASURE_BEFORE_RE.search(text[since:start]))
+
+
+def heat_misread(text, start, end, values):
+    """Whether an unsigned number the size of a heat is quoted as the
+    node's value: written as a measurement (measured) and not as a heat
+    (heat_phrased). Anything else is a reference to the heat. Round heat6
+    (1WytoKdgT4, 2026-10-31): "M1D1P2 is the other 0.96 neighbour" was
+    refused 23 turns running and the segment ran out of turns; "the 0.99
+    cluster", "(... at 2.56; ... at 2.19)", "same 2.19-heat proteins" were
+    refused too. Every true misread of that walk had a measurement word:
+    "a relevant Log2FC of 0.58", "Log2FC of 0.83", "Log2FC of 0.99"."""
+    return measured(text, start, end, values) and not heat_phrased(text, start, end)
+
+
+def heat_phrased(text, start, end):
+    """Whether the unsigned number at text[start:end] is written as a heat
+    without the word before it: followed by its count or by "heat", or
+    after "hot", "hotter" or "hottest" or after an earlier "heat <number>"
+    in its clause, with
+    nothing that writes it as a measurement (a unit after it, a verb of
+    change or a value label between). A signed number never is: "+2.43" is
+    data."""
+    if HEAT_COUNT_AFTER_RE.match(text[end:]) or HEAT_AFTER_RE.match(text[end:]):
+        return True
+    if MEASURE_AFTER_RE.match(text[end:]):
+        return False
+    whole = CLAUSE_END_RE.split(text[:start])[-1]
+    listed = list(HEAT_NUMBER_RE.finditer(whole))
+    if listed and not MEASURE_BEFORE_RE.search(whole[listed[-1].end():]):
+        return True
+    clause = CLAUSE_END_RE.split(text[max(0, start - HOT_WINDOW):start])[-1]
+    hot = list(HOT_RE.finditer(clause))
+    return bool(hot) and not MEASURE_BEFORE_RE.search(clause[hot[-1].end():])
+
+
+def name_catalog(walker, node_ids):
+    """(node id, bare name) for every name a text may call these nodes by."""
+    return [(node_id, name) for node_id in node_ids for name in _node_names(walker, node_id)]
+
+
+def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, mentions=None):
+    """(value, position, node) for every value a text quotes as data
+    (data_values) and gives to the node it names nearest before it in the
+    clause, from ``catalog`` (name_catalog), when the value's size is that
+    node's printed heat (``heats``, heats_of), the node's own layers do not
+    hold it, and, unsigned, it is quoted as a value (heat_misread; a signed
+    value always is).
+
+    A pooled record misses these: on Bgm0v4EU01 (round heat2, 2026-10-31) a
+    reading gave "Pkm ... shows Control +0.52, up like Ranbp9 (+0.52)", and
+    Pkm reads +0.04 with heat 0.52; Ranbp9 holds +0.52, so the value was in
+    the walk's record and passed. "Gli1 (+1.77) ... Gli2 (+1.75)" with
+    Gli2's heat 1.77 is not one: +1.77 sits after Gli1. Nor is a value after
+    a group of names, "Ranbp9 and Pkm both rise (+0.52, +0.04)": another
+    node named since the clause opened or the last value before the nearest
+    name means the values may go to the names in order, and the nearest name
+    is not the owner. A value ``also`` holds (a cited paper's) is left alone.
+
+    ``values`` (data_values) and ``mentions`` (_mentions over ``catalog``):
+    for a caller that has them."""
+    text = str(text or "")
+    values = data_values(text) if values is None else values
+    if not values:
+        return []
+    heat_of = {node_id: token for token, nodes in heats.items() for node_id in nodes}
+    mentions = _mentions(text, catalog) if mentions is None else mentions
+    out = []
+    for value, at in values:
+        opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, at)]
+        before = [m for m in mentions if m[0] >= (opened[-1] if opened else 0) and m[1] <= at]
+        if not before:
+            continue
+        nearest = before[-1]
+        node_id, token = nearest[2], _norm(value)
+        if heat_of.get(node_id) != token.lstrip("+−") or _in_record(value, node_tokens(overlay, node_id)) \
+                or _in_record(value, also):
+            continue
+        since = max([v_at + len(v) for v, v_at in values if v_at + len(v) <= nearest[0]] + [0])
+        if any(m[2] != node_id for m in before if m[0] >= since):
+            continue                                   # a name group: "Ranbp9 and Pkm (+0.52, ...)"
+        if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values):
+            continue
+        out.append((value, at, node_id))
+    return out
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")

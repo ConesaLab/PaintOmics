@@ -780,5 +780,245 @@ class ResultsSummaryIsNotTheBriefTest(unittest.TestCase):
             "the rules, the statements or how the section was planned")
 
 
+class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
+    """The Writer kept "rrm1 (+2.43) and rrm2b (+2.30) are strongly induced"
+    on 74Qe0uN7n6 (2026-10-31): 2.43 was rrm1's heat, its layer reads +0.12,
+    not relevant. Here Ccc plays rrm1 (heat 2.43, first value +7.7e-03, so a
+    small value's spellings are tried too) on the chain Bbb -> Ccc."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_dir = fx.make_data_dir()
+        graph = net_mod.build_network("tst", cls.data_dir).filter_pathway("KEGG:tst00001")
+        job = fx.make_job()
+        job._genes["3"]._omics[0]._values = [0.0077, 0.02, -0.1]
+        cls.ov = ov_mod.overlay_job(graph, job)
+        for node_id, heat in (("g:2", 1.11), ("g:3", 2.43)):
+            cls.ov.heat[node_id] = dict(cls.ov.heat[node_id], heat=heat)
+        cls.walker = Walker(graph, cls.ov, "KEGG:tst00001", params_for("pathway"))
+        cls.walker.start_at("g:2", 4, "test")
+        answer = cls.walker.step("Ccc", "Ccc Gene expression 0h +7.7e-03, not relevant", "test")
+        assert answer.startswith("e1"), answer
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.data_dir, ignore_errors=True)
+
+    def problems(self, prose, papers=None, listed=()):
+        stmt = {"n": 1, "claim": "Ccc follows Bbb", "prose": prose, "cites": [["Ccc", "Gene expression"]],
+                "legs": [1], "grounded_in": [{"leg": 1, "db": "KEGG"}], "beyond": [], "papers": list(listed)}
+        return verify.verify_statement(stmt, self.walker, papers or {})
+
+    def test_a_heat_quoted_as_a_value_is_sent_back_naming_the_node(self):
+        layers = " ".join(self.ov.layer_text("g:3").split())
+        found = self.problems("Ccc Gene expression is strongly induced (+2.43), not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes +2.43 for Ccc ("'), found)
+        self.assertIn("induced (+2.43), not relevant", found[0])            # the words around the number
+        self.assertTrue(found[0].endswith('"), which its layers do not hold (%s); 2.43 is Ccc\'s heat, not a '
+                                          'measured value' % layers), found)
+        unsigned = self.problems("Ccc rises 2.43-fold, not relevant.")
+        self.assertEqual(len(unsigned), 1, unsigned)
+        self.assertIn("2.43 is Ccc's heat", unsigned[0])
+
+    def test_a_signed_value_no_layer_holds_is_sent_back(self):
+        found = self.problems("Bbb falls while Ccc climbs to +3.10, not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes +3.10 ("'), found)
+        self.assertIn("Ccc climbs to +3.10, not", found[0])
+        self.assertIn('"), which no layer the walk read holds (the nearest node named before it, Ccc, reads ',
+                      found[0])
+        self.assertNotIn("heat", found[0])
+
+    def test_a_value_given_to_a_node_off_the_chain_is_not_blamed_on_the_one_before(self):
+        found = self.problems("Bbb falls, as does its partner Xyz (−0.70); Ccc is not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes −0.70 ("'), found)
+        self.assertIn("partner Xyz (−0.70)", found[0])
+        self.assertIn('"), which no layer the walk read holds (the nearest node named before it, Bbb, reads '
+                      'Gene expression', found[0])
+        self.assertNotIn("for Bbb", found[0])
+        self.assertTrue(found[0].endswith("; quote values as the layers print them"), found)
+
+    def test_a_value_of_a_neighbour_whose_layers_were_shown_stands(self):
+        """Round heat2 (2026-10-31): the Verifier dropped "Gli2 (+1.75) and
+        Gli3 (+1.75)", true values of relevant neighbours the walker was shown
+        and quoted, because only chain nodes counted. Here Aaa is Bbb's
+        relevant neighbour, shown at the start and never stepped onto."""
+        self.assertIn("g:1", self.walker.layers_shown)
+        self.assertNotIn("g:1", verify.chain_nodes(self.walker.record()["chain"]))
+        prose = "Ccc is not relevant, while Bbb's neighbour Aaa reached +2.20 at 6h."
+        self.assertEqual(self.problems(prose), [])
+        self.walker.layers_shown.discard("g:1")
+        try:
+            found = self.problems(prose)                     # its layers never shown: no source
+        finally:
+            self.walker.layers_shown.add("g:1")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes +2.20 ("'), found)
+        self.assertIn('"), which no layer the walk read holds', found[0])
+        found = self.problems("Ccc is not relevant, while Bbb's neighbour Aaa reached +2.43.")
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("2.43 is Ccc's heat, not a measured value", found[0])
+
+    def test_a_heat_given_to_its_node_objects_though_another_node_holds_it(self):
+        """Bgm0v4EU01, round heat2: "Pkm ... +0.52, up like Ranbp9 (+0.52)";
+        Pkm's heat 0.52, Ranbp9's value +0.52. Ccc is Pkm (heat 1.50), Aaa
+        Ranbp9 (2h +1.50, shown, not on the chain)."""
+        saved = {n: dict(self.ov.heat[n]) for n in ("g:1", "g:3")}
+        self.ov.heat["g:3"] = dict(saved["g:3"], heat=1.50)
+        self.ov.heat["g:1"] = dict(saved["g:1"], heat=0.77)
+        try:
+            found = self.problems("Ccc is not relevant and shows +1.50, up like Aaa (+1.50).")
+            kept = self.problems("Aaa (+1.50) rises while Ccc stays at −0.10, not relevant.")
+        finally:
+            self.ov.heat.update(saved)
+        layers = " ".join(self.ov.layer_text("g:3").split())
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes +1.50 for Ccc ("'), found)
+        self.assertIn("shows +1.50, up like", found[0])
+        self.assertTrue(found[0].endswith('"), which its layers do not hold (%s); 1.50 is Ccc\'s heat, not a '
+                                          'measured value' % layers), found)
+        self.assertEqual(kept, [])
+
+    def with_heats(self, heats, shown=()):
+        """Set node heats (and heats_shown members) for one test; undo it after."""
+        saved = {n: dict(self.ov.heat[n]) for n in heats}
+        for node_id, heat in heats.items():
+            self.ov.heat[node_id] = dict(saved[node_id], heat=heat)
+        added = set(shown) - self.walker.heats_shown
+        self.walker.heats_shown.update(added)
+        self.addCleanup(self.ov.heat.update, saved)
+        self.addCleanup(self.walker.heats_shown.difference_update, added)
+
+    def test_a_heat_in_the_walkers_other_words_is_not_a_value(self):
+        """Value refusals of rounds heat2, heat4 and heat5 (2026-10-31) that
+        were a heat, written in words the patterns did not read."""
+        heats = {"1.32": ["M1CVD2"], "2.56": ["M1B8D5"], "2.11": ["102591392"], "3.20": ["CDK5R1"],
+                 "3.70": ["CAPN2"]}
+        for text in ("M1CVD2, the remaining heat-1.32 sibling, is two steps away",
+                     "M1B8D5 is a heat-2.56 protein neighbour of C00492",
+                     "All three heat-2.11 hubs (102591392, 102592055, 107062250) share",
+                     "the strongest local signal by neighbourhood heat (3.20 for CDK5R1, 3.70 for CAPN2)",
+                     "the hub heats are 2.11, 2.11 and 1.32",
+                     "M1B8D5 is a heat–2.56 protein",                                   # an en dash
+                     "at heat 2.11", "(heat 3.20)", "(heat: 3.70)", "heat=1.32"):      # these always passed
+            self.assertEqual(verify.invented_values(text, set(), heats), [], text)
+        # a hyphen after the word never signs the number
+        self.assertEqual(verify.quoted_values("the remaining heat-1.32 sibling"), ["1.32"])
+        self.assertEqual(verify.quoted_values("a heat–2.56 protein"), ["2.56"])
+        self.assertEqual(verify.data_values("the remaining heat-1.32 sibling"), [])
+        for text in ("Ccc logFC −1.32", "Ccc falls (−1.32)"):                          # still data
+            self.assertEqual([v for v, _at in verify.data_values(text)], ["−1.32"], text)
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], ["−1.32"], text)
+
+    def test_an_unsigned_heat_is_a_value_only_when_written_as_a_measurement(self):
+        """1WytoKdgT4, round heat6 (2026-10-31): heat references refused, one
+        of them 23 turns running; the true misreads carried "Log2FC of"."""
+        heats = {"0.96": ["M1D1P2"], "0.99": ["M1C9Y2"], "2.56": ["M0ZV97"], "2.19": ["M1AJ68"],
+                 "0.83": ["M1BEN3"], "0.58": ["M1A0V0"]}
+        for text in ("M1C0U7 is a direct neighbour of M1ALZ1 (heat 0.96, 2 of 11 relevant) and its value "
+                     "matches the chain; M1D1P2 is the other 0.96 neighbour, but its layers are flat",
+                     "the 0.99 cluster around M1C9Y2",
+                     "(M0ZV97/M1B8D5/M1CDE0 at 2.56; M1AJ68/M1ALZ1/M1CGS8 at 2.19)",
+                     "same 2.19-heat proteins", "The 0.83-heat tier", "the 0.96 heat of M1D1P2"):
+            self.assertEqual(verify.invented_values(text, set(), heats), [], text)
+        for text, value in (("M1A0V0 has a relevant Log2FC of 0.58", "0.58"), ("M1BEN3 Log2FC of 0.83", "0.83"),
+                            ("M1C9Y2 shows Log2FC of 0.99", "0.99"), ("M1D1P2 has a value of 0.96", "0.96")):
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], [value], text)
+        self.assertEqual(verify.invented_values("M1A0V0 has a relevant Log2FC of 0.58", {"+0.58"}, heats), [])
+
+    def test_a_value_after_a_group_of_names_is_not_given_to_the_nearest(self):
+        """"Ranbp9 and Pkm both rise (+0.52, +0.04)": the values go to the
+        names in order, not both to Pkm. Ccc is Pkm (heat 1.50), Aaa Ranbp9."""
+        self.with_heats({"g:3": 1.50, "g:1": 0.77})
+        self.assertEqual(self.problems("Aaa and Ccc both move (+1.50, −0.10), Ccc not relevant."), [])
+        self.assertEqual(self.problems("Gene expression of Aaa and Ccc (+1.50); Ccc is not relevant."), [])
+        self.assertEqual(len(self.problems("Ccc is not relevant and shows +1.50, up like Aaa (+1.50).")), 1)
+
+    def test_a_cited_papers_figure_exempts_a_heat_given_to_its_node(self):
+        self.with_heats({"g:3": 1.50, "g:1": 0.77})
+        prose = "Ccc activity rose 1.50-fold in knockout cells%s, not relevant."
+        found = self.problems(prose % "")
+        self.assertEqual(len(found), 1, found)                          # Aaa's +1.50, given to Ccc
+        self.assertIn("1.50 is Ccc's heat", found[0])
+        papers = {1: {"title": "Ccc in knockout cells", "abstract": "Ccc activity rose 1.50-fold."}}
+        self.assertEqual(self.problems(prose % " [1]", papers, [1]), [])
+
+    def test_a_heat_printed_only_in_a_scan_is_held_to_the_heat_check(self):
+        """The walker guard's heat set (heat_nodes): Ddd is neither on the
+        chain nor shown, only its heat was printed."""
+        self.assertNotIn("g:4", verify.read_nodes(self.walker))
+        self.with_heats({"g:4": 3.33})
+        prose = "Ccc is not relevant, and Eee rises to 3.33."
+        self.assertEqual(self.problems(prose), [])                      # its heat never printed
+        self.with_heats({}, shown={"g:4"})
+        found = self.problems(prose)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("3.33 is Ddd's heat, not a measured value", found[0])
+
+    def test_the_hint_names_the_read_node_nearest_the_value(self):
+        found = self.problems("Bbb falls while Aaa reaches +3.10; Ccc is not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes +3.10 ("'), found)
+        self.assertIn('"), which no layer the walk read holds (the nearest node named before it, Aaa, reads '
+                      'Gene expression', found[0])
+
+    def test_the_results_pruner_keeps_a_shown_neighbours_value(self):
+        results = {"summary": "Aaa reached +2.20 at 6h. Ccc read +9.99.", "paragraphs": []}
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker), 1)
+        self.assertEqual(results["summary"], "Aaa reached +2.20 at 6h.")
+
+    def test_value_tokens_are_cached_and_the_record_is_unchanged(self):
+        expected = set()
+        for node_id in verify.read_nodes(self.walker):
+            expected.update(verify._norm(v) for v in verify.quoted_values(self.ov.layer_text(node_id, limit=None)))
+        self.assertEqual(verify._record_numbers(self.walker), expected)
+        self.assertIn("g:3", self.ov.value_tokens)
+        layer = self.ov.layers["g:2"][0]
+        saved = layer["text"]
+        try:
+            layer["text"] = saved + " · 9h +9.99"             # edited in place: read afresh
+            self.assertIn("+9.99", verify._record_numbers(self.walker))
+        finally:
+            layer["text"] = saved
+        self.assertEqual(verify._record_numbers(self.walker), expected)
+
+    def test_the_records_values_pass_in_any_spelling(self):
+        for prose in ("Bbb falls to -1.20 at 2h while Ccc stays at 7.7e-3, not relevant.",
+                      "Bbb falls to −1.20 at 2h; Ccc reads +0.0077 and 7.7 × 10⁻³, not relevant.",
+                      "Ccc is not relevant, its heat of 2.43 coming from its neighbours."):
+            self.assertEqual(self.problems(prose), [], prose)
+
+    def test_a_cited_papers_number_and_an_unsigned_figure_pass(self):
+        papers = {1: {"title": "Ccc in knockout cells", "abstract": "Ccc fell by −0.85 after the knockout."}}
+        self.assertEqual(self.problems("Ccc fell by −0.85 in knockout cells [1], not relevant.", papers, [1]), [])
+        self.assertEqual(len(self.problems("Ccc fell by −0.85 in knockout cells, not relevant.")), 1)
+        self.assertEqual(self.problems("Ccc is lost in 31.2% of tumours (p = 0.001), not relevant."), [])
+
+    def test_a_heat_written_as_one_without_the_word_is_not_a_value(self):
+        """Walker readings from the final3 records (2026-10-31): 55 of 1846
+        legs give a heat its count or call its node the hottest."""
+        heats = {"2.43": ["rrm1"], "2.07": ["dtymk"], "2.68": ["cysC"], "3.15": ["cysA"]}
+        for text in ("rrm1 is the hottest 1-step node from ak1 (2.43, 2 of 19 relevant)",
+                     "dtymk is the hottest unvisited relevant 1-step node from rrm1 (2.07, 2 of 29)",
+                     "sits on the hottest branch (cysC/cysQ at 2.68, cysA/P/U/W at 3.15)"):
+            self.assertEqual(verify.invented_values(text, set(), heats), [], text)
+        for text, value in (("the hottest node; rrm1 shows 2.43", "2.43"),     # the clause ended
+                            ("rrm1 (+2.43, 2 of 19)", "+2.43"),               # signed: written as data
+                            ("Ccc, the hottest node, rises 2.43-fold", "2.43"),   # a measurement
+                            ("the hottest node, rrm1, shows log2FC 2.43", "2.43"),
+                            ("rrm1 heat 2.43, dtymk +2.07", "+2.07"),            # a list: signed stays data
+                            ("rrm1 heat 2.43, dtymk rises 2.07", "2.07"),        # a list: then a measurement
+                            ("rrm1 heat 2.43; dtymk shows 2.07", "2.07")):       # the clause ended
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], [value], text)
+        # a heat list continued bare (74Qe0uN7n6, round heat1): 3.88 and 3.87 are heats
+        listed = "Metabolite nodes are hot without gene layers: C00074 heat 4.91, C00206 3.88, C00236 3.87"
+        self.assertEqual(verify.invented_values(listed, set(), {"4.91": ["C00074"], "3.88": ["C00206"],
+                                                                "3.87": ["C00236"]}), [])
+        self.assertEqual(self.problems("Ccc, the hottest gene here (2.43, 2 of 4 relevant), is not relevant."), [])
+        self.assertEqual(len(self.problems("Ccc (+2.43, 2 of 4) is not relevant.")), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
