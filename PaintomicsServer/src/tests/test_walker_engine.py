@@ -566,8 +566,9 @@ class HeatIsNotAValueTest(unittest.TestCase):
         w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
         answer = w.step("Ccc", "Ccc Gene expression is not relevant and shows 2h +1.50, up like Aaa (+1.50)", "on")
         self.assertTrue(answer.startswith("REFUSED"), answer)
-        self.assertIn("The reading gives Ccc +1.50, which its layers do not hold: 1.50 is Ccc's heat, "
-                      "not a measured value.", answer)
+        self.assertIn('The reading gives Ccc +1.50 ("', answer)
+        self.assertIn("shows 2h +1.50, up like", answer)                       # the words around it
+        self.assertIn('"), which its layers do not hold: 1.50 is Ccc\'s heat, not a measured value.', answer)
         self.assertIn("Ccc's layers:", answer)
         self.assertNotIn("which no layer you can read holds", answer)
         self.assertEqual(w.chain, [])
@@ -604,11 +605,26 @@ class HeatIsNotAValueTest(unittest.TestCase):
                         "Ccc, the remaining heat-2.43 sibling, is next")
         self.assertTrue(answer.startswith("e1"), answer)
 
+    def test_a_heat_referred_to_by_its_size_alone_passes(self):
+        """The reason 1WytoKdgT4's walker re-sent 23 times (round heat6):
+        "...; M1D1P2 is the other 0.96 neighbour", M1D1P2's heat 0.96. Aaa is
+        M1D1P2 here (heat 2.43, as Ccc's)."""
+        w, _opening = self.walker({"g:1": 2.43})
+        reason = ("Ccc is a direct neighbour of Bbb (heat 1.11, 2 of 11 relevant) and its value matches the "
+                  "chain; Aaa is the other 2.43 neighbour, but its layers are flat")
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+        self.assertTrue(answer.startswith("e1"), answer)
+        w, _opening = self.walker({"g:1": 2.43})
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "Aaa shows Log2FC of 2.43 here")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn('The reason quotes 2.43 ("…shows Log2FC of 2.43 here")', answer)   # the words, quoted
+
     def test_a_value_is_reported_once_whichever_text_quotes_it(self):
         w, _opening = self.walker()
         answer = w.step("Ccc", "Ccc Gene expression shows +2.43", "Ccc at +2.43 leads")
         self.assertTrue(answer.startswith("REFUSED"), answer)
-        self.assertIn("The reading and the reason quote +2.43, which no layer you can read holds.", answer)
+        self.assertIn('The reading and the reason quote +2.43 ("…expression shows +2.43"), which no layer '
+                      'you can read holds.', answer)                         # the first text's words
         self.assertNotIn("gives Ccc", answer)
         self.assertEqual(answer.count("2.43 is the heat of"), 1, answer)
 

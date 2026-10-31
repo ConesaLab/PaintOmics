@@ -541,18 +541,35 @@ def _invented_problems(stmt, walker, papers):
             next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
         if node_id is not None:
             label = walker.label(node_id)
-            out.append("quotes %s for %s, which its layers do not hold (%s); %s is %s's heat, not a measured value"
-                       % (value, label, layers_line(walker.overlay, node_id), _norm(value).lstrip("+−"), label))
+            out.append("quotes %s for %s (\"%s\"), which its layers do not hold (%s); %s is %s's heat, not a "
+                       "measured value" % (value, label, snippet(text, at, at + len(value)),
+                                           layers_line(walker.overlay, node_id), _norm(value).lstrip("+−"), label))
         elif before:
             # Not "for" that node: the sentence may give the value to one the
             # walk never read ("Bbb falls, as does its partner Xyz (−0.70)").
-            out.append("quotes %s, which no layer the walk read holds (the nearest node named before it, "
-                       "%s, reads %s); quote values as the layers print them" % (
-                           value, walker.label(before[-1]), layers_line(walker.overlay, before[-1])))
+            out.append("quotes %s (\"%s\"), which no layer the walk read holds (the nearest node named before "
+                       "it, %s, reads %s); quote values as the layers print them" % (
+                           value, snippet(text, at, at + len(value)), walker.label(before[-1]),
+                           layers_line(walker.overlay, before[-1])))
         else:
-            out.append("quotes %s, which no layer the walk read holds; quote values as the layers print them"
-                       % value)
+            out.append("quotes %s (\"%s\"), which no layer the walk read holds; quote values as the layers "
+                       "print them" % (value, snippet(text, at, at + len(value))))
     return out
+
+
+def snippet(text, start, end, width=40):
+    """About ``width`` characters of ``text`` around text[start:end], cut at
+    words, for a refusal or an objection to quote. Told only "gives M1D1P2
+    0.96", the walker of 1WytoKdgT4 (round heat6) re-sent the same step 23
+    times without finding which number was meant."""
+    text = str(text or "")
+    pad = max(0, (width - (end - start)) // 2)
+    lo, hi = max(0, start - pad), min(len(text), end + pad)
+    if lo > 0 and not text[lo - 1].isspace() and " " in text[lo:start]:      # cut mid-word: drop it
+        lo = text.index(" ", lo, start) + 1
+    if hi < len(text) and not text[hi].isspace() and " " in text[end:hi]:
+        hi = text.rindex(" ", end, hi)
+    return "%s%s%s" % ("…" if lo > 0 else "", " ".join(text[lo:hi].split()), "…" if hi < len(text) else "")
 
 
 def layers_line(overlay, node_id, lines=3):
@@ -1032,7 +1049,8 @@ def invented_values(text, numbers, heats, also=()):
     """(value, position) for every value ``text`` quotes as data (data_values)
     that is in neither ``numbers``, the layers' value tokens, nor ``also``,
     and that reads as a measurement: signed, as a layer prints every reading,
-    or, unsigned, the size of a heat in ``heats`` (heats_of).
+    or, unsigned, the size of a heat in ``heats`` (heats_of) written as a
+    measurement (heat_misread).
 
     The walker printed a neighbour's heat after its name, "rrm1 r=0 2.43", and
     showed an r=0 neighbour's layers to no one; on the zebrafish job
@@ -1047,12 +1065,13 @@ def invented_values(text, numbers, heats, also=()):
     word (heat_phrased)."""
     text = str(text or "")
     out = []
-    for value, at in data_values(text):
+    values = data_values(text)
+    for value, at in values:
         if _in_record(value, numbers) or _in_record(value, also):
             continue
         if _norm(value)[:1] in ("+", "−"):
             out.append((value, at))
-        elif heat_owners(value, heats) and not heat_phrased(text, at, at + len(value)):
+        elif heat_owners(value, heats) and heat_misread(text, at, at + len(value), values):
             out.append((value, at))
     return out
 
@@ -1079,17 +1098,46 @@ HEAT_NUMBER_RE = re.compile(_HEAT_WORDS + r"\d+\.\d+", re.I)
 MEASURE_AFTER_RE = re.compile(r"^(?:\s*-?\s*fold\b|\s*[×%]|\s*x\b|\s*(?:[µunpm]M|kDa)\b)", re.I)
 MEASURE_BEFORE_RE = re.compile(
     r"\b(?:ris(?:e|es|ing|en)|rose|fall(?:s|ing|en)?|fell|increas(?:e|es|ed|ing)|decreas(?:e|es|ed|ing)"
-    r"|up|down|show(?:s|ed|ing)?|log2?\s?FC|log2?\s?fold\s?change|log2FoldChange|FC|fold change)\b", re.I)
+    r"|up|down|show(?:s|ed|ing)?|log2?\s?FC|log2?\s?fold\s?change|log2FoldChange|FC|fold change"
+    r"|(?:value|level)s?\s+of)\b", re.I)
+# A heat word right after the number: "the 0.83-heat tier", "same 2.19-heat
+# proteins", "the 0.96 heat".
+HEAT_AFTER_RE = re.compile(r"^[\s\-–]*heats?\b", re.I)
+
+
+def measured(text, start, end, values):
+    """Whether the number at text[start:end] is written as a measurement: a
+    unit right after it (MEASURE_AFTER_RE), or a verb of change or a value
+    label (MEASURE_BEFORE_RE) since the later of its clause's start and the
+    end of the value before it (``values``, data_values)."""
+    if MEASURE_AFTER_RE.match(text[end:]):
+        return True
+    opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, start)]
+    since = max([opened[-1] if opened else 0] + [at + len(v) for v, at in values if at + len(v) <= start])
+    return bool(MEASURE_BEFORE_RE.search(text[since:start]))
+
+
+def heat_misread(text, start, end, values):
+    """Whether an unsigned number the size of a heat is quoted as the
+    node's value: written as a measurement (measured) and not as a heat
+    (heat_phrased). Anything else is a reference to the heat. Round heat6
+    (1WytoKdgT4, 2026-10-31): "M1D1P2 is the other 0.96 neighbour" was
+    refused 23 turns running and the segment ran out of turns; "the 0.99
+    cluster", "(... at 2.56; ... at 2.19)", "same 2.19-heat proteins" were
+    refused too. Every true misread of that walk had a measurement word:
+    "a relevant Log2FC of 0.58", "Log2FC of 0.83", "Log2FC of 0.99"."""
+    return measured(text, start, end, values) and not heat_phrased(text, start, end)
 
 
 def heat_phrased(text, start, end):
     """Whether the unsigned number at text[start:end] is written as a heat
-    without the word: followed by its count, or after "hot", "hotter" or
-    "hottest" or after an earlier "heat <number>" in its clause, with
+    without the word before it: followed by its count or by "heat", or
+    after "hot", "hotter" or "hottest" or after an earlier "heat <number>"
+    in its clause, with
     nothing that writes it as a measurement (a unit after it, a verb of
     change or a value label between). A signed number never is: "+2.43" is
     data."""
-    if HEAT_COUNT_AFTER_RE.match(text[end:]):
+    if HEAT_COUNT_AFTER_RE.match(text[end:]) or HEAT_AFTER_RE.match(text[end:]):
         return True
     if MEASURE_AFTER_RE.match(text[end:]):
         return False
@@ -1112,8 +1160,8 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
     (data_values) and gives to the node it names nearest before it in the
     clause, from ``catalog`` (name_catalog), when the value's size is that
     node's printed heat (``heats``, heats_of), the node's own layers do not
-    hold it, and it is not written as a heat (heat_phrased; a signed value
-    never is).
+    hold it, and, unsigned, it is quoted as a value (heat_misread; a signed
+    value always is).
 
     A pooled record misses these: on Bgm0v4EU01 (round heat2, 2026-10-31) a
     reading gave "Pkm ... shows Control +0.52, up like Ranbp9 (+0.52)", and
@@ -1147,7 +1195,7 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
         since = max([v_at + len(v) for v, v_at in values if v_at + len(v) <= nearest[0]] + [0])
         if any(m[2] != node_id for m in before if m[0] >= since):
             continue                                   # a name group: "Ranbp9 and Pkm (+0.52, ...)"
-        if token[:1] not in ("+", "−") and heat_phrased(text, at, at + len(value)):
+        if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values):
             continue
         out.append((value, at, node_id))
     return out
