@@ -871,8 +871,15 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         for text, value in (("the hottest node; rrm1 shows 2.43", "2.43"),     # the clause ended
                             ("rrm1 (+2.43, 2 of 19)", "+2.43"),               # signed: written as data
                             ("Ccc, the hottest node, rises 2.43-fold", "2.43"),   # a measurement
-                            ("the hottest node, rrm1, shows log2FC 2.43", "2.43")):
+                            ("the hottest node, rrm1, shows log2FC 2.43", "2.43"),
+                            ("rrm1 heat 2.43, dtymk +2.07", "+2.07"),            # a list: signed stays data
+                            ("rrm1 heat 2.43, dtymk rises 2.07", "2.07"),        # a list: then a measurement
+                            ("rrm1 heat 2.43; dtymk 2.07", "2.07")):             # the clause ended
             self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], [value], text)
+        # a heat list continued bare (74Qe0uN7n6, round heat1): 3.88 and 3.87 are heats
+        listed = "Metabolite nodes are hot without gene layers: C00074 heat 4.91, C00206 3.88, C00236 3.87"
+        self.assertEqual(verify.invented_values(listed, set(), {"4.91": ["C00074"], "3.88": ["C00206"],
+                                                                "3.87": ["C00236"]}), [])
         self.assertEqual(self.problems("Ccc, the hottest gene here (2.43, 2 of 4 relevant), is not relevant."), [])
         self.assertEqual(len(self.problems("Ccc (+2.43, 2 of 4) is not relevant.")), 1)
 

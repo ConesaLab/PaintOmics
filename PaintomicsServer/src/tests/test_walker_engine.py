@@ -496,6 +496,21 @@ class HeatIsNotAValueTest(unittest.TestCase):
         self.assertNotIn("g:1", {n for leg in w.chain for n in (leg.src, leg.dst)})   # nor on the chain
         self.assertIn("g:1", w.layers_shown)
 
+    def test_a_detail_blocks_values_stand_two_steps_on_in_a_note_and_the_stop(self):
+        """74Qe0uN7n6, round heat1 (2026-10-31): pkmb's "relevant neighbours'
+        layers" showed gapdhs +0.92, eno1a +0.79, ldha +0.84; five steps on, a
+        note and the stop quoting those true values were refused."""
+        w, opening = self.walker()
+        self.assertIn("relevant neighbours' layers:", opening)
+        self.assertIn("6h +2.20", opening.split("relevant neighbours' layers:")[1])   # Aaa's, in the block
+        w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "read it")
+        w.step("Eee", "Eee Proteomics 2h +2.10", "on")
+        self.assertNotIn("g:1", w.network.neighbours(w.current))
+        self.assertTrue(w.note("Aaa +2.20 (relevant) and Eee +2.50 rise together").startswith("noted"))
+        self.assertTrue(w.note("Nodes hot without their own change: Ccc heat 2.43, Bbb 1.11").startswith("noted"))
+        self.assertTrue(w.stop("Aaa 2h +1.50 · 6h +2.20 (relevant) leads; Eee 6h +2.50", "done").startswith("done ·"))
+        self.assertEqual(w.refusals, 0)
+
     def test_a_heat_a_scan_printed_is_held_to_the_heat_check(self):
         w, _opening = self.walker()
         w.overlay.heat["g:5"] = dict(w.overlay.heat["g:5"], heat=3.15)   # Eee: two steps from Bbb
