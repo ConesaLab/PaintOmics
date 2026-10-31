@@ -1950,21 +1950,40 @@ class ModelWalkStagesTest(unittest.TestCase):
     moves: each stage runs only on time it was given, and a stage that uses
     all of its budget still leaves the next one its turn."""
 
-    def walk(self, left_after_writers, sense_overrun=1.0):
+    def walk(self, left_after_writers, sense_overrun=1.0, n_statements=1, pipeline=None):
+        """``pipeline`` (walk seconds, chain length, segments) runs the
+        walk and Writer stages on stubs, recording the Writers' deadline;
+        without it they are skipped and the Writers leave
+        ``left_after_writers``."""
         from src.classes.AIInterpret import agent
         from src.classes.AIInterpret.walker import service
         clock = Clock()
         run_deadline = clock.t + parallel.plan_for("network")["run_seconds"]
-        seen = {"direction": [], "sense": [], "narrate": 0}
+        seen = {"direction": [], "sense": [], "narrate": 0, "narrate_left": [], "writer": []}
         walker = types.SimpleNamespace(params={}, anchor=None, record=lambda: {"chain": []}, overlay=None)
         store = types.SimpleNamespace(papers={}, checks=0, trace=[])
         context = types.SimpleNamespace(loop_error=None, trace=[], legs=[], read=set())
-        statements = [{"n": 1, "claim": "c", "prose": "p", "legs": []}]
+        statements = [{"n": n, "claim": "c", "prose": "p", "legs": []} for n in range(1, n_statements + 1)]
+        written = (statements, [], store, [context])
+        real_run_pipeline = parallel.run_pipeline
 
         def run_pipeline(coro):
+            if pipeline:
+                return real_run_pipeline(coro)
             coro.close()
             clock.t = run_deadline - left_after_writers
-            return walker, (statements, [], store, [context])
+            return walker, written
+
+        async def walk_in_parallel(*args, **kwargs):
+            walk_seconds, legs, segments = pipeline
+            clock.t += walk_seconds
+            walker.chain, walker.segments = list(range(legs)), segments
+            return walker
+
+        async def write_in_parallel(merged, card_text, pubmed, client, plan, deadline, *args, **kwargs):
+            seen["writer"].append(deadline)
+            clock.t = run_deadline - left_after_writers
+            return written
 
         def direction_pass(*args, **kwargs):
             seen["direction"].append(kwargs["deadline"])
@@ -1976,9 +1995,13 @@ class ModelWalkStagesTest(unittest.TestCase):
 
         def narrate(*args, **kwargs):
             seen["narrate"] += 1
+            seen["narrate_left"].append(args[10] - clock.t)
 
         checks = {"gates": {}}
         with patched((parallel, "run_pipeline", run_pipeline),
+                     (parallel, "walk_in_parallel", walk_in_parallel),
+                     (parallel, "write_in_parallel", write_in_parallel),
+                     (service, "artifact_gate", lambda merged: {"pass": True}),
                      (agent, "set_run_deadline", lambda when: None),
                      (writer_mod, "chain_text", lambda w: "chain"),
                      (service, "time", clock),
@@ -2018,6 +2041,139 @@ class ModelWalkStagesTest(unittest.TestCase):
         seen, checks = self.walk(left_after_writers=40)
         self.assertEqual(seen["narrate"], 0)
         self.assertEqual(checks["results"], [service.RESULTS_OUT_OF_TIME])
+
+    def test_a_slow_sense_stage_leaves_a_large_section_its_scaled_reserve(self):
+        """sG3755d52w (E. coli, 17 statements, 2026-10-29): the sense stage
+        ran to 50 s before the deadline and the draft timed out at 66 s."""
+        from src.classes.AIInterpret.walker import service
+        run_deadline = 10000.0 + parallel.plan_for("network")["run_seconds"]
+        seen, checks = self.walk(left_after_writers=200, n_statements=17)
+        self.assertEqual(seen["direction"], [run_deadline - service.SENSE_MIN_SECONDS - service.narrate_reserve(17)])
+        self.assertEqual(seen["sense"], [run_deadline - service.narrate_reserve(17) - service.STAGE_SLACK_SECONDS])
+        self.assertEqual(seen["narrate"], 1)
+        self.assertGreaterEqual(seen["narrate_left"][0], service.narrate_reserve(17),
+                                "the sense stage spent the time a 17-statement section needs")
+
+    def test_a_large_walk_skips_the_sense_stage_before_the_narrators_reserve(self):
+        from src.classes.AIInterpret.walker import service
+        seen, checks = self.walk(left_after_writers=130, n_statements=17)
+        self.assertEqual(seen["sense"], [], "the sense stage was entered on the Narrator's reserve")
+        self.assertIn("time budget", checks["sense"])
+        self.assertEqual((seen["narrate"], seen["narrate_left"]), (1, [130]))
+        # the same time left on a small walk still checks the statements
+        seen, checks = self.walk(left_after_writers=130, n_statements=3)
+        self.assertEqual(len(seen["sense"]), 1)
+        self.assertGreaterEqual(seen["narrate_left"][0], service.NARRATE_MIN_SECONDS)
+
+    def test_a_small_walk_is_gated_as_before(self):
+        from src.classes.AIInterpret.walker import service
+        run_deadline = 10000.0 + parallel.plan_for("network")["run_seconds"]
+        for n in (1, 3):
+            seen, _ = self.walk(left_after_writers=200, n_statements=n)
+            self.assertEqual(seen["direction"], [run_deadline - service.SENSE_MIN_SECONDS - 45])
+            self.assertEqual(seen["sense"], [run_deadline - 45 - service.STAGE_SLACK_SECONDS])
+            # entered with SENSE_MIN_SECONDS left in the run, as before; not a second less
+            seen, checks = self.walk(left_after_writers=service.SENSE_MIN_SECONDS, n_statements=n)
+            self.assertEqual(len(seen["sense"]), 1)
+            seen, checks = self.walk(left_after_writers=service.SENSE_MIN_SECONDS - 1, n_statements=n)
+            self.assertEqual(seen["sense"], [])
+            self.assertEqual(seen["narrate"], 1)
+
+    def test_the_writers_deadline_keeps_the_reserve_the_walk_is_expected_to_need(self):
+        from src.classes.AIInterpret.walker import service
+        plan = parallel.plan_for("network")
+        run_deadline = 10000.0 + plan["run_seconds"]
+        six = [{"first": 4 * i + 1, "last": 4 * i + 4, "label": "s%d" % i} for i in range(6)]
+        # six parts -> 18 statements expected -> 120 s, not 45: the Writers
+        # stop at 380 s, not at walk + 250 = 420 s
+        seen, _ = self.walk(left_after_writers=230, n_statements=17, pipeline=(170, 24, six))
+        self.assertEqual(seen["writer"], [run_deadline - service.SENSE_MIN_SECONDS - service.DIRECTION_MIN_SECONDS
+                                          - service.narrate_reserve(18)])
+        self.assertEqual(service.narrate_reserve(18), 120)
+        # one short part -> 3 statements -> today's 45 s
+        one = [{"first": 1, "last": 4, "label": "s0"}]
+        seen, _ = self.walk(left_after_writers=200, pipeline=(300, 4, one))
+        self.assertEqual(seen["writer"], [run_deadline - service.SENSE_MIN_SECONDS - service.DIRECTION_MIN_SECONDS
+                                          - service.NARRATE_MIN_SECONDS])
+        # a short walk: the plan's own writer_seconds bind, as before
+        seen, _ = self.walk(left_after_writers=200, pipeline=(100, 24, six))
+        self.assertEqual(seen["writer"], [10000.0 + 100 + plan["writer_seconds"]])
+
+
+class NarrateReserveTest(unittest.TestCase):
+    """The Narrator's reserve follows the kept statements: a draft and one
+    repair (job 1WytoKdgT4, 17 statements, 2026-10-29: a 41 s draft, 26 s
+    left, no repair, no Results)."""
+
+    def test_the_reserve_grows_with_the_statements_between_its_bounds(self):
+        from src.classes.AIInterpret.walker import service
+        self.assertEqual([service.narrate_reserve(n) for n in (0, 1, 2, 3, 4, 6, 15, 17, 20, 24, 40)],
+                         [45, 45, 45, 45, 50, 60, 105, 115, 130, 130, 130])
+        self.assertEqual(service.narrate_reserve(3), service.NARRATE_MIN_SECONDS)
+        # room for the 41 s draft and a 41 s repair of a 17-statement section
+        self.assertGreaterEqual(service.narrate_reserve(17), 41 + 41 + service.NARRATE_MIN_SECONDS / 2.0)
+        reserves = [service.narrate_reserve(n) for n in range(60)]
+        self.assertEqual(reserves, sorted(reserves))
+
+    def test_the_repair_needs_one_calls_share_never_more_than_today(self):
+        from src.classes.AIInterpret.walker import service
+        self.assertEqual([service.repair_min_seconds(n) for n in (1, 3, 4, 12, 17, 24)],
+                         [22.5, 22.5, 25.0, 45, 45, 45])
+
+    def test_the_expected_statements_follow_the_walks_parts(self):
+        network, pathway = parallel.plan_for("network"), parallel.plan_for("pathway")
+        six = types.SimpleNamespace(chain=list(range(24)), segments=[
+            {"first": 4 * i + 1, "last": 4 * i + 4, "label": "s%d" % i} for i in range(6)])
+        self.assertEqual(parallel.expected_statements(six, network), 18)
+        self.assertEqual(parallel.expected_statements(six, pathway), 6)     # joined into three parts
+        one = types.SimpleNamespace(chain=list(range(4)), segments=[{"first": 1, "last": 4, "label": "s0"}])
+        self.assertEqual(parallel.expected_statements(one, network), 3)
+
+
+class NarratorRepairGateTest(unittest.TestCase):
+    """The repair is asked when one call's share of the reserve is left
+    after the draft: 26 s is hopeless for 17 statements and refused as
+    before, 30 s after a 3-statement draft is now a repair."""
+    SHORT = {"title": "Results", "summary": "s.", "paragraphs": [{"text": "Too short.", "legs": [1]}]}
+
+    def calls(self, n_statements, left_after_draft, draft_seconds=40):
+        from src.classes.AIInterpret.walker import service
+        clock = Clock()
+        deadline = clock.t + draft_seconds + left_after_draft
+        asked = []
+
+        class Client(object):
+            def complete_json(self, *args, **kwargs):
+                asked.append(kwargs.get("budget_seconds"))
+                clock.t += draft_seconds if len(asked) == 1 else 1
+                return json.loads(json.dumps(NarratorRepairGateTest.SHORT))
+        statements = [{"n": n, "claim": "c", "prose": "p", "legs": [1]} for n in range(1, n_statements + 1)]
+        walker = types.SimpleNamespace(record=lambda: {"chain": []}, overlay=None)
+        checks = {"gates": {}}
+        with patched((service, "time", clock), (service.narrate_mod, "time", clock),
+                     (service.verify, "verify_results", lambda *a, **k: ["120 words; between 800 and 2550"]),
+                     (service.verify, "mendable_by_code", lambda problems: None),
+                     (service.verify, "drop_unrecorded_sentences", lambda *a, **k: 0),
+                     (service.verify, "drop_uncited_sentences", lambda *a, **k: 0),
+                     (service.verify, "drop_jargon_sentences", lambda *a, **k: 0),
+                     (service.verify, "drop_meta_sentences", lambda *a, **k: []),
+                     (service.tiers, "title_outruns_body", lambda *a, **k: []),
+                     (service.tiers, "mechanistic_verbs", lambda text: [])):
+            service._narrate(Client(), "card", "chain", statements, [], walker, {}, "network", checks,
+                             (800, 2000), deadline=deadline)
+        return asked
+
+    def test_a_large_section_with_26_s_left_is_not_repaired(self):
+        self.assertEqual(len(self.calls(17, 26)), 1)
+
+    def test_a_large_section_with_60_s_left_is_repaired(self):
+        asked = self.calls(17, 60)
+        self.assertEqual(len(asked), 2)
+        self.assertEqual(asked[1], 60)
+
+    def test_a_small_section_repairs_on_its_own_share(self):
+        self.assertEqual(len(self.calls(3, 30, draft_seconds=15)), 2, "a 3-statement repair with 30 s was refused")
+        self.assertEqual(len(self.calls(3, 20, draft_seconds=15)), 1)
 
 
 class WriterTest(_Fixture):

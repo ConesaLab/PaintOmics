@@ -55,10 +55,29 @@ STAGE_PERCENT = {"network": 5, "card": 10, "walk": 15, "writer": 60, "sense": 80
 # Seconds the sense check and the Narrator need after the Writers stop.
 SENSE_MIN_SECONDS = 70
 NARRATE_MIN_SECONDS = 45
+# The Narrator's reserve grows with the kept statements (narrate_reserve):
+# room for a draft and one repair, each about 15 s plus 2.5 s a statement.
+# Narrator calls on the 29 Oct 2026 survey (DeepSeek-V4-Flash, CSIC gateway)
+# took 13.6-41 s for 6-24 statements: 41 s for a 17-statement draft
+# (1WytoKdgT4), 34 s and 32 s for a 15-statement draft and repair
+# (u36I21KMxV). A flat 45 s left a 17-statement walk 26 s after its draft, no
+# repair, and the section failed on "2569 words; between 800 and 2550"; on
+# sG3755d52w the sense stage ran to 50 s before the deadline and the draft's
+# one call timed out at 66 s. Three of the round's four failing walks lost
+# their Results to the clock. Three statements keep today's 45 s, seventeen
+# get 115 s; the cap is two calls of the largest section seen with a margin,
+# past which the sense check would be left nothing in the network's 600 s.
+NARRATE_BASE_SECONDS = 30
+NARRATE_SECONDS_PER_STATEMENT = 5
+NARRATE_MAX_SECONDS = 130
 # Between the sense stage's deadline and the Narrator's gate: a call cut off
 # at its budget returns a little after it (the connect precedes the read
 # timer), and with no margin that little skipped the Narrator.
 STAGE_SLACK_SECONDS = 5
+# The sense stage is entered when its own deadline is at least this far off:
+# 20 s, what the gate "SENSE_MIN_SECONDS left in the run" gave it before the
+# Narrator's reserve grew past NARRATE_MIN_SECONDS.
+SENSE_OWN_MIN_SECONDS = SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS - STAGE_SLACK_SECONDS
 # The least a Results section must say per kept statement when the scope's
 # own floor would ask for more than the statements hold.
 WORDS_PER_STATEMENT = 50
@@ -99,6 +118,27 @@ GATES = ("artifact", "title", "direction", "context", "anchor")
 # water, NAD; artifact_gate's currency_legs) is a definite artifact, not a
 # low-power statistic, and hides a pathway walk's text as it always did.
 ADVISORY_ON_PATHWAY = ("artifact",)
+
+
+def narrate_reserve(n_statements):
+    """Seconds a model walk keeps for the Narrator of a Results section
+    retelling ``n_statements``: room for a draft and one repair (the timings
+    above NARRATE_BASE_SECONDS), never under NARRATE_MIN_SECONDS nor over
+    NARRATE_MAX_SECONDS. Every stage before the Narrator ends this far before
+    the run's deadline."""
+    need = NARRATE_BASE_SECONDS + NARRATE_SECONDS_PER_STATEMENT * max(0, int(n_statements))
+    return min(NARRATE_MAX_SECONDS, max(NARRATE_MIN_SECONDS, need))
+
+
+def repair_min_seconds(n_statements):
+    """Seconds that must be left after the draft for the Narrator's repair
+    to be asked: one call's share of the reserve, never more than
+    NARRATE_MIN_SECONDS. The reserve is two calls, so a flat 45 s made its
+    repair half unreachable for a small section: a 3-statement draft of
+    ~20 s left 25 s, refused. Not more than 45 s for a large one either: a
+    repair refused is a section lost, one tried and cut costs only time no
+    later stage uses, and 15-17-statement calls answered in 32-41 s."""
+    return min(NARRATE_MIN_SECONDS, narrate_reserve(n_statements) / 2.0)
 
 
 def advisory_gates(tag, gates):
@@ -662,8 +702,16 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
             return merged, None
         report("writer", "Writing statements and reading every cited paper", merged)
         t0 = time.time()
+        # No statement exists yet: the Narrator's reserve is set for the
+        # statements this walk's Writers are expected to keep
+        # (parallel.expected_statements). Not the cap: on a pathway walk,
+        # which keeps about six statements, 130 s against 70 s could end the
+        # Writers a minute early for a reserve the Narrator never needs.
+        # Writers that keep more take the difference from the sense check,
+        # whose deadline counts the kept statements, never from the Narrator.
         writer_deadline = min(time.time() + plan["writer_seconds"],
-                              run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS - DIRECTION_MIN_SECONDS)
+                              run_deadline - SENSE_MIN_SECONDS - DIRECTION_MIN_SECONDS
+                              - narrate_reserve(parallel.expected_statements(merged, plan)))
         written = await parallel.write_in_parallel(
             merged, card_text, PubMedClient(), client, plan, writer_deadline, cancelled,
             lambda detail: report("writer", detail, merged), card_ctx=card_ctx)
@@ -699,7 +747,7 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
     results = None
     # The stage is entered only when its own deadline leaves time for a call:
     # the sense check's and the Narrator's time is not the direction check's.
-    direction_deadline = run_deadline - SENSE_MIN_SECONDS - NARRATE_MIN_SECONDS
+    direction_deadline = run_deadline - SENSE_MIN_SECONDS - narrate_reserve(len(statements))
     if statements and not _due(direction_deadline):
         report("sense", "Checking the direction of every regulator the statements lean on", walker)
         t0 = time.time()
@@ -714,12 +762,17 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         gates["direction"] = {"pass": True, "not_applicable": True, "why": "skipped: the time budget was spent"}
     gates["context"] = context_gate(statements, store.papers)
     halt_if_cancelled()
-    if statements and run_deadline - time.time() >= SENSE_MIN_SECONDS:
+    # Counted after the direction check, which only drops statements: the
+    # sense check drops, never adds, so this reserve covers the Narrator's.
+    # The gate asks SENSE_OWN_MIN_SECONDS before the stage's own deadline: a
+    # small walk is gated as it was, a large one that much earlier.
+    sense_deadline = run_deadline - narrate_reserve(len(statements)) - STAGE_SLACK_SECONDS
+    if statements and sense_deadline - time.time() >= SENSE_OWN_MIN_SECONDS:
         report("sense", "Checking each statement against the design and the values", walker)
         t0 = time.time()
         try:
             _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks,
-                        deadline=run_deadline - NARRATE_MIN_SECONDS - STAGE_SLACK_SECONDS, card=card)
+                        deadline=sense_deadline, card=card)
         except Exception:                                             # noqa: BLE001
             # A malformed model answer drops this stage, not the walk: the
             # statements it rewrote are set aside, the rest stay as the Writers
@@ -735,6 +788,8 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         checks["sense"] = "skipped: the time budget was spent"
     halt_if_cancelled()
     scope_name = "The whole network" if tag == "network" else walker.network.pathway_name(tag)
+    # Entered on a call's worth whatever the section's size: a draft that
+    # passes needs no repair, and a stage skipped is a section lost.
     if statements and run_deadline - time.time() >= NARRATE_MIN_SECONDS:
         report("narrate", "Writing the Results section", walker)
         t0 = time.time()
@@ -1121,7 +1176,7 @@ def _narrate(client, card_text, chain, statements, dropped, walker, papers, tag,
     # When the section's problems ask for one, the repair is told what went.
     unmade = None
     if (problems or title_problems) and results is not None and (
-            deadline is None or deadline - time.time() >= NARRATE_MIN_SECONDS):
+            deadline is None or deadline - time.time() >= repair_min_seconds(len(statements))):
         try:
             repaired = narrate_mod.narrate(client, card_text, statements, chain, papers_text, words,
                                            objections=problems + effects["notes"] + title_problems,
