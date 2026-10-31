@@ -423,10 +423,10 @@ class HeatIsNotAValueTest(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.data_dir, ignore_errors=True)
 
-    def walker(self):
+    def walker(self, heats=None):
         graph = net_mod.build_network("tst", self.data_dir).filter_pathway("KEGG:tst00001")
         ov = ov_mod.overlay_job(graph, fx.make_job())
-        for node_id, heat in (("g:2", 1.11), ("g:3", 2.43)):
+        for node_id, heat in dict({"g:2": 1.11, "g:3": 2.43}, **(heats or {})).items():
             ov.heat[node_id] = dict(ov.heat[node_id], heat=heat)
         w = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
         opening = w.start_at("g:2", 6, "test")                     # standing on Bbb; Ccc is a neighbour
@@ -522,6 +522,35 @@ class HeatIsNotAValueTest(unittest.TestCase):
         self.assertTrue(answer.startswith("REFUSED"), answer)
         self.assertIn("3.15 is the heat of Eee", answer)
         self.assertNotIn("g:5", w._readable("g:3"))                      # a heat, never a value source
+
+    def test_a_heat_given_to_its_node_is_refused_though_another_node_holds_it(self):
+        """Bgm0v4EU01, round heat2 (2026-10-31): "Pkm ... shows Control +0.52,
+        up like Ranbp9 (+0.52)"; Pkm reads +0.04, heat 0.52, and Ranbp9's
+        +0.52 put the value in the pool. Here Ccc is Pkm (heat 1.50) and Aaa
+        Ranbp9 (2h +1.50)."""
+        w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+        answer = w.step("Ccc", "Ccc Gene expression is not relevant and shows 2h +1.50, up like Aaa (+1.50)", "on")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("The reading gives Ccc +1.50, which its layers do not hold: 1.50 is Ccc's heat, "
+                      "not a measured value.", answer)
+        self.assertIn("Ccc's layers:", answer)
+        self.assertNotIn("which no layer you can read holds", answer)
+        self.assertEqual(w.chain, [])
+
+    def test_a_heat_attribution_needs_the_value_given_to_that_node(self):
+        cases = (
+            # +1.50 sits after Aaa, not Ccc (Gli1 (+1.77) ... Gli2 (+1.75), Gli2's heat 1.77)
+            ({"g:3": 1.50, "g:1": 0.77}, "Ccc Gene expression 6h −0.10, while Aaa (+1.50) rises"),
+            # Ccc's own layers hold a value equal to its heat
+            ({"g:3": 0.05}, "Ccc Gene expression 0h +0.05, not relevant"),
+            # written as heats
+            ({"g:3": 0.35}, "Ccc Gene expression is flat, its neighbours' heat 0.42–0.35"),
+            ({"g:3": 3.54}, "Ccc Gene expression is flat; Ccc, the hottest (3.54), is not relevant"),
+        )
+        for heats, reading in cases:
+            w, _opening = self.walker(heats)
+            answer = w.step("Ccc", reading, "on")
+            self.assertTrue(answer.startswith("e1"), (reading, answer))
 
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()

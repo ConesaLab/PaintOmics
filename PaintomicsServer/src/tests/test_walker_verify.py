@@ -853,6 +853,23 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.assertEqual(len(found), 1, found)
         self.assertIn("2.43 is Ccc's heat, not a measured value", found[0])
 
+    def test_a_heat_given_to_its_node_objects_though_another_node_holds_it(self):
+        """Bgm0v4EU01, round heat2: "Pkm ... +0.52, up like Ranbp9 (+0.52)";
+        Pkm's heat 0.52, Ranbp9's value +0.52. Ccc is Pkm (heat 1.50), Aaa
+        Ranbp9 (2h +1.50, shown, not on the chain)."""
+        saved = {n: dict(self.ov.heat[n]) for n in ("g:1", "g:3")}
+        self.ov.heat["g:3"] = dict(saved["g:3"], heat=1.50)
+        self.ov.heat["g:1"] = dict(saved["g:1"], heat=0.77)
+        try:
+            found = self.problems("Ccc is not relevant and shows +1.50, up like Aaa (+1.50).")
+            kept = self.problems("Aaa (+1.50) rises while Ccc stays at −0.10, not relevant.")
+        finally:
+            self.ov.heat.update(saved)
+        layers = " ".join(self.ov.layer_text("g:3").split())
+        self.assertEqual(found, ["quotes +1.50 for Ccc, which its layers do not hold (%s); 1.50 is Ccc's heat, "
+                                 "not a measured value" % layers])
+        self.assertEqual(kept, [])
+
     def test_the_results_pruner_keeps_a_shown_neighbours_value(self):
         results = {"summary": "Aaa reached +2.20 at 6h. Ccc read +9.99.", "paragraphs": []}
         self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker), 1)
