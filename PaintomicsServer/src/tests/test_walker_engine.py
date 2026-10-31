@@ -470,6 +470,19 @@ class HeatIsNotAValueTest(unittest.TestCase):
         self.assertTrue(answer.startswith("e3"), answer)
         self.assertEqual(w.refusals, 0)
 
+    def test_a_heat_given_its_count_or_called_hottest_is_not_refused(self):
+        """55 of 1846 legs in the final3 records (2026-10-31) wrote a heat this
+        way, without the word "heat"; each refusal would have cost a turn."""
+        for reason in ("Ccc is the hottest 1-step node from Bbb (2.43, 2 of 19 relevant)",
+                       "Ccc sits on the hottest branch (Bbb at 1.11, Ccc at 2.43)"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+            self.assertTrue(answer.startswith("e1"), (reason, answer))
+        for reason in ("Ccc (+2.43, 2 of 19)", "the hottest neighbour; Ccc shows 2.43"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+            self.assertTrue(answer.startswith("REFUSED"), (reason, answer))
+
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()
         answer = w.note("Ccc +2.43 (relevant) leads this neighbourhood")

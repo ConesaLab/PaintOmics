@@ -836,6 +836,20 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.assertEqual(len(self.problems("Ccc fell by −0.85 in knockout cells, not relevant.")), 1)
         self.assertEqual(self.problems("Ccc is lost in 31.2% of tumours (p = 0.001), not relevant."), [])
 
+    def test_a_heat_written_as_one_without_the_word_is_not_a_value(self):
+        """Walker readings from the final3 records (2026-10-31): 55 of 1846
+        legs give a heat its count or call its node the hottest."""
+        heats = {"2.43": ["rrm1"], "2.07": ["dtymk"], "2.68": ["cysC"], "3.15": ["cysA"]}
+        for text in ("rrm1 is the hottest 1-step node from ak1 (2.43, 2 of 19 relevant)",
+                     "dtymk is the hottest unvisited relevant 1-step node from rrm1 (2.07, 2 of 29)",
+                     "sits on the hottest branch (cysC/cysQ at 2.68, cysA/P/U/W at 3.15)"):
+            self.assertEqual(verify.invented_values(text, set(), heats), [], text)
+        for text, value in (("the hottest node; rrm1 shows 2.43", "2.43"),     # the clause ended
+                            ("rrm1 (+2.43, 2 of 19)", "+2.43")):              # signed: written as data
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], [value], text)
+        self.assertEqual(self.problems("Ccc, the hottest gene here (2.43, 2 of 4 relevant), is not relevant."), [])
+        self.assertEqual(len(self.problems("Ccc (+2.43, 2 of 4) is not relevant.")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

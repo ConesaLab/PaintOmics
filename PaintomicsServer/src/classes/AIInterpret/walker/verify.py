@@ -959,14 +959,41 @@ def invented_values(text, numbers, heats, also=()):
     network walks quoted a heat as a value. An unsigned number unlike any
     heat is left alone: "31.2%", "p = 0.001" and "2.5 µM" are a paper's or the
     design's, and the Narrator's check (unrecorded_values) still reads every
-    number of the Results."""
+    number of the Results. Nor is an unsigned heat written as one without the
+    word (heat_phrased)."""
+    text = str(text or "")
     out = []
     for value, at in data_values(text):
         if _in_record(value, numbers) or _in_record(value, also):
             continue
-        if _norm(value)[:1] in ("+", "−") or heat_owners(value, heats):
+        if _norm(value)[:1] in ("+", "−"):
+            out.append((value, at))
+        elif heat_owners(value, heats) and not heat_phrased(text, at, at + len(value)):
             out.append((value, at))
     return out
+
+
+# How a walker writes a heat without the word: with its count after it, "(2.43,
+# 2 of 19 relevant)", or after "hot" in the same clause, "the hottest branch
+# (cysC/cysQ at 2.68, cysA/P/U/W at 3.15)". In the final3 records of 2026-10-31
+# 55 of 1846 legs would have been refused for nothing else. HOT_WINDOW is wide
+# enough for that 3.15, 49 characters after "hottest"; a sentence end (". ")
+# or a semicolon closes the clause, a decimal point does not.
+HEAT_COUNT_AFTER_RE = re.compile(r"^\s*[,(]\s*\d+\s+of\s+\d+(?:\s+(?:relevant|neighbours))?")
+HOT_RE = re.compile(r"\bhot(?:ter|test)?\b", re.I)
+CLAUSE_END_RE = re.compile(r"[.!?](?=\s)|;")
+HOT_WINDOW = 60
+
+
+def heat_phrased(text, start, end):
+    """Whether the unsigned number at text[start:end] is written as a heat
+    without the word: followed by its count, or after "hot", "hotter" or
+    "hottest" in its clause. A signed number never is: "+2.43" is data."""
+    if HEAT_COUNT_AFTER_RE.match(text[end:]):
+        return True
+    before = text[max(0, start - HOT_WINDOW):start]
+    clause = CLAUSE_END_RE.split(before)[-1]
+    return bool(HOT_RE.search(clause))
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")
