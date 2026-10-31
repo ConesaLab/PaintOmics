@@ -5,8 +5,8 @@ statement goes back to the Writer once, then drops.
 from __future__ import annotations
 
 import json
-import re
 
+from src.classes.AIInterpret.walker import card as card_mod
 from src.classes.AIInterpret.walker import regulators
 
 VERDICT = {"type": "object",
@@ -58,7 +58,7 @@ UNORDERED_TIMING_QUESTION = (
     "timing: the design states no perturbation and its columns have no order, so there is no before and after "
     "to fit. ok unless the statement reads the columns as a time course or an order (a rise from one column to "
     "the next, early or late, an effect after a treatment the design does not state); a value in one column, "
-    "columns compared by name and a fact from the literature are ok.\n"
+    "a difference between columns read as a difference and a fact from the literature are ok.\n"
 )
 _BRIEF_TAIL = (
     "contrast: is the contrast claimed one the design actually has?\n"
@@ -69,27 +69,19 @@ _BRIEF_TAIL = (
     "Be strict and specific. Judge only what is written.\n"
 )
 BRIEF = _BRIEF_HEAD + TIMING_QUESTION + _BRIEF_TAIL
-# Axis kinds whose columns carry no order (card.axis_kind): "time" and
-# "ordered" keep the perturbation question.
-UNORDERED_AXES = ("groups", "unlabeled")
-# How a card says it has no perturbation: the deterministic card writes "not
-# stated", the model card is told to say so, a user may write "none".
-NOT_STATED_RE = re.compile(r"^\W*(?:not (?:stated|given|specified|described|known)|none|unknown|n/?a|"
-                           r"no perturbation)\b", re.I)
-
-
-def perturbation_stated(card):
-    """True when the card names a perturbation: a perturbation text that is
-    not a "not stated" or a perturbed gene."""
-    text = str(card.get("perturbation") or "").strip()
-    return bool(card.get("perturbed_genes")) or bool(text and not NOT_STATED_RE.match(text))
 
 
 def timing_question(card=None):
     """The timing line the card allows: the perturbation question unless the
     card states no perturbation and its axis has no order. No card, today's
-    question."""
-    if card and not perturbation_stated(card) and card.get("axis_kind", "groups") in UNORDERED_AXES:
+    question. A card from design_card carries `perturbation_stated`; one built
+    elsewhere is read by the same rule from its fields."""
+    if not card:
+        return TIMING_QUESTION
+    stated = card.get("perturbation_stated")
+    if stated is None:
+        stated = card_mod.perturbation_stated(card)
+    if not stated and not card_mod.axis_is_ordered(card.get("axis_kind", "groups")):
         return UNORDERED_TIMING_QUESTION
     return TIMING_QUESTION
 

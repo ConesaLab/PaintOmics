@@ -25,6 +25,21 @@ TIME_TOKEN_RE = re.compile(
     r"[\s_-]?\d+(?:\.\d+)?)(?![A-Za-z])", re.I)
 NUMBER_LABEL_RE = re.compile(r"^-?\d+(\.\d+)?\s*[a-zA-Zµ%/]*$")
 TIME_WORDS = ("time course", "time-course", "timecourse", "time point", "timepoint", "time series", "kinetic")
+# The axis kinds (axis_kind) whose columns carry an order.
+ORDERED_AXES = ("time", "ordered")
+# A perturbation field that says there is none, as a whole phrase on the
+# stripped, lower-cased text: a prefix match read "Na+ stress", "None-treated
+# vs LPS" and "Unknown compound X exposure" as "not stated" (review of #212,
+# 31 Oct 2026). The deterministic card writes "not stated"; a model card or a
+# user may word it otherwise.
+NOT_STATED_RE = re.compile(
+    r"(?:it is |is )?not (?:explicitly |clearly )?(?:stated|given|specified|described|known|provided|mentioned)"
+    r"(?: in the (?:design|text|design text))?"
+    r"|none(?: stated| given| described| specified)?"
+    r"|unknown|n/?a"
+    r"|no perturbation(?: is)?(?: stated| described| given| specified| named| provided)?"
+    r"|no design(?: text)?(?: provided| given| stated)?"
+    r"|the design(?: text)? does not (?:describe|state|name|specify|mention) (?:a|any) perturbation")
 # A column of p-values or q-values, by its header: p.value, pvalue, p_val,
 # P-value, PValue, adj.p.Value, adj.P.Val, padj, p.adjusted, FDR, qvalue,
 # q.value, q_val. Whole tokens only -- letters or digits on either side break
@@ -287,6 +302,29 @@ def axis_kind(labels, design_text=""):
     return "groups"
 
 
+def axis_is_ordered(kind):
+    """True for the axis kinds whose columns carry an order (time points,
+    doses): the only ones that allow before and after, trajectories, peaks."""
+    return kind in ORDERED_AXES
+
+
+def _says_no_perturbation(text):
+    text = str(text or "").strip().lower().rstrip(".!;: ")
+    return not text or bool(NOT_STATED_RE.fullmatch(text))
+
+
+def perturbation_stated(card, design_text=None):
+    """Whether the card names a perturbation. Not when the job has no design
+    text at all (the #209 case; a model card may still word something there),
+    unless the user's own edits name one; not when the perturbation field is
+    wholly a "not stated" phrase; always when a perturbed gene is named."""
+    if design_text is not None and not str(design_text).strip() and card.get("source") != "user":
+        return False
+    if card.get("perturbed_genes"):
+        return True
+    return not _says_no_perturbation(card.get("perturbation"))
+
+
 def job_card(job_instance):
     """The deterministic card for a stored job: the design text's first
     sentence, the value type if the text names it, the axis, the labels, and
@@ -401,7 +439,7 @@ def model_card(client, design_text, condition_names, labels_by_omic, temperature
     fallback = deterministic_card(design_text, condition_names, labels_by_omic, aliases)
     prompt = (
         "Read an experiment design and answer with five short fields.\n"
-        "perturbation: what was done, against what, in which system.\n"
+        "perturbation: what was done, against what, in which system; 'not stated' if the text names none.\n"
         "value: what one number in the tables is (e.g. log2 fold change treated over control at one time point).\n"
         "axis: the conditions in order, as the user labels them.\n"
         "baseline: which condition is the baseline and whether the text says it precedes the perturbation; "

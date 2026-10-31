@@ -970,7 +970,8 @@ class BudgetEdgesTest(unittest.TestCase):
         failing = {f: {"ok": True, "note": ""} for f in service.sense_mod.FIELDS}
         failing["timing"] = {"ok": False, "note": "no timing"}
         seen, deadline = [], time.time() + 30
-        with patched((service.sense_mod, "sense_check", lambda client, card_text, statements, chain, **_: {
+        with patched((service.sense_mod, "sense_check",
+                      lambda client, card_text, statements, chain, budget_seconds=None, card=None: {
                           s["n"]: dict(failing) for s in statements}),
                      (service, "_rewrite_and_recheck", lambda client, card, chain, bad, *a, **k: seen.append(
                          k.get("deadline")) or {s["n"]: [] for s in bad})):

@@ -437,6 +437,9 @@ def design_card(job, labels, policy, client=None, override=None, aliases=None):
     else:
         card = card_mod.deterministic_card(design_text, conditions, labels, aliases)
     card["axis_kind"] = card_mod.axis_kind(labels, design_text)
+    # Read once here, from the design text and the card, for every stage that
+    # asks about a perturbation (the sense check's timing question).
+    card["perturbation_stated"] = card_mod.perturbation_stated(card, design_text)
     # The omics whose file carried no header: the walker may make no timing
     # claim on them until the user confirms the columns.
     card["unlabeled"] = sorted(name for name, l in labels.items() if l is None)
