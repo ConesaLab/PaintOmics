@@ -476,8 +476,10 @@ def _invented_problems(stmt, walker, papers):
     paper it cites states in the text the Writer has of it (title, abstract,
     every section fetched), naming the node the value is given to: the node
     whose heat it equals, else (without saying it is that node's) the chain
-    node named nearest before it. The Writer resubmits; a statement still
-    quoting one on its last submission is dropped."""
+    node named nearest before it; and one per value a read node holds that is
+    given to a node whose heat it is (heats_given_as_values). The Writer
+    resubmits; a statement still quoting one on its last submission is
+    dropped."""
     text = " ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
     if not data_values(text):
         return []
@@ -492,15 +494,21 @@ def _invented_problems(stmt, walker, papers):
             size = _norm(value).lstrip("+−")      # a paper's figure, with either sign
             stated.update((size, "+" + size, "−" + size))
     found = invented_values(text, _record_numbers(walker), heats, stated)
-    if not found:
+    # A value some read node holds, given to a node whose printed heat it is
+    # (heats_given_as_values): any node the walk printed a heat for.
+    named = list(dict.fromkeys(read_nodes(walker) + sorted(getattr(walker, "heats_shown", ()) or ())))
+    unheld = {at for _value, at in found}
+    given = {at: (value, node_id) for value, at, node_id in heats_given_as_values(
+        text, name_catalog(walker, named), heats_of(walker.overlay, named), walker.overlay) if at not in unheld}
+    if not found and not given:
         return []
-    catalog = [(node_id, name) for node_id in nodes for name in _node_names(walker, node_id)]
-    mentions = _mentions(text, catalog)
+    mentions = _mentions(text, name_catalog(walker, nodes))
     out = []
-    for value, at in found:
+    for value, at in sorted(found + [(value, at) for at, (value, _n) in given.items()], key=lambda f: f[1]):
         before = [m[2] for m in mentions if m[1] <= at]
         owners = heat_owners(value, heats)
-        node_id = next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
+        node_id = given[at][1] if at in given else \
+            next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
         if node_id is not None:
             label = walker.label(node_id)
             out.append("quotes %s for %s, which its layers do not hold (%s); %s is %s's heat, not a measured value"
@@ -1053,6 +1061,45 @@ def heat_phrased(text, start, end):
     clause = CLAUSE_END_RE.split(text[max(0, start - HOT_WINDOW):start])[-1]
     hot = list(HOT_RE.finditer(clause))
     return bool(hot) and not MEASURE_BEFORE_RE.search(clause[hot[-1].end():])
+
+
+def name_catalog(walker, node_ids):
+    """(node id, bare name) for every name a text may call these nodes by."""
+    return [(node_id, name) for node_id in node_ids for name in _node_names(walker, node_id)]
+
+
+def heats_given_as_values(text, catalog, heats, overlay):
+    """(value, position, node) for every value a text quotes as data
+    (data_values) and gives to the node it names nearest before it in the
+    clause, from ``catalog`` (name_catalog), when the value's size is that
+    node's printed heat (``heats``, heats_of), the node's own layers do not
+    hold it, and it is not written as a heat (heat_phrased; a signed value
+    never is).
+
+    A pooled record misses these: on Bgm0v4EU01 (round heat2, 2026-10-31) a
+    reading gave "Pkm ... shows Control +0.52, up like Ranbp9 (+0.52)", and
+    Pkm reads +0.04 with heat 0.52; Ranbp9 holds +0.52, so the value was in
+    the walk's record and passed. "Gli1 (+1.77) ... Gli2 (+1.75)" with
+    Gli2's heat 1.77 is not one: +1.77 sits after Gli1."""
+    text = str(text or "")
+    values = data_values(text)
+    if not values:
+        return []
+    heat_of = {node_id: token for token, nodes in heats.items() for node_id in nodes}
+    mentions = _mentions(text, catalog)
+    out = []
+    for value, at in values:
+        opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, at)]
+        before = [m for m in mentions if m[0] >= (opened[-1] if opened else 0) and m[1] <= at]
+        if not before:
+            continue
+        node_id, token = before[-1][2], _norm(value)
+        if heat_of.get(node_id) != token.lstrip("+−") or _in_record(value, node_tokens(overlay, node_id)):
+            continue
+        if token[:1] not in ("+", "−") and heat_phrased(text, at, at + len(value)):
+            continue
+        out.append((value, at, node_id))
+    return out
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")

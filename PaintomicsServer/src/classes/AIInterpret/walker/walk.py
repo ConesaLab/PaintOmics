@@ -356,29 +356,46 @@ class Walker:
 
     def _invented(self, tool, args, texts, target=None):
         """The refusal for texts (name -> text) quoting a value as data that no
-        layer the walker could have read holds (verify.invented_values), with
-        what to quote instead; None when every value is a layer's.
+        layer the walker could have read holds (verify.invented_values), or
+        giving a node a value that is its printed heat and not its own
+        (verify.heats_given_as_values), with what to quote instead; None
+        otherwise.
 
         On the zebrafish job 74Qe0uN7n6 (re-run 2026-10-31) the neighbour list
         printed "rrm1 r=0 2.43", an r=0 neighbour's layers were shown nowhere,
         and the reading stepping onto it wrote "Gene expression on rrm1 shows
         log2FC +2.43 (relevant)": 2.43 was rrm1's heat, its layer reads +0.12,
         not relevant. Two kept statements quoted it on."""
+        if not any(verify.data_values(text) for text in texts.values()):
+            return None
         nodes = self._readable(target)
         # A heat any answer printed, the scans' included, is a number the
         # walker may misread as a value; only the layers' tokens are values.
-        heats = verify.heats_of(self.overlay, list(dict.fromkeys(nodes + sorted(self.heats_shown))))
+        named = list(dict.fromkeys(nodes + sorted(self.heats_shown)))
+        heats = verify.heats_of(self.overlay, named)
         numbers = verify.node_numbers(self.overlay, nodes)
-        found = OrderedDict()
+        found, given = OrderedDict(), OrderedDict()
+        catalog = None
         for name, text in texts.items():
             for value, _at in verify.invented_values(text, numbers, heats):
                 found.setdefault(value, []).append(name)
-        if not found:
+            # a value another node holds, given to the node whose heat it is (Pkm, heat2)
+            catalog = catalog if catalog is not None else verify.name_catalog(self, named)
+            for value, _at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay):
+                if value not in found:
+                    given.setdefault((value, node_id), []).append(name)
+        if not found and not given:
             return None
-        where = list(dict.fromkeys(name for names in found.values() for name in names))
-        why = ["The %s quotes %s, which no layer you can read holds." % (
-            " and the ".join(where), ", ".join(found))]
-        owners = []
+        why, owners = [], []
+        if found:
+            where = list(dict.fromkeys(name for names in found.values() for name in names))
+            why.append("The %s quotes %s, which no layer you can read holds." % (
+                " and the ".join(where), ", ".join(found)))
+        for (value, node_id), names in given.items():
+            why.append("The %s gives %s %s, which its layers do not hold: %s is %s's heat, not a measured value."
+                       % (" and the ".join(names), self.label(node_id), value, value.lstrip("+-−"),
+                          self.label(node_id)))
+            owners.append(node_id)
         for value in found:
             mine = verify.heat_owners(value, heats)
             if mine:
