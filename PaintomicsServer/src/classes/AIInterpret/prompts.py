@@ -1,4 +1,6 @@
 """Prompt text for the AI chat and the design guidance every AI prompt carries."""
+from src.classes.AIInterpret.walker.card import axis_is_ordered
+
 
 # ---------------------------------------------------------------------------
 # Design guidance: which one a prompt carries follows the design card's axis
@@ -30,7 +32,7 @@ Column guidance:
 def design_guidance(axis_kind):
     """The guidance block the design card selects: trajectories only when the
     columns are ordered, conditions by name otherwise."""
-    if axis_kind in ("time", "ordered"):
+    if axis_is_ordered(axis_kind):
         return TEMPORAL_GUIDANCE_BLOCK
     if axis_kind == "unlabeled":
         return UNLABELED_GUIDANCE_BLOCK

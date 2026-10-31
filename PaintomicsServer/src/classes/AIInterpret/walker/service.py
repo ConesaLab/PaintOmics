@@ -437,6 +437,9 @@ def design_card(job, labels, policy, client=None, override=None, aliases=None):
     else:
         card = card_mod.deterministic_card(design_text, conditions, labels, aliases)
     card["axis_kind"] = card_mod.axis_kind(labels, design_text)
+    # Read once here, from the design text and the card, for every stage that
+    # asks about a perturbation (the sense check's timing question).
+    card["perturbation_stated"] = card_mod.perturbation_stated(card, design_text)
     # The omics whose file carried no header: the walker may make no timing
     # claim on them until the user confirms the columns.
     card["unlabeled"] = sorted(name for name, l in labels.items() if l is None)
@@ -716,7 +719,7 @@ def _model_walk(walker, tag, card, card_text, client, writer, report, halt_if_ca
         t0 = time.time()
         try:
             _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks,
-                        deadline=run_deadline - NARRATE_MIN_SECONDS - STAGE_SLACK_SECONDS)
+                        deadline=run_deadline - NARRATE_MIN_SECONDS - STAGE_SLACK_SECONDS, card=card)
         except Exception:                                             # noqa: BLE001
             # A malformed model answer drops this stage, not the walk: the
             # statements it rewrote are set aside, the rest stay as the Writers
@@ -910,11 +913,12 @@ def _refresh_direction(failing, again, verdicts):
             verdicts.pop(s["n"], None)
 
 
-def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks, deadline=None):
+def _sense_pass(client, card_text, chain, statements, dropped, walker, store, read, checks, deadline=None,
+                card=None):
     # Each call gives up by `deadline`: a rate-limited sense check that slept
     # through its retries used to take the time the Narrator was promised.
     verdicts = None if _due(deadline) else sense_mod.sense_check(client, card_text, statements, chain,
-                                                                 budget_seconds=_left(deadline))
+                                                                 budget_seconds=_left(deadline), card=card)
     if verdicts is None:
         for s in statements:
             s["sense"] = None
@@ -931,7 +935,7 @@ def _sense_pass(client, card_text, chain, statements, dropped, walker, store, re
         walker, store, read, deadline=deadline)
     # Unasked, each failing statement keeps the verdict it failed and drops.
     again = {} if _due(deadline) else sense_mod.sense_check(client, card_text, failing, chain,
-                                                            budget_seconds=_left(deadline)) or {}
+                                                            budget_seconds=_left(deadline), card=card) or {}
     for s in failing:
         s["sense"] = again.get(s["n"], s["sense"])
         if problems[s["n"]] or sense_mod.failed_fields(s.get("sense")):
