@@ -22,12 +22,29 @@ NUMBER_RE = re.compile(r"(?<![\w.±<>≤≥|])[+\-−]?(?:\d+\.\d+%s?|\d+%s)" % 
 BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 
 
+# A number written as a heat: "heat 2.43", "heat of 2.43", "heat score 2.43",
+# "(heat: 2.43)". The walker prints a node's heat after its name, and naming
+# it a heat is the one way to quote it that cannot pass for a reading.
+HEAT_BEFORE_RE = re.compile(r"\bheat(?:\s+score)?(?:\s+(?:of|is|was))?\s*[:=≈]?\s*$", re.I)
+
+
+def _is_bound(text, start):
+    return bool(BOUND_BEFORE_RE.search(text[max(0, start - 3):start]))
+
+
 def quoted_values(text):
     """The values a text quotes, as written: NUMBER_RE's matches less the bounds
     written with a space after the comparator ("> 1.00", "p < 0.05")."""
     text = str(text or "")
-    return [m.group(0) for m in NUMBER_RE.finditer(text)
-            if not BOUND_BEFORE_RE.search(text[max(0, m.start() - 3):m.start()])]
+    return [m.group(0) for m in NUMBER_RE.finditer(text) if not _is_bound(text, m.start())]
+
+
+def data_values(text):
+    """(value, position) for every value a text quotes as data: quoted_values
+    less the numbers written as a heat (HEAT_BEFORE_RE)."""
+    text = str(text or "")
+    return [(m.group(0), m.start()) for m in NUMBER_RE.finditer(text)
+            if not _is_bound(text, m.start()) and not HEAT_BEFORE_RE.search(text[max(0, m.start() - 24):m.start()])]
 LEG_LIST_RE = re.compile(r"\[(e\d+(?:\s*,\s*e?\d+)*)\]")
 
 
@@ -449,7 +466,58 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
                                    " ".join(w for w in (context.get("organism"), context.get("system"))
                                             if w and w != "unknown"),
                                    "this organism and system"))
+    problems.extend(_invented_problems(stmt, walker, papers))
     return problems
+
+
+def _invented_problems(stmt, walker, papers):
+    """One objection per value the statement's claim or prose quotes as data
+    (invented_values) that no chain node's layers hold and no paper it cites
+    states in the text the Writer has of it (title, abstract, every section
+    fetched), naming the node the value is given to: the node whose heat it
+    equals, else the chain node named nearest before it. The Writer resubmits;
+    a statement still quoting one on its last submission is dropped."""
+    text = " ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
+    if not data_values(text):
+        return []
+    nodes = chain_nodes(walker.record()["chain"])
+    heats = heats_of(walker.overlay, nodes)
+    stated = set()
+    for ref in statement_refs(stmt):
+        paper = (papers or {}).get(ref) or {}
+        blob = " ".join([str(paper.get("title") or ""), str(paper.get("abstract") or "")]
+                        + [str(v or "") for v in (paper.get("sections") or {}).values()])
+        for value in quoted_values(blob):
+            size = _norm(value).lstrip("+−")      # a paper's figure, with either sign
+            stated.update((size, "+" + size, "−" + size))
+    found = invented_values(text, _record_numbers(walker), heats, stated)
+    if not found:
+        return []
+    catalog = [(node_id, name) for node_id in nodes for name in _node_names(walker, node_id)]
+    mentions = _mentions(text, catalog)
+    out = []
+    for value, at in found:
+        before = [m[2] for m in mentions if m[1] <= at]
+        owners = heat_owners(value, heats)
+        node_id = next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None) \
+            or (before[-1] if before else None)
+        if node_id is None:
+            out.append("quotes %s, which no layer on the chain holds; quote values as the layers print them"
+                       % value)
+            continue
+        label = walker.label(node_id)
+        problem = "quotes %s for %s, which its layers do not hold (%s)" % (
+            value, label, layers_line(walker.overlay, node_id))
+        if node_id in owners:
+            problem += "; %s is %s's heat, not a measured value" % (_norm(value).lstrip("+−"), label)
+        out.append(problem)
+    return out
+
+
+def layers_line(overlay, node_id, lines=3):
+    """A node's layer text (as the model reads it) on one line, for an objection."""
+    rows = [" ".join(row.split()) for row in overlay.layer_text(node_id).splitlines()]
+    return "; ".join(rows[:lines]) + ("; …" if len(rows) > lines else "")
 
 
 def citing_sentences(stmt, ref):
@@ -804,8 +872,10 @@ def paper_numbers(stmt, ref):
     verifier then found [5] and [119] dropped, the repair re-sent the same
     sentences, and both runs that day lost their whole Results section. [5]'s
     passage reads "(p = 0.001)", [119]'s holds 31.2% and 25.0%. Only these
-    confirmed fields count, never the statement's prose: no code checks the
-    prose number by number, only the model sense check reads it."""
+    confirmed fields count, never the statement's prose: the Verifier checks
+    only the prose numbers that read as data, signed or a heat's size
+    (invented_values), and an unsigned figure such as "31.2%" passes it
+    unchecked."""
     evidence = stmt.get("evidence") if isinstance(stmt.get("evidence"), (list, tuple)) else []
     tokens = set()
     for item in evidence:
@@ -846,11 +916,57 @@ def _record_numbers(walker):
     layer's, not the MEMBERS_SHOWN a model reads (overlay.capped_layers). The
     record holds what the user measured; a sentence quoting a member's value
     the walker's cap left out is quoting the user's data, not inventing it."""
+    return node_numbers(walker.overlay, chain_nodes(walker.record()["chain"]))
+
+
+def node_numbers(overlay, node_ids):
+    """Every value token in these nodes' layer text, every layer of each."""
     tokens = set()
-    for node_id in chain_nodes(walker.record()["chain"]):
-        for value in quoted_values(walker.overlay.layer_text(node_id, limit=None)):
+    for node_id in node_ids:
+        for value in quoted_values(overlay.layer_text(node_id, limit=None)):
             tokens.add(_norm(value))
     return tokens
+
+
+def heats_of(overlay, node_ids):
+    """{a heat as the walker prints it, normalised: [node ids with that heat]}
+    for these nodes; a heat of 0.00 says nothing and is left out."""
+    out = {}
+    for node_id in node_ids:
+        heat = round(((getattr(overlay, "heat", None) or {}).get(node_id) or {}).get("heat", 0.0), 2)
+        if heat > 0:
+            out.setdefault(_norm("%.2f" % heat), []).append(node_id)
+    return out
+
+
+def heat_owners(value, heats):
+    """The nodes whose heat a quoted value's size equals."""
+    return heats.get(_norm(value).lstrip("+−"), [])
+
+
+def invented_values(text, numbers, heats, also=()):
+    """(value, position) for every value ``text`` quotes as data (data_values)
+    that is in neither ``numbers``, the layers' value tokens, nor ``also``,
+    and that reads as a measurement: signed, as a layer prints every reading,
+    or, unsigned, the size of a heat in ``heats`` (heats_of).
+
+    The walker printed a neighbour's heat after its name, "rrm1 r=0 2.43", and
+    showed an r=0 neighbour's layers to no one; on the zebrafish job
+    74Qe0uN7n6 (re-run 2026-10-31) a reading stepping there wrote "Gene
+    expression on rrm1 shows log2FC +2.43 (relevant), a strong induction",
+    where the layer reads +0.12, not relevant, and the Writer kept "rrm1
+    (+2.43) and rrm2b (+2.30) are strongly induced". 15 of that round's 19
+    network walks quoted a heat as a value. An unsigned number unlike any
+    heat is left alone: "31.2%", "p = 0.001" and "2.5 µM" are a paper's or the
+    design's, and the Narrator's check (unrecorded_values) still reads every
+    number of the Results."""
+    out = []
+    for value, at in data_values(text):
+        if _in_record(value, numbers) or _in_record(value, also):
+            continue
+        if _norm(value)[:1] in ("+", "−") or heat_owners(value, heats):
+            out.append((value, at))
+    return out
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")
