@@ -64,6 +64,7 @@ def permute_flags(graph, overlay, rng):
     rng.shuffle(donors)
     ov.r = {v: bool(overlay.r.get(d)) for v, d in zip(nodes, donors)}
     ov.layers = OrderedDict((v, overlay.layers.get(d, [])) for v, d in zip(nodes, donors))
+    ov.value_tokens = {}                  # its own: the layers moved (verify.node_tokens)
     ov.heat = heat_mod.compute_heat(graph, ov.measured, ov.r)
     ov.K = sum(1 for v in nodes if ov.r[v])
     return ov
