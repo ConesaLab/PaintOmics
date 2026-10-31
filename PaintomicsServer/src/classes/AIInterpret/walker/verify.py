@@ -472,17 +472,17 @@ def verify_statement(stmt, walker, papers, read=None, part=None, names_genes=Tru
 
 def _invented_problems(stmt, walker, papers):
     """One objection per value the statement's claim or prose quotes as data
-    (invented_values) that no chain node's layers hold and no paper it cites
-    states in the text the Writer has of it (title, abstract, every section
-    fetched), naming the node the value is given to: the node whose heat it
-    equals, else (without saying it is that node's) the chain node named
-    nearest before it. The Writer resubmits;
-    a statement still quoting one on its last submission is dropped."""
+    (invented_values) that no layer the walk read holds (read_nodes) and no
+    paper it cites states in the text the Writer has of it (title, abstract,
+    every section fetched), naming the node the value is given to: the node
+    whose heat it equals, else (without saying it is that node's) the chain
+    node named nearest before it. The Writer resubmits; a statement still
+    quoting one on its last submission is dropped."""
     text = " ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
     if not data_values(text):
         return []
     nodes = chain_nodes(walker.record()["chain"])
-    heats = heats_of(walker.overlay, nodes)
+    heats = heats_of(walker.overlay, read_nodes(walker))
     stated = set()
     for ref in statement_refs(stmt):
         paper = (papers or {}).get(ref) or {}
@@ -508,11 +508,11 @@ def _invented_problems(stmt, walker, papers):
         elif before:
             # Not "for" that node: the sentence may give the value to one off
             # the chain ("Bbb falls, as does its partner Xyz (−0.70)").
-            out.append("quotes %s, which no chain node's layers hold (the nearest chain node named before it, "
+            out.append("quotes %s, which no layer the walk read holds (the nearest chain node named before it, "
                        "%s, reads %s); quote values as the layers print them" % (
                            value, walker.label(before[-1]), layers_line(walker.overlay, before[-1])))
         else:
-            out.append("quotes %s, which no layer on the chain holds; quote values as the layers print them"
+            out.append("quotes %s, which no layer the walk read holds; quote values as the layers print them"
                        % value)
     return out
 
@@ -915,11 +915,26 @@ def unrecorded_values(sentence, numbers, source=None, source_refs=None):
 
 
 def _record_numbers(walker):
-    """Every value token that appears in any chain node's layer text: every
-    layer's, not the MEMBERS_SHOWN a model reads (overlay.capped_layers). The
-    record holds what the user measured; a sentence quoting a member's value
-    the walker's cap left out is quoting the user's data, not inventing it."""
-    return node_numbers(walker.overlay, chain_nodes(walker.record()["chain"]))
+    """Every value token that appears in the layer text of any node the walk
+    read (read_nodes): every layer's, not the MEMBERS_SHOWN a model reads
+    (overlay.capped_layers). The record holds what the user measured; a
+    sentence quoting a member's value the walker's cap left out is quoting
+    the user's data, not inventing it."""
+    return node_numbers(walker.overlay, read_nodes(walker))
+
+
+def read_nodes(walker):
+    """The nodes whose layers the walk read: every chain node, in walk order,
+    then every node whose layers block an answer printed (Walker.layers_shown,
+    the walker guard's own set; a relevant neighbour is shown and never
+    stepped onto). Chain-only, the Verifier dropped three true statements of
+    round heat2 (2026-10-31): "Gli2 (+1.75) and Gli3 (+1.75)" on vRmKBo4E60,
+    "Cyp51 (Control +0.51) and Msmo1 (Control +0.61)" twice on Bgm0v4EU01,
+    each a value of a relevant neighbour the walker had quoted in a reading.
+    getattr: a walker rebuilt from a record or by a test may lack the set."""
+    nodes = chain_nodes(walker.record()["chain"])
+    chained = set(nodes)
+    return nodes + sorted(n for n in getattr(walker, "layers_shown", ()) or () if n not in chained)
 
 
 def node_numbers(overlay, node_ids):
