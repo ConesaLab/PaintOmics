@@ -552,6 +552,30 @@ class HeatIsNotAValueTest(unittest.TestCase):
             answer = w.step("Ccc", reading, "on")
             self.assertTrue(answer.startswith("e1"), (reading, answer))
 
+    def test_a_value_after_a_group_of_names_is_not_given_to_the_nearest(self):
+        """"Ranbp9 and Pkm both rise (+0.52, +0.04)" is a true reading: the
+        values go to the names in order. Ccc is Pkm (heat 1.50), Aaa Ranbp9."""
+        for reading in ("Aaa and Ccc both move in Gene expression (+1.50, −0.10)",
+                        "Gene expression of Aaa and Ccc (+1.50)"):
+            w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+            answer = w.step("Ccc", reading, "on")
+            self.assertTrue(answer.startswith("e1"), (reading, answer))
+
+    def test_a_value_is_reported_once_whichever_text_quotes_it(self):
+        w, _opening = self.walker()
+        answer = w.step("Ccc", "Ccc Gene expression shows +2.43", "Ccc at +2.43 leads")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("The reading and the reason quote +2.43, which no layer you can read holds.", answer)
+        self.assertNotIn("gives Ccc", answer)
+        self.assertEqual(answer.count("2.43 is the heat of"), 1, answer)
+
+    def test_a_heat_quoted_in_scientific_form_is_named_as_printed(self):
+        w, _opening = self.walker({"g:3": 0.52})
+        answer = w.step("Ccc", "Ccc Gene expression shows +5.2e-1", "on")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("0.52 is the heat of Ccc", answer)
+        self.assertNotIn("5.2e-1 is the heat", answer)
+
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()
         answer = w.note("Ccc +2.43 (relevant) leads this neighbourhood")
