@@ -143,6 +143,23 @@ class MergeTest(_Fixture):
         self.assertLessEqual(runner.most, PLAN["walkers"])
         self.assertGreater(runner.most, 1, "the seeds were walked one after another, not at once")
 
+    def test_the_merged_walker_carries_what_every_walker_was_shown(self):
+        """The Writers, the Verifier and the Narrator read the merged walker:
+        dropping the segments' layers_shown cost round heat2 three true
+        statements (verify.read_nodes)."""
+        planner = Walker(self.net, self.ov, "network", params_for("network"))
+        planner.layers_shown, planner.heats_shown = {"g:7"}, {"g:6"}
+        subs = []
+        for seed in ("g:2", "g:4"):
+            sub = Walker(self.net, self.ov, "network", params_for("network"))
+            sub.start_at(seed, 3, "test")
+            subs.append(sub)
+        self.assertTrue(subs[0].layers_shown - subs[1].layers_shown)
+        merged = parallel.merge_segments(planner, subs)
+        self.assertEqual(merged.layers_shown, {"g:7"} | subs[0].layers_shown | subs[1].layers_shown)
+        self.assertEqual(merged.heats_shown, {"g:6"} | subs[0].heats_shown | subs[1].heats_shown)
+        self.assertLessEqual(verify.node_tokens(self.ov, "g:4"), verify._record_numbers(merged))
+
     def test_a_walker_past_the_deadline_is_stopped_at_its_next_turn(self):
         merged, _runner = self.walk(ScriptedRunner(pause=0.2), seconds=0.3)
         self.assertTrue(merged.done)

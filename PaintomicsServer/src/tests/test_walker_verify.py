@@ -821,21 +821,46 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
     def test_a_signed_value_no_layer_holds_is_sent_back(self):
         found = self.problems("Bbb falls while Ccc climbs to +3.10, not relevant.")
         self.assertEqual(len(found), 1, found)
-        self.assertTrue(found[0].startswith("quotes +3.10, which no chain node's layers hold (the nearest chain "
+        self.assertTrue(found[0].startswith("quotes +3.10, which no layer the walk read holds (the nearest chain "
                                             "node named before it, Ccc, reads "), found)
         self.assertNotIn("heat", found[0])
 
     def test_a_value_given_to_a_node_off_the_chain_is_not_blamed_on_the_one_before(self):
         found = self.problems("Bbb falls, as does its partner Xyz (−0.70); Ccc is not relevant.")
         self.assertEqual(len(found), 1, found)
-        self.assertTrue(found[0].startswith("quotes −0.70, which no chain node's layers hold (the nearest chain "
+        self.assertTrue(found[0].startswith("quotes −0.70, which no layer the walk read holds (the nearest chain "
                                             "node named before it, Bbb, reads Gene expression"), found)
         self.assertNotIn("for Bbb", found[0])
         self.assertTrue(found[0].endswith("; quote values as the layers print them"), found)
 
+    def test_a_value_of_a_neighbour_whose_layers_were_shown_stands(self):
+        """Round heat2 (2026-10-31): the Verifier dropped "Gli2 (+1.75) and
+        Gli3 (+1.75)", true values of relevant neighbours the walker was shown
+        and quoted, because only chain nodes counted. Here Aaa is Bbb's
+        relevant neighbour, shown at the start and never stepped onto."""
+        self.assertIn("g:1", self.walker.layers_shown)
+        self.assertNotIn("g:1", verify.chain_nodes(self.walker.record()["chain"]))
+        prose = "Ccc is not relevant, while Bbb's neighbour Aaa reached +2.20 at 6h."
+        self.assertEqual(self.problems(prose), [])
+        self.walker.layers_shown.discard("g:1")
+        try:
+            found = self.problems(prose)                     # its layers never shown: no source
+        finally:
+            self.walker.layers_shown.add("g:1")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("quotes +2.20, which no layer the walk read holds"), found)
+        found = self.problems("Ccc is not relevant, while Bbb's neighbour Aaa reached +2.43.")
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("2.43 is Ccc's heat, not a measured value", found[0])
+
+    def test_the_results_pruner_keeps_a_shown_neighbours_value(self):
+        results = {"summary": "Aaa reached +2.20 at 6h. Ccc read +9.99.", "paragraphs": []}
+        self.assertEqual(verify.drop_unrecorded_sentences(results, self.walker), 1)
+        self.assertEqual(results["summary"], "Aaa reached +2.20 at 6h.")
+
     def test_value_tokens_are_cached_and_the_record_is_unchanged(self):
         expected = set()
-        for node_id in verify.chain_nodes(self.walker.record()["chain"]):
+        for node_id in verify.read_nodes(self.walker):
             expected.update(verify._norm(v) for v in verify.quoted_values(self.ov.layer_text(node_id, limit=None)))
         self.assertEqual(verify._record_numbers(self.walker), expected)
         self.assertIn("g:3", self.ov.value_tokens)
