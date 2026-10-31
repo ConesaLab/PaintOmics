@@ -821,14 +821,14 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
     def test_a_signed_value_no_layer_holds_is_sent_back(self):
         found = self.problems("Bbb falls while Ccc climbs to +3.10, not relevant.")
         self.assertEqual(len(found), 1, found)
-        self.assertTrue(found[0].startswith("quotes +3.10, which no layer the walk read holds (the nearest chain "
+        self.assertTrue(found[0].startswith("quotes +3.10, which no layer the walk read holds (the nearest "
                                             "node named before it, Ccc, reads "), found)
         self.assertNotIn("heat", found[0])
 
     def test_a_value_given_to_a_node_off_the_chain_is_not_blamed_on_the_one_before(self):
         found = self.problems("Bbb falls, as does its partner Xyz (−0.70); Ccc is not relevant.")
         self.assertEqual(len(found), 1, found)
-        self.assertTrue(found[0].startswith("quotes −0.70, which no layer the walk read holds (the nearest chain "
+        self.assertTrue(found[0].startswith("quotes −0.70, which no layer the walk read holds (the nearest "
                                             "node named before it, Bbb, reads Gene expression"), found)
         self.assertNotIn("for Bbb", found[0])
         self.assertTrue(found[0].endswith("; quote values as the layers print them"), found)
@@ -869,6 +869,51 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.assertEqual(found, ["quotes +1.50 for Ccc, which its layers do not hold (%s); 1.50 is Ccc's heat, "
                                  "not a measured value" % layers])
         self.assertEqual(kept, [])
+
+    def with_heats(self, heats, shown=()):
+        """Set node heats (and heats_shown members) for one test; undo it after."""
+        saved = {n: dict(self.ov.heat[n]) for n in heats}
+        for node_id, heat in heats.items():
+            self.ov.heat[node_id] = dict(saved[node_id], heat=heat)
+        added = set(shown) - self.walker.heats_shown
+        self.walker.heats_shown.update(added)
+        self.addCleanup(self.ov.heat.update, saved)
+        self.addCleanup(self.walker.heats_shown.difference_update, added)
+
+    def test_a_value_after_a_group_of_names_is_not_given_to_the_nearest(self):
+        """"Ranbp9 and Pkm both rise (+0.52, +0.04)": the values go to the
+        names in order, not both to Pkm. Ccc is Pkm (heat 1.50), Aaa Ranbp9."""
+        self.with_heats({"g:3": 1.50, "g:1": 0.77})
+        self.assertEqual(self.problems("Aaa and Ccc both move (+1.50, −0.10), Ccc not relevant."), [])
+        self.assertEqual(self.problems("Gene expression of Aaa and Ccc (+1.50); Ccc is not relevant."), [])
+        self.assertEqual(len(self.problems("Ccc is not relevant and shows +1.50, up like Aaa (+1.50).")), 1)
+
+    def test_a_cited_papers_figure_exempts_a_heat_given_to_its_node(self):
+        self.with_heats({"g:3": 1.50, "g:1": 0.77})
+        prose = "Ccc activity rose 1.50-fold in knockout cells%s, not relevant."
+        found = self.problems(prose % "")
+        self.assertEqual(len(found), 1, found)                          # Aaa's +1.50, given to Ccc
+        self.assertIn("1.50 is Ccc's heat", found[0])
+        papers = {1: {"title": "Ccc in knockout cells", "abstract": "Ccc activity rose 1.50-fold."}}
+        self.assertEqual(self.problems(prose % " [1]", papers, [1]), [])
+
+    def test_a_heat_printed_only_in_a_scan_is_held_to_the_heat_check(self):
+        """The walker guard's heat set (heat_nodes): Ddd is neither on the
+        chain nor shown, only its heat was printed."""
+        self.assertNotIn("g:4", verify.read_nodes(self.walker))
+        self.with_heats({"g:4": 3.33})
+        prose = "Ccc is not relevant, and Eee reaches 3.33."
+        self.assertEqual(self.problems(prose), [])                      # its heat never printed
+        self.with_heats({}, shown={"g:4"})
+        found = self.problems(prose)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("3.33 is Ddd's heat, not a measured value", found[0])
+
+    def test_the_hint_names_the_read_node_nearest_the_value(self):
+        found = self.problems("Bbb falls while Aaa reaches +3.10; Ccc is not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("quotes +3.10, which no layer the walk read holds (the nearest node "
+                                            "named before it, Aaa, reads Gene expression"), found)
 
     def test_the_results_pruner_keeps_a_shown_neighbours_value(self):
         results = {"summary": "Aaa reached +2.20 at 6h. Ccc read +9.99.", "paragraphs": []}

@@ -371,36 +371,39 @@ class Walker:
         nodes = self._readable(target)
         # A heat any answer printed, the scans' included, is a number the
         # walker may misread as a value; only the layers' tokens are values.
-        named = list(dict.fromkeys(nodes + sorted(self.heats_shown)))
+        named = verify.heat_nodes(self, nodes)
         heats = verify.heats_of(self.overlay, named)
         numbers = verify.node_numbers(self.overlay, nodes)
         found, given = OrderedDict(), OrderedDict()
-        catalog = None
         for name, text in texts.items():
             for value, _at in verify.invented_values(text, numbers, heats):
                 found.setdefault(value, []).append(name)
-            # a value another node holds, given to the node whose heat it is (Pkm, heat2)
-            catalog = catalog if catalog is not None else verify.name_catalog(self, named)
+        # Then, over every text, a value another node holds given to the node
+        # whose heat it is (Pkm, heat2) -- never one already reported above,
+        # in any spelling, so a reading and a reason cannot say both.
+        unheld = {verify._norm(value) for value in found}
+        catalog = verify.name_catalog(self, named)
+        for name, text in texts.items():
             for value, _at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay):
-                if value not in found:
+                if verify._norm(value) not in unheld:
                     given.setdefault((value, node_id), []).append(name)
         if not found and not given:
             return None
         why, owners = [], []
         if found:
             where = list(dict.fromkeys(name for names in found.values() for name in names))
-            why.append("The %s quotes %s, which no layer you can read holds." % (
-                " and the ".join(where), ", ".join(found)))
+            why.append("The %s %s %s, which no layer you can read holds." % (
+                " and the ".join(where), "quotes" if len(where) == 1 else "quote", ", ".join(found)))
         for (value, node_id), names in given.items():
-            why.append("The %s gives %s %s, which its layers do not hold: %s is %s's heat, not a measured value."
-                       % (" and the ".join(names), self.label(node_id), value, value.lstrip("+-−"),
-                          self.label(node_id)))
+            why.append("The %s %s %s %s, which its layers do not hold: %s is %s's heat, not a measured value."
+                       % (" and the ".join(names), "gives" if len(names) == 1 else "give", self.label(node_id),
+                          value, verify._norm(value).lstrip("+−"), self.label(node_id)))
             owners.append(node_id)
         for value in found:
             mine = verify.heat_owners(value, heats)
             if mine:
                 why.append("%s is the heat of %s, not a measured value." % (
-                    value.lstrip("+-−"), ", ".join(self.label(n) for n in mine)))
+                    verify._norm(value).lstrip("+−"), ", ".join(self.label(n) for n in mine)))
                 owners += mine
         why.append("The number after \"heat\" beside a neighbour's name is how surprising its neighbourhood's "
                    "relevant count is; a node's values are only those its layers block prints.")

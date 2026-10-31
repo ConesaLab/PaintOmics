@@ -475,16 +475,22 @@ def _invented_problems(stmt, walker, papers):
     (invented_values) that no layer the walk read holds (read_nodes) and no
     paper it cites states in the text the Writer has of it (title, abstract,
     every section fetched), naming the node the value is given to: the node
-    whose heat it equals, else (without saying it is that node's) the chain
-    node named nearest before it; and one per value a read node holds that is
-    given to a node whose heat it is (heats_given_as_values). The Writer
-    resubmits; a statement still quoting one on its last submission is
-    dropped."""
-    text = " ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
-    if not data_values(text):
+    whose heat it equals, else (without saying it is that node's) the node
+    the walk read named nearest before it; and one per value a read node
+    holds that is given to a node whose heat it is (heats_given_as_values).
+    The Writer resubmits; a statement still quoting one on its last
+    submission is dropped."""
+    # "; ": the claim is its own clause, so its names make no group with the
+    # prose's first value (heats_given_as_values) and its "hottest" no heat.
+    text = "; ".join([str(stmt.get("claim") or ""), str(stmt.get("prose") or "")])
+    values = data_values(text)
+    if not values:
         return []
-    nodes = chain_nodes(walker.record()["chain"])
-    heats = heats_of(walker.overlay, read_nodes(walker))
+    read = read_nodes(walker, chain_nodes(walker.record()["chain"]))
+    # The walker guard's heat set (heat_nodes): a heat printed only in a scan
+    # or a neighbour list is as misreadable here as in a reading.
+    named = heat_nodes(walker, read)
+    heats = heats_of(walker.overlay, named)
     stated = set()
     for ref in statement_refs(stmt):
         paper = (papers or {}).get(ref) or {}
@@ -493,19 +499,19 @@ def _invented_problems(stmt, walker, papers):
         for value in quoted_values(blob):
             size = _norm(value).lstrip("+−")      # a paper's figure, with either sign
             stated.update((size, "+" + size, "−" + size))
-    found = invented_values(text, _record_numbers(walker), heats, stated)
+    found = invented_values(text, _record_numbers(walker, read), heats, stated)
     # A value some read node holds, given to a node whose printed heat it is
     # (heats_given_as_values): any node the walk printed a heat for.
-    named = list(dict.fromkeys(read_nodes(walker) + sorted(getattr(walker, "heats_shown", ()) or ())))
+    mentions = _mentions(text, name_catalog(walker, named))
     unheld = {at for _value, at in found}
     given = {at: (value, node_id) for value, at, node_id in heats_given_as_values(
-        text, name_catalog(walker, named), heats_of(walker.overlay, named), walker.overlay) if at not in unheld}
+        text, None, heats, walker.overlay, stated, values, mentions) if at not in unheld}
     if not found and not given:
         return []
-    mentions = _mentions(text, name_catalog(walker, nodes))
+    readable = set(read)
     out = []
     for value, at in sorted(found + [(value, at) for at, (value, _n) in given.items()], key=lambda f: f[1]):
-        before = [m[2] for m in mentions if m[1] <= at]
+        before = [m[2] for m in mentions if m[1] <= at and m[2] in readable]
         owners = heat_owners(value, heats)
         node_id = given[at][1] if at in given else \
             next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
@@ -514,9 +520,9 @@ def _invented_problems(stmt, walker, papers):
             out.append("quotes %s for %s, which its layers do not hold (%s); %s is %s's heat, not a measured value"
                        % (value, label, layers_line(walker.overlay, node_id), _norm(value).lstrip("+−"), label))
         elif before:
-            # Not "for" that node: the sentence may give the value to one off
-            # the chain ("Bbb falls, as does its partner Xyz (−0.70)").
-            out.append("quotes %s, which no layer the walk read holds (the nearest chain node named before it, "
+            # Not "for" that node: the sentence may give the value to one the
+            # walk never read ("Bbb falls, as does its partner Xyz (−0.70)").
+            out.append("quotes %s, which no layer the walk read holds (the nearest node named before it, "
                        "%s, reads %s); quote values as the layers print them" % (
                            value, walker.label(before[-1]), layers_line(walker.overlay, before[-1])))
         else:
@@ -922,16 +928,24 @@ def unrecorded_values(sentence, numbers, source=None, source_refs=None):
     return out
 
 
-def _record_numbers(walker):
+def _record_numbers(walker, nodes=None):
     """Every value token that appears in the layer text of any node the walk
-    read (read_nodes): every layer's, not the MEMBERS_SHOWN a model reads
-    (overlay.capped_layers). The record holds what the user measured; a
-    sentence quoting a member's value the walker's cap left out is quoting
-    the user's data, not inventing it."""
-    return node_numbers(walker.overlay, read_nodes(walker))
+    read (``nodes``, read_nodes when None): every layer's, not the
+    MEMBERS_SHOWN a model reads (overlay.capped_layers). The record holds
+    what the user measured; a sentence quoting a member's value the walker's
+    cap left out is quoting the user's data, not inventing it."""
+    return node_numbers(walker.overlay, read_nodes(walker) if nodes is None else nodes)
 
 
-def read_nodes(walker):
+def heat_nodes(walker, value_nodes):
+    """The nodes whose printed heat a text may misread as a value: the value
+    nodes (read_nodes, or the walker guard's readable set), then every node
+    any answer printed a heat for (Walker.heats_shown). The one definition
+    the walker guard and the Verifier share, so their heat sets cannot drift."""
+    return list(dict.fromkeys(list(value_nodes) + sorted(getattr(walker, "heats_shown", ()) or ())))
+
+
+def read_nodes(walker, chain=None):
     """The nodes whose layers the walk read: every chain node, in walk order,
     then every node whose layers block an answer printed (Walker.layers_shown,
     the walker guard's own set; a relevant neighbour is shown and never
@@ -939,8 +953,9 @@ def read_nodes(walker):
     round heat2 (2026-10-31): "Gli2 (+1.75) and Gli3 (+1.75)" on vRmKBo4E60,
     "Cyp51 (Control +0.51) and Msmo1 (Control +0.61)" twice on Bgm0v4EU01,
     each a value of a relevant neighbour the walker had quoted in a reading.
-    getattr: a walker rebuilt from a record or by a test may lack the set."""
-    nodes = chain_nodes(walker.record()["chain"])
+    getattr: a walker rebuilt from a record or by a test may lack the set.
+    ``chain``: chain_nodes, when the caller has them."""
+    nodes = list(chain) if chain is not None else chain_nodes(walker.record()["chain"])
     chained = set(nodes)
     return nodes + sorted(n for n in getattr(walker, "layers_shown", ()) or () if n not in chained)
 
@@ -1068,7 +1083,7 @@ def name_catalog(walker, node_ids):
     return [(node_id, name) for node_id in node_ids for name in _node_names(walker, node_id)]
 
 
-def heats_given_as_values(text, catalog, heats, overlay):
+def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, mentions=None):
     """(value, position, node) for every value a text quotes as data
     (data_values) and gives to the node it names nearest before it in the
     clause, from ``catalog`` (name_catalog), when the value's size is that
@@ -1080,22 +1095,34 @@ def heats_given_as_values(text, catalog, heats, overlay):
     reading gave "Pkm ... shows Control +0.52, up like Ranbp9 (+0.52)", and
     Pkm reads +0.04 with heat 0.52; Ranbp9 holds +0.52, so the value was in
     the walk's record and passed. "Gli1 (+1.77) ... Gli2 (+1.75)" with
-    Gli2's heat 1.77 is not one: +1.77 sits after Gli1."""
+    Gli2's heat 1.77 is not one: +1.77 sits after Gli1. Nor is a value after
+    a group of names, "Ranbp9 and Pkm both rise (+0.52, +0.04)": another
+    node named since the clause opened or the last value before the nearest
+    name means the values may go to the names in order, and the nearest name
+    is not the owner. A value ``also`` holds (a cited paper's) is left alone.
+
+    ``values`` (data_values) and ``mentions`` (_mentions over ``catalog``):
+    for a caller that has them."""
     text = str(text or "")
-    values = data_values(text)
+    values = data_values(text) if values is None else values
     if not values:
         return []
     heat_of = {node_id: token for token, nodes in heats.items() for node_id in nodes}
-    mentions = _mentions(text, catalog)
+    mentions = _mentions(text, catalog) if mentions is None else mentions
     out = []
     for value, at in values:
         opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, at)]
         before = [m for m in mentions if m[0] >= (opened[-1] if opened else 0) and m[1] <= at]
         if not before:
             continue
-        node_id, token = before[-1][2], _norm(value)
-        if heat_of.get(node_id) != token.lstrip("+−") or _in_record(value, node_tokens(overlay, node_id)):
+        nearest = before[-1]
+        node_id, token = nearest[2], _norm(value)
+        if heat_of.get(node_id) != token.lstrip("+−") or _in_record(value, node_tokens(overlay, node_id)) \
+                or _in_record(value, also):
             continue
+        since = max([v_at + len(v) for v, v_at in values if v_at + len(v) <= nearest[0]] + [0])
+        if any(m[2] != node_id for m in before if m[0] >= since):
+            continue                                   # a name group: "Ranbp9 and Pkm (+0.52, ...)"
         if token[:1] not in ("+", "−") and heat_phrased(text, at, at + len(value)):
             continue
         out.append((value, at, node_id))
