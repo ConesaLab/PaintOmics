@@ -37,13 +37,16 @@ try:
     # STEP 1. EXTRACT THE MAPPING DATABASE
     #
     # Ensembl first: it creates the transcript groups. KEGG next: it creates
-    # kegg_id and the uniprot_acc rows. The Ensembl-UniProt pass last: it can
-    # only join groups that already exist.
+    # kegg_id and the uniprot_acc rows. The Ensembl-UniProt pass after them: it
+    # can only join groups that already exist. The identifier aliases last: they
+    # join the groups their targets ended up in, and only the species with a
+    # table in common_resources/identifier_aliases/ have any.
     #**************************************************************************
     if COMMON_BUILD_DB_TOOLS.EXTERNAL_RESOURCES.get("ensembl"):
         COMMON_BUILD_DB_TOOLS.processEnsemblData()
     COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
     COMMON_BUILD_DB_TOOLS.processEnsemblUniProtData()
+    COMMON_BUILD_DB_TOOLS.processIdentifierAliases()
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************

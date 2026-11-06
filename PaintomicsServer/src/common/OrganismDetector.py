@@ -153,6 +153,10 @@ _PATTERN_TABLE = [
     (r"Solyc\d{2}g\d{6}(?:\.\d+)?", ("sly",), "Solanum lycopersicum"),
     (r"Glyma\.?\d{2}[Gg]\d{6}", ("gmx",), "Glycine max"),
     (r"Potri\.\d{3}G\d{6}", ("pop",), "Populus trichocarpa"),
+    # Cameor v2 gene ids (Psat.cameor.v2.1g00050, Psat.cameor.v2.0s1040g10400),
+    # which psat accepts through common_resources/identifier_aliases/psat.tsv.gz.
+    # A transcript's .1 names the organism as surely as the gene does.
+    (r"Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+(?:\.\d+)?", ("psat",), "Lathyrus oleraceus"),
     # Phytozome gene ids the mapper renames to their locus tags
     # (FeatureNamesToKeggIDsMapper.PHYTOZOME_LOCUS_TAGS). Any case (Mercator
     # writes them in lower case) and any suffix: a transcript or a versioned

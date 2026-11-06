@@ -51,6 +51,7 @@ try:
     COMMON_BUILD_DB_TOOLS.processMapManMappingData()
     COMMON_BUILD_DB_TOOLS.processKEGGMappingData()
     COMMON_BUILD_DB_TOOLS.processEnsemblUniProtData()
+    COMMON_BUILD_DB_TOOLS.processIdentifierAliases()
     #**************************************************************************
     # STEP 2. PROCESS THE KEGG DATABASE
     #**************************************************************************

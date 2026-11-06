@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, csv, json, shutil, re, itertools, glob, random
+import os, csv, gzip, json, shutil, re, itertools, glob, random, zlib
 from collections import defaultdict, Counter
 from time import sleep, strftime
 from sys import stderr, path
@@ -722,6 +722,208 @@ def processEnsemblUniProtData():
         skipSource("ENSEMBL-UNIPROT", "none of the %d UniProt accessions matched KEGG's uniprot list" % total_lines,
                    "Ensembl identifiers are installed but reach no KEGG identifier")
     return total_lines
+
+
+#**************************************************************************
+# IDENTIFIER ALIASES
+#
+# Gene ids that no public dump links to what an installed species carries. Three
+# users asked for them on paintomics.org in 2026: maize B73 v4 (Zm00001d...; the
+# species holds v5, Zm00001eb...), pea Cameor v2 (Psat.cameor.v2...; it holds
+# v1a) and sorghum, where 3,192 Ensembl genes have an NCBI locus tag naming a
+# GeneID KEGG knows and no link in Ensembl's dump.
+#
+# Writing them straight into Mongo does not last: createDatabase imports xref and
+# dbname with --drop, and dumpDatabase mints every _id at random. So the tables
+# ship in the tree and name what survives a rebuild, a display id and a table.
+# common_resources/identifier_aliases/README.md records where each row came from.
+#**************************************************************************
+IDENTIFIER_ALIASES_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                      "common_resources", "identifier_aliases")
+IDENTIFIER_ALIAS_COLUMNS = ["alias", "alias_dbname", "target_dbname", "target_display_id", "evidence"]
+
+#: Where an id no public table carries is filed. Deliberately absent from
+#: FeatureNamesToKeggIDsMapper.GENE_LEVEL_BRIDGE_DATABASES: an alias is reached,
+#: it never carries the second hop to anything else.
+GENE_ALIAS_DBNAME = "gene_alias"
+
+#: The tables an alias may be filed under, and the label each is registered with
+#: if this pass is the first to need it. An Ensembl gene can be an alias too, when
+#: it already exists and only the link is missing (sorghum): insertXREF returns
+#: the existing document, so it joins the target's group with no second document.
+IDENTIFIER_ALIAS_DATABASES = {GENE_ALIAS_DBNAME: "Gene id from another assembly", "ensembl_gene": "Ensembl gene"}
+
+#: GENE_LEVEL_BRIDGE_DATABASES without its KEGG target, which a bridge never goes
+#: through (resolveBridgeDatabaseIds). The mapper's module needs pymongo to import
+#: and this one must not; a test pins the two lists together.
+ALIAS_BRIDGE_DATABASES = ("entrezgene", "ncbi_geneid", "ensembl_gene")
+
+
+def _groupMembers(itemId):
+    """The xref ids sharing a transcript group with this one: its `mates` once dumped."""
+    members = set()
+    for group in xref2transcript['global'].get(itemId, ()):
+        members |= transcript2xref['global'].get(group, set())
+    return members
+
+
+def keggGenesReachedBy(itemId):
+    """The kegg_id display ids a name on this xref entry resolves to, by the mapper's own two hops.
+
+    FeatureNamesToKeggIDsMapper.findIDsByFeaturesName on what dumpDatabase will
+    write, one document at a time: the kegg_id mates if there are any, otherwise
+    the kegg_id mates of the gene-level documents spelling the same value as one of
+    its gene-level mates.
+    """
+    keggTable = ALL_DBS.get("kegg_id")
+    if keggTable is None:
+        return set()
+    keggDbId = keggTable.getID()
+    entries = xref['global']
+
+    def keggMates(members):
+        return {entries[member].display_id for member in members
+                if member in entries and entries[member].dbname_id == keggDbId}
+
+    members = _groupMembers(itemId)
+    reached = keggMates(members)
+    if reached:
+        return reached
+
+    bridgeDbIds = [ALL_DBS[name].getID() for name in ALIAS_BRIDGE_DATABASES if name in ALL_DBS]
+    values = {entries[member].display_id for member in members
+              if member in entries and entries[member].dbname_id in bridgeDbIds}
+    for value in values:
+        for bridgeDbId in bridgeDbIds:
+            bridge = findXREF(value, bridgeDbId)
+            if bridge is not None:
+                reached |= keggMates(_groupMembers(bridge.getID()))
+    return reached
+
+
+def readIdentifierAliases(fileName):
+    """The rows of a species' alias table, each a list of fields. Raises when it cannot be read.
+
+    All of it first, so a table that turns out corrupt half way has changed nothing.
+    Tens of thousands of rows of a few short strings: bounded, and small next to the
+    tables this build already holds.
+    """
+    with gzip.open(fileName, "rt", encoding="utf-8", newline="\n") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+        if header != IDENTIFIER_ALIAS_COLUMNS:
+            raise ValueError("unexpected header " + str(header))
+        return [line.rstrip("\n").split("\t") for line in handle]
+
+
+def _planIdentifierAliases(rows):
+    """Which rows can be applied: (plan, missing, refused, malformed); nothing is written.
+
+    Decided on the tables as the earlier passes left them, so a row applied by this
+    pass cannot change the answer for a later one. The refusals are the warning in
+    processEnsemblUniProtData's docstring turned into a check: an id filed under a
+    bridge table is walked through by the mapper's second hop, so writing it into a
+    group that names several genes, or into the group of a gene another id also
+    claims, makes paralogues mates and each inherits the others' kegg_id. Measured
+    safe on what ships (no locus tag names two GeneIDs on sbi or zma, and each
+    ncbi_geneid document has exactly one kegg_id mate); the check is what keeps a
+    regenerated table or a future KEGG release honest. A gene_alias row never
+    carries a second hop, so it may reach several KEGG genes, as its target does: it
+    is refused only when the name already means something else, or names two targets.
+    """
+    plan = []
+    missing = []
+    refused = []
+    malformed = []
+    wellFormed = []
+    for row in rows:
+        if len(row) != len(IDENTIFIER_ALIAS_COLUMNS) or not all(row):
+            malformed.append(("wrong number of columns or an empty one", row))
+        elif row[1] not in IDENTIFIER_ALIAS_DATABASES:
+            malformed.append(("no alias table is called " + row[1], row))
+        else:
+            wellFormed.append(row)
+
+    targetsOfAlias = defaultdict(set)
+    bridgeAliasesOfTarget = defaultdict(set)
+    for alias, aliasDb, targetDb, targetId, _ in wellFormed:
+        targetsOfAlias[alias].add((targetDb, targetId))
+        if aliasDb in ALIAS_BRIDGE_DATABASES:
+            bridgeAliasesOfTarget[(targetDb, targetId)].add(alias)
+
+    for row in wellFormed:
+        alias, aliasDb, targetDb, targetId, evidence = row
+        targetTable = ALL_DBS.get(targetDb)
+        target = findXREF(targetId, targetTable.getID()) if targetTable else None
+        groups = xref2transcript['global'].get(target.getID()) if target else None
+        if not groups:
+            missing.append(("this build has no " + targetDb + " " + targetId + " with a group to join", row))
+            continue
+        if len(targetsOfAlias[alias]) > 1:
+            refused.append(("the alias names " + str(len(targetsOfAlias[alias])) + " targets", row))
+            continue
+
+        bridges = aliasDb in ALIAS_BRIDGE_DATABASES
+        if bridges and len(bridgeAliasesOfTarget[(targetDb, targetId)]) > 1:
+            refused.append(("several gene-level ids claim this target and would become mates", row))
+            continue
+        existing = findXREFByEntry(alias)
+        if bridges or existing is not None:
+            reached = keggGenesReachedBy(target.getID())
+            if bridges and len(reached) > 1:
+                refused.append(("the target reaches " + str(len(reached)) + " KEGG genes, and an id filed under " +
+                                aliasDb + " would hand them all on", row))
+                continue
+            if existing is not None and keggGenesReachedBy(existing.getID()) - reached:
+                refused.append(("the name already reaches a KEGG gene its target does not", row))
+                continue
+        plan.append((alias, aliasDb, tuple(groups), evidence))
+    return plan, missing, refused, malformed
+
+
+def processIdentifierAliases():
+    """Link the ids of common_resources/identifier_aliases/<species>.tsv.gz to what they name.
+
+    Each row names an alias and a target by display id and table. The alias joins
+    every transcript group its target is in, and dumpDatabase derives `mates` from
+    the groups, so a name reaches exactly what its target reaches. The mapper looks
+    names up by display_id with no table filter, so nothing else has to change for
+    them to be found.
+
+    A no-op for a species without a table, and fail-soft for one that has it: a
+    target this build lacks (a KEGG or Ensembl release can drop a gene) is counted
+    and skipped, an unreadable table costs the aliases and nothing else. Must run
+    AFTER processEnsemblUniProtData, for the groups the targets' rows make, and
+    before dumpDatabase. Returns the number of rows linked.
+    """
+    fileName = os.path.join(IDENTIFIER_ALIASES_DIR, str(SPECIE) + ".tsv.gz")
+    if not os.path.isfile(fileName):
+        return 0
+
+    consequence = "gene ids from other assemblies will not map for this species"
+    try:
+        rows = readIdentifierAliases(fileName)
+    except (OSError, EOFError, ValueError, zlib.error) as ex:
+        skipSource("IDENTIFIER-ALIASES", "cannot read " + fileName + ": " + str(ex), consequence)
+        return 0
+
+    stderr.write("PROCESSING IDENTIFIER ALIASES...\n")
+    plan, missing, refused, malformed = _planIdentifierAliases(rows)
+
+    for alias, aliasDb, groups, evidence in plan:
+        aliasDbId = insertDatabase(DBNAME_Entry(aliasDb, IDENTIFIER_ALIAS_DATABASES[aliasDb], "Identifier"))
+        aliasId = insertXREF(XREF_Entry(alias, aliasDbId, "Identifier alias, evidence: " + evidence))
+        for group in groups:
+            insertTR_XREF(aliasId, group)
+
+    TOTAL_FEATURES["IDENTIFIER-ALIASES"] = len(rows)
+    FAILED_LINES["IDENTIFIER-ALIASES"] = [
+        ["IDENTIFIER ALIAS NOT APPLIED: " + reason] + row for reason, row in missing + refused + malformed]
+    stderr.write("  * %d of %d rows linked, %d targets this build lacks, %d refused, %d malformed\n"
+                 % (len(plan), len(rows), len(missing), len(refused), len(malformed)))
+    if rows and not plan:
+        skipSource("IDENTIFIER-ALIASES", "none of the %d rows of %s could be applied" % (len(rows), fileName), consequence)
+    return len(plan)
+
 
 #**************************************************************************
 #

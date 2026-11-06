@@ -270,3 +270,7 @@ test_form_placeholder_is_not_a_design	1.7
 # Without it 25 suites were unrecorded, and test_shard_split_is_balanced allows
 # fewer than 25.
 test_step3_says_what_is_true_without_a_network	0.4
+# Added with feat/map-older-assembly-gene-ids (2026-11-06), charged like
+# test_uniprot_two_hop_mapping, which fakes the same xref lookups: on the VM the
+# two took 2.8 and 1.0 s, and that one is recorded here at 0.3 s.
+test_identifier_aliases	0.8
