@@ -43,6 +43,7 @@ test_an_empty_id_is_not_a_join_key	3.7
 test_apply_replicate_mapping_servlet	1.8
 test_bed2genes_association	19.5
 test_bed2genes_validation	1.6
+test_boot_failure_names_the_real_cause	0.2
 test_both_arms_arm_the_transport	1.5
 test_bug_fixes	1.8
 test_build_warnings_handoff	0.3
@@ -242,6 +243,7 @@ test_svg_export_is_sandboxed	2.5
 test_the_poll_gives_up_on_a_dead_session	0.0
 test_tool_descriptions	2.9
 test_transport_respects_the_deadline	15.3
+test_unavailable_job_is_not_an_error	1.8
 test_uniprot_two_hop_mapping	0.3
 test_unmapped_features_are_not_errors	1.8
 test_user_directory_setup	0.2

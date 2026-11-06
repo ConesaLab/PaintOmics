@@ -21,20 +21,29 @@ Usage:
     cd PaintomicsServer
     python -m src.tests.test_input_file_refusal_is_not_an_internal_error
 """
+import collections
 import io
+import json
 import os
 import re
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
+from unittest import mock
+
+from flask import Flask
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "../..")))
 
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+from src.common.PySiQ import Job, JobStatus, Queue
 from src.common.ServerErrorManager import InputFileError, handleException
+from src.paintomicsserver import Response, configureJSONSerialisation
+from src.servlets import PathwayAcquisitionServlet as servlet
 from src.tests import fake_omics
 
 SERVER_SRC = os.path.join(REPO, "PaintomicsServer", "src")
@@ -136,6 +145,68 @@ class EveryInputValidationRaisesIt(unittest.TestCase):
             plain = re.findall(r'raise Exception\(\s*"(?:\[b\])?Errors detected in input files', source)
             self.assertEqual([], plain, relative)
             self.assertNotRegex(source, r'Exception\("\[b\]One of the uploaded files is not UTF-8', relative)
+
+
+class Step2EmptyMappingIsARefusalTest(unittest.TestCase):
+    """The reports of 2026-09-15/16 (yeast ids run as fgr) and 2026-10-25 (mouse ids
+    run as hsa): identifiers that match nothing reach Step 2, which runs on the job
+    queue, so the refusal travels the status poll rather than a request's own
+    error. PR #186 had changed Step 1 only and this one still said "Oops..Internal
+    error!" with a Report button.
+
+    Each half is the real code: the servlet raises, the queue delivers what it
+    returned, and the response class renders the body the browser parses."""
+
+    REFUSAL = ("None of the identifiers in your data matched hsa's KEGG genes: "
+               "'Gene expression' (150 identifiers), e.g. ENSMUSG00000000001 matched 0, "
+               "so there is nothing to analyse.")
+
+    def setUp(self):
+        self.job = mock.MagicMock()
+        self.job.getJobID.return_value = "emptymap"
+        self.job.explainEmptyMapping.return_value = self.REFUSAL
+
+    def runStep2(self):
+        manager = mock.MagicMock()
+        manager.return_value.loadJobInstance.return_value = self.job
+        with mock.patch.object(servlet, "JobInformationManager", manager), \
+                mock.patch.object(servlet, "JobProgress"):
+            return servlet.pathwayAcquisitionStep2_PART2(
+                "emptymap", "u1", [], {}, Response(), "/nowhere/", {})
+
+    def test_the_servlet_refuses_with_input_file_error(self):
+        response = self.runStep2()
+        self.assertEqual(response.status, 400)
+        self.assertIs(response.content["success"], False)
+        self.assertIs(response.content["extra"]["input_error"], True)
+        self.assertIn("ERROR MESSAGE: " + self.REFUSAL, response.content["message"])
+        self.job.generatePathwaysList.assert_not_called()
+
+    def test_the_flag_survives_the_status_poll(self):
+        """check_job_status answers a finished job with the response the job
+        returned, which is the branch this takes: the servlet catches its own
+        exception, so the worker sees a finished job and not a failed one. The
+        failed branch builds a new body and would drop `extra`."""
+        queue = Queue.__new__(Queue)
+        queue.lock = threading.Lock()
+        queue.queue = collections.deque([])
+        queue.jobs = {}
+        queue.workers = []
+        job = Job(self.runStep2, ())
+        job.set_id("emptymap")
+        job.result = job.fn(*job.args)
+        job.status = JobStatus.FINISHED
+        queue.jobs["emptymap"] = job
+
+        delivered = queue.deliver_result("emptymap")
+        app = Flask(__name__)
+        configureJSONSerialisation(app)
+        with app.app_context():
+            rendered, status = delivered.getResponse()
+        self.assertEqual(status, 400)
+        body = json.loads(rendered.get_data(as_text=True))
+        self.assertIs(body["extra"]["input_error"], True)
+        self.assertIn(self.REFUSAL, body["message"])
 
 
 class TheBrowserWordsItAsARefusal(unittest.TestCase):

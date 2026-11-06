@@ -133,24 +133,150 @@ function resetPaintomicsSession() {
 }
 
 /**
+ * How loadModule treats a module it could not fetch. The fetch is retried
+ * because a connection that drops mid-boot is usually back within moments: on
+ * 2026-10-27 06:48 UTC one client's IP changed between two modules, the second
+ * never reached the server, and the reload 81 s later worked. The pause is what
+ * gives a retry its chance, since a dead connection fails in milliseconds.
+ */
+var MODULE_FETCH_ATTEMPTS = 3;
+var MODULE_FETCH_RETRY_PAUSE = 500;
+var MODULE_FETCH_ERROR = "ModuleFetchError";
+
+/**
+ * Waits on the main thread. Boot is synchronous, launch() uses the modules the
+ * moment its loops end, so there is nothing a timer could hand back to. Only a
+ * failed fetch ever comes here, and a page still booting has nothing to freeze.
+ */
+function pauseBoot(milliseconds) {
+    var until = Date.now() + milliseconds;
+    while (Date.now() < until) {
+        /* wait */
+    }
+}
+
+/**
+ * One attempt at one module. Says which of the two ways it can fail happened,
+ * because only the first is worth asking again: a request that got no usable
+ * answer, or a script that arrived and then threw.
+ *
+ * jQuery 3.1 evaluates the fetched text through an injected <script> (DOMEval),
+ * so an exception in it never reaches jQuery: it reports success and the browser
+ * raises the exception on window instead. The listener is what sees it, and the
+ * request being synchronous means nothing else can run while it is attached.
+ * textStatus "parsererror" is how the other jQuery versions report the same
+ * thing, so an upgrade does not turn it into a dropped connection.
+ *
+ * It also evaluates the body of an HTTP error, so nginx's 502 page raises
+ * "Unexpected token '<'" here as well (measured in the browser). That is why the
+ * caller asks about the request first: a failed request's body says nothing about
+ * the module.
+ */
+function fetchModuleOnce(file) {
+    var outcome = {failedRequest: null, evaluationError: null};
+    var onScriptError = function (event) {
+        outcome.evaluationError = event.error || new Error(event.message);
+    };
+
+    window.addEventListener("error", onScriptError);
+    try {
+        $.ajax({
+            url: file,
+            async: false, dataType: "script",
+            error: function (jqXHR, textStatus, errorThrown) {
+                if (textStatus === "parsererror") {
+                    outcome.evaluationError = errorThrown;
+                } else {
+                    outcome.failedRequest = jqXHR;
+                }
+            }
+        });
+    } finally {
+        window.removeEventListener("error", onScriptError);
+    }
+    return outcome;
+}
+
+/* The exception a module threw while evaluating, naming the module. */
+function moduleEvaluationError(file, thrown) {
+    var error = (thrown instanceof Error) ? thrown : new Error(String(thrown));
+    error.moduleFile = file;
+    return error;
+}
+
+/* A module that could not be fetched; showBootFailureMessage recognises the name. */
+function moduleFetchError(file, jqXHR) {
+    var httpStatus = Number(jqXHR && jqXHR.status) || 0;
+    var error = new Error("Could not fetch " + file + " after " + MODULE_FETCH_ATTEMPTS + " attempts (" +
+        (httpStatus > 0 ? "HTTP " + httpStatus : "no answer from the server") + ").");
+    error.name = MODULE_FETCH_ERROR;
+    error.moduleFile = file;
+    error.httpStatus = httpStatus;
+    return error;
+}
+
+/**
+ * The exception as the report should carry it. Stack included, cut to what fits
+ * a mail: "ReferenceError: x is not defined" with no location is a report nobody
+ * can act on.
+ */
+function describeBootError(error) {
+    if (!error || !(error.name || error.message)) {
+        return "Boot failure: " + String(error);
+    }
+    var described = (error.name || "Error") + ": " + (error.message || "(no message)");
+    if (error.moduleFile) {
+        described = "While evaluating " + error.moduleFile + ": " + described;
+    }
+    return error.stack ? described + "\n" + String(error.stack).slice(0, 1500) : described;
+}
+
+/**
  * The dialog shown when the application cannot boot.
  *
- * It used to advise clearing the browser cache, which is both wrong - that
- * touches neither sessionStorage nor IndexedDB, the two places the offending
- * state actually lives - and unactionable, so users saw the same blank page on
- * every reload. Offer the action that does work instead.
+ * It used to say that the analysis stored in this browser could not be restored,
+ * whatever the failure was. restoreCachedModel contains that failure on its own,
+ * so what reached this dialog was everything else, and the report of 2026-10-27
+ * blamed a stored analysis for a connection that had dropped. The two cases
+ * here are the two we can tell apart: a module that never arrived, where nothing
+ * of the user's is involved and only a reload helps, and any other exception,
+ * whose cause is not known, so the discard is offered as something that may help
+ * and the exception goes with the report.
+ *
+ * It also used to advise clearing the browser cache, which is both wrong - that
+ * touches neither sessionStorage nor IndexedDB, the two places a stored analysis
+ * actually lives - and unactionable, so users saw the same blank page on every
+ * reload.
  */
 function showBootFailureMessage(error) {
     console.error(Date.logFormat() + "app.js : the application failed to start.", error);
 
+    if (error && error.name === MODULE_FETCH_ERROR) {
+        // Not reportable: the report would say what this says, and there is no
+        // fault of ours behind it to act on. A file that is really gone from the
+        // server keeps failing, which is what the address below is for.
+        var cause = (error.httpStatus > 0) ? "the server answered HTTP " + error.httpStatus : "the connection dropped";
+        showErrorMessage("PaintOmics AI could not start", {
+            message: "The page could not finish loading because " + cause + " while fetching [b]" + error.moduleFile + "[/b]." +
+                "</br>Your analysis and your jobs are not affected." +
+                "</br><a href='#' onclick='location.reload(); return false;'>Reload the page</a> to try again." +
+                "</br>If it keeps happening, contact us at <a href='mailto:paintomicsai@gmail.com'>paintomicsai@gmail.com</a>.",
+            showButton: true,
+            showReportButton: false
+        });
+        return;
+    }
+
     // No leading </br> (it drew an empty first line), and the pointer names the
     // real menu path; a guest has no storage, so the job link comes first.
     showErrorMessage("PaintOmics AI could not start", {
-        message: "The analysis stored in this browser could not be restored." +
-            "</br><a href='#' onclick='resetPaintomicsSession(); return false;'>Discard the stored analysis and reload</a>" +
+        message: "An unexpected error stopped the page from starting." +
+            "</br>If you had an analysis open in this browser, this may help: " +
+            "<a href='#' onclick='resetPaintomicsSession(); return false;'>Discard the stored analysis and reload</a>" +
             " &ndash; your jobs are kept on the server, so you can reopen them from their job link or, when signed in," +
             " from [b]Storage &rsaquo; My files and Jobs[/b]." +
-            "</br>If the error persists, contact us at <a href='mailto:paintomicsai@gmail.com'>paintomicsai@gmail.com</a>.",
+            "</br>If the error persists, press Report error or contact us at <a href='mailto:paintomicsai@gmail.com'>paintomicsai@gmail.com</a>.",
+        hidden: describeBootError(error),
         showButton: true
     });
 }
@@ -319,14 +445,32 @@ function Application() {
         }
     };
 
+    /**
+     * Fetches and runs one module, or throws: this used to have no error
+     * handling, so a module that never arrived was silent until new MainView()
+     * or a model constructor raised a ReferenceError nothing could explain.
+     * A fetch that fails is asked again; a script that arrived and threw is not.
+     */
     this.loadModule = function (location, name) {
-        $.ajax({
-            url: location + name + ".js",
-            async: false, dataType: "script",
-            success: function () {
-                console.info(Date.logFormat() + "app.js : Loaded " + name);
+        var file = location + name + ".js";
+        var outcome = null;
+
+        for (var attempt = 1; attempt <= MODULE_FETCH_ATTEMPTS; attempt++) {
+            if (attempt > 1) {
+                console.warn(Date.logFormat() + "app.js : could not fetch " + file + ", trying again (attempt " + attempt + ").");
+                pauseBoot(MODULE_FETCH_RETRY_PAUSE * (attempt - 1));
             }
-        });
+            outcome = fetchModuleOnce(file);
+            if (outcome.failedRequest) {
+                continue;
+            }
+            if (outcome.evaluationError) {
+                throw moduleEvaluationError(file, outcome.evaluationError);
+            }
+            console.info(Date.logFormat() + "app.js : Loaded " + name);
+            return;
+        }
+        throw moduleFetchError(file, outcome.failedRequest);
     };
 
     this.getMainView = function () {

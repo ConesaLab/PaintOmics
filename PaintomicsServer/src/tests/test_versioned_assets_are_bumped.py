@@ -297,8 +297,10 @@ PUBLISHED = {
     # `this.controllers` passed every check here.
     # v=0.8 rewords the boot-failure and browser warnings: no empty first line,
     # the real menu path back to a job, and a plain browser recommendation.
+    # v=0.9 retries a module that did not arrive and stops blaming the stored
+    # analysis for every boot failure.
     "app.js": (
-        "0.8", "3ed26b1ab6e92fb0b602d893fff4ab4e4b54b93e99b1ee458c860d771f43d710"),
+        "0.9", "6a554120e21932bb6abf95f94c7184a50167c3af2327d4d9985015060e19ef1a"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

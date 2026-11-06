@@ -598,7 +598,11 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         # rather than let the metagenes step fail inside R over an empty file.
         emptyMapping = jobInstance.explainEmptyMapping(selectedCompounds)
         if emptyMapping:
-            raise UserWarning(emptyMapping)
+            # InputFileError, not UserWarning: the job ran on the queue and this
+            # is what the status poll hands the browser, so a plain exception
+            # read as "Oops..Internal error!" with a Report button. Mouse ids run
+            # as human were reported to us that way on 2026-10-25, twice.
+            raise InputFileError(emptyMapping)
 
         logging.info("STEP2 - GENERATING PATHWAYS INFORMATION...")
         JobProgress.enter(jobID, "pathways")
@@ -797,6 +801,22 @@ def pathwayAcquisitionStep3(request, response):
     finally:
         return response
 
+def jobUnavailableAnswer(message):
+    """The answer for a job that cannot be opened, which is not a fault of ours.
+
+    The job was removed on schedule, belongs to someone else, or holds nothing to
+    show. `jobUnavailable` has the client word that as a warning with no Report
+    button (11 reports up to 2026-11-03 were guests telling us that retention had
+    worked). `errorMessage` stays the whole message, because a client still open
+    from before this flag existed reads only that.
+
+    @param {String} message, why this job cannot be opened
+    @returns {dict} the response content
+    """
+    return {"success": False, "jobUnavailable": True,
+            "errorMessage": message + "<br>To analyse the data again, start a new analysis."}
+
+
 def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
     #VARIABLE DECLARATION
     jobInstance = None
@@ -839,13 +859,13 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         if jobInstance == None:
             #TODO DIAS BORRADO?
             logging.info("RECOVER_JOB - JOB " + jobID + " NOT FOUND AT DATABASE.")
-            response.setContent({"success": False, "errorMessage": "Job " + jobID + " not found at database.<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users."})
+            response.setContent(jobUnavailableAnswer("Job " + jobID + " not found at database.<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users."))
             return response
 
         # Allow "no user" jobs to be viewed by anyone, logged or not
         if str( jobInstance.getUserID() ) != 'None' and jobInstance.getUserID() != userID and not jobInstance.getAllowSharing():
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT BELONG TO USER " + str(userID) + " JOB HAS USER " + str(jobInstance.getUserID()))
-            response.setContent({"success": False, "errorMessage": "Invalid Job ID (" + jobID + ") for current user.<br>Please, check the Job ID and try again."})
+            response.setContent(jobUnavailableAnswer("Invalid Job ID (" + jobID + ") for current user.<br>Please, check the Job ID and try again."))
             return response
 
         # Sanitize optional PaintOmics 4 fields that may come back as strings
@@ -926,10 +946,10 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
 
         if len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( jobInstance.getCompoundBasedInputOmics() ) > 0:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS FOUND COMPOUNDS (STEP 2: OLD FORMAT?).")
-            response.setContent({"success": False, "errorMessage": "Job " + jobID + " does not contains saved information about the found compounds, please run it again."})
+            response.setContent(jobUnavailableAnswer("Job " + jobID + " does not contain saved information about the found compounds."))
         elif len( matchedPathwaysJSONList ) == 0 and jobInstance.getLastStep() > 2:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS PATHWAYS.")
-            response.setContent( {"success": False, "errorMessage":"Job " + jobID + " does not contains information about pathways. Please, run it again."})
+            response.setContent(jobUnavailableAnswer("Job " + jobID + " does not contain information about pathways."))
         else:
             if len(matchedPathwaysJSONList) != 0 :
                 response.setContent({
