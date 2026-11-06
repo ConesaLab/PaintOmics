@@ -273,8 +273,11 @@ PUBLISHED = {
     # would ignore the draft and leave the statements closed. Still unreleased
     # when the statements opened beside a draft too and the note took the
     # draft's own problems (results_draft.problems), so only the digest moved.
+    # v=1.8 reads status "unavailable", the server's answer for an organism with
+    # no graph to walk: a note and no Start button. A browser keeping v=1.7 would
+    # draw an empty column.
     "app/view/PathwayAcquisitionViews/PA_Step4WalkView.js": (
-        "1.7", "48f4574817313fe545e124fafe0b8067caa5f8e8e18f9b4031f6fe7f739db25d"),
+        "1.8", "84f7a9e6b3c3ed3b7e7e8d2f8b6a4137edf01a3d6c47c0b95957c8ba9681163f"),
     "js/libs/linkurious/sigma.min.js": ("0.1", None),
     "js/libs/linkurious/plugins.js": ("0.2", None),
     # Versioned by its release rather than by a counter. A vendored library is

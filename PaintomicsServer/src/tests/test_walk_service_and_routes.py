@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta
 
@@ -65,6 +66,25 @@ class FakeWalkDAO(object):
 
     def closeConnection(self):
         return True
+
+
+def _no_graph_data_dir(organism="tst"):
+    """What customSpeciesInstaller.py leaves on disk for a species: the metagene
+    script's gene2pathway.list and nothing else. Caller removes it."""
+    root = tempfile.mkdtemp(prefix="walker-no-graph-")
+    org_dir = os.path.join(root, "current", organism)
+    os.makedirs(org_dir)
+    with open(os.path.join(org_dir, "gene2pathway.list"), "w") as handle:
+        handle.write("%s:1\tpath:%s00010\n" % (organism, organism))
+    return root
+
+
+class _OmniPathCollection(object):
+    def __init__(self, docs=()):
+        self.docs = docs
+
+    def find_one(self, *args):
+        return self.docs[0] if self.docs else None
 
 
 def _job_with_id(job_id="J1"):
@@ -156,6 +176,58 @@ class ServiceTest(unittest.TestCase):
             (dao_module.AIWalkDAO, jim_module.JobInformationManager, service.KEGG_DATA_DIR,
              service.mongo_for) = saved
         return FakeWalkDAO.store.get(("J1", scope))
+
+    # The message a job on a species that HAS a graph reads when its features fall
+    # outside it (Q5APyBNMH3, ngo), word for word: the no-graph case must not touch it.
+    OFF_THE_GRAPH = ("None of this job's features is on the organism's graph, so the walk has nowhere to "
+                     "start: either their identifiers did not map onto the organism's genes or compounds, "
+                     "or the genes they map to are on no KEGG, Reactome or OmniPath pathway with drawn "
+                     "interactions (common for bacterial genes outside every pathway map).")
+
+    def _no_graph_dir(self):
+        data_dir = _no_graph_data_dir()
+        self.addCleanup(shutil.rmtree, data_dir, True)
+        return data_dir
+
+    def test_an_organism_with_no_graph_is_told_so_and_its_identifiers_are_not_blamed(self):
+        """All five annotation species, 2026-11-06: "either their identifiers
+        did not map ...", on jobs whose identifiers had mapped, because the
+        organism has no kgml directory and so nothing to put them on."""
+        data_dir = self._no_graph_dir()
+        for scope in ("network", "pathway:tst00010"):
+            with self.subTest(scope=scope):
+                with self.assertRaises(service.WalkError) as raised:
+                    service.run(_job_with_id(), "J1", scope, policy="greedy", data_dir=data_dir, use_mongo=False)
+                said = str(raised.exception)
+                self.assertNotIn("did not map", said)
+                self.assertNotIn("draws no interactions", said)
+                self.assertIn("Your mapped genes are fine", said)
+                self.assertIn("pathway enrichment and the pathway maps work", said)
+                self.assertIn("gene annotation", said)
+                self.assertIn("AI walk is not available", said)
+
+    def test_a_species_with_a_graph_keeps_its_message_word_for_word(self):
+        outside = fx.FakeJob({"NOPE_1": fx.FakeFeature("NOPE_1", [fx.FakeOmicValue(
+            "Gene expression", "Nope", [True], [1.0, 2.0, 3.0])])})
+        outside.getJobID = lambda: "J2"
+        with self.assertRaises(service.WalkError) as raised:
+            service.run(outside, "J2", "network", policy="greedy", data_dir=self.data_dir, use_mongo=False)
+        self.assertEqual(str(raised.exception), self.OFF_THE_GRAPH)
+
+    def test_no_model_is_asked_about_a_walk_that_cannot_happen(self):
+        """The design card is a gateway call with the user's design in it, and
+        it comes before the graph is read."""
+        def no_model():
+            raise AssertionError("a model client was built for a walk with no graph to run on")
+        saved = service.llm_client
+        service.llm_client = no_model
+        try:
+            with self.assertRaises(service.WalkError) as raised:
+                service.run(_job_with_id(), "J1", "network", policy="model", data_dir=self._no_graph_dir(),
+                            use_mongo=False)
+        finally:
+            service.llm_client = saved
+        self.assertIn("AI walk is not available", str(raised.exception))
 
     def test_the_job_stores_a_view_when_done(self):
         doc = self._run_job("pathway:tst00001", _job_with_id())
@@ -681,6 +753,9 @@ class RouteTest(unittest.TestCase):
             def getMatchedPathways(self):
                 return test.pathways
 
+            def getOrganism(self):
+                return "tst"
+
         class _Sessions(object):
             def isValidUser(self, *args):
                 return True
@@ -712,6 +787,108 @@ class RouteTest(unittest.TestCase):
 
     def status(self, **form):
         return self.servlet.aiWalkStatus(_Request(dict(form)), self._response(), self.queue).content
+
+    def _on_an_organism_with_no_graph(self):
+        """The server's data directory holds only what customSpeciesInstaller.py
+        writes, and the organism's database no OmniPath."""
+        data_dir = _no_graph_data_dir()
+        self.addCleanup(shutil.rmtree, data_dir, True)
+        service_mod = self.servlet.walk_service
+        saved = (service_mod.KEGG_DATA_DIR, service_mod.mongo_for)
+
+        def restore():
+            service_mod.KEGG_DATA_DIR, service_mod.mongo_for = saved
+        self.addCleanup(restore)
+        service_mod.KEGG_DATA_DIR = data_dir
+        service_mod.mongo_for = lambda organism: {"omnipath_network": _OmniPathCollection()}
+
+    def interpret_status(self, **form):
+        return self.servlet.aiInterpretStatus(_Request(dict(form)), self._response(), self.queue).content
+
+    def initiate(self, **form):
+        return self.servlet.aiInterpretInitiate(_Request(dict(form)), self._response(), self.queue).content
+
+    def test_no_walk_is_filed_on_an_organism_with_no_graph(self):
+        """Step 2 files one the moment a job lands: a queue slot and a gateway
+        call on every job, on all five annotation species, to fail every time."""
+        self._on_an_organism_with_no_graph()
+        saved_dao = self.servlet.AIInterpretDAO
+
+        class _Chats(object):
+            def clear_chat(self, job_id):
+                pass
+
+            def closeConnection(self):
+                pass
+        self.servlet.AIInterpretDAO = _Chats
+        try:
+            for out in (self.initiate(jobID="J1"), self.start(jobID="J1", scope="network"),
+                        self.start(jobID="J1", scope="pathway:tst00010"),
+                        self.start(jobID="J1", scope="network", restart="true")):
+                self.assertEqual(self.queue.filed, [], "a walk that cannot run took a queue slot")
+                self.assertTrue(out["success"])
+                self.assertEqual(out["status"], "unavailable")
+                self.assertIn("AI walk is not available", out["detail"])
+        finally:
+            self.servlet.AIInterpretDAO = saved_dao
+        self.assertEqual(FakeWalkDAO.store, {}, "a walk document was stored for a walk that was never filed")
+
+    def test_the_status_of_an_organism_with_no_graph_offers_no_retry(self):
+        """"error" and "not_started" both put a button on the page; "unavailable"
+        is the status the page draws without one. A walk stored as failed before
+        this answer existed reads the same."""
+        self._on_an_organism_with_no_graph()
+        for stored in (None, {"status": "error", "detail": "None of this job's features is on the organism's graph"}):
+            if stored:
+                FakeWalkDAO().save_progress("J1", "network", stored)
+            for out in (self.interpret_status(jobID="J1"), self.status(jobID="J1", scope="network")):
+                self.assertEqual(out["status"], "unavailable")
+                self.assertIn("AI walk is not available", out["detail"])
+                self.assertNotIn("card", out, "the design card is the form that starts a walk")
+
+    def test_only_an_organism_with_no_graph_source_at_all_is_told_so(self):
+        """Any one source is a graph, and a fault is not a verdict: the message
+        says the organism was added from an annotation, so it has to be true."""
+        self._on_an_organism_with_no_graph()
+        service_mod = self.servlet.walk_service
+        org_dir = os.path.join(service_mod.KEGG_DATA_DIR, "current", "tst")
+        said = lambda: self.interpret_status(jobID="J1")["status"]
+        self.assertEqual(said(), "unavailable")
+        os.makedirs(os.path.join(org_dir, "kgml"))
+        self.assertEqual(said(), "unavailable", "a kgml directory with no map in it draws nothing")
+        open(os.path.join(org_dir, "kgml", "tst00010.kgml"), "w").close()
+        self.assertEqual(said(), "not_started")
+        os.remove(os.path.join(org_dir, "kgml", "tst00010.kgml"))
+        os.makedirs(os.path.join(org_dir, "reactome"))
+        open(os.path.join(org_dir, "reactome", "R-TST-1.graph.json"), "w").close()
+        self.assertEqual(said(), "not_started")
+        os.remove(os.path.join(org_dir, "reactome", "R-TST-1.graph.json"))
+        self.assertEqual(said(), "unavailable")
+        service_mod.mongo_for = lambda organism: {"omnipath_network": _OmniPathCollection([{"_id": 1}])}
+        self.assertEqual(said(), "not_started")
+
+        class Down(object):
+            def __getitem__(self, name):
+                raise OSError("Mongo is not answering")
+        service_mod.mongo_for = lambda organism: Down()
+        self.assertEqual(said(), "not_started", "Mongo not answering read as an organism with no graph")
+        service_mod.KEGG_DATA_DIR = os.path.join(service_mod.KEGG_DATA_DIR, "not-installed-here")
+        self.assertEqual(said(), "not_started", "no install to judge read as an organism with no graph")
+
+    def test_a_species_with_a_graph_files_and_reports_as_before(self):
+        data_dir = fx.make_data_dir()
+        self.addCleanup(shutil.rmtree, data_dir, True)
+        service_mod = self.servlet.walk_service
+        saved = service_mod.KEGG_DATA_DIR
+        self.addCleanup(setattr, service_mod, "KEGG_DATA_DIR", saved)
+        service_mod.KEGG_DATA_DIR = data_dir
+        self.assertEqual(self.interpret_status(jobID="J1")["status"], "not_started")
+        self.assertEqual(self.start(jobID="J1", scope="network")["status"], "queued")
+        self.assertEqual(len(self.queue.filed), 1)
+        FakeWalkDAO().save_progress("J1", "network", {"status": "error", "detail": "the walk's own failure"})
+        self.queue.jobs.clear()
+        out = self.interpret_status(jobID="J1")
+        self.assertEqual((out["status"], out["detail"]), ("error", "the walk's own failure"))
 
     def test_a_bad_scope_is_refused_before_anything_is_filed(self):
         out = self.start(jobID="J1", scope="pathway:../../etc")

@@ -39,9 +39,21 @@ The runtime contract this satisfies (verified against the live code 2026-08-14):
     only maps newer than the local common snapshot are fetched, with 300px
     thumbnails to match the installed ones.
 
-Deliberately NOT produced (all degrade cleanly): ``hubData/`` (guards at
-PathwayAcquisitionJob.py:2296/2528), ``pathways_network.json`` (empty tab),
-Reactome/MapMan collections (source checkboxes simply absent).
+Deliberately NOT produced, and what each absence does to the species:
+
+  * ``hubData/`` and per-organism ``kgml/``: no compound neighbours for the
+    metabolite hub (PathwayAcquisitionJob.compundsClassification), and no drawn
+    pathway graph. The AI walk needs that graph and no other source supplies
+    one here, so it is not available: nothing is queued, /ai_interpret_status
+    and /ai_walk_status answer ``unavailable``, and the AI panel and Step 4's
+    Walk column say why (walker/service.py NO_GRAPH_MESSAGE).
+  * ``pathways_network.json``: GET /kegg_data/pathway_network/<code> answers
+    404, and the Step 3 network card says this organism has no KEGG pathway
+    network. The Tools rail beside it and the pathway table keep working.
+  * Reactome/MapMan/OmniPath collections: Step 1 lists those sources as "not
+    installed" and they cannot be ticked.
+
+Mapping, enrichment and the pathway maps work as for any other organism.
 
 Usage:
   python customSpeciesInstaller.py \

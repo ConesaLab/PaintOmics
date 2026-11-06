@@ -308,10 +308,21 @@ python src/AdminTools/customSpeciesInstaller.py \
 
 It synthesises the pathway, cross-reference, identifier-registry and version
 collections from KEGG's reference KO pathways, registers the code so that the
-organism list regenerates, and makes the species appear in the picker. Hub
-data, the pathway interaction network and Reactome/MapMan are deliberately not
-produced: those tabs are empty and those checkboxes are absent for such a
-species.
+organism list regenerates, and makes the species appear in the picker. Mapping,
+pathway enrichment and the pathway maps work as for any other organism.
+
+Hub data, per-organism KGML maps, the pathway network file and
+Reactome/MapMan/OmniPath are deliberately not produced. On such a species:
+
+- Step 1 lists MapMan, Reactome and OmniPath as *not installed*, and they cannot
+  be ticked.
+- The **Pathways network** card at Step 3 is not available. It says the organism
+  has no KEGG pathway network (`/kegg_data/pathway_network/<code>` answers 404);
+  the Tools panel beside it and the pathway table keep working.
+- The AI walk is not available, and with it the AI interpretation and its chat.
+  They need a pathway interaction graph, and an annotation does not give one. No
+  walk is queued and nothing is sent to the AI service; the AI panel and the Walk
+  column at Step 4 say why.
 
 ## AI settings
 

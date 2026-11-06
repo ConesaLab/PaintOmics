@@ -14,8 +14,8 @@ only appearing after a refresh -- and an AI run is 5 to 15 minutes of polling
 every 3 seconds, so one blip (a deploy, a sleep/wake, a VPN reconnect) is
 enough.
 
-A non-answer is not a verdict about the job. Only ``done``, ``error`` and
-``cancelled`` end the chain; everything else must try again.
+A non-answer is not a verdict about the job. Only ``done``, ``error``,
+``cancelled`` and ``unavailable`` end the chain; everything else must try again.
 
 Usage:
     cd PaintomicsServer
@@ -189,6 +189,10 @@ results.cancelled = drive(function (opts) {
 results.errored = drive(function (opts) {
     opts.success({success: true, status: "error", percent: 0, detail: "boom"});
 });
+// An organism with no graph to walk: no later answer differs.
+results.unavailable = drive(function (opts) {
+    opts.success({success: true, status: "unavailable", percent: 100, detail: "no graph"});
+});
 
 // THE JOB IS GONE. A reopened job is drawn from the browser's own copy, so the
 // page shows it without asking the server; only the AI report asks. Once the
@@ -325,7 +329,7 @@ class StatusPollChainTest(unittest.TestCase):
         self.assertEqual(self.results["stillRunning"]["scheduled"], 1)
 
     def test_terminal_states_stop_the_chain(self):
-        for state in ("done", "cancelled", "errored"):
+        for state in ("done", "cancelled", "errored", "unavailable"):
             with self.subTest(state=state):
                 self.assertEqual(
                     self.results[state]["scheduled"], 0,

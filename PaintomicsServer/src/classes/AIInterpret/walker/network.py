@@ -491,6 +491,28 @@ SOURCE_PATTERNS = ("kgml/*.kgml", "reactome/*.graph.json", "mapping/uniprot2kegg
                    "mapping/reactome/NCBI2Reactome.txt")
 
 
+def has_graph_source(organism, data_dir, open_mongo=None):
+    """Whether anything build_network reads edges from is installed for the
+    organism: a KGML map, a Reactome graph, or an OmniPath document. Cheap, for
+    a status poll: a normal species answers from one directory listing, and
+    ``open_mongo(organism)`` is called only when no file holds a graph. True
+    when it cannot tell (no install here to judge, or Mongo not answering), so
+    that a passing fault never reads as "no graph"."""
+    org_dir = os.path.join(data_dir, "current", str(organism))
+    if not os.path.isdir(org_dir):
+        return True
+    for pattern in ("kgml/*.kgml", "reactome/*.graph.json"):
+        if any(glob.iglob(os.path.join(org_dir, pattern))):
+            return True
+    if open_mongo is None:
+        return False
+    try:
+        return open_mongo(organism)["omnipath_network"].find_one({}, {"_id": 1}) is not None
+    except Exception as exc:                                  # noqa: BLE001
+        logger.warning("[walker] OmniPath collection unavailable: %s", exc)
+        return True
+
+
 def _signature(org_dir):
     """Name, size and modification time of every file the build reads, hashed:
     a changed install rebuilds, a same-size edit included."""

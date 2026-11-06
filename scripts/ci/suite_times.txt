@@ -265,3 +265,8 @@ test_walker_network_tags_every_map	1.2
 # test_job_endpoint_validation, which imports the same servlet: on Drago the
 # two took 3.2 and 3.0 s.
 test_form_placeholder_is_not_a_design	1.7
+# Added with fix/custom-species-network-and-walk (2026-11-06), charged like
+# test_status_poll_retries_unreadable_answers, which drives node the same way.
+# Without it 25 suites were unrecorded, and test_shard_split_is_balanced allows
+# fewer than 25.
+test_step3_says_what_is_true_without_a_network	0.4
