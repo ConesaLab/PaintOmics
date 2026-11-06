@@ -237,11 +237,13 @@ function describeBootError(error) {
  * It used to say that the analysis stored in this browser could not be restored,
  * whatever the failure was. restoreCachedModel contains that failure on its own,
  * so what reached this dialog was everything else, and the report of 2026-10-27
- * blamed a stored analysis for a connection that had dropped. The two cases
- * here are the two we can tell apart: a module that never arrived, where nothing
- * of the user's is involved and only a reload helps, and any other exception,
- * whose cause is not known, so the discard is offered as something that may help
- * and the exception goes with the report.
+ * blamed a stored analysis for a connection that had dropped. The three cases
+ * here are the three we can tell apart: a module that never arrived, where nothing
+ * of the user's is involved and only a reload helps; a module that arrived and
+ * threw, where launch() has not read either store yet, so discarding them could
+ * not help and the exception goes with the report; and any other exception, whose
+ * cause is not known, so the discard is offered as something that may help and the
+ * exception goes with the report.
  *
  * It also used to advise clearing the browser cache, which is both wrong - that
  * touches neither sessionStorage nor IndexedDB, the two places a stored analysis
@@ -269,12 +271,15 @@ function showBootFailureMessage(error) {
 
     // No leading </br> (it drew an empty first line), and the pointer names the
     // real menu path; a guest has no storage, so the job link comes first.
+    var recovery = (error && error.moduleFile) ?
+        "</br>Your analysis and your jobs are not affected." +
+        "</br><a href='#' onclick='location.reload(); return false;'>Reload the page</a> to try again." :
+        "</br>If you had an analysis open in this browser, this may help: " +
+        "<a href='#' onclick='resetPaintomicsSession(); return false;'>Discard the stored analysis and reload</a>" +
+        " &ndash; your jobs are kept on the server, so you can reopen them from their job link or, when signed in," +
+        " from [b]Storage &rsaquo; My files and Jobs[/b].";
     showErrorMessage("PaintOmics AI could not start", {
-        message: "An unexpected error stopped the page from starting." +
-            "</br>If you had an analysis open in this browser, this may help: " +
-            "<a href='#' onclick='resetPaintomicsSession(); return false;'>Discard the stored analysis and reload</a>" +
-            " &ndash; your jobs are kept on the server, so you can reopen them from their job link or, when signed in," +
-            " from [b]Storage &rsaquo; My files and Jobs[/b]." +
+        message: "An unexpected error stopped the page from starting." + recovery +
             "</br>If the error persists, press Report error or contact us at <a href='mailto:paintomicsai@gmail.com'>paintomicsai@gmail.com</a>.",
         hidden: describeBootError(error),
         showButton: true

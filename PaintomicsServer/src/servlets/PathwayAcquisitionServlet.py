@@ -21,6 +21,7 @@ import logging
 import logging.config
 
 import cairosvg
+from html import escape
 from time import time
 
 from collections import defaultdict
@@ -35,7 +36,8 @@ from src.common.Statistics import adjustPvalues, calculateStoufferCombinedPvalue
 from src.common.DesignFile import parse_design
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 from src.common.DAO.FeatureDAO import FeatureDAO
-from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+from src.common.DAO.UserDAO import UserDAO
+from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob, mappedTotal
 from src.classes import PathwayEvidence
 
 from src.conf.serverconf import CLIENT_TMP_DIR
@@ -65,7 +67,7 @@ def loadRequestedJob(jobID, action):
     jobInstance = JobInformationManager().loadJobInstance(jobID)
 
     if jobInstance is None:
-        raise UserWarning("Job " + str(jobID) + " was not found at database.")
+        raise UserWarning("Job " + escape(str(jobID)) + " was not found at database.")
 
     return jobInstance
 
@@ -268,10 +270,10 @@ def pathwayAcquisitionStep1_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXA
             # See Bed2GenesServlet: a bare NotImplementedError reaches the user
             # as "ERROR MESSAGE: " with nothing after it.
             raise NotImplementedError(
-                "Unrecognised example mode %r: expected no value for an "
+                "Unrecognised example mode %s: expected no value for an "
                 "upload, 'example' for the default dataset, or "
-                "'example/<dataset-id>' for a specific one."
-                % (exampleMode,))
+                "'example/&lt;dataset-id&gt;' for a specific one."
+                % (escape(repr(exampleMode)),))
 
 
         #************************************************************************
@@ -579,7 +581,7 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         jobInstance = JobInformationManager().loadJobInstance(jobID)
 
         if jobInstance is None:
-            raise UserWarning("Job " + jobID + " was not found at database.")
+            raise UserWarning("Job " + escape(jobID) + " was not found at database.")
 
         jobInstance.setDirectories(CLIENT_TMP_DIR)
         jobInstance.initializeDirectories()
@@ -801,20 +803,51 @@ def pathwayAcquisitionStep3(request, response):
     finally:
         return response
 
+# Only where it is true: a job under someone's account is not gone, and a job
+# that matched no pathway comes out the same from the same files.
+ANALYSE_AGAIN = "<br>To analyse the data again, start a new analysis."
+
+
 def jobUnavailableAnswer(message):
-    """The answer for a job that cannot be opened, which is not a fault of ours.
+    """The answer for a job this caller cannot open, which is not a fault of ours.
 
-    The job was removed on schedule, belongs to someone else, or holds nothing to
-    show. `jobUnavailable` has the client word that as a warning with no Report
-    button (11 reports up to 2026-11-03 were guests telling us that retention had
-    worked). `errorMessage` stays the whole message, because a client still open
-    from before this flag existed reads only that.
+    The job was removed on schedule, is under an account the caller is not signed
+    in to, or holds nothing to show. `jobUnavailable` has the client word that as a
+    warning with no Report button (11 reports up to 2026-11-03 were guests telling
+    us that retention had worked). `errorMessage` stays the whole message, because a
+    client still open from before this flag existed reads only that.
 
-    @param {String} message, why this job cannot be opened
+    @param {String} message, why this job cannot be opened, as HTML: anything off
+           the request in it must already be escaped
     @returns {dict} the response content
     """
-    return {"success": False, "jobUnavailable": True,
-            "errorMessage": message + "<br>To analyse the data again, start a new analysis."}
+    return {"success": False, "jobUnavailable": True, "errorMessage": message}
+
+
+def isSignedInToAnAccount(userID):
+    """Whether this caller is using a registered account.
+
+    isValidUser lets two other kinds of caller through. With no cookies the userID
+    is None (the string 'None' once a cookie has carried it). A guest has a real
+    userID and token, for an account made for that browser, so only the stored
+    is_guest tells it from a registered one. Signing in would open an owner's job
+    for either of them, and for a registered account it would change nothing.
+    """
+    if userID is None or str(userID) == 'None':
+        return False
+    daoInstance = UserDAO()
+    try:
+        user = daoInstance.findByID(userID)
+    finally:
+        daoInstance.closeConnection()
+    return user is not None and not user.isGuest()
+
+
+def matchedNoCompounds(compoundOmics):
+    """Whether every compound omic stored a summary that says nothing matched."""
+    return all(isinstance(omic.get("omicSummary"), list) and omic["omicSummary"]
+               and mappedTotal(omic["omicSummary"]) == 0
+               for omic in compoundOmics)
 
 
 def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
@@ -847,25 +880,34 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         if not jobID:
             raise UserWarning("Missing jobID parameter for recovering a job.")
 
+        # Every answer below reaches the dialog through .html(), and this came
+        # off the request: a ?jobID= in a link is posted here as it stands.
+        shownJobID = escape(jobID)
+
         logging.info("RECOVER_JOB - LOADING JOB " + jobID + "...")
         jobInstance = JobInformationManager().loadJobInstance(jobID)
         queueJob = QUEUE_INSTANCE.fetch_job(jobID)
 
         if queueJob is not None and not queueJob.is_finished():
             logging.info("RECOVER_JOB - JOB " + jobID + " HAS NOT FINISHED ")
-            response.setContent({"success": False, "message": "Your job " + jobID + " is still running in the queue. Please, try again later to check if it has finished."})
+            response.setContent({"success": False, "message": "Your job " + shownJobID + " is still running in the queue. Please, try again later to check if it has finished."})
             return response
 
         if jobInstance == None:
             #TODO DIAS BORRADO?
             logging.info("RECOVER_JOB - JOB " + jobID + " NOT FOUND AT DATABASE.")
-            response.setContent(jobUnavailableAnswer("Job " + jobID + " not found at database.<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users."))
+            response.setContent(jobUnavailableAnswer("Job " + shownJobID + " not found at database.<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users." + ANALYSE_AGAIN))
             return response
 
         # Allow "no user" jobs to be viewed by anyone, logged or not
         if str( jobInstance.getUserID() ) != 'None' and jobInstance.getUserID() != userID and not jobInstance.getAllowSharing():
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT BELONG TO USER " + str(userID) + " JOB HAS USER " + str(jobInstance.getUserID()))
-            response.setContent(jobUnavailableAnswer("Invalid Job ID (" + jobID + ") for current user.<br>Please, check the Job ID and try again."))
+            if isSignedInToAnAccount(userID):
+                response.setContent(jobUnavailableAnswer("Invalid Job ID (" + shownJobID + ") for current user.<br>Please, check the Job ID and try again."))
+            else:
+                # The "Keep this job" mail promises its link needs no re-run, and
+                # it is opened on any device, signed in or not.
+                response.setContent(jobUnavailableAnswer("Job " + shownJobID + " is kept under the account that ran it, and it has not been removed.<br>If it is yours, sign in with that account and this link will open it."))
             return response
 
         # Sanitize optional PaintOmics 4 fields that may come back as strings
@@ -944,12 +986,23 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         for matchedclass in jobInstance.getMatchedClass().values():
             matchedClassJSONList.append( matchedclass.toBSON() )
 
-        if len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( jobInstance.getCompoundBasedInputOmics() ) > 0:
+        compoundOmics = jobInstance.getCompoundBasedInputOmics()
+        # A metabolomics file none of whose names matched has no compounds to
+        # store. Its job goes on to the normal Step 2 answer, as one with a single
+        # match does: the gene analysis in it can still run.
+        if len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( compoundOmics ) > 0 and not matchedNoCompounds(compoundOmics):
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS FOUND COMPOUNDS (STEP 2: OLD FORMAT?).")
-            response.setContent(jobUnavailableAnswer("Job " + jobID + " does not contain saved information about the found compounds."))
+            response.setContent(jobUnavailableAnswer("Job " + shownJobID + " does not contain saved information about the found compounds." + ANALYSE_AGAIN))
         elif len( matchedPathwaysJSONList ) == 0 and jobInstance.getLastStep() > 2:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS PATHWAYS.")
-            response.setContent(jobUnavailableAnswer("Job " + jobID + " does not contain information about pathways."))
+            summary = jobInstance.summary
+            if isinstance(summary, list) and len(summary) > 1 and summary[1] == 0:
+                response.setContent(jobUnavailableAnswer("Job " + shownJobID + " finished, but none of its identifiers belongs to a pathway of the selected databases, so it has nothing to show.<br>To try another organism or other databases, start a new analysis."))
+            else:
+                # summary[1] and lastStep are written first, then the pathways, so
+                # it counted some that are not there: the store did not finish.
+                # That one is ours, and running it again repairs it.
+                response.setContent({"success": False, "errorMessage": "Job " + shownJobID + " does not contain information about pathways. Please, run it again."})
         else:
             if len(matchedPathwaysJSONList) != 0 :
                 response.setContent({
@@ -1384,12 +1437,12 @@ def pathwayAcquisitionApplyReplicateMapping(request, response):
         if not omicName:
             raise Exception("Missing omicName.")
         if mode not in ("auto", "manual", "off"):
-            raise Exception("Invalid mode '%s'; expected 'auto', 'manual', or 'off'." % mode)
+            raise Exception("Invalid mode '%s'; expected 'auto', 'manual', or 'off'." % escape(mode))
 
         # ---- Step 2. Load job and locate the targeted omic ----------------
         jobInstance = JobInformationManager().loadJobInstance(jobID)
         if jobInstance is None:
-            raise Exception("Job %s not found." % jobID)
+            raise Exception("Job %s not found." % escape(str(jobID)))
         if jobInstance.getReadOnly() and str(jobInstance.getUserID()) != str(userID):
             raise Exception("Read-only job — replicate mapping cannot be modified by this user.")
 
@@ -1404,7 +1457,7 @@ def pathwayAcquisitionApplyReplicateMapping(request, response):
         # deleted.
         inputOmic, featureDict, featureType = jobInstance._findInputOmicByName(omicName)
         if inputOmic is None:
-            raise Exception("Omic '%s' not found in this job." % omicName)
+            raise Exception("Omic '%s' not found in this job." % escape(str(omicName)))
 
         if mode == "manual":
             # Parse the design file here (servlet-level concern: reading uploaded
@@ -1658,7 +1711,7 @@ def _hubOwnedJob(jobID, userID, tag):
     jobInstance = JobInformationManager().loadJobInstance(jobID)
     if jobInstance is None:
         return None, {"success": False,
-                      "errorMessage": "Job " + str(jobID) + " not found."}
+                      "errorMessage": "Job " + escape(str(jobID)) + " not found."}
     if (str(jobInstance.getUserID()) != "None"
             and jobInstance.getUserID() != userID
             and not jobInstance.getAllowSharing()):

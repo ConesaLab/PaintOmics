@@ -1325,12 +1325,15 @@ function JobController() {
 					success: function (response) {
 						if (response.success === false) {
 							if (response.message) {
-								showInfoMessage(response.message);
+								/* The Close button is the only way out of this modal, and
+								   the job can run for a while yet. */
+								showInfoMessage(response.message, {showButton: true});
 							} else if (response.jobUnavailable === true) {
-								/* Nothing is broken: the job was removed on schedule, or
-								   belongs to someone else, or holds nothing to show. As an
-								   error this offered Report error, and 11 reports up to
-								   2026-11-03 were guests telling us retention had worked. */
+								/* Nothing is broken: the job was removed on schedule, or is
+								   under an account the caller is not signed in to, or holds
+								   nothing to show. As an error this offered Report error, and
+								   11 reports up to 2026-11-03 were guests telling us retention
+								   had worked. */
 								showWarningMessage("This job is not available", {
 									message: response.errorMessage,
 									logMessage: "Job " + jobID + " is not available.",

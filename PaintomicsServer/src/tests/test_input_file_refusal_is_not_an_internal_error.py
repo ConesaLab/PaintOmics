@@ -17,37 +17,41 @@ user it was ours. The validation now raises InputFileError, the error response
 says so (extra.input_error) and ajaxErrorHandler words it as what it is, with no
 Report button. Any other exception keeps the internal-error dialog.
 
+That message quotes the first column of the user's file, so the dialog encodes it:
+an id such as <NA> has to be seen, and one with markup in it must not run. So these
+messages carry [b]-style markup and no raw HTML.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_input_file_refusal_is_not_an_internal_error
 """
-import collections
+import ast
 import io
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
-import threading
+import time
 import unittest
 from unittest import mock
-
-from flask import Flask
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "../..")))
 
-from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
-from src.common.PySiQ import Job, JobStatus, Queue
+from src import paintomicsserver as server
+from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob, explainEmptyMapping
 from src.common.ServerErrorManager import InputFileError, handleException
-from src.paintomicsserver import Response, configureJSONSerialisation
+from src.conf.serverconf import SERVER_SUBDOMAIN
+from src.paintomicsserver import Response
 from src.servlets import PathwayAcquisitionServlet as servlet
 from src.tests import fake_omics
+from src.tests.test_status_poll_retries_unreadable_answers import UTIL, extract_function, read
 
 SERVER_SRC = os.path.join(REPO, "PaintomicsServer", "src")
-UTIL_JS = os.path.join(REPO, "PaintomicsClient", "public_html", "app", "view", "common", "Util.js")
 JOB_CONTROLLER_JS = os.path.join(REPO, "PaintomicsClient", "public_html", "app", "controller", "JobController.js")
 
 
@@ -103,6 +107,15 @@ class ValidationRaisesInputFileError(_JobCase):
         self.job.geneBasedInputOmics = [fake_omics.omicInput(path, omicName="Gene expression")]
         self.assertIn("invalid values or symbols", str(self.refusal()))
 
+    def test_a_file_with_no_feature_lines_is_refused_in_the_markup_the_dialog_keeps(self):
+        path = os.path.join(self.inputDir, "only_header.tab")
+        with io.open(path, "w", encoding="utf-8") as handle:
+            handle.write("# name\tcondition\n")
+        self.job.geneBasedInputOmics = [fake_omics.omicInput(path, omicName="Gene expression")]
+        message = str(self.refusal())
+        self.assertIn("[b]does not seem to have any feature lines[/b]", message)
+        self.assertNotIn("<b>", message)
+
     def test_acceptable_files_raise_nothing(self):
         genes = fake_omics.geneExpressionFile(self.inputDir, nFeatures=6)
         self.job.geneBasedInputOmics = [fake_omics.omicInput(genes)]
@@ -146,6 +159,19 @@ class EveryInputValidationRaisesIt(unittest.TestCase):
             self.assertEqual([], plain, relative)
             self.assertNotRegex(source, r'Exception\("\[b\]One of the uploaded files is not UTF-8', relative)
 
+    def test_no_refusal_is_written_in_raw_html(self):
+        """The dialog encodes these messages, so a tag would be read as text."""
+        tag = re.compile(r"</?(?:b|br|i|a|ul|li|p|em|strong|span|div)\b[^>]*>", re.I)
+        for relative in ("classes/JobInstances/PathwayAcquisitionJob.py",
+                         "classes/JobInstances/Bed2GeneJob.py",
+                         "classes/JobInstances/MiRNA2GeneJob.py",
+                         "common/OrganismDetector.py"):
+            with io.open(os.path.join(SERVER_SRC, relative), encoding="utf-8") as handle:
+                tree = ast.parse(handle.read())
+            found = [node.value for node in ast.walk(tree)
+                     if isinstance(node, ast.Constant) and isinstance(node.value, str) and tag.search(node.value)]
+            self.assertEqual([], found, relative)
+
 
 class Step2EmptyMappingIsARefusalTest(unittest.TestCase):
     """The reports of 2026-09-15/16 (yeast ids run as fgr) and 2026-10-25 (mouse ids
@@ -154,8 +180,8 @@ class Step2EmptyMappingIsARefusalTest(unittest.TestCase):
     error. PR #186 had changed Step 1 only and this one still said "Oops..Internal
     error!" with a Report button.
 
-    Each half is the real code: the servlet raises, the queue delivers what it
-    returned, and the response class renders the body the browser parses."""
+    Each half is the real code: the servlet raises, a real worker runs it off the
+    queue, and the real route renders the body the browser parses."""
 
     REFUSAL = ("None of the identifiers in your data matched hsa's KEGG genes: "
                "'Gene expression' (150 identifiers), e.g. ENSMUSG00000000001 matched 0, "
@@ -187,45 +213,203 @@ class Step2EmptyMappingIsARefusalTest(unittest.TestCase):
         returned, which is the branch this takes: the servlet catches its own
         exception, so the worker sees a finished job and not a failed one. The
         failed branch builds a new body and would drop `extra`."""
-        queue = Queue.__new__(Queue)
-        queue.lock = threading.Lock()
-        queue.queue = collections.deque([])
-        queue.jobs = {}
-        queue.workers = []
-        job = Job(self.runStep2, ())
-        job.set_id("emptymap")
-        job.result = job.fn(*job.args)
-        job.status = JobStatus.FINISHED
-        queue.jobs["emptymap"] = job
+        with mock.patch.object(server, "configureLogging"), \
+                mock.patch.object(server, "KeggInformationManager"), \
+                mock.patch.object(server, "JobInformationManager"), \
+                mock.patch.object(server.Application, "ensureIndexes"), \
+                mock.patch.object(server.Application, "startScheludeTasks"):
+            application = server.Application()
 
-        delivered = queue.deliver_result("emptymap")
-        app = Flask(__name__)
-        configureJSONSerialisation(app)
-        with app.app_context():
-            rendered, status = delivered.getResponse()
-        self.assertEqual(status, 400)
-        body = json.loads(rendered.get_data(as_text=True))
+        manager = mock.MagicMock()
+        manager.return_value.loadJobInstance.return_value = self.job
+        with mock.patch.object(servlet, "JobInformationManager", manager), \
+                mock.patch.object(servlet, "JobProgress"):
+            application.queue.enqueue(
+                fn=servlet.pathwayAcquisitionStep2_PART2,
+                args=("emptymap", "u1", [], {}, Response(), "/nowhere/", {}),
+                job_id="emptymap")
+            client = application.app.test_client()
+            url = SERVER_SUBDOMAIN + "/check_job_status/emptymap"
+            deadline = time.monotonic() + 30
+            answer = client.post(url)
+            while answer.status_code == 200 and time.monotonic() < deadline:
+                time.sleep(0.01)
+                answer = client.post(url)
+
+        self.assertEqual(answer.status_code, 400)
+        body = json.loads(answer.get_data(as_text=True))
         self.assertIs(body["extra"]["input_error"], True)
         self.assertIn(self.REFUSAL, body["message"])
 
 
+DIALOG_HARNESS = r"""
+const nodes = {};
+function element(selector) {
+    const self = {
+        html(value) { nodes[selector + ".html"] = value; return self; },
+        text(value) { nodes[selector + ".text"] = value; return self; },
+        css(value) { nodes[selector + ".display"] = value.display; return self; },
+        removeClass() { return self; }, addClass() { return self; }, hasClass() { return false; },
+        show() { return self; }, hide() { return self; }, focus() { return self; },
+        outerHeight() { return 100; }
+    };
+    return self;
+}
+const $ = element;
+$.wait = function (fn) { fn(); };
+Date.logFormat = function () { return ""; };
+const dialog = {setWidth() {}, setHeight() {}, getHeight() { return 100; }, center() {}, show() {}, hide() {},
+                isVisible() { return true; }, body: null, el: {focus() {}}};
+/* What Ext 4.2 does; ext-all.js itself needs a DOM. The browser check runs the real one. */
+const entities = {"&": "&amp;", ">": "&gt;", "<": "&lt;", '"': "&quot;", "'": "&#39;"};
+const Ext = {getCmp() { return dialog; },
+             String: {htmlEncode(text) { return String(text).replace(/[&<>"']/g, function (c) { return entities[c]; }); }}};
+console.error = console.warn = console.info = function () {};
+var debugging = false, ignoreOtherErrors = false;
+function unreadableAnswerMessage() { return "unreadable"; }
+function deleteCredentials() {}
+%(client)s
+const results = {split: {}};
+const bodies = %(bodies)s;
+for (const name of Object.keys(bodies)) {
+    for (const key of Object.keys(nodes)) { delete nodes[key]; }
+    ignoreOtherErrors = false;
+    ajaxErrorHandler({responseText: JSON.stringify(bodies[name])});
+    results[name] = {
+        title: nodes["#messageDialogTitle.html"],
+        body: nodes["#messageDialogBody.html"],
+        hidden: nodes["#hiddenMessageDialogBody.text"],
+        report: nodes["#reportErrorButton.display"],
+        close: nodes["#messageDialogButton.display"]
+    };
+}
+const lines = %(lines)s;
+for (const name of Object.keys(lines)) {
+    results.split[name] = splitServerError(lines[name]);
+}
+process.stdout.write(JSON.stringify(results));
+"""
+
+
+def _answerTo(exception, userID=None):
+    """The body handleException really writes for this exception."""
+    response = _Response()
+    try:
+        raise exception
+    except Exception as ex:
+        handleException(response, ex, "PathwayAcquisitionServlet.py", "step", userID=userID)
+    return response.content
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
 class TheBrowserWordsItAsARefusal(unittest.TestCase):
-    """Source assertions: the client has no test harness. Verified in Chrome."""
+    """The real ajaxErrorHandler, splitServerError and showMessage on the server's
+    real answers, down to what goes into the dialog's elements."""
 
-    def setUp(self):
-        with io.open(UTIL_JS, encoding="utf-8") as handle:
-            util = handle.read()
-        match = re.search(r"function ajaxErrorHandler\(responseObj\) \{.*?\n\}", util, re.S)
-        self.assertTrue(match, "ajaxErrorHandler is gone")
-        self.handler = match.group(0)
+    IMG = "<img src=x onerror=console.log(1)>"
+    MARKUP = ("[b]Errors detected in input files, please fix the following issues and try again:[/b][br]"
+              "Errors detected while processing a.tab:\n[ul][li]Line 3:Line contains invalid values or symbols.[/li][/ul]")
 
-    def test_the_flag_gets_its_own_dialog_before_the_internal_error_one(self):
-        flag = self.handler.index("err.extra.input_error === true")
-        self.assertLess(flag, self.handler.index('showErrorMessage("Oops..Internal error!"'))
-        branch = self.handler[flag:self.handler.index("return;", flag)]
-        self.assertIn('"Please check your input files"', branch)
-        self.assertIn("showReportButton: false", branch)
-        self.assertNotIn("retrying in the browser", branch)
+    @classmethod
+    def setUpClass(cls):
+        hostile = explainEmptyMapping(
+            "hsa", [{"omicName": "Gene expression", "omicSummary": [{"KEGG": 0}, 3]}],
+            lambda name, size=None: [cls.IMG, "<NA>", "ENSX1"])
+        cls.hostileText = hostile
+        util = read(UTIL)
+        script = DIALOG_HARNESS % {
+            "client": "\n".join(extract_function(util, name, "Util.js") for name in
+                                ("showMessage", "showErrorMessage", "ajaxErrorHandler", "splitServerError")),
+            "bodies": json.dumps({
+                "hostileRefusal": _answerTo(InputFileError(hostile), userID="17"),
+                "markedUpRefusal": _answerTo(InputFileError(cls.MARKUP), userID="17"),
+                "internalError": _answerTo(ValueError("The table is broken."), userID="17"),
+                "anonymousError": _answerTo(ValueError("The table is broken.")),
+            }),
+            "lines": json.dumps({
+                "fullStop": "InputFileError: AT S.py: f. ERROR MESSAGE: PaintOmics recognised.. User ID: 17",
+                "noFullStop": "UserWarning: AT S.py: f. ERROR MESSAGE: Job 'x'. User ID: 17",
+                "noSuffix": "InputFileError: AT S.py: f. ERROR MESSAGE: PaintOmics recognised.",
+                "noMarker": "Your job is not on the queue anymore. User ID: 17",
+                "midSentence": "ValueError: AT S.py: f. ERROR MESSAGE: Bad. User ID: 17 is not a number",
+                "onlyTheSuffix": "ValueError: AT S.py: f. ERROR MESSAGE: . User ID: 17",
+            }),
+        }
+        directory = tempfile.mkdtemp(prefix="paintomics-refusal-")
+        try:
+            path = os.path.join(directory, "check.js")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(script)
+            done = subprocess.run(["node", path], capture_output=True, text=True, timeout=60)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+        if done.returncode != 0:
+            raise AssertionError("the harness failed:\n" + done.stderr)
+        cls.results = json.loads(done.stdout)
+
+    def test_the_flag_gets_its_own_dialog_and_no_report_button(self):
+        dialog = self.results["hostileRefusal"]
+        self.assertIn("Please check your input files", dialog["title"])
+        self.assertEqual(dialog["report"], "none")
+        self.assertEqual(dialog["close"], "inline-block")
+        self.assertNotIn("retrying in the browser", dialog["body"])
+
+    def test_any_other_exception_stays_an_internal_error_with_a_report_button(self):
+        dialog = self.results["internalError"]
+        self.assertIn("Oops..Internal error!", dialog["title"])
+        self.assertEqual(dialog["report"], "inline-block")
+        self.assertIn("retrying in the browser", dialog["body"])
+
+    def test_the_ids_in_a_refusal_are_text(self):
+        self.assertIn(self.IMG, self.hostileText, "the fixture no longer quotes the id")
+        body = self.results["hostileRefusal"]["body"]
+        self.assertNotIn("<img", body)
+        self.assertNotIn("<NA>", body)
+        self.assertIn("&lt;img src=x onerror=console.log(1)&gt;", body)
+        self.assertIn("&lt;NA&gt;", body, "an id the message relies on has vanished")
+
+    def test_the_markup_a_refusal_is_written_in_still_works(self):
+        body = self.results["markedUpRefusal"]["body"]
+        self.assertIn("<b>Errors detected", body)
+        self.assertIn("</b></br>", body)
+        self.assertIn("<ul><li>Line 3:", body)
+        self.assertIn("</li></ul>", body)
+        self.assertNotIn("[b]", body)
+
+    def test_the_user_id_leaves_the_text_of_a_refusal(self):
+        body = self.results["hostileRefusal"]["body"]
+        self.assertNotIn("User ID", body)
+        self.assertNotIn("..", body)
+        self.assertTrue(body.endswith("."), body)
+
+    def test_the_user_id_stays_in_what_a_report_sends(self):
+        dialog = self.results["internalError"]
+        self.assertNotIn("User ID", dialog["body"])
+        self.assertIn("The table is broken.", dialog["body"])
+        self.assertIn("User ID: 17", dialog["hidden"])
+        self.assertIn("AT PathwayAcquisitionServlet.py", dialog["hidden"])
+
+    def test_a_caller_with_no_session_has_no_suffix_to_move(self):
+        dialog = self.results["anonymousError"]
+        self.assertIn("The table is broken.", dialog["body"])
+        self.assertNotIn("User ID", dialog["hidden"])
+
+    def test_split_server_error(self):
+        split = self.results["split"]
+        self.assertEqual(split["fullStop"], {
+            "readable": "PaintOmics recognised.",
+            "technical": "InputFileError: AT S.py: f. User ID: 17"})
+        self.assertEqual(split["noFullStop"], {
+            "readable": "Job 'x'",
+            "technical": "UserWarning: AT S.py: f. User ID: 17"})
+        self.assertEqual(split["noSuffix"], {
+            "readable": "PaintOmics recognised.",
+            "technical": "InputFileError: AT S.py: f."})
+        self.assertEqual(split["noMarker"], {
+            "readable": "Your job is not on the queue anymore. User ID: 17",
+            "technical": ""})
+        self.assertEqual(split["midSentence"]["readable"], "Bad. User ID: 17 is not a number")
+        self.assertNotEqual(split["onlyTheSuffix"]["readable"], "", "a dialog with nothing in it")
 
 
 class ThePreparationDialogWordsItToo(unittest.TestCase):

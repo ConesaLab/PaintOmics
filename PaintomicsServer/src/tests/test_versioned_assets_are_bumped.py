@@ -139,8 +139,11 @@ PUBLISHED = {
     # v=3.4 shows the server's refusal of the uploaded files (InputFileError) as
     # "Please check your input files" with no Report button, and an organism
     # request that names no organism as a warning.
+    # v=3.5 encodes the text of that refusal, which quotes the user's identifiers
+    # (Ext.String.htmlEncode, so [b] and the like still work), and moves the
+    # ". User ID: N" a server message ends with into the half a report sends.
     "app/view/common/Util.js": (
-        "3.4", "4d8b96d34f7798d312c928e389429d14a7ac80bfe518659e4ff81dad5c1c173b"),
+        "3.5", "ee1c5eed4336d8cc88051d5a6294d81c6712bf7fb5fa6751514cec68df095635"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
@@ -299,8 +302,10 @@ PUBLISHED = {
     # the real menu path back to a job, and a plain browser recommendation.
     # v=0.9 retries a module that did not arrive and stops blaming the stored
     # analysis for every boot failure.
+    # v=0.10 offers a module that threw a reload rather than the discard, because
+    # launch() has read neither store at that point.
     "app.js": (
-        "0.9", "6a554120e21932bb6abf95f94c7184a50167c3af2327d4d9985015060e19ef1a"),
+        "0.10", "2df7fc946caba0126fc454193244d3d9cd6e379770055cec907c99b4ba2757fe"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

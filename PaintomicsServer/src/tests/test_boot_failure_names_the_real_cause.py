@@ -28,9 +28,13 @@ Pinned here, on the shipped app.js under a stubbed jQuery:
     other versions as textStatus "parsererror", and both are covered;
   * the dialog for a load failure names the file and offers a reload, with no
     discard and no Report button;
+  * a module that threw gets a reload too and no discard, because launch() has
+    read neither store at that point, and its exception goes with the report;
   * the dialog for anything else stops asserting the stored analysis is the
     cause, still offers the discard as something that may help, and puts the
-    real exception in the hidden field the Report button sends.
+    real exception in the hidden field the Report button sends;
+  * launch() goes through all that: it stops at the first module that fails, and
+    its catch raises the dialog.
 
 Usage:
     cd PaintomicsServer
@@ -51,7 +55,8 @@ MODULE = "app/model/FeatureModels.js"
 
 # The whole of app.js in a vm context, so what runs is what ships. `respond(opts,
 # n, context, raiseOnWindow)` decides what the n-th request for the module does.
-# The clock advances on every read, which ends pauseBoot's wait at once.
+# The clock advances on every read, which ends pauseBoot's wait at once and leaves
+# in bootClock how long it would have waited.
 HARNESS = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -71,12 +76,15 @@ function boot(respond) {
         removeEventListener(type, listener) { listeners.delete(listener); }
     };
     sandbox.window = sandbox;
-    sandbox.$ = function () { return {ready() {}}; };
+    let onReady = null;
+    sandbox.$ = function () { return {ready(fn) { onReady = fn; }}; };
+    sandbox.Ext = {application(config) { config.launch(); },
+                   form: {field: {File: {override() {}}}}};
     const context = vm.createContext(sandbox);
     vm.runInContext(
-        "(function () { var clock = 1000;" +
-        " Date.now = function () { clock += 100; return clock; };" +
-        " Date.logFormat = function () { return ''; }; })();", context);
+        "var bootClock = 0;" +
+        " Date.now = function () { bootClock += 100; return bootClock; };" +
+        " Date.logFormat = function () { return ''; };", context);
     vm.runInContext(source, context);
 
     const raiseOnWindow = function (event) { listeners.forEach(function (fn) { fn(event); }); };
@@ -84,7 +92,8 @@ function boot(respond) {
         requests.push(opts.url);
         respond(opts, requests.length, context, raiseOnWindow);
     };
-    return {sandbox: sandbox, context: context, requests: requests, dialogs: dialogs, listeners: listeners};
+    return {sandbox: sandbox, context: context, requests: requests, dialogs: dialogs, listeners: listeners,
+            ready: function () { onReady(); }};
 }
 
 function plain(dialog) {
@@ -93,7 +102,15 @@ function plain(dialog) {
                       showButton: dialog.data.showButton};
 }
 
-/* Load one module, then hand whatever it threw to the boot dialog, as launch() does. */
+/* The whole boot: ready -> Ext.application -> launch() -> its catch. */
+function realBoot(respond) {
+    const app = boot(respond);
+    app.ready();
+    return {requests: app.requests.slice(), dialog: plain(app.dialogs[0])};
+}
+
+/* Load one module, then hand whatever it threw to the boot dialog, as launch()'s
+   catch does. Shorter to read than realBoot when the module is the point. */
 function load(respond) {
     const app = boot(respond);
     app.sandbox.application = null;
@@ -108,12 +125,13 @@ function load(respond) {
         requests: app.requests.length,
         listenersLeft: app.listeners.size,
         threw: thrown && {name: thrown.name, message: thrown.message, moduleFile: thrown.moduleFile},
-        dialog: plain(app.dialogs[0])
+        dialog: plain(app.dialogs[0]),
+        waitedMs: app.sandbox.bootClock
     };
 }
 
 const answered = function (status, statusText) { return {status: status, statusText: statusText}; };
-const dropped = function (opts) { opts.error(answered(0, "NetworkError"), "error", "NetworkError"); };
+const dropped = function (opts) { if (opts.error) { opts.error(answered(0, "NetworkError"), "error", "NetworkError"); } };
 const arrived = function (opts) { if (opts.success) { opts.success("", "success", answered(200, "OK")); } };
 
 const results = {};
@@ -140,6 +158,18 @@ results.parserError = load(function (opts, n, context) {
     opts.error(answered(200, "OK"), "parsererror", vm.runInContext("new SyntaxError('Unexpected token')", context));
 });
 
+results.bootDropped = realBoot(dropped);
+
+results.bootThrew = realBoot(function (opts, n, context, raiseOnWindow) {
+    if (opts.url === %(module)s) {
+        raiseOnWindow({error: vm.runInContext("new TypeError('Ext is not ready')", context), message: "Uncaught TypeError"});
+    }
+    arrived(opts);
+});
+
+/* Every module arrives and defines nothing, so launch() itself is what throws. */
+results.bootNoMainView = realBoot(arrived);
+
 /* What the boot used to die on when a module was missing, or anything else. */
 function otherFailure(expression) {
     const app = boot(arrived);
@@ -164,7 +194,7 @@ class BootFailureTest(unittest.TestCase):
         try:
             script = os.path.join(scratch, "harness.js")
             with open(script, "w", encoding="utf-8") as handle:
-                handle.write(HARNESS % {"app": json.dumps(APP_JS)})
+                handle.write(HARNESS % {"app": json.dumps(APP_JS), "module": json.dumps(MODULE)})
             done = subprocess.run(["node", script], capture_output=True, text=True, timeout=60)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
@@ -212,6 +242,40 @@ class ModuleFetchTest(BootFailureTest):
         self.assertEqual(result["threw"]["name"], "SyntaxError")
         self.assertEqual(result["threw"]["moduleFile"], MODULE)
 
+    def test_the_retries_wait_for_the_connection_but_not_for_long(self):
+        """A dead connection fails in milliseconds, and this wait blocks the main thread."""
+        waited = self.results["alwaysDropped"]["waitedMs"]
+        self.assertGreaterEqual(waited, 1000, "the retries are over before a connection can return")
+        self.assertLess(waited, 10000, "the page is frozen for this long")
+
+
+class RealBootTest(BootFailureTest):
+    """launch() and its catch, which everything else in this file only stands in for."""
+
+    def test_launch_stops_at_the_first_module_that_fails_and_says_which(self):
+        result = self.results["bootDropped"]
+        first = "app/model/JobInstanceModels.js"
+        self.assertEqual(set(result["requests"]), {first}, "launch() carried on past a module it never got")
+        self.assertGreater(len(result["requests"]), 1, "launch() did not retry it")
+        self.assertIsNotNone(result["dialog"], "launch() failed and its catch raised no dialog")
+        self.assertIn(first, result["dialog"]["message"])
+        self.assertIs(result["dialog"]["showReportButton"], False)
+
+    def test_launch_stops_at_a_module_that_threw_and_offers_a_reload(self):
+        result = self.results["bootThrew"]
+        self.assertEqual(result["requests"], ["app/model/JobInstanceModels.js", MODULE])
+        self.assertIsNotNone(result["dialog"], "launch() failed and its catch raised no dialog")
+        self.assertIn("location.reload()", result["dialog"]["message"])
+        self.assertNotIn("resetPaintomicsSession", result["dialog"]["message"])
+        self.assertIn(MODULE, result["dialog"]["hidden"])
+
+    def test_launch_failing_after_the_modules_offers_the_discard(self):
+        result = self.results["bootNoMainView"]
+        self.assertEqual(len(result["requests"]), 16, "launch() no longer asks for every module")
+        self.assertIsNotNone(result["dialog"], "launch() failed and its catch raised no dialog")
+        self.assertIn("resetPaintomicsSession()", result["dialog"]["message"])
+        self.assertIn("MainView is not defined", result["dialog"]["hidden"])
+
 
 class BootDialogTest(BootFailureTest):
 
@@ -233,6 +297,7 @@ class BootDialogTest(BootFailureTest):
                 self.assertNotIn("resetPaintomicsSession", dialog["message"])
                 self.assertNotIn("stored analysis", dialog["message"])
                 self.assertIs(dialog["showReportButton"], False)
+                self.assertIsNot(dialog.get("showButton"), False, "a modal with no way to close it")
 
     def test_an_http_error_is_not_called_a_dropped_connection(self):
         dialog = self.results["always502"]["dialog"]
@@ -248,6 +313,18 @@ class BootDialogTest(BootFailureTest):
                 self.assertNotIn("connection dropped", dialog["message"])
                 self.assertIn(MODULE, dialog["hidden"])
 
+    def test_a_script_that_threw_offers_a_reload_and_no_discard(self):
+        """launch() has read neither store yet, so discarding them cannot help."""
+        for case in ("threwOnWindow", "parserError"):
+            with self.subTest(case=case):
+                dialog = self.results[case]["dialog"]
+                self.assertIn("location.reload()", dialog["message"])
+                self.assertNotIn("resetPaintomicsSession", dialog["message"])
+                self.assertNotIn("Discard", dialog["message"])
+                self.assertIn("not affected", dialog["message"])
+                self.assertIsNot(dialog.get("showReportButton"), False, "this one is ours to hear about")
+                self.assertIsNot(dialog.get("showButton"), False, "a modal with no way to close it")
+
     def test_any_other_failure_does_not_assert_the_stored_analysis_is_the_cause(self):
         message = self.results["referenceError"]["message"]
         self.assertNotIn("could not be restored", message)
@@ -257,7 +334,9 @@ class BootDialogTest(BootFailureTest):
     def test_the_real_exception_reaches_the_report(self):
         dialog = self.results["referenceError"]
         self.assertIn("ReferenceError: MainView is not defined", dialog.get("hidden") or "")
+        self.assertIn("    at ", dialog.get("hidden") or "", "no location: a report nobody can act on")
         self.assertIsNot(dialog.get("showReportButton"), False)
+        self.assertIsNot(dialog.get("showButton"), False, "a modal with no way to close it")
 
     def test_a_rejection_with_nothing_in_it_still_says_something(self):
         """.catch(showBootFailureMessage) passes whatever was rejected."""
