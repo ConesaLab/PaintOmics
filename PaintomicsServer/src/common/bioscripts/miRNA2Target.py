@@ -31,6 +31,12 @@ import numpy as np
 import scipy.stats
 from csv import reader as csv_reader
 
+# What the score-method column reads for a pair nothing could score, with "nan" as
+# its score. Nothing computed that score, and nan > any cutoff is False, so the job
+# calls no such pair relevant.
+NO_SCORE_METHOD = "none"
+
+
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h:m:g:r:i:o:", ["help", "method=", "genes=", "reference=", "mirna=", "output="])
@@ -82,7 +88,7 @@ def main():
 def print_usage():
     print("\nUsage: python miRNA2Target.py [options] <mandatory>")
     print("Options:")
-    print("\t-m, --method:\n\t\t The score method, accepted values are 'fc' (Fold change) | 'spearman' | 'kendall' | 'pearson'")
+    print("\t-m, --method:\n\t\t The score method, accepted values are 'spearman' | 'kendall' | 'pearson'. With no gene expression file, no score is computed.")
     print("\t-g, --genes:\n\t\t A file containing the gene expression quantification. These values are necessary to calculate the correlation between miRNAs and targets.")
     print("\t-h, --help:\n\t\t show this help message and exit")
     print("Mandatory:")
@@ -105,11 +111,8 @@ def toFloats(values):
     file is read WITHOUT skipping its header, so `geneTable` legitimately
     contains a row keyed '#geneID' whose cells are condition names. Converting
     eagerly and letting that raise would abort the read before the output file
-    is even opened -- a different failure, and a different (empty) output, than
-    the one this script has always produced. Keeping the raw cells makes such a
-    row fail exactly where it failed before: inside the scoring loop, on the
-    first pair that actually uses it, under the blanket handler that keeps the
-    partial file.
+    is even opened. Keeping the raw cells lets such a row stay harmless until a
+    pair actually uses it, and run() then names it (see firstNonNumber).
     """
     try:
         return [float(value) for value in values]
@@ -124,7 +127,100 @@ def asFloats(values):
     return values
 
 
-def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutputFile, method="fc"):
+class NotANumber(ValueError):
+    """A row about to be scored is not numbers: a text cell, or a header row.
+
+    run() records which file, row and cell in stats["notANumber"] before raising
+    it, so the caller can name the row instead of quoting float()'s complaint.
+    """
+
+
+def notANumber(stats, fileLabel, rowId, cell, headerRow, pair):
+    """Record the row that cannot be scored in stats, and the exception to raise."""
+    stats["notANumber"] = {"file": fileLabel, "row": rowId, "cell": cell,
+                           "headerRow": headerRow, "regulator": pair[0], "target": pair[1]}
+    return NotANumber("row %r cannot be scored, at cell %r" % (rowId, cell))
+
+
+def isNumber(cell):
+    try:
+        float(cell)
+    except ValueError:
+        return False
+    return True
+
+
+def isGeneHeaderRow(targetId, values, firstGeneId):
+    """Whether the gene expression row a target matched is that file's header.
+
+    The file is read with its first line, which is its header unless it holds a
+    gene. A first line whose id starts with "#", or with no number among its values,
+    is not a gene's row. "#gene 0 12 24" passes float() and was scored on its time
+    labels with no word; a first line that is only "#gene" reached scipy with no
+    values, which read as a failure of ours. A plain id with numbers is a gene, in a
+    file with no header: all numbers and it is scored; "G1 NA 2.0 0.5" holds one bad
+    cell, and calling that a header would send the reader to rename a header the
+    file does not have.
+    """
+    if targetId != firstGeneId:
+        return False
+    return targetId.startswith("#") or not any(isNumber(value) for value in values)
+
+
+def firstNonNumber(values):
+    """The first cell of a row read by toFloats that is not a number, or None.
+
+    toFloats returns either every cell as a float or the row's raw text, so one
+    look at the first cell settles a row that parsed; only a row that did not
+    parse is walked to find the cell to name.
+    """
+    if not values or not isinstance(values[0], str):
+        return None
+    return next((value for value in values if not isNumber(value)), None)
+
+
+def readHeader(rawHeader, nValues):
+    """The condition names a header row gives rows of nValues values.
+
+    Returns (names, None), or (None, problem) for a header that would put the
+    wrong name over some column. Whether the header labels the id column varies
+    between files: gene_expression_values.tab opens with "#geneID", while
+    mirna_unmapped_values.tab goes straight into "I/C_0h". What decides:
+
+    - A first cell starting with "#" labels the id column, always, and the rest
+      must be one name per value. "#miRNA C1 C2 C3" over four values used to pass
+      as four names, with "#miRNA" as the first condition and every value one
+      column off.
+    - Otherwise as many cells as values are the names, and one more means the
+      first cell is a label. Width cannot tell "miRNA C1 C2 C3" from "C1 C2 C3 C4"
+      over three values, so the second loses "C1" with no word; the docs say so.
+    - That reading has one case it cannot settle: one more cell than values, with
+      the last one empty. "C1 C2 <empty>" over two values is two names and a
+      trailing tab; "miRNA C1 <empty>" is a label and an unnamed last column. Taken
+      either way, the other file gets every name one column off, so it is refused.
+
+    An empty cell past every column of the rows names nothing and is dropped. Only
+    those: the empty last cell of "#miRNA C1 C2 C3 <empty>" over four values sits
+    over a value, and dropping it would shift the names back onto the wrong columns.
+    """
+    cells = list(rawHeader)
+    while len(cells) > nValues + 1 and not cells[-1].strip():
+        cells.pop()
+    first = cells[0].lstrip("\ufeff").strip() if cells else ""
+    if first.startswith("#"):
+        if len(cells) == nValues + 1:
+            return cells[1:], None
+        return None, {"cells": len(cells), "values": nValues, "label": first}
+    if len(cells) == nValues:
+        return cells, None
+    if len(cells) == nValues + 1:
+        if cells[-1].strip() or not first:
+            return cells[1:], None
+        return None, {"cells": len(cells), "values": nValues, "readsTwoWays": first}
+    return None, {"cells": len(cells), "values": nValues}
+
+
+def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutputFile, method="kendall"):
     miRNAtable = {}
     geneTable = {}
     dataFile_header = None
@@ -138,7 +234,7 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                "associationTargets": 0, "genes": 0}
     seenTargets = set()
     unmatchedSample = []
-    stats = {"dropped": dropped, "pairs": 0, "scored": 0, "unmatchedTargets": 0,
+    stats = {"dropped": dropped, "pairs": 0, "scored": 0, "unscored": 0, "unmatchedTargets": 0,
              "nanScores": 0}
     unmatchedDistinct = set()   # bounded: the first 2000 distinct unmatched targets
     geneOrder = []              # the first gene ids in FILE order, header included
@@ -151,20 +247,27 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                 rawHeader = line
                 continue
 
+            # Before the width below is read from it: an empty line straight
+            # after the header used to be taken as a row with -1 values.
+            if not line:
+                continue            # a trailing empty line is not a row
+
             if dataFile_header is None:
-                # Whether the header labels the ID column varies between files:
-                # gene_expression_values.tab opens with "#geneID", while
-                # mirna_unmapped_values.tab goes straight into "I/C_0h". This
-                # used to always drop the first cell, so for the latter the
-                # first condition was consumed as if it were the ID label --
-                # the example emitted 5 condition names above 6 columns of
-                # data, leaving every value mislabelled downstream. Decide from
-                # the width of the first data row instead of assuming.
-                nValues = len(line) - 1
-                if len(rawHeader) == nValues:
-                    dataFile_header = rawHeader          # no label for the ID column
-                else:
-                    dataFile_header = rawHeader[1:]      # first cell labels the ID column
+                # This used to always drop the first cell, so a header with no id
+                # label lost its first condition -- the example emitted 5 condition
+                # names above 6 columns of data, leaving every value mislabelled
+                # downstream. It is decided against the first data row instead.
+                #
+                # A header that does not fit names the wrong conditions on every
+                # row this writes. "#miRNA C1 C2" over rows of one value passed as
+                # two conditions, so pearson crashed on its first pair ("length at
+                # least 2") while kendall and spearman scored nan, and the user read
+                # a crash or "values are identical" for a header that does not fit
+                # its rows. Nothing is scored; the caller says so.
+                dataFile_header, mismatch = readHeader(rawHeader, len(line) - 1)
+                if mismatch is not None:
+                    dataFile_header = []
+                    stats["headerMismatch"] = mismatch
 
             # An unnamed row is not a feature.
             #
@@ -181,8 +284,6 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             # target column was blank from top to bottom.
             #
             # Dropped here, at the read, so no later stage can join on nothing.
-            if not line:
-                continue            # a trailing empty line is not a row
             if not line[0].strip():
                 dropped["regulators"] += 1
                 continue
@@ -216,12 +317,30 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             if regulator in miRNAtable:
                 miRNAtable[regulator]["targets"].append(target)
                 seenTargets.add(target)
+                # Counted here, where every pair is read, and not in the
+                # scoring loop: that count stopped where pearson raised, so the
+                # same one-column file read "1 miRNA-target pairs" under pearson
+                # and "2" under kendall.
+                stats["pairs"] += 1
     inputDataFile.close()
 
 
     # STEP 4. FOR EACH REGULATOR AND EACH TARGET, CALCULATE THE SCORE AND SAVE RESULTS TO A FILE IF NO
     # RELEVANT ASSOCIATIONS WERE PROVIDED.
     useCorrelation = relevantReferenceFile is None or relevantReferenceFile == ''
+
+    # The rows go to a file beside the output and take its name only once the
+    # last pair is written. A run that stops part-way used to keep what it had
+    # written under the real name, and the job read that file as the whole
+    # result: three miRNAs in, one row out, reported as a success with no word
+    # about the other two. Now a run that stops leaves no output file at all, and
+    # stats["aborted"] says why.
+    partialOutputFile = corrOutputFile + ".partial"
+    outputFile = None
+    finished = False
+    processed = 0               # pairs handled before the one being scored
+    currentPair = None          # (miRNA, target) while a pair is being scored
+    firstGeneId = None          # first cell of the gene expression file's first line
 
     try:
         print("STEP 3. Processing miRNAs and calculating score...")
@@ -233,6 +352,8 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                 for line in csv_reader(inputDataFile, delimiter="\t"):
                     if not line:
                         continue
+                    if firstGeneId is None:
+                        firstGeneId = line[0].strip()
                     if not line[0].strip():
                         dropped["genes"] += 1
                         continue
@@ -243,52 +364,76 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
             inputDataFile.close()
         else:
             print("STEP 3. No mRNA expression file was provided...")
-            method = "fc"
+
+        # A score here is the correlation between a miRNA and a target, so with
+        # nothing to correlate there is no score. This used to be "fc", which the
+        # form described as filtering on "the fold-change for the expression of
+        # the miRNAs" and getScore answered with random.uniform(-1, 1), so the job
+        # called a random share of the pairs relevant, different on every run. A
+        # fold change cannot stand in. It needs to know which column is the
+        # reference, which these files do not say; the values are often log ratios
+        # already; the cutoff is on the -1 to 1 scale of a correlation; and it
+        # would give every target of a miRNA one number, when the point of the score
+        # is to choose among them. So every pair is written, none is called
+        # relevant, and the job says why ("fc" still arrives from a hand-written
+        # request, the form stopped offering it).
+        scoring = useCorrelation
+        if useCorrelation and geneExpresion is None:
+            scoring, stats["noScore"] = False, "noGeneExpression"
+        elif useCorrelation and method == "fc":
+            scoring, stats["noScore"] = False, "foldChange"
+        if not scoring:
+            method = NO_SCORE_METHOD
 
         # A correlation over a single condition is not a weak correlation, it
         # is undefined -- scipy raises "x and y must have length at least 2"
         # for pearson/spearman, and kendall returns nan for every pair because
         # every pair is a tie. Both were invisible: the raise landed in the
-        # blanket handler below, which keeps the partial file, so a user with
-        # one condition got an EMPTY result and was told their identifiers did
-        # not match; kendall got them 30,722 rows of "nan". Recorded here so
-        # the caller can say which it is.
+        # blanket handler below, so a user with one condition got an EMPTY
+        # result and was told their identifiers did not match; kendall got them
+        # 30,722 rows of "nan". Recorded here so the caller can say which it is.
         stats["conditions"] = len(dataFile_header)
-        if useCorrelation and method != "fc" and len(dataFile_header) < 2:
+        if scoring and len(dataFile_header) < 2 and "headerMismatch" not in stats:
             stats["tooFewConditions"] = len(dataFile_header)
 
-        outputFile = open(corrOutputFile, 'w')
-        outputFile.write("# miRNA_id\ttarget_id\tscore\tscore method\t" + "\t".join(dataFile_header) + "\n")
+        # A header that does not fit its rows would mislabel every row written,
+        # so no row is written (see STEP 1).
+        if "headerMismatch" not in stats:
+            outputFile = open(partialOutputFile, 'w')
+            outputFile.write("# miRNA_id\ttarget_id\tscore\tscore method\t" + "\t".join(dataFile_header) + "\n")
 
-        miRNA_id = miRNA_values = miRNA_targets = target_id = target_values = score = None
-        total = len(miRNAtable.keys())
-        current=0
-        for miRNA_id in miRNAtable:
-            current+=1
-            if (current*100/total) % 20 == 0:
-                print("Processed " + str(current*100/total) + "% of " + str(total) + " total miRNAs")
+            miRNA_id = miRNA_values = miRNA_targets = target_id = target_values = score = None
+            total = len(miRNAtable.keys())
+            current=0
+            for miRNA_id in miRNAtable:
+                current+=1
+                if (current*100/total) % 20 == 0:
+                    print("Processed " + str(current*100/total) + "% of " + str(total) + " total miRNAs")
 
-            miRNA_values = miRNAtable[miRNA_id]["values"]
-            miRNA_floats = miRNAtable[miRNA_id]["floats"]
-            miRNA_targets = miRNAtable[miRNA_id]["targets"]
+                miRNA_values = miRNAtable[miRNA_id]["values"]
+                miRNA_floats = miRNAtable[miRNA_id]["floats"]
+                miRNA_targets = miRNAtable[miRNA_id]["targets"]
+                # Once per miRNA; it only matters when a pair of it is scored.
+                miRNA_text = firstNonNumber(miRNA_floats) if scoring else None
 
-            # Both are the same for every target of this miRNA, so they are
-            # built once here rather than once per pair.
-            rowPrefix = miRNA_id + "\t"
-            rowSuffix = "\t" + "\t".join(miRNA_values) + "\n"
+                # Both are the same for every target of this miRNA, so they are
+                # built once here rather than once per pair.
+                rowPrefix = miRNA_id + "\t"
+                rowSuffix = "\t" + "\t".join(miRNA_values) + "\n"
 
-            # One writelines() per miRNA instead of one write() per pair. The
-            # rows are appended in the order they were produced, so the file is
-            # byte for byte the one the per-pair writes produced. The finally
-            # matters for the one case where that is not obvious: if a pair
-            # raises, the handler below keeps whatever is in the file, so the
-            # rows this miRNA already produced have to reach it -- otherwise a
-            # failing run would truncate at a different place than it used to.
-            rows = []
-            try:
+                # One writelines() per miRNA instead of one write() per pair. The
+                # rows are appended in the order they were produced, so the file is
+                # byte for byte the one the per-pair writes produced.
+                rows = []
                 for target_id in miRNA_targets:
-                    stats["pairs"] += 1
-                    if useCorrelation:
+                    currentPair = (miRNA_id, target_id)
+                    if not useCorrelation:
+                        rows.append(rowPrefix + target_id + "\t" + str(0) + "\t" + "Association" + rowSuffix)
+                        stats["scored"] += 1
+                    elif not scoring:
+                        rows.append(rowPrefix + target_id + "\tnan\t" + NO_SCORE_METHOD + rowSuffix)
+                        stats["unscored"] += 1
+                    else:
                         target_values = geneTable.get(target_id, None)
                         if target_values is None:
                             stats["unmatchedTargets"] += 1
@@ -296,8 +441,20 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                                 unmatchedSample.append(target_id)
                             if len(unmatchedDistinct) < 2000:
                                 unmatchedDistinct.add(target_id)
-
-                        if method == "fc" or target_values is not None:
+                        else:
+                            # A row that is not numbers is the file's, not a fault
+                            # of the scoring: say which row it is. The gene file is
+                            # read with its header row, so a target named like that
+                            # row's first cell meets condition names here (float()
+                            # said only "could not convert string to float: 'C1'").
+                            if miRNA_text is not None:
+                                raise notANumber(stats, "miRNA quantification", miRNA_id,
+                                                 miRNA_text, False, currentPair)
+                            target_text = firstNonNumber(target_values)
+                            headerRow = isGeneHeaderRow(target_id, target_values, firstGeneId)
+                            if headerRow or target_text is not None:
+                                raise notANumber(stats, "gene expression", target_id, target_text,
+                                                 headerRow, currentPair)
                             score = getScore(miRNA_floats, target_values, method)
                             # nan is what every correlation returns when a
                             # pair is all ties (two identical columns, say):
@@ -306,22 +463,31 @@ def run(referenceFile, relevantReferenceFile, dataFile, geneExpresion, corrOutpu
                                 stats["nanScores"] += 1
                             rows.append(rowPrefix + target_id + "\t" + str(score) + "\t" + method + rowSuffix)
                             stats["scored"] += 1
-                    else:
-                        rows.append(rowPrefix + target_id + "\t" + str(0) + "\t" + "Association" + rowSuffix)
-                        stats["scored"] += 1
-            finally:
+                    processed += 1
+                    currentPair = None
                 outputFile.writelines(rows)
+
+            outputFile.close()
+            os.replace(partialOutputFile, corrOutputFile)
+            finished = True
     except Exception as e:
-        # Kept as a catch-all so a bad row cannot lose the rows already
-        # written, but no longer SILENT: an abort truncates the output, and a
-        # truncated file read as "no results" is how a crash got reported to a
-        # user as an identifier mismatch.
+        # Still a catch-all, so the caller gets the account below whatever
+        # went wrong, but a run that stops here has NO result: what it wrote is
+        # removed in the finally, and the caller fails the job with the reason.
         print("Exception catched " +  str(e))
-        stats["aborted"] = str(e)
-        stats["abortedAfterPairs"] = stats["pairs"]
+        stats["aborted"] = str(e) or type(e).__name__
+        stats["abortedAfterPairs"] = processed
+        stats["abortedOn"] = list(currentPair) if currentPair else None
     finally:
         print("STEP 5. Done")
-        outputFile.close()
+        if outputFile is not None:
+            outputFile.close()
+        if not finished:
+            # Also an output of an earlier run under the same name: whatever
+            # is found under it after this call is this call's whole result.
+            for leftover in (partialOutputFile, corrOutputFile):
+                if os.path.exists(leftover):
+                    os.remove(leftover)
 
     # The three identifier spaces, named. When nothing joined, which of them
     # failed to meet is the whole answer, and it is not derivable from the
@@ -434,11 +600,7 @@ def getScore(values_1, values_2, method):
     correlations -- the same function, on the same values -- so the scores, and
     therefore their str(), are unchanged.
     """
-    if method == "fc":
-        #CALCULATE THE FOLD CHANGE
-        import random
-        return random.uniform(-1, 1)
-    elif method == "spearman":
+    if method == "spearman":
         #CALCULATE THE CORRELATION USING SPEARMAN
         return scipy.stats.spearmanr(asFloats(values_1), asFloats(values_2)).correlation
     elif method == "kendall":

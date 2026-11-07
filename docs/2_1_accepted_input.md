@@ -530,6 +530,15 @@ expression file uses.
     Unlike the upload form, miRNA2Genes always splits on tabs, and always treats
     the first line of the quantification file as a header. A comma-separated
     file, or one that begins with data, will not be read the way you intend.
+    The header needs one condition name per value column. A first cell starting
+    with `#` is always a label for the miRNA id column, so over rows of four values
+    `#miRNA` needs four names after it. A first cell without `#` is read by width:
+    four cells are four names, and five are a label and four names. So five names
+    over four values lose the first name with no message, because width cannot tell
+    them from a label. A header that fits neither width is refused, with the counts,
+    and so is one with one cell too many whose last cell is empty and whose first
+    has no `#`, because it could be a label with an unnamed column, or names with a
+    tab left at the end.
 
 Most miRNAs have many predicted targets and few real ones at any given moment,
 so the point of the tool is to discriminate:
@@ -545,3 +554,8 @@ so the point of the tool is to discriminate:
 A correlation needs at least two conditions. With a single column every pair is a
 tie and nothing can be scored; the tool says so rather than returning an empty
 result.
+
+The form asks for a gene expression matrix or a relevant associations file. A
+request to the server with neither has nothing to score against: every pair is
+carried onto its gene with `nan` as its score, no pair is marked relevant, and the
+answer's `notice` field says so.

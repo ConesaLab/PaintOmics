@@ -102,7 +102,9 @@ class NoAssociationWithoutAnIdentifierTest(unittest.TestCase):
         after = self.source[self.source.index("skippedUnnamed = 0"):]
         self.assertIn("written == 0", after)
         raised = after[after.index("written == 0"):]
-        self.assertIn("raise Exception", raised)
+        # A refusal of the files, so the dialog says so and offers no Report
+        # (test_mirna_scoring_keeps_no_partial_result runs it).
+        self.assertIn("raise InputFileError", raised)
         self.assertIn("empty name", raised)
 
     def test_the_message_says_which_column_to_look_at(self):

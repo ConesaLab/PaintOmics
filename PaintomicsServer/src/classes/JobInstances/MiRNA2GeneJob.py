@@ -31,7 +31,7 @@ from src.classes.Feature import OmicValue, Gene
 from src.servlets.DataManagementServlet import copyFile
 from src.common.Util import ensure_utf8
 from src.common.ServerErrorManager import InputFileError
-from src.common.bioscripts.miRNA2Target import run as run_miRNA2Target
+from src.common.bioscripts.miRNA2Target import NO_SCORE_METHOD, run as run_miRNA2Target
 
 from os import path as os_path, mkdir as os_mkdir
 from csv import reader as csv_reader
@@ -39,6 +39,143 @@ from random import randint
 from collections import defaultdict
 import shutil
 from src.conf.serverconf import MAX_NUMBER_FEATURES
+
+
+def _plural(count, noun):
+    """ "1 value", "4 values": a count with its noun in the right number."""
+    return "%d %s%s" % (count, noun, "" if count == 1 else "s")
+
+
+def _pairs(count):
+    return _plural(count, "miRNA-target pair")
+
+
+def _pairsWereRead(count):
+    return _pairs(count) + (" was read" if count == 1 else " were read")
+
+
+def _headerMismatchText(mismatch):
+    """A miRNA header that would put the wrong name over some column.
+
+    See miRNA2Target.readHeader for what fits. Counted from the files, and a first
+    cell starting with "#" is the only one known to be a label: for any other, the
+    honest count is of cells, because five cells over three values may be five names
+    or a label and four.
+    """
+    cells, values = mismatch.get("cells", 0), mismatch.get("values", 0)
+    opening = "The header row of your miRNA quantification file "
+    rows = "its rows have %s after the miRNA id" % _plural(values, "value")
+    label = mismatch.get("label")
+    if label:
+        names = cells - 1
+        text = ("%snames %s after its label \"%s\", but %s. It needs one name per value "
+                "column, so it should name %d."
+                % (opening, _plural(names, "condition") if names else "no conditions", label, rows, values))
+        if names == values - 1:
+            text += " If \"%s\" is itself a condition name, remove the \"#\"." % label
+        return text + " Nothing was scored."
+    first = mismatch.get("readsTwoWays")
+    if first:
+        return ("%shas %s and the last one is empty, and %s. That can be read two ways: "
+                "\"%s\" as a label for the miRNA id column with the last value column unnamed, "
+                "or \"%s\" as the first condition with an empty cell left over at the end. "
+                "Remove the empty cell if every column has a name, or name the last column "
+                "and start the label with \"#\". Nothing was scored."
+                % (opening, _plural(cells, "cell"), rows, first, first))
+    if cells > values + 1:
+        said = "has %s" % _plural(cells, "cell")
+    elif cells == 0:
+        said = "is empty"
+    else:
+        said = "has only %s" % _plural(cells, "cell")
+    return ("%s%s, but %s. The header needs one name per value column, optionally "
+            "preceded by a label for the miRNA id column, so it should have %d or %d "
+            "cells. Nothing was scored." % (opening, said, rows, values, values + 1))
+
+
+def _notANumberText(cell):
+    """A row that reached the scoring step and is not numbers."""
+    if cell.get("headerRow"):
+        # A header can hold numbers ("#gene 0 12 24") or nothing ("#gene"), so
+        # there may be no cell to quote.
+        quoted = cell.get("cell")
+        return ("Your targets/associations file pairs %s with a target called "
+                "\"%s\", which is also the first cell of the header row of your "
+                "gene expression file. That row is a header, not the values of a "
+                "gene%s, so the pair could not be scored and no result was saved. "
+                "Remove that pair from the associations file, or rename the first "
+                "cell of the gene expression header so that no target has its name."
+                % (cell.get("regulator"), cell.get("target"),
+                   " (its cell \"%s\" is not a number)" % quoted if quoted is not None else ""))
+    return ("The row for \"%s\" in your %s file holds \"%s\", which is not a "
+            "number, so the pair %s - %s could not be scored and no result was "
+            "saved. Every value after the identifier has to be a number."
+            % (cell.get("row"), cell.get("file"), cell.get("cell"),
+               cell.get("regulator"), cell.get("target")))
+
+
+def _scoringFailure(stats):
+    """Why miRNA2Target stopped before the end, or None when it finished.
+
+    Returns (text, reportsACrash). A run that stops leaves no output file, so it
+    has no result to read, whatever it scored before stopping; until this, a run
+    that stopped after writing some rows was read as a smaller success. A header
+    that does not fit its rows and a cell that is not a number are the user's
+    files, and say so. Left to the chain in _emptyResultExplanation: a file with
+    no data rows, or with no miRNA that joins, where nothing was there to score;
+    and a single condition column, told by the sentence kendall and spearman also
+    get (pearson raises on it, they score nan). Anything else is ours.
+    """
+    if stats.get("headerMismatch"):
+        return _headerMismatchText(stats["headerMismatch"]), False
+    if (not stats.get("aborted") or stats.get("regulators", 1) == 0
+            or stats.get("pairs", 0) == 0 or stats.get("tooFewConditions") is not None):
+        return None
+    if stats.get("notANumber"):
+        return _notANumberText(stats["notANumber"]), False
+    pair = stats.get("abortedOn")
+    if pair:
+        where = ("at miRNA-target pair %d of %d (%s with %s)"
+                 % (stats.get("abortedAfterPairs", 0) + 1, stats.get("pairs", 0), pair[0], pair[1]))
+    else:
+        where = "after %d of %s" % (stats.get("abortedAfterPairs", 0), _pairs(stats.get("pairs", 0)))
+    # Stopped before any pair was handled, it had written nothing to discard.
+    saved = ("The rows it had already written were discarded, so no partial result was saved."
+             if stats.get("abortedAfterPairs", 0) else "No result was saved.")
+    # scipy ends its messages with a full stop ("... length at least 2.").
+    return ("The scoring step failed on our side %s, with the error: %s. %s"
+            % (where, str(stats["aborted"]).rstrip("."), saved)), True
+
+
+def noScoreNotice(stats):
+    """What the job says when miRNA2Target wrote its pairs without a score, or None.
+
+    Such a run has a result: every pair, carried onto its gene. It has no selection,
+    and the reader has to be told that, or the empty relevant list reads as a
+    cutoff that nothing passed.
+    """
+    reason = stats.get("noScore") if isinstance(stats, dict) else None
+    if not reason:
+        return None
+    if reason == "foldChange":
+        why, fix = "The score method \"fc\" (fold change) computes no score", "a correlation score method"
+    else:
+        why, fix = "No score could be computed without gene expression", "a gene expression file"
+    return ("%s: %s and none was marked as relevant. Every pair read is in the results, "
+            "with nan as its score. To select pairs, use %s or a relevant associations file."
+            % (why, _pairsWereRead(stats.get("pairs", 0)), fix))
+
+
+def unfinishedRunError(stats):
+    """What the job raises when miRNA2Target stopped before the end, or None.
+
+    The account is the only thing such a run leaves: its output file is gone, so
+    the job must not go on to read one.
+    """
+    if isinstance(stats, dict) and (stats.get("aborted") or stats.get("headerMismatch")):
+        return emptyResultError(stats)
+    return None
+
 
 def explainEmptyResult(stats):
     """Why no miRNA-target pair survived, in the user's own identifiers.
@@ -61,16 +198,25 @@ def _emptyResultExplanation(stats):
 
     Both come from the branch that writes the sentence, so they cannot disagree.
     stats["aborted"] cannot say it alone: pearson on a single condition aborts too,
-    and what it is told is the too-few-conditions explanation.
+    and what it is told is the too-few-conditions explanation. Any other run that
+    stopped before the end is told by _scoringFailure, ahead of the chain, whose
+    opening sentence would be untrue of it.
     """
     if not isinstance(stats, dict):
         return ("Your mirna2gene association process did not return any "
                 "result. Please, check the files (same identifiers, etc) and "
                 "parameters."), False
 
-    reportsACrash = False
+    failure = _scoringFailure(stats)
+    if failure is not None:
+        return failure
+
     dropped = stats.get("dropped") or {}
+    # Said of the runs where no pair formed. Where pairs were read and the scoring
+    # is what came up empty, this opening would contradict the sentence after it
+    # ("2 miRNA-target pairs were read"), so those branches open on what is true.
     lines = ["No miRNA was matched to a target gene, so there is nothing to analyse."]
+    noCorrelation = "No correlation could be computed, so there is nothing to analyse."
 
     def sample(ids):
         return ", ".join(str(i) for i in (ids or [])[:3])
@@ -102,9 +248,8 @@ def _emptyResultExplanation(stats):
     elif (stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0)
           and not stats.get("aborted")):
         lines.append(
-            "%d miRNA-target pairs were read, but not one target gene was found "
-            "in your gene expression file, so no correlation could be computed."
-            % stats.get("pairs", 0))
+            "%s, but not one target gene was found in your gene expression file, "
+            "so no correlation could be computed." % _pairsWereRead(stats.get("pairs", 0)))
         nearMiss = stats.get("sampleNearMiss")
         if stats.get("nearMisses") and nearMiss:
             lines.append(
@@ -128,32 +273,28 @@ def _emptyResultExplanation(stats):
     # 3. Targets matched, so the fault is in the SCORING, and blaming
     #    identifiers would send the user to rebuild files that were fine.
     elif conditions is not None:
+        lines[0] = noCorrelation
         lines.append(
             "Your data has %d condition column, and a correlation needs at "
             "least two: with a single column every pair is a tie, so there is "
-            "nothing to correlate. %d miRNA-target pairs were read. Either "
+            "nothing to correlate. %s. Either "
             "supply the conditions you want correlated, or provide a relevant "
             "associations file so the pairs are taken from it instead of being "
-            "scored." % (conditions, stats.get("pairs", 0)))
-    elif stats.get("aborted"):
-        reportsACrash = True
-        lines.append(
-            "The scoring step stopped after %d miRNA-target pairs with: %s. The "
-            "result file was truncated there, so this is not a problem with "
-            "your identifiers."
-            % (stats.get("abortedAfterPairs", 0), stats["aborted"]))
+            "scored." % (conditions, _pairsWereRead(stats.get("pairs", 0))))
     elif stats.get("scored", 0) and stats.get("nanScores", 0) == stats.get("scored", 0):
+        scored = stats.get("scored", 0)
+        lines[0] = noCorrelation
         lines.append(
-            "All %d scored miRNA-target pairs gave an undefined correlation "
-            "(nan): each pair's values are identical across the conditions, so "
-            "there is nothing to correlate. Check that the condition columns "
-            "differ, or provide a relevant associations file."
-            % stats.get("scored", 0))
+            "%s gave an undefined correlation (nan): %s identical across the "
+            "conditions, so there is nothing to correlate. Check that the "
+            "condition columns differ, or provide a relevant associations file."
+            % (("The one scored miRNA-target pair", "its values are") if scored == 1
+               else ("All %d scored miRNA-target pairs" % scored, "each pair's values are")))
     else:
         lines.append(
-            "%d miRNA-target pairs were read and %d were scored, but none "
-            "carried a usable target gene."
-            % (stats.get("pairs", 0), stats.get("scored", 0)))
+            "%s and %d %s scored, but none carried a usable target gene."
+            % (_pairsWereRead(stats.get("pairs", 0)), stats.get("scored", 0),
+               "was" if stats.get("scored", 0) == 1 else "were"))
 
     # 4. Blank cells, reported whenever there were any -- they are usually the
     #    reason a file "looks fine" and matches nothing.
@@ -174,7 +315,7 @@ def _emptyResultExplanation(stats):
         lines.append("Rows skipped because an identifier was blank: " +
                      "; ".join(blanks) + ".")
 
-    return " ".join(lines), reportsACrash
+    return " ".join(lines), False
 
 
 def emptyResultError(stats):
@@ -183,11 +324,12 @@ def emptyResultError(stats):
     A refusal of the files, which the dialog encodes because the message quotes
     their first columns. That holds for a single condition column under every
     method: pearson raises on the first target it finds and kendall and spearman
-    score nan, and all three read the same sentence whichever row comes first (only
-    pearson's count of pairs stops where it raised). Only a text that reports a crash
-    of the scoring step is no refusal: it stays an error that can be reported, and
-    its dialog takes HTML while its text can quote a cell of the file ("could not
-    convert string to float: '...'"). Quotes stay as they are, because the Step 1
+    score nan, and all three read the same sentence, with the same count of pairs,
+    whichever row comes first. It holds for a header that does not fit its rows
+    and for a row with a cell that is not a number, whatever the method. Only a
+    scoring step that failed on our side is no refusal: it stays an error that can
+    be reported, and its dialog takes HTML while its text can quote the files (the
+    pair it failed on, and the error). Quotes stay as they are, because the Step 1
     dialog encodes this text once more.
     """
     message, reportsACrash = _emptyResultExplanation(stats)
@@ -204,10 +346,11 @@ class MiRNA2GeneJob(Job):
         super(MiRNA2GeneJob, self).__init__(jobID, userID, CLIENT_TMP_DIR)
         self.omicName = None
         self.report               = "all" #all or DE
-        self.score_method         = "kendall" #fc OR kendall OR spearman OR pearson
+        self.score_method         = "kendall" #kendall OR spearman OR pearson; none when nothing could be scored
         self.selection_method     = "negative_correlation" #max_fc OR similar_fc OR abs_correlation OR positive_correlation OR negative_correlation
         self.cutoff               = -0.6
         self.enrichment           = "genes"
+        self.notice               = None #what a run that succeeded could not do, for the response
 
     def getOptions(self):
         return {
@@ -523,6 +666,13 @@ class MiRNA2GeneJob(Job):
         matchStats = run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
         logging.info("STARTING miRNA2Target PROCESS...Done")
         logging.info("miRNA2Target ACCOUNT: %s", matchStats)
+        # A run that stopped before the end left no output file, only its
+        # account. It used to leave the rows it had written, and only a run with
+        # no row at all was refused below, so a scoring step that stopped after
+        # one pair of three was reported as a success with a third of the result.
+        unfinished = unfinishedRunError(matchStats)
+        if unfinished is not None:
+            raise unfinished
         # Rows whose every score is nan are not results: nan > cutoff is False,
         # so such a run "succeeded" with zero relevant associations and no word
         # about why (two identical condition columns do this for kendall,
@@ -530,6 +680,15 @@ class MiRNA2GeneJob(Job):
         if isinstance(matchStats, dict) and matchStats.get("scored") \
                 and matchStats.get("nanScores") == matchStats.get("scored"):
             raise emptyResultError(matchStats)
+
+        # No score means no selection, so the stored options, the description and
+        # the results' Selection column say so, rather than naming a correlation
+        # that was never computed. nan > cutoff is False under every selection
+        # method below, so no pair is called relevant.
+        self.notice = noScoreNotice(matchStats)
+        if self.notice:
+            logging.info("MIRNA2GENES - %s", self.notice)
+            self.score_method = self.selection_method = NO_SCORE_METHOD
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")
@@ -551,9 +710,13 @@ class MiRNA2GeneJob(Job):
         # the correlation settings.
         useCorrelation = relevantReferenceFile is None or relevantReferenceFile == ''
 
+        if not os_path.isfile(tmpFile):
+            # miRNA2Target writes this file whenever it finishes, so this is ours.
+            raise Exception("The scoring step finished without writing its result file.")
+
         if os_path.isfile(tmpFile):
              with open(tmpFile, 'r') as inputDataFile:
-                mirnaID = geneID = score = methodsHasChanged = score_type = sortedScores = None
+                mirnaID = geneID = score = sortedScores = None
                 scoresTable = defaultdict(list)
 
                 csvReader = csv_reader(inputDataFile, delimiter="\t")
@@ -572,7 +735,6 @@ class MiRNA2GeneJob(Job):
                     mirnaID    = line[0].upper()
                     geneID     = line[1].upper()
                     score      = float(line[2])
-                    score_type = line[3]
                     # A list, not map(): on Python 3 map() is a one-shot
                     # iterator, and this goes on to OmicValue.setValues().
                     #
@@ -593,15 +755,13 @@ class MiRNA2GeneJob(Job):
                     # -- and the loss would be empty values, not an exception.
                     values     =  [float(value) for value in line[4:]]
 
-                    #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
-                    #correlation, the script will calculate the FC
                     isRelevant = mirnaID.lower() in relevantMiRNAS
                     isRelevantAssociation = False
 
                     if useCorrelation:
-                        if score_type != "fc" and self.selection_method == "negative_correlation":
+                        if self.selection_method == "negative_correlation":
                             score *= -1  #INVERT VALUES
-                        elif score_type != "fc" and self.selection_method == "abs_correlation":
+                        elif self.selection_method == "abs_correlation":
                             score = abs(score)
                         #TODO: SIMILAR FC SELECTION
 
@@ -650,10 +810,6 @@ class MiRNA2GeneJob(Job):
                     logging.info("MIRNA2GENES - NO RESULTS")
                     raise emptyResultError(matchStats)
 
-                #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
-                #correlation, the script will calculate the FC
-                methodsHasChanged = (score_type == "fc" and self.score_method != "fc")
-
                 #STEP 6. FOR EACH GENE, ORDER THE MIRNAS BY THE HIGHER CORRELATION OR FC
                 filePrefix = '' if self.getUserID() is not None else self.getJobID() + '_'
                 randomSeed = str(randint(0, 1000))
@@ -666,6 +822,8 @@ class MiRNA2GeneJob(Job):
                 regulatorRelevantAssociations = open(self.getTemporalDir() + '/' + filePrefix + "regulator_relevant_associations" + self.date + "_" + randomSeed + ".tab", 'w')
 
                 # PRINT HEADER
+                if self.notice:
+                    genesToMiRNAFile.write("# " + self.notice + "\n")
                 genesToMiRNAFile.write("# Gene name\tmiRNA ID\tDE\tScore\tSelection\n")
                 #TODO: RE-ENABLE THIS CODE
                 regulator2genesOutput.write("# Gene name\t"+ header + "\n")
@@ -701,7 +859,7 @@ class MiRNA2GeneJob(Job):
                         lineAux = geneID + "\t" + omicValue.getOriginalName() + "\t"
 
                         #Recover the original value for the score
-                        if not methodsHasChanged and self.selection_method == "negative_correlation":
+                        if self.selection_method == "negative_correlation":
                             score *= -1
 
                         #WRITE RESULTS TO genesToMiRNAFile FILE -->   gen_id mirna relevant score
@@ -739,12 +897,12 @@ class MiRNA2GeneJob(Job):
                     # user gets a plausible-looking result and finds out three
                     # steps later, from an error about identifier spaces that
                     # names nothing on one side.
-                    raise Exception(
-                        " - None of the %d target genes carried an identifier, so "
+                    raise InputFileError(
+                        "No target gene carried an identifier (%s read), so "
                         "every association row would have been written with an "
                         "empty name. Check that the second column of your "
                         "associations file holds the target gene ID."
-                        % skippedUnnamed)
+                        % _plural(skippedUnnamed, "target gene"))
 
                 genesToMiRNAFile.close()
                 regulator2genesOutput.close()

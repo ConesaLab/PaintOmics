@@ -153,6 +153,8 @@ test_metagenes_order_invariance	43.3
 test_metagenes_reads_hash_gene_symbols	0.5
 test_mirna2genes_validation	1.4
 test_mirna_header_alignment	0.1
+test_mirna_scoring_keeps_no_partial_result	1.8
+test_mirna_without_gene_expression_calls_nothing_relevant	2.8
 test_missing_origin_field	2.0
 test_mixed_width_omics_are_named	2.1
 test_model_fallback	3.3

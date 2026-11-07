@@ -167,8 +167,10 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         stats = run(targets, None, values, genes, self.out, "pearson")
         message = explainEmptyResult(stats)
         # Pairs read is the only large number quoted, and it is exactly the
-        # number of (regulator, target) pairs that survived the read.
-        self.assertIn("%d miRNA-target pairs" % stats["pairs"], message)
+        # number of (regulator, target) pairs that survived the read -- here one,
+        # which used to read "1 miRNA-target pairs were read".
+        self.assertEqual(stats["pairs"], 1)
+        self.assertIn("1 miRNA-target pair was read", message)
         self.assertNotIn("approximately", message.lower())
         self.assertNotIn("about ", message.lower())
 
@@ -202,7 +204,7 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         self.assertIsNone(stats.get("tooFewConditions"))
 
     def test_an_abort_is_not_reported_as_an_identifier_problem(self):
-        """The blanket handler keeps the partial file; it must not stay silent.
+        """A run that stopped is not "no results".
 
         A truncated run read as "no results" is exactly how a crash reached a
         user as a message about identifier spaces.
@@ -211,8 +213,8 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
                  "aborted": "x and y must have length at least 2",
                  "abortedAfterPairs": 22}
         message = explainEmptyResult(stats)
-        self.assertIn("stopped after 22", message)
-        self.assertIn("not a problem with your identifiers", message)
+        self.assertIn("failed on our side after 22 of 900 miRNA-target pairs", message)
+        self.assertNotIn("identifier", message)
 
     def test_a_join_that_produced_nothing_is_named_before_the_conditions(self):
         """The reporting user's files: one condition column AND targets that
