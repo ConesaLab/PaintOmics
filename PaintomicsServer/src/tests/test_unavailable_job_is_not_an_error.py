@@ -302,7 +302,8 @@ class AJobWithOnlyMetabolitesThatMatchedNothingTest(_AnswerCase):
         """Step 2 draws them all: one it cannot read left "Loading job information..."
         up with no Close, so it does not go on with the readable one beside it."""
         unreadable = {"omicName": "G2", "omicSummary": None}
-        for omics in ([GENE_OMIC, unreadable], [unreadable, GENE_OMIC], [GENE_OMIC, {"omicName": "G2"}], [GENE_OMIC, "None"]):
+        for omics in ([GENE_OMIC, unreadable], [unreadable, GENE_OMIC], [GENE_OMIC, {"omicName": "G2"}], [GENE_OMIC, "None"],
+                      [GENE_OMIC, GENE_OMIC, unreadable]):
             with self.subTest(omics=omics):
                 self.assertGeneDataCannotBeRead(self.recoverWithGeneOmics(omics))
 

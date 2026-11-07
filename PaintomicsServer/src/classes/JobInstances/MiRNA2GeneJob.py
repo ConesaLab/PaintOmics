@@ -96,8 +96,11 @@ def _emptyResultExplanation(stats):
             "of them appears in the first column of your targets/associations "
             "file. The two files have to use the same miRNA identifiers."
             % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
-    # 2. They joined, but not one target id exists in the expression file.
-    elif stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0):
+    # 2. They joined, but not one target id exists in the expression file. Scoring
+    #    only ever aborts on a target it found, before counting it as scored, so
+    #    after an abort a target missing earlier in the file is not the cause.
+    elif (stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0)
+          and not stats.get("aborted")):
         lines.append(
             "%d miRNA-target pairs were read, but not one target gene was found "
             "in your gene expression file, so no correlation could be computed."
@@ -179,12 +182,13 @@ def emptyResultError(stats):
 
     A refusal of the files, which the dialog encodes because the message quotes
     their first columns. That holds for a single condition column under every
-    method: pearson raises on it and kendall and spearman score nan, and all three
-    read the same sentence. Only a text that reports a crash of the scoring step is
-    no refusal: it stays an error that can be reported, and its dialog takes HTML
-    while its text can quote a cell of the file ("could not convert string to
-    float: '...'"). Quotes stay as they are, because the Step 1 dialog encodes this
-    text once more.
+    method: pearson raises on the first target it finds and kendall and spearman
+    score nan, and all three read the same sentence whichever row comes first (only
+    pearson's count of pairs stops where it raised). Only a text that reports a crash
+    of the scoring step is no refusal: it stays an error that can be reported, and
+    its dialog takes HTML while its text can quote a cell of the file ("could not
+    convert string to float: '...'"). Quotes stay as they are, because the Step 1
+    dialog encodes this text once more.
     """
     message, reportsACrash = _emptyResultExplanation(stats)
     if reportsACrash:

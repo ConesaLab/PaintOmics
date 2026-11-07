@@ -301,6 +301,13 @@ ROWS = {"values": [["#miRNA", "C1", "C2"], [HOSTILE_MIRNA, "0.1", "0.4"], ["<NA>
 ONE_CONDITION = {"values": [["#miRNA", "C1"], ["hsa-miR-1", "0.1"], ["hsa-miR-2", "0.2"]],
                  "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G2"]],
                  "genes": [["#gene", "C1"], ["G1", "1.0"], ["G2", "2.0"]]}
+METHODS = ("pearson", "kendall", "spearman")
+# One target missing and one found. The scoring loop follows the values file, miRNA
+# by miRNA, so the second row is the first swapped and scored in the same order; the
+# third is the order that does change what is scored first.
+ONE_MISSING_TARGET = ([["hsa-miR-1", "NOPE"], ["hsa-miR-2", "G2"]],
+                      [["hsa-miR-2", "G2"], ["hsa-miR-1", "NOPE"]],
+                      [["hsa-miR-1", "G2"], ["hsa-miR-2", "NOPE"]])
 
 
 def _miRNAToolAnswer(rows, relevant=(), method="kendall"):
@@ -377,8 +384,50 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
             return real(matchStats)
         with mock.patch.object(MiRNA2GeneJob_module, "emptyResultError", spy):
             _miRNAToolAnswer(ONE_CONDITION, method="pearson")
+            self.assertIn("at least 2", stats.get("aborted", ""))
+            self.assertEqual(stats.get("tooFewConditions"), 1)
+            stats.clear()
+            _miRNAToolAnswer(dict(ONE_CONDITION, targets=ONE_MISSING_TARGET[0]), method="pearson")
         self.assertIn("at least 2", stats.get("aborted", ""))
-        self.assertEqual(stats.get("tooFewConditions"), 1)
+        self.assertEqual((stats.get("scored"), stats.get("unmatchedTargets")), (0, 1))
+
+    def test_a_missing_target_does_not_hide_a_single_condition(self):
+        """Pearson aborts on the first target it finds, before counting it as scored, so
+        a target missing earlier in the file looked like no target found at all."""
+        for targets in ONE_MISSING_TARGET:
+            for method in METHODS:
+                with self.subTest(method=method, targets=targets):
+                    answer = _miRNAToolAnswer(dict(ONE_CONDITION, targets=targets), method=method)
+                    self.assertEqual(answer.status, 400)
+                    self.assertIs(answer.content["extra"]["input_error"], True)
+                    self.assertIn("Your data has 1 condition column", answer.content["message"])
+                    self.assertNotIn("not one target gene was found", answer.content["message"])
+                    self.assertNotIn("The scoring step stopped", answer.content["message"])
+
+    def test_a_missing_target_does_not_hide_a_crash(self):
+        """A target was found and scoring crashed on it, whichever row comes first."""
+        for targets in (["NOPE", "#gene"], ["#gene", "NOPE"]):
+            for method in METHODS:
+                with self.subTest(method=method, targets=targets):
+                    answer = self._crashed(method, targets)
+                    self.assertEqual(answer.status, 400)
+                    self.assertIs(answer.content["extra"]["input_error"], False)
+                    self.assertIn("The scoring step stopped", answer.content["message"])
+                    self.assertNotIn("not one target gene was found", answer.content["message"])
+
+    def test_targets_that_are_all_missing_are_still_refused(self):
+        twoConditions = {"values": [["#miRNA", "C1", "C2"], ["hsa-miR-1", "0.1", "0.4"], ["hsa-miR-2", "0.2", "0.9"]],
+                         "genes": [["#gene", "C1", "C2"], ["G1", "1.0", "2.0"]]}
+        for rows, conditionsNote in ((ONE_CONDITION, True), (twoConditions, False)):
+            for targets in ([["hsa-miR-1", "NOPE1"], ["hsa-miR-2", "NOPE2"]], [["hsa-miR-2", "NOPE2"], ["hsa-miR-1", "NOPE1"]]):
+                for method in METHODS:
+                    with self.subTest(method=method, targets=targets, conditionsNote=conditionsNote):
+                        answer = _miRNAToolAnswer(dict(rows, targets=targets), method=method)
+                        self.assertEqual(answer.status, 400)
+                        self.assertIs(answer.content["extra"]["input_error"], True)
+                        self.assertIn("2 miRNA-target pairs were read, but not one target gene was found",
+                                      answer.content["message"])
+                        self.assertEqual("Once the targets match" in answer.content["message"], conditionsNote)
 
     def test_the_error_goes_by_what_the_text_explains(self):
         """An abort under a sentence about the files is a refusal; the crash text is not."""
@@ -386,16 +435,19 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
         for name, stats, sentence in (
                 ("no data rows", dict(aborted, regulators=0), "has no data rows"),
                 ("no pairs", dict(aborted, pairs=0), "none of them appears"),
-                ("no target found", dict(aborted, unmatchedTargets=2), "not one target gene was found"),
-                ("too few conditions", dict(aborted, tooFewConditions=1), "1 condition column")):
+                ("too few conditions", dict(aborted, tooFewConditions=1), "1 condition column"),
+                ("too few conditions, a target missing", dict(aborted, tooFewConditions=1, unmatchedTargets=1),
+                 "1 condition column")):
             with self.subTest(name):
                 error = emptyResultError(stats)
                 self.assertIsInstance(error, InputFileError)
                 self.assertIn(sentence, str(error))
                 self.assertNotIn("boom", str(error))
-        crash = emptyResultError(aborted)
-        self.assertNotIsInstance(crash, InputFileError)
-        self.assertIn("stopped after 2 miRNA-target pairs with: boom", str(crash))
+        for stats in (aborted, dict(aborted, unmatchedTargets=1)):
+            crash = emptyResultError(stats)
+            self.assertNotIsInstance(crash, InputFileError)
+            self.assertIn("stopped after 2 miRNA-target pairs with: boom", str(crash))
+        self.assertIsInstance(emptyResultError(dict(aborted, aborted=None, unmatchedTargets=2)), InputFileError)
 
     def test_a_scoring_step_that_crashed_is_not_a_refusal(self):
         """It says it is not a problem with the identifiers, so it keeps Report error.
@@ -422,11 +474,11 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
     def test_stats_that_are_not_there_are_still_a_refusal(self):
         self.assertIsInstance(emptyResultError(None), InputFileError)
 
-    def _crashed(self, method="kendall"):
+    def _crashed(self, method="kendall", targets=("#gene",)):
         """A target named as the gene file's header row is scored on its cell text."""
         return _miRNAToolAnswer({
             "values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"]],
-            "targets": [["mmu-miR-1", "#gene"]],
+            "targets": [["mmu-miR-1", target] for target in targets],
             "genes": [["#gene", HOSTILE_MIRNA, "C2"], ["G1", "1.0", "2.0"]]}, method=method)
 
 
@@ -633,6 +685,10 @@ class ThePreparationDialogWordsItToo(unittest.TestCase):
         running job's dialog through jobLabel, and the line above."""
         self.assertEqual(re.findall(r"var omicLabel = ([^;]+);", self.source), ["step1OmicLabelAsHtml(itemsContainer)"])
         self.assertIn('"<b>" + omicLabel + "</b>: " + parsedMessage', self.source)
+        # What comes before " (conversion job": the running title, then waiting, finished, failed.
+        self.assertEqual(re.findall(r'(\S+) \+ " \(conversion job "', self.source),
+                         ["other.jobLabel", "omicLabel", "omicLabel", "omicLabel"])
+        self.assertIn('jobLabel: "Preparing " + omicLabel}', self.source)
 
     def test_a_refused_preparation_is_counted(self):
         self.assertRegex(self.source, r"function step1FailureIsInputRefusal\(response\)")
