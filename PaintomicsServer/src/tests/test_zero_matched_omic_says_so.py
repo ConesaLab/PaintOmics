@@ -112,7 +112,8 @@ class ZeroMatchedOmicSaysSoTest(unittest.TestCase):
             self.assertNotIn("remove the suffix", message, (organism, samples[0]))
             self.assertIn("Check the organism", message, (organism, samples[0]))
             self.assertIn("They look like %s identifiers" % named, message, (organism, samples[0]))
-            self.assertIn("go back to step 1 and choose that organism", message, (organism, samples[0]))
+            # Its index holds none of them: _Lookup answers 0 for every organism.
+            self.assertIn("Choosing that organism in step 1 may not be enough", message, (organism, samples[0]))
 
     def test_the_transcript_advice_needs_every_sample_to_be_one(self):
         for organism, samples in (("psat", ["Psat.cameor.v2.1g306350", "Psat.cameor.v2.3g10100", "Psat.cameor.v2.7g337900"]),

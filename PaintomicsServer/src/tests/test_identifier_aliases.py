@@ -1488,7 +1488,10 @@ class OrganismHintTest(unittest.TestCase):
         self.assertEqual("pattern", result["method"])
         self.assertEqual("zma", result["confident"]["code"])
         pattern = re.compile(next(regex for regex, codes, _ in od._PATTERN_TABLE if regex.startswith("Zm00001")))
-        for identifier in ("Zm00001d027230", "Zm00001e000010", "Zm00001d027230_T1"):
+        # v5 ids carry Zm00001eb (Ensembl's NAM-5.0 build, the one zma holds), or
+        # Zm00001e in MaizeGDB's preliminary annotation of the same genome.
+        for identifier in ("Zm00001d027230", "Zm00001eb000010", "Zm00001eb000010_P001", "Zm00001e000001",
+                           "Zm00001e009486_T001", "Zm00001d027230_T1"):
             self.assertTrue(pattern.fullmatch(identifier), identifier)
         # A suffix of another shape, or letters where the number goes, is not a maize transcript.
         for identifier in ("Zm00001d027230_P001", "Zm00001d027230_T", "Zm00001d027230_T001.1", "zm00001d027230_T001",

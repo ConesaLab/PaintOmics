@@ -14,7 +14,7 @@ their classification badges, which are drawn once it stops.
 
 ![The pathways network](img/ui/step3-pathway-network.png)
 
-*The KEGG network of the STATegra example: 66 of the 364 matched pathways drawn, 162 edges, nodes coloured by classification, with the Visual settings pane on the right.*
+*The KEGG network of the STATegra example: 66 of the 363 matched pathways drawn, 162 edges, nodes coloured by classification, with the Visual settings pane on the right. The screenshot is older and reads 66 of 364: it counted KEGG's global map, which the network does not draw.*
 
 ## What a node is
 
@@ -55,7 +55,7 @@ canvas pans and zooms.
 The line under the toolbar says exactly what was drawn, so a graph that is
 nearly empty can be told from one that failed to build:
 
-> **66** of 364 KEGG pathways · **162** edges — linked biological processes · p ≤ 0.05
+> **66** of 363 KEGG pathways · **162** edges — linked biological processes · p ≤ 0.05
 
 In shared-features mode it also carries the similarity threshold. If there are
 nodes but no edges at all it adds a warning that no pathway pair passed the

@@ -137,19 +137,20 @@ L-alanine, D-alanine and β-alanine are four separate KEGG compounds in
 different pathways, and the exact-name match is not automatically the one you
 measured.
 
-## Step 3 — 1,007 pathways found, 114 significant
+## Step 3 — 1,006 pathways found, 114 significant
 
 ![The pathways summary](img/ui/step3-pathways-summary.png)
 
 *The summary at the top of the results screen, with the per-database
-breakdown.*
+breakdown. The screenshot is older and reads 1,007, and 364 for KEGG: it
+counted KEGG's global map, which the table does not list.*
 
 | Database | Found | Significant |
 |---|---|---|
-| KEGG | 364 | 71 |
+| KEGG | 363 | 71 |
 | OmniPath | 120 | 10 |
 | Reactome | 523 | 33 |
-| **Total** | **1,007** | **114** |
+| **Total** | **1,006** | **114** |
 
 "Found" means the pathway contains at least one feature you uploaded and
 PaintOmics matched. "Significant" means a p-value of 0.05 or less — a fixed
@@ -172,7 +173,8 @@ tool that makes it tractable.
 
 ![The pathway network](img/ui/step3-pathway-network.png)
 
-*66 of the 364 KEGG pathways, joined by 162 edges, filtered to p ≤ 0.05.*
+*66 of the 363 KEGG pathways, joined by 162 edges, filtered to p ≤ 0.05. The
+screenshot is older and reads 66 of 364: it counted KEGG's global map.*
 
 The filter that draws this view keeps pathways at p ≤ 0.05 and edges where two
 pathways share enough features. What it shows is that the 71 significant KEGG
@@ -280,7 +282,7 @@ measurement, not the absence of an effect.** Reporting "metabolomics does not
 support purine involvement" from this cell would be wrong.
 
 The combined p-value in the enrichment table pools all five of these columns.
-It is useful for ranking 1,007 pathways down to something readable; it is not a
+It is useful for ranking 1,006 pathways down to something readable; it is not a
 substitute for this table. Read the per-omic columns of any pathway you intend
 to make a claim about — the combination cannot tell you that two of its five
 inputs were carried by four compounds and one flagged protein.

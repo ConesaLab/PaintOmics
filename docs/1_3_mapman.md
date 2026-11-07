@@ -31,9 +31,12 @@ NCBI-gene-id conversion for `dosa` and the gene-to-bin cross-link has nothing to
 join through. If you work on rice and want MapMan diagrams, choose the organism
 whose code is `osa`.
 
-Sugar beet (`bvu`) has a MapMan build but no MapMan identifier mapping in the
-shipped configuration, so its **MapMan** checkbox stays disabled and only its
-KEGG pathways are analysed.
+Sugar beet is not on the list. GoMapMan publishes a sugar beet export under the code
+`bvu`, but in KEGG `bvu` is the gut bacterium *Phocaeicola vulgatus*, and the
+build that installed the export under that code was removed in September 2026
+for putting plant pathways into a bacterium. `bvu` is now KEGG only, like any
+other bacterium. KEGG's own sugar beet code is `bvg`, and GoMapMan's sugar beet
+gene ids have no link to its genes.
 
 As with the other optional databases, whether *your* server has MapMan installed
 for the organism you picked is what the Step 1 checkbox says: tickable when it

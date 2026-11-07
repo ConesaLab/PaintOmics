@@ -118,7 +118,7 @@ below lists every database at once and can be filtered by database from its
 **Databases to view** tick-boxes. The summary band above the tabs reports how
 many pathways each database contributed and how many of them were significant —
 in the STATegra mouse example, 523 Reactome pathways of which 33 were
-significant, beside 364 KEGG pathways of which 71 were.
+significant, beside 363 KEGG pathways of which 71 were.
 
 For how the four databases differ, see the comparison table on
 [the KEGG page](1_1_kegg.md).

@@ -42,6 +42,22 @@ function paStep3NormaliseColorBy(visualOptions) {
 	return visualOptions;
 }
 
+/**
+* KEGG's global Metabolic pathways map, <organism>01100. The server sends it
+* with every other matched pathway, and Step 3 leaves it out of the enrichment
+* table and the network: it draws most of metabolism at once, so it is enriched
+* in almost every job and tells you nothing (4_1_pathway_enrichment.md).
+*
+* Every count on the page leaves it out as well. "Pathways found" counted it
+* while the table did not list it, so a job read one pathway more in the card
+* than it had rows below, and "Significant" one more whenever it passed. The id
+* is the organism code followed by 01100 on every installed species (3,262 of
+* the 3,263 on paintomics.org carry the map, all under that id; 2026-11-07).
+*/
+var paStep3IsGlobalMap = function (pathwayID, organism) {
+	return !!organism && pathwayID === organism + "01100";
+};
+
 function PA_Step3JobView() {
 	/**
 	* About this view: this view (PA_Step3JobView) is used to visualize an instance for a Pathway acquisition
@@ -419,7 +435,7 @@ function PA_Step3JobView() {
 			this.pathwayNetworkViews[db].loadModel(model);
 
 			// Determine if the table for the DB is filtered or not
-			this.isFiltered[db] = (this.model.getPathwaysByDB(db).length != this.getTotalVisiblePathways(db).visible);
+			this.isFiltered[db] = this.isDatabaseFiltered(db);
 		}).bind(this));
 
 		if (this.getModel().isRecoveredJob && this.getModel().getStepNumber() === 3) {
@@ -479,12 +495,22 @@ function PA_Step3JobView() {
 		}).bind(this));
 	};
 
+	/**
+	* The counts the summary card and the network show, over the pathways the
+	* table can list (the global map is not one, see paStep3IsGlobalMap):
+	* `listed` every one of them, `visible` those the category filter shows,
+	* `significative` the visible ones at p <= 0.05.
+	*/
 	this.getTotalVisiblePathways = function(db){
+		var listed = 0;
 		var visible = 0;
 		var significative = 0;
 		var pathways = (db == undefined ? this.getModel().getPathways() : this.getModel().getPathwaysByDB(db));
+		var organism = this.getModel().getOrganism();
 		var combinedMethod = this.visualOptions.selectedCombinedMethod;
 		for (var i in pathways) {
+			if (paStep3IsGlobalMap(pathways[i].getID(), organism)) continue;
+			listed++;
 			visible += (pathways[i].isVisible() ? 1 : 0);
 			if (!pathways[i].isVisible()) continue;
 
@@ -509,10 +535,26 @@ function PA_Step3JobView() {
 		}
 
 		var visiblePathways = {
+			listed: listed,
 			visible: visible,
 			significative : significative
 		};
 		return visiblePathways;
+	};
+
+	/**
+	* Whether the category filter hides any of this database's pathways, which
+	* is what sends the adjusted p-values back to the server to be recomputed
+	* over the visible rows. Asked of every pathway the server sent, the global
+	* map included: the server adjusted the p-values over a set that holds it,
+	* so hiding it is a filter like any other even though no row or count shows
+	* it. This is exactly what comparing the pathway total with the visible
+	* count said while the visible count still included the map.
+	*/
+	this.isDatabaseFiltered = function(db){
+		return this.getModel().getPathwaysByDB(db).some(function(pathway) {
+			return !pathway.isVisible();
+		});
 	};
 
 	/*********************************************************************
@@ -709,7 +751,7 @@ function PA_Step3JobView() {
 		if(caller === "PA_Step3PathwayClassificationView"){
 			/* Mark databases as filtered or not */
 			this.model.databases.forEach(function(db) {
-				me.isFiltered[db] = (me.model.getPathwaysByDB(db).length != me.getTotalVisiblePathways(db).visible);
+				me.isFiltered[db] = me.isDatabaseFiltered(db);
 			});
 
 			/********************************************************/
@@ -1258,7 +1300,12 @@ function PA_Step3JobView() {
 					style: "max-width:1900px; margin: 5px 10px; margin-top:50px;",
 					html:
 					'<div class="po-band-head">' +
-					'  <h2>Pathways summary<span class="helpTip" title="Each pathway is scored per submitted omic type: its significance comes from how many of its features (genes and compounds) are present in your input, against the total the pathway contains. When two or more omic types are submitted, a Combined Significance Value ranks pathways across all of them."></span></h2>' +
+					'  <h2>Pathways summary<span class="helpTip" title="Each pathway is scored per submitted omic type: its significance comes from how many of its features (genes and compounds) are present in your input, against the total the pathway contains. When two or more omic types are submitted, a Combined Significance Value ranks pathways across all of them.' +
+					// Said where the counts are, because the KEGG tab's category
+					// tree still lists the map (paStep3IsGlobalMap).
+					((me.getModel().getDatabases().indexOf("KEGG") === -1) ? '' :
+					' The counts leave out KEGG\'s global map, Metabolic pathways (01100), which the table does not list and the network does not draw.') +
+					'"></span></h2>' +
 					'  <span id="jobName" class="po-job-name" style="display: none"></span>' +
 					'  <div class="po-band-actions">' +
 					'    <span class="po-job-chip">Job <b id="jobIdField">&mdash;</b>' +
@@ -2407,13 +2454,13 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			/* STEP 1.A.1 EXCLUDE NODE IF:                           */
 			/*  - If elem is not a NODE                             */
 			/*  - If node is a classification or is not a pathway   */
-			/*  - Is a special case (e.g. mmu01100)                 */
+			/*  - Is the global map (paStep3IsGlobalMap)            */
 			/*  - If is not visible                                 */
 			/********************************************************/
 			if ((elem.group !== "nodes") ||
 			(elem.data.is_classification !== undefined) ||
 			(matchedPathway === undefined) ||
-			(elem.data.id === this.getModel().getOrganism() + "01100") ||
+			paStep3IsGlobalMap(elem.data.id, this.getModel().getOrganism()) ||
 			(!matchedPathway.isVisible())){
 				ignoredPathways[elem.data.id] = true;
 				continue;
@@ -2586,13 +2633,13 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				/*  - If source/target were ignored previously          */
 				/*  - If source/target are not valid pathways           */
 				/*  - If source/target are not visible                  */
-				/*  - Is source/target are special cases (e.g. mmu01100)*/
+				/*  - Its source or target is the global map            */
 				/********************************************************/
 				if ((elem.group !== "edges") || (elem.data.class !== visualOptions.edgesClass) ||
 				(ignoredPathways[elem.data.source] || ignoredPathways[elem.data.target]) ||
 				(indexedPathways[elem.data.source] === undefined || indexedPathways[elem.data.target] === undefined) ||
 				(!indexedPathways[elem.data.source].isVisible() || !indexedPathways[elem.data.target].isVisible()) ||
-				(elem.data.source === this.getModel().getOrganism() + "01100" || elem.data.target === this.getModel().getOrganism() + "01100")) {
+				(paStep3IsGlobalMap(elem.data.source, this.getModel().getOrganism()) || paStep3IsGlobalMap(elem.data.target, this.getModel().getOrganism()))) {
 					continue;
 				}
 
@@ -2605,8 +2652,11 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		/********************************************************/
 		/* STEP 2.C DESCRIBE WHAT WAS ACTUALLY DRAWN            */
 		/********************************************************/
+		/* "of M" is the pathways the table can list for this database, the
+		   count the summary card uses: every key of indexedPathways read one
+		   more on KEGG, the global map, which is never a node either. */
 		me.updateNetworkSubtitle(nodesAux.length, edgesAux.length,
-			Object.keys(indexedPathways).length, visualOptions);
+			me.getParent().getTotalVisiblePathways(me.database).listed, visualOptions);
 
 		/********************************************************/
 		/* STEP 3. GENERATE THE NETWORK                         */
@@ -2975,7 +3025,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	*
 	* @param {Number} nodeCount    pathways drawn
 	* @param {Number} edgeCount    edges drawn
-	* @param {Number} totalPathways pathways this database matched at all
+	* @param {Number} totalPathways pathways the table can list for this database
 	* @param {Object} visualOptions the filter state the counts came from
 	* @chainable
 	* @returns {PA_Step3PathwayNetworkView}
@@ -4973,8 +5023,8 @@ function PA_Step3PathwayTableView() {
 		for (var i in pathways) {
 			pathwayModel = pathways[i];
 
-			//NOTE: IGNORE Metabolic pathways (HUGE PATHWAY)
-			if (pathwayModel.getID() === this.getModel().getOrganism() + "01100") {
+			// The global map is never a row, and never counted (paStep3IsGlobalMap).
+			if (paStep3IsGlobalMap(pathwayModel.getID(), this.getModel().getOrganism())) {
 				continue;
 			}
 

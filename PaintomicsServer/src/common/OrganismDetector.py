@@ -148,12 +148,39 @@ _PATTERN_TABLE = [
     (r"AT[1-5CM]G\d{5}(?:\.\d+)?", ("ath",), "Arabidopsis thaliana"),
     (r"Os\d{2}g\d{7}", ("dosa", "osa"), "Oryza sativa japonica"),
     (r"LOC_Os\d{2}g\d{5}", ("osa", "dosa"), "Oryza sativa japonica"),
-    # A v4 transcript's _T001 names the organism as surely as the gene does.
-    (r"Zm00001[de]\d{6}(?:_T\d+)?", ("zma",), "Zea mays"),
+    # Maize B73, in one expression so a file that mixes versions still reaches
+    # PATTERN_FRACTION:
+    #   RefGen_v4    Zm00001d027230, which zma accepts through
+    #                common_resources/identifier_aliases/zma.tsv.gz; a transcript's
+    #                _T001 names the organism as surely as the gene does
+    #   NAM-5.0      Zm00001eb000010, its transcripts _T001 and proteins _P001: the
+    #                build zma carries from Ensembl (39,771 genes and 145,097
+    #                transcripts and proteins on paintomics.org, 2026-11-07, every
+    #                one of this form)
+    #   preliminary  Zm00001e000001, _T001, _P001: MaizeGDB's first NAM-5.0
+    #                annotation, replaced by the one above and kept in its archive
+    #                with 41,576 genes. zma holds none of them, but they are maize.
+    (r"Zm00001(?:d\d{6}(?:_T\d+)?|eb?\d{6}(?:_[TP]\d+)?)", ("zma",), "Zea mays"),
     (r"GRMZM\d?G\d{6}", ("zma",), "Zea mays"),
     (r"Solyc\d{2}g\d{6}(?:\.\d+)?", ("sly",), "Solanum lycopersicum"),
     (r"Glyma\.?\d{2}[Gg]\d{6}", ("gmx",), "Glycine max"),
     (r"Potri\.\d{3}G\d{6}", ("pop",), "Populus trichocarpa"),
+    # Grape. These are the forms seen in real data on 2026-11-07, not every form
+    # ever published:
+    #   PN_T2T, Ensembl Plants 61 on     Vitis01g00541, .t01, .t01.CDS
+    #   PN40024.v4, releases 53-60       Vitvi18g00828, _t001, _P001
+    #   12X, releases up to 52           VIT_00s0125g00090, .t01
+    #   PN40024.gnm2.ann1.V31M, Legume
+    #   Information System               VIT_201s0011g00010, .1
+    #   NCBI locus tags                  VIT_00032725001
+    #   UniProt gene names, taxon 29760  VitviT2T_000244, Vv19s0014g04930,
+    #                                    GSVIVT00014047001, VITISV_008354
+    # vvi's Ensembl build is PN_T2T, so only the first form is in its identifier
+    # index; the others are grape all the same, and describeHint says how many it
+    # found in the index rather than promising a match.
+    (r"Vitis\d{2}g\d{5}(?:\.t\d+(?:\.CDS)?)?|VitviT2T_\d{6}|Vitvi\d{2}g\d{5}(?:_[tP]\d+)?"
+     r"|VIT_\d{2}s\d{4}g\d{5}(?:\.t\d+)?|VIT_2\d{2}s\d{4}g\d{5}(?:\.\d+)?|VIT_\d{11}"
+     r"|Vv\d{2}s\d{4}g\d{5}|GSVIVT\d{11}|VITISV_\d{6}", ("vvi",), "Vitis vinifera"),
     # Cameor v2 gene ids (Psat.cameor.v2.1g00050, Psat.cameor.v2.0s1040g10400),
     # which psat accepts through common_resources/identifier_aliases/psat.tsv.gz.
     # A transcript's .1 names the organism as surely as the gene does.
@@ -353,9 +380,16 @@ def openLookup():
 
 # --- Decision ---------------------------------------------------------------
 
-def _candidate(code, hits, total, names, method):
+def _candidate(code, indexHits, total, names, method):
+    """One organism's score. `indexHits` is how many identifiers its identifier
+    index holds, or None when the index gave no answer (no lookup, or one that
+    failed or timed out), which is not the same as 0. `hits` starts as that
+    number and `counted` says what it counts: "index", or "form" once a pattern
+    has raised it (see the pattern layer in detectOrganism)."""
+    hits = indexHits or 0
     return {"code": code, "name": names.get(code, code), "hits": hits, "total": total,
-            "fraction": (hits / float(total)) if total else 0.0, "method": method}
+            "fraction": (hits / float(total)) if total else 0.0, "method": method,
+            "counted": "index", "indexHits": indexHits}
 
 
 def decide(scored):
@@ -387,7 +421,8 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
     names         override of speciesNames() (tests)
 
     Result keys, all always present:
-      selected     {code, name, hits, total, fraction} or None
+      selected     {code, name, hits, total, fraction, method, counted, indexHits}
+                   or None; every candidate has the same keys (see _candidate)
       selectedOk   True when the chosen organism recognises enough -- say nothing
       confident    the one organism the sample fits, or None
       candidates   ranked list to show (the winner, or the tie), possibly empty
@@ -415,13 +450,14 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
         total = len(sample)
 
         def score(code, method):
-            try:
-                hits = lookup.hits(code, sample) if lookup is not None else 0
-            except Exception as ex:
-                logging.warning("OrganismDetector: lookup of %s failed (%s: %s)", code,
-                                type(ex).__name__, ex)
-                hits = 0
-            return _candidate(code, hits, total, names, method)
+            indexHits = None
+            if lookup is not None:
+                try:
+                    indexHits = lookup.hits(code, sample)
+                except Exception as ex:
+                    logging.warning("OrganismDetector: lookup of %s failed (%s: %s)", code,
+                                    type(ex).__name__, ex)
+            return _candidate(code, indexHits, total, names, method)
 
         # 1. The chosen organism first: the common case ends here, one query.
         if selected and selected in installedSet:
@@ -450,11 +486,16 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
                     # numbers. An xref without that namespace must not silence a
                     # definitional prefix -- but then hits and fraction have to
                     # move together, or the sentence reads "(0 of 120 matched)"
-                    # while claiming the organism.
+                    # while claiming the organism. And the count is then the
+                    # pattern's, not the index's: maize v4 transcript ids
+                    # (Zm00001d027230_T001) are in no identifier index, and
+                    # describeHint used to report all 150 of them as matching
+                    # zma's. `counted` and `indexHits` carry the difference.
                     floor = int(round(fraction * total))
                     if candidate["hits"] < floor:
                         candidate["hits"] = floor
                         candidate["fraction"] = candidate["hits"] / float(total)
+                        candidate["counted"] = "form"
                     scored.append(candidate)
                 confident, candidates = decide(scored)
                 result.update(confident=confident, candidates=candidates, method="pattern")
@@ -496,16 +537,37 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
 # --- Wording shared by the form hint and the failure message ----------------
 
 def describeHint(result):
-    """One plain sentence for a step 2 failure message, or None when there is
-    nothing worth saying. The client renders its own richer version."""
+    """Plain words for a step 2 failure message, or None when there is nothing
+    worth saying. The client renders its own richer version."""
     if not result or not result.get("success") or result.get("selectedOk"):
         return None
     confident = result.get("confident")
     if confident:
-        return ("They look like %s identifiers (%d of %d match its identifier index): go "
-                "back to step 1 and choose that organism." % (confident["name"],
-                                                              confident["hits"],
-                                                              confident["total"]))
+        name, hits, total = confident["name"], confident["hits"], confident["total"]
+        choose = "go back to step 1 and choose that organism."
+        if confident.get("counted") != "form":
+            return ("They look like %s identifiers (%d of %d match its identifier index): %s"
+                    % (name, hits, total, choose))
+        # A pattern counted these, so say so, and say what the index found:
+        # "150 of 150 match its identifier index" for transcript ids the index
+        # does not hold is the sentence this replaces.
+        form = "%d of %d have the form of its identifiers" % (hits, total)
+        indexed = confident.get("indexHits")
+        if indexed is None:
+            # The index gave no answer, so there is nothing to say about it.
+            return "They look like %s identifiers (%s): %s" % (name, form, choose)
+        if indexed == 0:
+            # Choosing the organism would get these ids no further on its own.
+            # Some have a way in from there: a suffix to remove, which the step 2
+            # message on that organism explains (Zm00001d027230_T001). Others have
+            # none: grape's VIT_00s0125g00090, a genome version vvi does not hold.
+            # Nothing here can tell them apart, so this says what is true of both.
+            return ("They look like %s identifiers (%s, but none is in its identifier index). "
+                    "Choosing that organism in step 1 may not be enough: PaintOmics may hold "
+                    "another genome version or kind of identifier for it." % (name, form))
+        inIndex = "1 is" if indexed == 1 else "%d are" % indexed
+        return ("They look like %s identifiers (%s, %s in its identifier index): %s"
+                % (name, form, inIndex, choose))
     candidates = result.get("candidates") or []
     if len(candidates) >= 2:
         return ("They look like %s identifiers: go back to step 1 and choose the one your "
