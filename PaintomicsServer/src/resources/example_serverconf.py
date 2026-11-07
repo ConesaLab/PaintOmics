@@ -109,6 +109,14 @@ MAX_JOB_DAYS              = 14     # jobs belonging to a registered account
 # GUEST ACCOUNT itself survives without being logged into. Its jobs are already
 # gone long before this, under MAX_GUEST_JOB_DAYS.
 MAX_GUEST_DAYS            = 90
+
+# Whether the daily cleaning run also deletes old files of anonymous and guest
+# work that no job in the database uses (clean_databases.sweepExpiredFiles). Off
+# unless a site turns it on, because the first run on a long-lived server
+# deletes a lot for good: 22,000 entries and 17 GB on paintomics.org. While it
+# is off each run logs what it would delete; `clean_databases --dry-run` lists
+# it. Removing expired jobs is not behind this.
+SWEEP_ORPHAN_FILES = os.getenv("PAINTOMICS_SWEEP_ORPHAN_FILES", "0").strip().lower() in ("1", "true")
 MAX_NUMBER_FEATURES       = 1000000
 
 # ========== MONGO DB SETTINGS ==========

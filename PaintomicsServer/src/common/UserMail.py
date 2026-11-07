@@ -10,9 +10,11 @@ address:
 2. It sends nothing to a guest account. Their addresses are made up
    (``guest12345@`` the site's ``PAINTOMICS_EMAIL_DOMAIN``), so every message
    to one is a bounce.
-3. When the mail server refuses the address while sending
-   (``Util.RecipientRejected``, a 5xx answer to RCPT TO), it turns mail off for
-   that account, so the next run does not try again.
+3. When the mail server refuses the address while sending, as one that will
+   never work (``Util.RecipientRejected``: "550 5.1.1 no such user" and the
+   like, see ``Util._deadAddressRefusal``), it turns mail off for that
+   account, so the next run does not try again. A full mailbox or a refusal
+   by policy does not turn anything off; it fails like any other send.
 
 Point 3 catches little in practice. Gmail's SMTP, which paintomics.org sends
 through, accepts an address that does not exist and bounces it later, as a

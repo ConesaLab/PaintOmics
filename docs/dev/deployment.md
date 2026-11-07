@@ -194,9 +194,13 @@ docker exec -w /app/PaintomicsServer paintomics-app-1 \
 `status <address>` shows the switch, `list` shows every account that has it,
 and `enable <address>` turns mail back on. Nothing else about the account
 changes: the user can still sign in and their jobs are kept. Every message to a
-user goes through `src/common/UserMail.py`, which honours the switch, and an
-address the SMTP server refuses while sending (a 5xx answer) is switched off
-automatically. Guest accounts are never mailed: their addresses are made up.
+user goes through `src/common/UserMail.py`, which honours the switch. An
+address the SMTP server refuses while sending as one that does not exist (for
+example `550 5.1.1`) is switched off automatically; a full mailbox (`552`) or a
+refusal by policy (`5.7.x`) is not, and is tried again the next day. Guest
+accounts are never mailed: their addresses are made up. Someone whose mail is
+off and who asks for a password reset is told that no mail was sent and to write
+to `EMAIL_FROM_ADDRESS`, so `enable` is what brings their reset mail back.
 
 ## Retention
 
@@ -206,14 +210,44 @@ admin panel's *Clean databases* button) removes anonymous and guest jobs after
 from the day the job was last opened. Registered users get one warning a day at
 most, listing every job that is due to go.
 
-It also removes files under `CLIENT_TMP/nologin` that no job in the database
-owns or names and that are older than `MAX_GUEST_JOB_DAYS`. Preview a run
-without changing anything:
+A second part of the same run deletes old files that no job uses. It is **off
+unless `PAINTOMICS_SWEEP_ORPHAN_FILES=1` is set**, because what it deletes cannot
+be brought back. It looks in `CLIENT_TMP/nologin` and in each guest account's
+folder, at uploads, result folders and scratch folders, and takes what no job in
+the database uses and what was last changed more than `MAX_GUEST_JOB_DAYS` ago,
+with the guest's *My data* entries for the uploads it removes. Registered
+accounts' folders are not looked at. While it is off, each run deletes none of
+this and logs one line:
+
+```text
+would delete 22669 entries, 17.60 GB; the orphan file sweep is off (PAINTOMICS_SWEEP_ORPHAN_FILES)
+```
+
+Read the full list without changing anything, whatever the setting says:
 
 ```bash
 docker exec -w /app/PaintomicsServer paintomics-app-1 \
     python -m src.AdminTools.scripts.clean_databases --dry-run
 ```
+
+To turn it on, after reading that list:
+
+1. Add `PAINTOMICS_SWEEP_ORPHAN_FILES=1` to `deploy/.env`.
+2. Recreate the app container, since a restart does not pick up a new
+   environment: `docker compose -f deploy/compose.yaml up -d app`. Running jobs
+   are lost, so pick a quiet moment.
+3. Check that it arrived:
+   `docker exec paintomics-app-1 printenv PAINTOMICS_SWEEP_ORPHAN_FILES`.
+
+The next daily run, 24 hours after the app started, deletes the files and logs
+every path it removes. To turn it off again, remove the line and recreate the
+container.
+
+A user id held by more than one user document is skipped altogether: no job,
+file or *My data* entry of that id is deleted, no warning is sent, and each run
+logs a warning naming the id. The ones on paintomics.org predate the atomic id
+counter of August 2026. Which document to keep is the operator's decision; the
+cleaner has no rule for it.
 
 ## After every deploy
 

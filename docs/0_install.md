@@ -170,6 +170,7 @@ to the `environment:` block of the app service.
 | `MONGODB_HOST` / `MONGODB_PORT` / `MONGODB_DATABASE` | `localhost` / `27017` / `PaintomicsDB` | Compose sets the host to the service name `mongo` |
 | `MAX_THREADS` | `6` | Threads one job splits its pathway scoring and feature mapping across |
 | `N_WORKERS` | `4` | Queue workers |
+| `PAINTOMICS_SWEEP_ORPHAN_FILES` | off | `1` makes the daily cleaning run delete, for good, the old files of anonymous and guest work that no job uses. While it is off the run logs how many it would delete |
 
 Four more are set in the template rather than from the environment, so changing
 them means editing `serverconf.py`:

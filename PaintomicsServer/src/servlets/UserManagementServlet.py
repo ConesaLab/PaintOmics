@@ -22,6 +22,7 @@ import logging.config
 
 from src.conf.serverconf import (
     CLIENT_TMP_DIR,
+    EMAIL_FROM_ADDRESS,
     PAINTOMICS_BASE_URL,
     PAINTOMICS_EMAIL_DOMAIN,
 )
@@ -32,7 +33,7 @@ from src.common.DAO.MessageDAO import MessageDAO
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException, CredentialException
 from src.common.Util import adapt_string
-from src.common.UserMail import sendToUser
+from src.common.UserMail import REJECTED, SKIPPED, sendToUser
 from src.common.EmailTemplates import PRODUCT_NAME, welcomeEmail, passwordResetEmail
 
 from flask import url_for
@@ -387,6 +388,7 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
             daoInstance.update(userInstance, {})
 
             # Send e-mail
+            mailOutcome = None
             try:
 
                 restoreLink = url_for('resetPasswordHandler', emailToken = emailToken, userEmail = userEmail)
@@ -394,16 +396,23 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
                                              PAINTOMICS_BASE_URL + restoreLink,
                                              randomPassword)
 
-                # sendToUser sends nothing to an account whose mail an
-                # administrator turned off (src.common.UserMail); the reply
-                # to the browser is the same either way, as it already was
-                # for a delivery that failed.
-                sendToUser(userInstance, "Reset your " + PRODUCT_NAME + " password", message,
-                           ROOT_DIRECTORY,
-                           userCollection=daoInstance.dbManager.getCollection(daoInstance.collectionName),
-                           isHTML=True)
+                # sendToUser sends nothing to an account whose mail is turned
+                # off (src.common.UserMail).
+                mailOutcome = sendToUser(userInstance, "Reset your " + PRODUCT_NAME + " password", message,
+                                         ROOT_DIRECTORY,
+                                         userCollection=daoInstance.dbManager.getCollection(daoInstance.collectionName),
+                                         isHTML=True)
             except Exception:
                 logging.error("Failed to send the reset password email.")
+
+            # The browser answers any success with "Email sent. Check your inbox",
+            # which would leave this person waiting for a message that was
+            # never sent, with no sign that somebody has to turn their mail
+            # back on (AdminTools/scripts/user_mail.py).
+            if mailOutcome in (SKIPPED, REJECTED):
+                raise CredentialException(
+                    "No mail was sent, because mail is turned off for this account. "
+                    "Please write to " + EMAIL_FROM_ADDRESS + " and we will help you sign in.")
 
         else:
             if emailToken != userInstance.getResetToken():
