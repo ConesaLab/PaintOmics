@@ -151,8 +151,11 @@ PUBLISHED = {
     # "The connection failed" for an answer cut off or never received
     # (connectionFailed), and holds watchUploadFrame. Not 3.6: #226 published
     # that number with other content.
+    # v=3.8 gives extJSErrorHandler the "Please check your input files" wording of
+    # ajaxErrorHandler for an answer marked input_error: a form submit that the
+    # server refuses for a file name or omic name is the user's to fix.
     "app/view/common/Util.js": (
-        "3.7", "31b23226c49cd193ae70ddde412f7faa20309fb6f294f5bfc8cf7c39f6f0c51b"),
+        "3.8", "c36a6fa135c8c875703f9afd6856b35bd5a1d8ca059f463177b00f257c467758"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.

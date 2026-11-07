@@ -1717,12 +1717,13 @@ function PA_Step2ReplicateDetectionView() {
 		var nSamples = det.sampleHeader.length;
 		var nReplicates = det.mapping.filter(function(m) { return m >= 0; }).length;
 
-		// Build a small preview list — capped to keep the UI compact.
+		// Build a small preview list — capped to keep the UI compact. The sample
+		// and column names are the headers of the user's file: text.
 		var previewRows = det.sampleHeader.slice(0, 12).map(function(sample, idx) {
 			var replicateCols = det.groups[idx].map(function(colIdx) {
 				return omic.omicHeader[colIdx + 1];
 			}).join(", ");
-			return '<li><b>' + sample + '</b> ← ' + replicateCols + '</li>';
+			return '<li><b>' + Ext.String.htmlEncode(String(sample)) + '</b> ← ' + Ext.String.htmlEncode(replicateCols) + '</li>';
 		}).join("");
 		if (det.sampleHeader.length > 12) {
 			previewRows += '<li class="repDetectionMore">…and ' + (det.sampleHeader.length - 12) + ' more</li>';
@@ -1736,7 +1737,7 @@ function PA_Step2ReplicateDetectionView() {
 			statusNote =
 				'<p class="repDetectionWarn"><i class="fa fa-exclamation-triangle"></i> ' +
 				'Detection is incomplete — ' + det.unmatched.length + ' column(s) ' +
-				'do not look like replicates (' + unmatchedCols +
+				'do not look like replicates (' + Ext.String.htmlEncode(unmatchedCols) +
 				(det.unmatched.length > 5 ? ', …' : '') +
 				'). Upload a design file to confirm the grouping.</p>';
 		}

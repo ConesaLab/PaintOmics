@@ -719,7 +719,11 @@ function PA_Step4PathwayView() {
 			if (this.value == "custom") {
 				var omicName = this.name.split(/_(.+)/)[1];
 				var omicDataDistribution = me.getDataDistributionSummaries(omicName);
-				var omicCustomValues = Ext.ComponentQuery.query('[name="customslider_' + omicName + '"]')[0].getValues();
+				// Matched by name, not through [name="..."]: the omic's name may
+				// hold the quote that would end that selector.
+				var omicCustomValues = Ext.ComponentQuery.query('multicustomslider').filter(function(slider) {
+					return slider.name === "customslider_" + omicName;
+				})[0].getValues();
 				var visualOptionsCustomValues = (me.visualOptions.customValues || {});
 
 				omicDataDistribution.splice(11, 2, ...omicCustomValues);
@@ -2459,7 +2463,10 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 					}
 
 					title[1] = (title.length > 1) ? title[1] : "";
-					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
+					// useHTML: the row is named after the omic, the user's name for
+					// it, beside a column header and a feature name from the file.
+					// Encoded first; the * and ^ markers become icons after.
+					return "<b>" + Ext.String.htmlEncode(title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + Ext.String.htmlEncode(title[1]) + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 				},
 				useHTML: true
 			},
@@ -2472,7 +2479,8 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 						if (this.value.split) {
 							var title = this.value.split("#");
 							title[1] = (title.length > 1) ? title[1] : "No data";
-							return paRowLabel(title[0], title[1], {width: 70, maxChars: 12});
+							// text: the row's name is the omic's, never markup.
+							return paRowLabel(title[0], title[1], {width: 70, maxChars: 12, text: true});
 						}
 
 						return null;
@@ -3159,12 +3167,16 @@ function PA_Step4VisualOptionsView() {
 		// and a tick does not. The product already reads eye/eye-slash that way in
 		// three other places: the network cluster toggles, the alternative-compound
 		// Show/Hide, and the My Data actions.
+		//
+		// The omic's name is the user's, so every attribute and label below
+		// carries it encoded. The id is read back with .attr("id"), which decodes
+		// it, so visibleOmics still holds "<name>#genebased".
 		var omicsAux = me.getParent().getGeneBasedInputOmics();
 		for (var i in omicsAux) {
 			windowContent +=
 			' <div class="checkbox viewbox">'+
-			'   <input ' + ((visualOptions.visibleOmics.indexOf(omicsAux[i].omicName + "#genebased") > -1) ? "checked" : "") + ' type="checkbox" id="' + omicsAux[i].omicName + '#genebased">'+
-			'   <label for="' + omicsAux[i].omicName + '#genebased">' + omicsAux[i].omicName + '</label>'+
+			'   <input ' + ((visualOptions.visibleOmics.indexOf(omicsAux[i].omicName + "#genebased") > -1) ? "checked" : "") + ' type="checkbox" id="' + Ext.String.htmlEncode(omicsAux[i].omicName + '#genebased') + '">'+
+			'   <label for="' + Ext.String.htmlEncode(omicsAux[i].omicName + '#genebased') + '">' + Ext.String.htmlEncode(omicsAux[i].omicName) + '</label>'+
 			' </div>';
 		}
 
@@ -3173,8 +3185,8 @@ function PA_Step4VisualOptionsView() {
 		for (var i in omicsCompounds) {
 			windowContent +=
 			' <div class="checkbox viewbox">'+
-			'  <input ' + ((visualOptions.visibleOmics.indexOf(omicsCompounds[i].omicName + "#compoundbased") > -1) ? "checked" : "") + ' type="checkbox" id="' + omicsCompounds[i].omicName + '#compoundbased' + '">'+
-			'  <label for="' + omicsCompounds[i].omicName + '#compoundbased">' + omicsCompounds[i].omicName + '</label>'+
+			'  <input ' + ((visualOptions.visibleOmics.indexOf(omicsCompounds[i].omicName + "#compoundbased") > -1) ? "checked" : "") + ' type="checkbox" id="' + Ext.String.htmlEncode(omicsCompounds[i].omicName + '#compoundbased') + '">'+
+			'  <label for="' + Ext.String.htmlEncode(omicsCompounds[i].omicName + '#compoundbased') + '">' + Ext.String.htmlEncode(omicsCompounds[i].omicName) + '</label>'+
 			' </div>';
 		}
 
@@ -3195,15 +3207,19 @@ function PA_Step4VisualOptionsView() {
 		/* Add a fieldset for each omic */
 		 $.each(omicsAux.concat(omicsCompounds), function(index, omicObject) {
 			 var omic = omicObject.omicName;
+			 // Encoded in every attribute: name="colorByCheckbox_<omic>" is read
+			 // back with .attr("name"), decoded, so colorReferences keeps the
+			 // name itself.
+			 var omicAttr = Ext.String.htmlEncode(omic);
 
 			 windowContent +=
 			 '<fieldset>' +
-			 '		<legend>' + omic + '</legend>' +
-			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="p10p90")?"checked ":"") +'type="radio" id="colorByCheckbox1_' + omic + '" name="colorByCheckbox_' + omic + '" value="p10p90"><label for="colorByCheckbox1_' + omic + '">Percentiles 10 and 90</label></div>' +
-			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="absoluteMinMax")?"checked ":"") +'type="radio" id="colorByCheckbox2_' + omic + '" name="colorByCheckbox_' + omic + '" value="absoluteMinMax"><label for="colorByCheckbox2_' + omic + '">Global Min/Max (including outliers).</label></div>' +
-			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="riMinMax")?"checked ":"") +'type="radio" id="colorByCheckbox3_' + omic + '" name="colorByCheckbox_' + omic + '" value="riMinMax"><label for="colorByCheckbox3_' + omic + '">Global Min/Max (without outliers).</label></div>' +
-			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="custom")?"checked ":"") +'type="radio" id="colorByCheckbox4_' + omic + '" name="colorByCheckbox_' + omic + '" value="custom"><label for="colorByCheckbox4_' + omic + '">Custom values</label></div>' +
-			 '	  <div class="radio" id="colorByCheckbox5_' + omic + '"></div>' +
+			 '		<legend>' + omicAttr + '</legend>' +
+			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="p10p90")?"checked ":"") +'type="radio" id="colorByCheckbox1_' + omicAttr + '" name="colorByCheckbox_' + omicAttr + '" value="p10p90"><label for="colorByCheckbox1_' + omicAttr + '">Percentiles 10 and 90</label></div>' +
+			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="absoluteMinMax")?"checked ":"") +'type="radio" id="colorByCheckbox2_' + omicAttr + '" name="colorByCheckbox_' + omicAttr + '" value="absoluteMinMax"><label for="colorByCheckbox2_' + omicAttr + '">Global Min/Max (including outliers).</label></div>' +
+			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="riMinMax")?"checked ":"") +'type="radio" id="colorByCheckbox3_' + omicAttr + '" name="colorByCheckbox_' + omicAttr + '" value="riMinMax"><label for="colorByCheckbox3_' + omicAttr + '">Global Min/Max (without outliers).</label></div>' +
+			 '    <div class="radio"><input '+ ((visualOptions.colorReferences[omic] ==="custom")?"checked ":"") +'type="radio" id="colorByCheckbox4_' + omicAttr + '" name="colorByCheckbox_' + omicAttr + '" value="custom"><label for="colorByCheckbox4_' + omicAttr + '">Custom values</label></div>' +
+			 '	  <div class="radio" id="colorByCheckbox5_' + omicAttr + '"></div>' +
 			 '</fieldset>';
 		 });
 
@@ -3277,6 +3293,11 @@ function PA_Step4VisualOptionsView() {
 							 var customOmicValues = (PA4View.visualOptions.hasOwnProperty("customValues") ?
 							 (PA4View.visualOptions.customValues[omic] || defaultOmicValues) : defaultOmicValues );
 
+							 // By name, not through a [name="..."] selector: a quote or a
+							 // backslash in the omic's name made the selector throw.
+							 var omicRadios = $('input[type=radio]').filter(function() {
+								 return this.name === "colorByCheckbox_" + omic;
+							 });
 							 var customSlider = Ext.create('Ext.slider.MultiCustom', {
 						        renderTo: "colorByCheckbox5_" + omic,
 										name: "customslider_" + omic,
@@ -3284,10 +3305,10 @@ function PA_Step4VisualOptionsView() {
 						        minValue: omicValues.min,
 						        maxValue: omicValues.max,
 										customValues: [customOmicValues[0], customOmicValues[1]],
-										disabled: ($('input[type=radio][name="colorByCheckbox_' + omic + '"]:checked').val() !== "custom"),
+										disabled: (omicRadios.filter(":checked").val() !== "custom"),
 						   	});
 
-								$('input[type=radio][name="colorByCheckbox_' + omic + '"]').change(function() {
+								omicRadios.change(function() {
 									 if (this.value !== "custom") {
 										 customSlider.disable();
 									 }	else {
@@ -3821,7 +3842,9 @@ function PA_Step4GlobalHeatmapView() {
 		var visualOptionsGH = this.getParent().getVisualOptions();
 
 		for (var omicName in selectedOmics) {
-			divName = "globalHeatmapContainer-" + omicName.toLowerCase().replace(/ /g, "-");
+			// The omic's name is the user's: text in the heading, a safe key in
+			// the id (paDomKey), and the same key where generateContent finds it.
+			divName = "globalHeatmapContainer-" + paDomKey(omicName.toLowerCase().replace(/ /g, "-"));
 
 			var legendGH = "";
 			try {
@@ -3835,7 +3858,7 @@ function PA_Step4GlobalHeatmapView() {
 				console.error(Date.logFormat() + " could not build the colour legend for " + omicName + ".", error);
 			}
 
-			globalHeatmapContainer.append("<div class='omicHeatmapsContainer'>" + "<h3>" + omicName + "</h3>" + legendGH + "<div id='" + divName + "'></div></div>");
+			globalHeatmapContainer.append("<div class='omicHeatmapsContainer'>" + "<h3>" + Ext.String.htmlEncode(omicName) + "</h3>" + legendGH + "<div id='" + divName + "'></div></div>");
 			dataMatrix[omicName] = {};
 			otherDataMatrix[omicName] = {};
 		}
@@ -3977,7 +4000,7 @@ function PA_Step4GlobalHeatmapView() {
 		//STEP 1. GENERATE THE HEATMAP FOR REFERENCE OMIC
 		var omicValues = Array.prototype.concat.apply([], Object.values(dataMatrix[referenceOmic]));
 		var showLabels = true;
-		var divName = "globalHeatmapContainer-" + referenceOmic.toLowerCase().replace(/ /g, "-");
+		var divName = "globalHeatmapContainer-" + paDomKey(referenceOmic.toLowerCase().replace(/ /g, "-"));
 		var divWidth = 200;
 
 		if (omicValues.length === 0) {
@@ -4032,7 +4055,7 @@ function PA_Step4GlobalHeatmapView() {
 				}
 			}
 
-			divName = "globalHeatmapContainer-" + omicName.toLowerCase().replace(/ /g, "-");
+			divName = "globalHeatmapContainer-" + paDomKey(omicName.toLowerCase().replace(/ /g, "-"));
 			divWidth = 200;
 			divWidth += (showLabels) ? 90 : 0;
 			$("#" + divName).append("<div id='" + divName + "-" + level + "' class='heatmapContainer' style='width:" + divWidth + "px; height:" + divHeight + "px;'></div>");
@@ -4328,12 +4351,15 @@ function PA_Step4GlobalHeatmapView() {
 		for (var i in omicNames) {
 			//CHECK IF WE HAVE VALUES FOR THIS OMIC IN CURRENT PATHWAY
 			if (this.getModel().getSignificanceValues()[omicNames[i]][0] !== 0) {
-				divName = "lateralOptionsSelector-" + omicNames[i].toLowerCase().replace(/ /g, "-");
+				// The omic's name is the user's: encoded in the value (read back
+				// decoded with .val()) and the label, a safe key in the ids and the
+				// radio group's name, which updateObserver selects unquoted.
+				divName = "lateralOptionsSelector-" + paDomKey(omicNames[i].toLowerCase().replace(/ /g, "-"));
 				htmlCode +=
 				'<div class="lateralOptionsSelector omicSelection">' +
 				' <div class="omicPosition">' + (parseInt(i) + 1) + '</div>'+
 				' <div>'+
-				'   <div class="checkbox"><input checked type="checkbox" id="' + divName + '-check" value="' + omicNames[i] + '"><label for="' + divName + '-check">' + omicNames[i] + '</label></div>' +
+				'   <div class="checkbox"><input checked type="checkbox" id="' + divName + '-check" value="' + Ext.String.htmlEncode(omicNames[i]) + '"><label for="' + divName + '-check">' + Ext.String.htmlEncode(omicNames[i]) + '</label></div>' +
 				'   <div class="radio"><input type="radio" id="' + divName + '-radio1" name="' + divName + '-radio" value="all"><label for="' + divName + '-radio1">All features (Genes or compounds)</label></div>' +
 				'   <div class="radio"><input checked type="radio" id="' + divName + '-radio2" name="' + divName + '-radio" value="relevant"><label for="' + divName + '-radio2">Only relevant features</label></div>' +
 				' </div>' +
@@ -4360,10 +4386,10 @@ function PA_Step4GlobalHeatmapView() {
 				//DEFAULT OPTION k = SQRT(N/2), rounded upwards
 				k = Math.ceil(Math.sqrt(k / 2));
 
-				divName = "kMeansSelector-" + omicNames[i].toLowerCase().replace(/ /g, "-");
+				divName = "kMeansSelector-" + paDomKey(omicNames[i].toLowerCase().replace(/ /g, "-"));
 				htmlCode +=
 				'      <div id="' + divName + '" class="lateralOptionsSelector kSelection">' +
-				'        <label>' + omicNames[i] + ': </label> <input type="number" min="1" step="1" value="' + k + '" SIZE="6">' +
+				'        <label>' + Ext.String.htmlEncode(omicNames[i]) + ': </label> <input type="number" min="1" step="1" value="' + k + '" SIZE="6">' +
 				'      </div>';
 			}
 		}
@@ -4619,7 +4645,10 @@ function PA_Step4DetailsView() {
 		var visualOptionsDV = this.getParent("PA_Step4PathwayView").getVisualOptions();
 
 		for (var i in omicNames) {
-			divId = omicNames[i].replace(" ", "_");
+			// The omic's name is the user's: text in the headings, encoded in the
+			// checkbox's value (read back decoded with .val()), and a safe key in
+			// the ids, which the change handler below derives the same way.
+			divId = paDomKey(omicNames[i].replace(" ", "_"));
 
 			// The colour ramp these heatmaps were painted with. The charts
 			// themselves carry legend:{enabled:false} - one series per row would
@@ -4638,7 +4667,7 @@ function PA_Step4DetailsView() {
 
 			htmlCode =
 			"<div class='contentbox'>" +
-			"  <h3>" + omicNames[i].replace("#", " ") + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='"+ omicNames[i] +"'/>Only relevant</span></h3>" +
+			"  <h3>" + Ext.String.htmlEncode(omicNames[i].replace("#", " ")) + "<span><input type='checkbox' id='" + divId + "_cb_relevant' value='"+ Ext.String.htmlEncode(omicNames[i]) +"'/>Only relevant</span></h3>" +
 			"  " + legendDV +
 			"  <div class='PA_step5_heatmapContainer' id='" + divId + "_heatmapContainer'  style='height: " + ((entriesTable[omicNames[i]].length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 			"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer'  style='width:" + divWidth + "px;height: " + ((entriesTable[omicNames[i]].length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
@@ -4647,7 +4676,7 @@ function PA_Step4DetailsView() {
 			if (metagenesSetElems !== null && metagenesSetElems.length) {
 				htmlCode += 
 				"<div class='contentbox' id='" + divId + "_metagenes_box' style='" + (metagenesSetElems !== null ? '' : 'display: none;') + "'>" +
-				"  <h3>" + omicNames[i].replace("#", " ") + " (metagenes) </h3>" +
+				"  <h3>" + Ext.String.htmlEncode(omicNames[i].replace("#", " ")) + " (metagenes) </h3>" +
 				"  <div class='PA_step5_heatmapContainer' id='" + divId + "_heatmapContainer_metagenes'  style='height: " + ((entriesTableMetagenes[omicNames[i]].length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 				"  <div class='PA_step5_plotContainer' id='" + divId + "_plotContainer_metagenes'  style='width:" + divWidth + "px;height: " + ((entriesTableMetagenes[omicNames[i]].length * 30) + 100) + "px'><i class='fa fa-cog fa-spin'></i> Loading..</div>" +
 				"</div>";
@@ -4669,7 +4698,7 @@ function PA_Step4DetailsView() {
 		// Link event individually to save heatmap reference
 		$("div.contentbox h3 :checkbox").change(function() {
 			var omicName = $(this).val();
-			var divId = omicName.replace(" ", "_");
+			var divId = paDomKey(omicName.replace(" ", "_"));
 			var onlyRelevants = $(this).is(":checked");
 	
 			// Highcharts does not automatically hide Y labels when hiding series, so it is easier and faster
@@ -4794,7 +4823,10 @@ function PA_Step4DetailsView() {
 						title[0] = title[0] + " [" + headerField + "]";
 					}
 					title[1] = (title.length > 1) ? title[1] : "";
-					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.value === null ? "No data" : this.point.value);
+					// useHTML, and a row of a compound box ends in the omic's name
+					// (addTableEntrie's keggNameSuffix): text, encoded before the
+					// * and ^ markers become icons.
+					return "<b>" + Ext.String.htmlEncode(title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + Ext.String.htmlEncode(title[1]) + "</i>" + (this.point.value === null ? "No data" : this.point.value);
 				},
 				useHTML: true
 			},
@@ -4805,10 +4837,10 @@ function PA_Step4DetailsView() {
 					formatter: function () {
 						var title = this.value.split("#");
 						title[1] = (title.length > 1) ? title[1] : "No data";
-						// paRowLabel() keeps the regulator rows' embedded markup
-						// intact and ellipsises from the front, so identifiers that
-						// share a prefix stay distinguishable.
-						return paRowLabel(title[0], title[1], {width: 100, maxChars: 16});
+						// paRowLabel() ellipsises from the front, so identifiers
+						// that share a prefix stay distinguishable. As text: a row
+						// of a compound box ends in the omic's name, the user's.
+						return paRowLabel(title[0], title[1], {width: 100, maxChars: 16, text: true});
 					},
 					style: {fontSize: "9px"}, useHTML: true
 				}
@@ -4928,7 +4960,8 @@ function PA_Step4DetailsView() {
 					if (xAxisCat[this.point.x] !== undefined) {
 						title[0] = title[0] + " [" + xAxisCat[this.point.x] + "]";
 					}
-					return "<b>" + title[0].replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + title[1] + "</i>" + (this.point.y === null ? "No data" : this.point.y);
+					// As the paired heatmap's tooltip: text, then the markers.
+					return "<b>" + Ext.String.htmlEncode(title[0]).replace(/[\*\^]/g, function(c) { return replaceSymbols[c]; }) + "</b><br/>" + "<i class='tooltipInputName'>" + Ext.String.htmlEncode(title[1]) + "</i>" + (this.point.y === null ? "No data" : this.point.y);
 				},
 				useHTML: true
 			},

@@ -25,6 +25,8 @@ import tempfile
 from PIL.Image import open as image_open
 from chardet import detect # get the encoding of a file
 
+from src.common.ServerErrorManager import InputFileError
+
 class Singleton(type):
     _instances = {}
     def __call__(cls, *args, **kwargs):
@@ -97,6 +99,95 @@ def resolveWithin(baseDir, fileName):
         return None
 
     return candidate
+
+
+# "\" is an ordinary character in a Linux file name, but a name that carries one
+# was written as a Windows path, so it is refused with "/" rather than kept.
+_PATH_SEPARATORS = ("/", "\\")
+
+
+def unsafeNameReason(name):
+    """Why `name` cannot be one file name inside a folder, or None when it can.
+
+    For a name off a request: an uploaded file's name, a My Data file or inbuilt
+    GTF a form refers to, a job id that picks a folder. It has to name one entry
+    of the folder and nothing else, so a separator, "." or "..", and a NUL are
+    refused rather than cleaned up. A browser sends the bare name of the file the
+    user picked, so a name holding any of them was made by hand. Spaces, dots
+    inside the name, letters of any script and long names are fine; the file
+    system's own limit (255 bytes on ext4) is left to the file system.
+    """
+    text = "" if name is None else str(name)
+    if not text.strip():
+        return "it is empty"
+    separator = _separatorReason(text)
+    if separator is not None:
+        return separator
+    if text in (".", ".."):
+        return "it is '%s'" % text
+    return None
+
+
+def _separatorReason(text):
+    if "\x00" in text:
+        return "it contains a NUL character"
+    if any(separator in text for separator in _PATH_SEPARATORS):
+        return "it contains '/' or '\\'"
+    return None
+
+
+def requireOmicNameForFiles(omicName):
+    """`omicName`, or InputFileError when it cannot be part of a file name.
+
+    A job names the files it writes for an omic after the omic:
+    "<temporal dir>/<omic name>_matched.txt" in Job.py, the metagenes R script's
+    "--output_prefix", MORE's "MORE_output_<omic name>_<date>.tab". The name is
+    the form's own text, so "../../x" wrote "x_matched.txt" outside the job.
+    Only what makes a name a path is refused: a separator or a NUL. A name with
+    one never worked (the folder it names does not exist), and "." or ".." are
+    harmless here, since a suffix always follows.
+    """
+    text = "" if omicName is None else str(omicName)
+    reason = _separatorReason(text)
+    if reason is not None:
+        raise InputFileError(
+            "The omic name '%s' cannot be used: %s. PaintOmics names the files "
+            "it writes for an omic after it. Rename the omic and try again."
+            % (text.replace("\x00", "\\0"), reason))
+    return omicName
+
+
+def fileInFolder(folder, name, what="file"):
+    """The path of `name` inside `folder`, or InputFileError saying why not.
+
+    The one gate a file name off a request goes through before it reaches the
+    file system: where an upload is saved (DataManagementServlet.saveFile),
+    where a form names a file already in My Data or an inbuilt GTF
+    (JobInformationManager.saveFiles, MOREServlet) and where a job id picks a
+    folder. Uploads used to be saved as "<folder>/<name>" with the name as the
+    request gave it, so "../x" wrote a new file outside the user's folder.
+
+    unsafeNameReason refuses anything that is not a single name. resolveWithin
+    then resolves the path with realpath, which follows symlinks: a link inside
+    the folder that points out of it is refused too, including one whose target
+    does not exist yet, which open() would have created.
+
+    InputFileError, so the page says "Please check your input files" and offers
+    no error report. The message quotes the name as text; every dialog that
+    shows it encodes it.
+    """
+    reason = unsafeNameReason(name)
+    path = None
+    if reason is None:
+        path = resolveWithin(folder, str(name))
+        if path is None:
+            reason = "it points outside its folder"
+    if reason is not None:
+        shown = ("" if name is None else str(name)).replace("\x00", "\\0")
+        raise InputFileError(
+            "The %s name '%s' cannot be used: %s. A file name must be one name, "
+            "without '/' or '\\'. Rename the file and try again." % (what, shown, reason))
+    return path
 
 
 def chunks(l, n):

@@ -26,7 +26,7 @@
 import logging
 from html import escape
 from threading import RLock as threading_lock
-from src.common.Util import Singleton
+from src.common.Util import Singleton, fileInFolder, requireOmicNameForFiles
 from collections import deque
 
 from src.conf.serverconf import JOB_CACHE_MAX_SIZE
@@ -312,6 +312,22 @@ class JobInformationManager(metaclass=Singleton):
                 fileLabel + " it refers to.")
         return str(location)
 
+    @classmethod
+    def _referencedFile(cls, formFields, fieldName, fileLabel, folder, prefix="[MyData]/"):
+        """The name of a file a form refers to instead of uploading, checked.
+
+        A `*_filelocation` field names a file in the user's My Data folder
+        ("[MyData]/<name>") or an inbuilt GTF. The name was stored as the form
+        gave it and later joined to the folder by the job, so "[MyData]/../../
+        <user>/inputData/<file>" read another user's file into this job, and an
+        absolute path was honoured as it stood where the job falls back to the
+        bare name (MiRNA2GeneJob.resolveInput). Every name My Data or a
+        converter puts in that field is a plain name in that folder.
+        """
+        name = cls._requiredFileLocation(formFields, fieldName, fileLabel).replace(prefix, "")
+        fileInFolder(folder, name, fileLabel)
+        return name
+
     @staticmethod
     def _fileByReference(formFields, uploadedFileName, suffix):
         """Whether a secondary file arrives by reference instead of as an upload.
@@ -364,6 +380,7 @@ class JobInformationManager(metaclass=Singleton):
                         escape(uploadedFileName.replace("file", "omic_name")) +
                         "' is missing, so PaintOmics cannot tell which omic the "
                         "file '" + escape(uploadedFileName) + "' belongs to.")
+                requireOmicNameForFiles(omicType)
 
                 fields["omicType"] = omicType
                 fields["dataType"] =  formFields.get(uploadedFileName.replace("file","file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.
@@ -424,14 +441,14 @@ class JobInformationManager(metaclass=Singleton):
                         savedFiles[dataOmicId] = dataFileName = saveFile(userID, dataFileName, fields, uploadedDataFile, CLIENT_TMP_DIR)
 
             elif(origin == 'mydata'):
-                dataFileName = self._requiredFileLocation(
+                dataFileName = self._referencedFile(
                     formFields, uploadedFileName.replace("file","filelocation"),
-                    "data file").replace("[MyData]/","")
+                    "data file", CLIENT_TMP_DIR)
                 logging.info("SAVE FILES  - USING ALREADY SUBMITTED FILE (data file) %s FOR %s", dataFileName, omicType)
             elif(origin == 'inbuilt_gtf'):
-                dataFileName = EXAMPLE_FILES_DIR + "GTF/" + self._requiredFileLocation(
+                dataFileName = EXAMPLE_FILES_DIR + "GTF/" + self._referencedFile(
                     formFields, uploadedFileName.replace("file","filelocation"),
-                    "inbuilt GTF file").replace("[inbuilt GTF files]/","")
+                    "inbuilt GTF file", EXAMPLE_FILES_DIR + "GTF/", prefix="[inbuilt GTF files]/")
                 logging.info("SAVE FILES  - USING ALREADY INBUILT GTF FILE %s FOR %s", dataFileName, omicType)
             elif('filelocation' in origin):
                 # The omic references the file of another omic
@@ -469,9 +486,9 @@ class JobInformationManager(metaclass=Singleton):
                             savedFiles[dataOmicId] = dataFileName = saveFile(userID, dataFileName, fields, uploadedDataFile, CLIENT_TMP_DIR)
 
                 else:
-                    dataFileName = self._requiredFileLocation(
+                    dataFileName = self._referencedFile(
                         formFields, originName + "_filelocation",
-                        "referenced data file").replace("[MyData]/", "")
+                        "referenced data file", CLIENT_TMP_DIR)
             else:
                 logging.info("\tIGNORING " + omicType + ", EMPTY FILE OR NOT PROVIDED")
                 continue
@@ -513,9 +530,9 @@ class JobInformationManager(metaclass=Singleton):
 
                     relevantFileName = saveFile(userID, relevantFileName, fieldsRelevant, uploadedRelevantFile, CLIENT_TMP_DIR)
                 else:
-                    relevantFileName = self._requiredFileLocation(
+                    relevantFileName = self._referencedFile(
                         formFields, uploadedFileName.replace("file","relevant_filelocation"),
-                        "relevant features file").replace("[MyData]/","")
+                        "relevant features file", CLIENT_TMP_DIR)
                     logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant features file) %s FOR %s", relevantFileName, omicType)
             else:
                 relevantFileName = None
@@ -545,9 +562,9 @@ class JobInformationManager(metaclass=Singleton):
 
                     associationsFileName = saveFile(userID, associationsFileName, fieldsAssociations, uploadedAssociationDataFile, CLIENT_TMP_DIR)
                 else:
-                    associationsFileName = self._requiredFileLocation(
+                    associationsFileName = self._referencedFile(
                         formFields, uploadedFileName.replace("file","associations_filelocation"),
-                        "associations file").replace("[MyData]/","")
+                        "associations file", CLIENT_TMP_DIR)
                     logging.info("STEP1 - USING ALREADY SUBMITTED FILE (associations file) %s FOR %s", associationsFileName, omicType)
 
                 # SAVE THE RELEVANT ASSOCIATIONS FILE (IF ANY)
@@ -578,9 +595,9 @@ class JobInformationManager(metaclass=Singleton):
 
                         relevantAssociationsFileName = saveFile(userID, relevantAssociationsFileName, fieldsRelevantAssociations, uploadedAssociationRelevantFile, CLIENT_TMP_DIR)
                     else:
-                        relevantAssociationsFileName = self._requiredFileLocation(
+                        relevantAssociationsFileName = self._referencedFile(
                             formFields, uploadedFileName.replace("file", "relevant_associations_filelocation"),
-                            "relevant associations file").replace("[MyData]/", "")
+                            "relevant associations file", CLIENT_TMP_DIR)
                         logging.info("STEP1 - USING ALREADY SUBMITTED FILE (relevant associations file) %s FOR %s", relevantAssociationsFileName, omicType)
             else:
                 relevantAssociationsFileName = associationsFileName = None
@@ -602,9 +619,9 @@ class JobInformationManager(metaclass=Singleton):
                         designFileName = jobInstance.getJobID() + '_' + designFileName
                     designFileName = saveFile(userID, designFileName, fieldsDesign, uploadedDesignFile, CLIENT_TMP_DIR)
                 else:
-                    designFileName = self._requiredFileLocation(
+                    designFileName = self._referencedFile(
                         formFields, uploadedFileName.replace("file", "design_filelocation"),
-                        "experimental design file").replace("[MyData]/", "")
+                        "experimental design file", CLIENT_TMP_DIR)
                 logging.info("STEP1 - EXPERIMENTAL DESIGN FOR %s IS %s", omicType, designFileName)
 
             if(jobInstance != None):

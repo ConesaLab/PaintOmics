@@ -13,8 +13,8 @@ from src.classes.JobInstances.MOREJob import MOREJob
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.servlets.DataManagementServlet import saveFile
-from src.common.Util import ensure_utf8
-from src.common.ServerErrorManager import handleException, CredentialException
+from src.common.Util import ensure_utf8, fileInFolder, requireOmicNameForFiles
+from src.common.ServerErrorManager import handleException, CredentialException, InputFileError
 from src.common import ExampleDatasets
 from src.conf.serverconf import CLIENT_TMP_DIR
 
@@ -519,14 +519,25 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
             RESPONSE.setContent({"success": True, "jobID": JOB_ID})
             return RESPONSE
 
+        # A file the form names instead of uploading is a name in this user's
+        # My Data folder. STEP2 joins it to that folder with os.path.join, which
+        # returns an absolute name as it stands, and transcodes the file in place
+        # (ensure_utf8), so an unchecked name both read and rewrote a file
+        # anywhere the server can write. None when the field is empty.
+        def referencedFile(field, label):
+            name = formFields.get(field, "").replace("[MyData]/", "")
+            if not name:
+                return None
+            fileInFolder(jobInstance.getInputDir(), name, label)
+            return name
+
         # 3. Save Gene Expression Dataset
         rnaseq_file = uploadedFiles.get("rnaseqaux_file")
         if rnaseq_file:
             fields = {"omicType": "Gene Expression", "dataType": "Target Data"}
             jobInstance.targetExpressionFile = saveFile(userID, rnaseq_file.filename, fields, rnaseq_file, jobInstance.getInputDir())
         else:
-            jobInstance.targetExpressionFile = formFields.get("rnaseqaux_filelocation", "").replace("[MyData]/", "")
-            if not jobInstance.targetExpressionFile: jobInstance.targetExpressionFile = None
+            jobInstance.targetExpressionFile = referencedFile("rnaseqaux_filelocation", "target expression file")
 
         # 4. Save Experimental Design (Conditions)
         cond_file = uploadedFiles.get("conditions_file")
@@ -535,8 +546,7 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
             jobInstance.conditionsFile = saveFile(userID, cond_file.filename, fields, cond_file, jobInstance.getInputDir())
         else:
             # Check if it was already uploaded (fast-track/re-run)
-            jobInstance.conditionsFile = formFields.get("conditions_filelocation", "").replace("[MyData]/", "")
-            if not jobInstance.conditionsFile: jobInstance.conditionsFile = None
+            jobInstance.conditionsFile = referencedFile("conditions_filelocation", "experimental design file")
 
         # 5. Save Regulatory Omics
         # We expect a dynamic list of omics from the UI
@@ -544,6 +554,9 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
         i = 0
         while f"omic_name_{i}" in formFields:
             name = formFields.get(f"omic_name_{i}").strip()
+            # STEP2 names this omic's result files after it
+            # ("MORE_output_<name>_<date>.tab").
+            requireOmicNameForFiles(name)
             data_file = uploadedFiles.get(f"file_{i}_file")
             assoc_file = uploadedFiles.get(f"assoc_file_{i}_file")
             rel_file = uploadedFiles.get(f"relevant_file_{i}_file")
@@ -556,22 +569,19 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
                 fields = {"omicType": name, "dataType": "Regulatory Data"}
                 data_path = saveFile(userID, data_file.filename, fields, data_file, jobInstance.getInputDir())
             else:
-                data_path = formFields.get(f"file_{i}_filelocation", "").replace("[MyData]/", "")
-                if not data_path: data_path = None
+                data_path = referencedFile(f"file_{i}_filelocation", "regulatory data file")
 
             if assoc_file:
                 fields = {"omicType": name, "dataType": "Associations"}
                 assoc_path = saveFile(userID, assoc_file.filename, fields, assoc_file, jobInstance.getInputDir())
             else:
-                assoc_path = formFields.get(f"assoc_file_{i}_filelocation", "").replace("[MyData]/", "")
-                if not assoc_path: assoc_path = None
+                assoc_path = referencedFile(f"assoc_file_{i}_filelocation", "associations file")
 
             if rel_file:
                 fields = {"omicType": name, "dataType": "Relevant Features"}
                 rel_path = saveFile(userID, rel_file.filename, fields, rel_file, jobInstance.getInputDir())
             else:
-                rel_path = formFields.get(f"relevant_file_{i}_filelocation", "").replace("[MyData]/", "")
-                if not rel_path: rel_path = None
+                rel_path = referencedFile(f"relevant_file_{i}_filelocation", "relevant features file")
 
             min_variation = _parseMinVariation(formFields.get(f"more_minvar_{i}"))
 
@@ -618,6 +628,10 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
         # The bare sentence below showed "Oops..Internal error!" with Report,
         # and a retry can never succeed on a session the server forgot.
         handleException(RESPONSE, e, __file__, "fromMOREtoGenes_STEP1")
+    except InputFileError as e:
+        # Through handleException for its input_error flag: the page then says
+        # "Please check your input files" rather than "Oops..Internal error!".
+        handleException(RESPONSE, e, __file__, "fromMOREtoGenes_STEP1", userID=userID)
 
     except Exception as e:
         logging.error(f"MORE_STEP1 - ERROR: {str(e)}")

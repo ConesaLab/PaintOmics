@@ -1316,6 +1316,20 @@ function extJSErrorHandler(form, responseObj) {
     }
 
     var halves = splitServerError(err.message);
+
+    // The server refused the files the form sent, and said why (InputFileError):
+    // a file name that is not a plain name, a My Data file that is not in the
+    // user's folder, an omic name with a "/". Worded as ajaxErrorHandler words
+    // the same refusal, without "try again later" or a Report button.
+    if (err.extra && err.extra.input_error === true) {
+        showErrorMessage("Please check your input files", {
+            message: Ext.String.htmlEncode(halves.readable),
+            showButton: true,
+            showReportButton: false
+        });
+        return;
+    }
+
     showErrorMessage("Oops..Internal error!", {
         message: serverTextAsHtml(halves.readable) + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
         hidden: halves.technical,

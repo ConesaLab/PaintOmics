@@ -29,7 +29,7 @@ from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.FileDAO import FileDAO
 from src.common.DAO.JobDAO import JobDAO
 from src.common.ServerErrorManager import handleException
-from src.common.Util import resolveWithin
+from src.common.Util import resolveWithin, fileInFolder, unsafeNameReason
 
 def dataManagementUploadFile(request, response, DESTINATION_DIR, isReference=False):
     #VARIABLE DECLARATION
@@ -352,6 +352,14 @@ def dataManagementDownloadFile(request, response):
 
         userDirID = userID if userID is not None else "nologin"
 
+        # jobID picks the folder fileName is then confined to, so a jobID of
+        # "../../<user>/jobsData/<job>" moved that folder into another user's
+        # job: resolveWithin below only checks fileName against whatever folder
+        # it is handed. An empty jobID is the "tmp" listing's own folder.
+        if fileType != "input" and jobID and unsafeNameReason(jobID) is not None:
+            response.setContent({"success": False, "errorMessage": "File not found.</br>Sorry but it looks like the requested file was removed from system."})
+            return response
+
         if fileType=="job_result":
             userDir =  "/jobsData/" + jobID + "/output/"
         elif fileType=="input":
@@ -409,16 +417,22 @@ def saveFile(userID, uploadedFileName, options, uploadedFile, DESTINATION_DIR):
             "Malformed submission: a file was attached without a filename, "
             "so it cannot be saved.")
 
+    # Make sure to replace invalid chars to avoid problems
+    uploadedFileName = ''.join('_' if ch in [':', '!', '[', ']', ';'] else ch for ch in uploadedFileName)
+
+    # The name is the request's own, and it used to be joined to the folder as
+    # it came: "../x" saved a new file outside the user's folder. Refused before
+    # the folder is even created, and every candidate below is checked again,
+    # since the suffix loop builds new names.
+    fileInFolder(DESTINATION_DIR, uploadedFileName, "uploaded file")
+
     #1. CREATE THE USER DATA DIRECTORY IF NOT EXISTS
     if(not os.path.isdir(DESTINATION_DIR)):
         os.makedirs(DESTINATION_DIR)
 
-    # Make sure to replace invalid chars to avoid problems
-    uploadedFileName = ''.join('_' if ch in [':', '!', '[', ']', ';'] else ch for ch in uploadedFileName)
-
     #TODO: CHECK IF ENOUGH SPACE
     #SAVE THE FILE TO USER's DIRECTORY
-    file_path = "{path}/{file}".format(path=DESTINATION_DIR, file=uploadedFileName)
+    file_path = fileInFolder(DESTINATION_DIR, uploadedFileName, "uploaded file")
 
     #CHECK IF FILENAME ALREADY EXISTS -> IF SO, ADD SUBFIX
     fileExtension=uploadedFileName.rsplit(".")
@@ -431,7 +445,7 @@ def saveFile(userID, uploadedFileName, options, uploadedFile, DESTINATION_DIR):
     iteration = 1
     while(os.path.isfile(file_path)):
         uploadedFileName = originalName + str(iteration) + fileExtension
-        file_path = "{path}/{file}".format(path=DESTINATION_DIR, file=uploadedFileName)
+        file_path = fileInFolder(DESTINATION_DIR, uploadedFileName, "uploaded file")
         iteration=iteration+1
 
     logging.info("\tSAVING " + uploadedFile.filename + " AS " + uploadedFileName + "...")
@@ -486,7 +500,9 @@ def registerFile(userID, fileName, options, location):
     if bool(options): #NOT EMPTY
         fileInstance.otherFields = options
 
-    file_path = "{path}/{file}".format(path=location, file=fileName)
+    # The admin's "register an inbuilt GTF" form passes fileName straight from
+    # the request; every other caller passes a name saveFile or copyFile chose.
+    file_path = fileInFolder(location, fileName)
     fileInstance.setSize(os.stat(file_path).st_size)
 
     import time
