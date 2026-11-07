@@ -15,6 +15,12 @@ The answer that means it is one sentence, raised by UserSessionManager.isValidUs
 as a CredentialException and framed by handleException. Both handlers now ask for
 that exception and that opening, through isInvalidSessionAnswer.
 
+So every servlet has to send that refusal through handleException. The MORE
+tool's Step 1 caught it itself and sent the bare sentence; with the stricter
+check it showed "Oops..Internal error!" with Report to a user whose session the
+server had forgotten (any restart or deploy forgets them all). It now sends it
+the way the other tools do, and its real answer is one of the cases below.
+
 Every body below is written by the real server code; the handlers are the real
 ones from Util.js, under node.
 
@@ -152,6 +158,30 @@ def _invalidSession(userID):
     raise AssertionError("isValidUser accepted a token nobody issued")
 
 
+class _StaleSessionRequest(object):
+    """A MORE submission from a page whose session the server no longer holds
+    (sessions live in memory, so every restart or deploy forgets them all)."""
+    form = {}
+    files = {}
+    cookies = {"userID": "17", "sessionToken": "a-token-nobody-issued"}
+
+
+class _NoQueue(object):
+    def enqueue(self, **kwargs):
+        raise AssertionError("a stale session queued a MORE job")
+
+
+def _moreToolAnswer():
+    """The body the real MORE Step 1 sends for a stale session.
+
+    It was the only servlet that caught isValidUser's refusal itself and sent
+    the bare sentence, with none of handleException's framing, so the MORE tool
+    showed "Oops..Internal error!" with Report where every other tool signs out.
+    """
+    from src.servlets.MOREServlet import fromMOREtoGenes_STEP1
+    return fromMOREtoGenes_STEP1(_StaleSessionRequest(), Response(), _NoQueue(), "MOREJOB").content
+
+
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")
 class TheSessionAnswerTest(unittest.TestCase):
 
@@ -164,6 +194,7 @@ class TheSessionAnswerTest(unittest.TestCase):
         bodies = {
             "invalidSession": _invalidSession("17"),
             "invalidSessionWithNoUser": _invalidSession(""),
+            "moreToolSession": _moreToolAnswer(),
             "refusalQuotingTheWords": _answerTo(InputFileError(refusal)),
             "crashQuotingTheWords": _answerTo(ValueError("could not convert string to float: '%s'" % WORDS)),
             "refusalQuotingTheWholeAnswer": _answerTo(InputFileError(
@@ -191,6 +222,13 @@ class TheSessionAnswerTest(unittest.TestCase):
                     self.assertIn("Invalid session", dialog["title"])
                     self.assertTrue(dialog["signedOut"])
                     self.assertEqual(dialog["report"], "none")
+
+    def test_the_more_tool_signs_a_stale_session_out(self):
+        """MORE's Step 1 failure goes to extJSErrorHandler, like the other tools'."""
+        for dialog in self.dialogs("moreToolSession"):
+            self.assertIn("Invalid session", dialog["title"])
+            self.assertTrue(dialog["signedOut"], "a stale session was kept on the MORE tool")
+            self.assertEqual(dialog["report"], "none")
 
     def test_a_refusal_quoting_the_words_is_a_refusal(self):
         ajax, form = self.dialogs("refusalQuotingTheWords")
