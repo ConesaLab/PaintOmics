@@ -28,6 +28,11 @@ What is pinned here
   a suggestion to pick something that is not in the combo.
 * The step 2 message appends the verdict, and a detector that raises leaves
   the message exactly as it was.
+* Maize v5 and grape ids name their organism (real ids, read from the zma and
+  vvi databases on paintomics.org, Ensembl Plants and NCBI on 2026-11-07).
+* The verdict's count says what was counted: identifiers the organism's index
+  holds, or identifiers that only have its form. Maize v4 transcript ids,
+  which no index holds, read "150 of 150 match its identifier index".
 
 Everything runs without MongoDB: the lookup is a dict.
 
@@ -36,6 +41,7 @@ Usage:
     python -m src.tests.test_organism_hint_from_identifiers
 """
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -426,6 +432,116 @@ class StepTwoMessageTest(unittest.TestCase):
         self.assertEqual(raising, plain)
         self.assertEqual(quiet, plain)
         self.assertIsNone(explainEmptyMapping("fgr", [], lambda name: [], detect=lambda i, o: "x"))
+
+
+# Real ids, each set read on 2026-11-07. The zma database on paintomics.org holds
+# 39,771 v5 genes and 145,097 transcripts and proteins, every one of these forms.
+MAIZE_V5 = ["Zm00001eb000010", "Zm00001eb000020", "Zm00001eb000010_T001", "Zm00001eb000020_P004",
+            "Zm00001eb000010_P001", "Zm00001eb000020_P002"]
+# Grape in each genome version: vvi on paintomics.org (PN_T2T, its Ensembl build);
+# Ensembl Plants 60 (PN40024.v4) and 50 (12X) entrez dumps; a user's mail; NCBI
+# gene_info locus tags.
+GRAPE = {
+    "PN_T2T": ["Vitis01g00541", "Vitis15g01003", "Vitis04g00873.t01", "Vitis02g00420.t01",
+               "Vitis07g00050.t01.CDS"],
+    "PN40024.v4": ["Vitvi18g00828", "Vitvi18g00267", "Vitvi18g00828_t001", "Vitvi18g00267_t003",
+                   "Vitvi18g00828_P001"],
+    "12X": ["VIT_00s0125g00090", "VIT_00s0125g00170", "VIT_00s0125g00090.t01", "VIT_00s0120g00050",
+            "VIT_00s0131g00010", "VIT_16s0100g01030"],
+    "NCBI locus tags": ["VIT_00032725001", "VIT_00022656001", "VIT_00028700001", "VIT_00019848001",
+                        "VIT_00000729001"],
+}
+
+
+class MaizeAndGrapeIdsTest(unittest.TestCase):
+
+    def test_maize_v5_ids_name_maize(self):
+        """Zm00001eb...: the pattern had Zm00001[de]\\d{6}, which no real v5 id fits."""
+        match = od.matchPattern(MAIZE_V5)
+        self.assertIsNotNone(match)
+        self.assertEqual(("zma",), match[0])
+        self.assertEqual(1.0, match[2])
+
+    def test_a_file_mixing_maize_v4_and_v5_still_names_maize(self):
+        mixed = ["Zm00001d027230", "Zm00001d002345", "Zm00001d045677", "Zm00001eb000010", "Zm00001eb000020"]
+        self.assertEqual(("zma",), od.matchPattern(mixed)[0])
+
+    def test_every_grape_version_names_grape(self):
+        for version, identifiers in GRAPE.items():
+            match = od.matchPattern(identifiers)
+            self.assertIsNotNone(match, version)
+            self.assertEqual(("vvi",), match[0], version)
+            self.assertEqual(1.0, match[2], version)
+
+    def test_lookalikes_are_neither(self):
+        pattern = {codes: re.compile(regex) for regex, codes, _ in od._PATTERN_TABLE
+                   if codes in (("zma",), ("vvi",)) and not regex.startswith("GRMZM")}
+        for identifier in ("Zm00001e000010", "Zm00001eb00001", "Zm00001eb0000100", "zm00001eb000010",
+                           "Zm00001eb000010_X001", "Zm00001eb000010_T", "Zm00001d027230_P001"):
+            self.assertIsNone(pattern[("zma",)].fullmatch(identifier), identifier)
+        for identifier in ("vitis01g00541", "Vitis1g00541", "Vitis01g0054", "Vitis01g00541.CDS",
+                           "VIT_00s012g00050", "VIT_0003272500", "VIT_000327250010", "vit_00s0120g00050",
+                           "Vitvi18g00828.t01", "VITISV_000123"):
+            self.assertIsNone(pattern[("vvi",)].fullmatch(identifier), identifier)
+
+    def test_a_grape_file_run_as_the_wrong_organism_is_told_grape(self):
+        for version, identifiers in GRAPE.items():
+            lookup = FakeLookup({"ath": [], "vvi": GRAPE["PN_T2T"]})
+            result = od.detectOrganism(identifiers, selected="ath", lookup=lookup,
+                                       names={"vvi": "Vitis vinifera (wine grape)"})
+            self.assertEqual("pattern", result["method"], version)
+            self.assertEqual("vvi", result["confident"]["code"], version)
+
+    def test_maize_v5_ids_run_as_the_wrong_organism_are_told_maize(self):
+        lookup = FakeLookup({"hsa": [], "zma": MAIZE_V5})
+        result = od.detectOrganism(MAIZE_V5, selected="hsa", lookup=lookup, names={"zma": "Zea mays"})
+        self.assertEqual("zma", result["confident"]["code"])
+        # zma's index holds every one of them, so the count is the index's.
+        self.assertEqual("index", result["confident"]["counted"])
+        self.assertEqual("They look like Zea mays identifiers (6 of 6 match its identifier index): go back "
+                         "to step 1 and choose that organism.", od.describeHint(result))
+
+
+class CountSaysWhatWasCountedTest(unittest.TestCase):
+    """A pattern names the organism; only the index can say the ids are in it."""
+
+    V4_TRANSCRIPTS = ["Zm00001d%06d_T00%d" % (27230 + i, i % 3 + 1) for i in range(150)]
+
+    def hint(self, identifiers, indexed):
+        lookup = FakeLookup({"hsa": [], "zma": indexed})
+        return od.detectOrganism(identifiers, selected="hsa", lookup=lookup, names={"zma": "Zea mays"})
+
+    def test_ids_the_index_does_not_hold_are_counted_as_ids_of_its_form(self):
+        result = self.hint(self.V4_TRANSCRIPTS, [])
+        self.assertEqual("zma", result["confident"]["code"])
+        self.assertEqual("form", result["confident"]["counted"])
+        self.assertEqual(0, result["confident"]["indexHits"])
+        sentence = od.describeHint(result)
+        self.assertNotIn("match its identifier index", sentence)
+        self.assertEqual("They look like Zea mays identifiers (150 of 150 have the form of its identifiers, "
+                         "but none is in its identifier index): go back to step 1 and choose that organism.",
+                         sentence)
+
+    def test_part_in_the_index_says_how_many(self):
+        genes = ["Zm00001d%06d" % (30000 + i) for i in range(75)]
+        result = self.hint(self.V4_TRANSCRIPTS[:75] + genes, genes)
+        self.assertIn("(150 of 150 have the form of its identifiers, 75 are in its identifier index)",
+                      od.describeHint(result))
+        result = self.hint(self.V4_TRANSCRIPTS[:149] + genes[:1], genes[:1])
+        self.assertIn("1 is in its identifier index", od.describeHint(result))
+
+    def test_the_step_2_message_says_it_too(self):
+        def sampler(name, limit=3):
+            return self.V4_TRANSCRIPTS[:limit]
+
+        def detect(identifiers, organism):
+            return od.describeHint(self.hint(identifiers, []))
+
+        message = explainEmptyMapping("hsa", [{"omicName": "Gene expression",
+                                               "omicSummary": [{"KEGG": 0, "Total": 0}, 150]}],
+                                      sampler, detect=detect)
+        self.assertIn("have the form of its identifiers, but none is in its identifier index", message)
+        self.assertNotIn("match its identifier index", message)
 
 
 if __name__ == "__main__":

@@ -270,7 +270,10 @@ matched nothing in this pathway, which is not the same as a p-value of 1.
 
 The organism's global **Metabolic pathways** map (`<organism>01100`) is left
 out of the table deliberately. It is a drawing of most of metabolism at once,
-so it is enriched in almost every metabolomics job and tells you nothing.
+so it is enriched in almost every metabolomics job and tells you nothing. The
+pathway network does not draw it either, and the **Pathways found** and
+**Significant** counts above the table do not count it, so **Pathways found**
+counts the pathways the table lists.
 
 On a job with more than five omics, and in mobile layout, the per-omic columns
 start hidden so that the pathway name and the combined value stay readable.

@@ -148,12 +148,32 @@ _PATTERN_TABLE = [
     (r"AT[1-5CM]G\d{5}(?:\.\d+)?", ("ath",), "Arabidopsis thaliana"),
     (r"Os\d{2}g\d{7}", ("dosa", "osa"), "Oryza sativa japonica"),
     (r"LOC_Os\d{2}g\d{5}", ("osa", "dosa"), "Oryza sativa japonica"),
-    # A v4 transcript's _T001 names the organism as surely as the gene does.
-    (r"Zm00001[de]\d{6}(?:_T\d+)?", ("zma",), "Zea mays"),
+    # Maize B73 in two genome versions, in one expression so a file that mixes
+    # them still reaches PATTERN_FRACTION:
+    #   RefGen_v4  Zm00001d027230, which zma accepts through
+    #              common_resources/identifier_aliases/zma.tsv.gz; a transcript's
+    #              _T001 names the organism as surely as the gene does
+    #   NAM-5.0    Zm00001eb000010, its transcripts _T001 and proteins _P001:
+    #              the build zma carries from Ensembl (39,771 genes and 145,097
+    #              transcripts and proteins on paintomics.org, 2026-11-07, every
+    #              one of this form). The "b" is part of the prefix; no id has
+    #              Zm00001e followed by a digit.
+    (r"Zm00001(?:d\d{6}(?:_T\d+)?|eb\d{6}(?:_[TP]\d+)?)", ("zma",), "Zea mays"),
     (r"GRMZM\d?G\d{6}", ("zma",), "Zea mays"),
     (r"Solyc\d{2}g\d{6}(?:\.\d+)?", ("sly",), "Solanum lycopersicum"),
     (r"Glyma\.?\d{2}[Gg]\d{6}", ("gmx",), "Glycine max"),
     (r"Potri\.\d{3}G\d{6}", ("pop",), "Populus trichocarpa"),
+    # Grape, in every genome version that published ids of its own (the forms
+    # read from Ensembl Plants' entrez dumps and NCBI's gene_info):
+    #   PN_T2T, Ensembl Plants 61 on   Vitis01g00541, .t01, .t01.CDS
+    #   PN40024.v4, releases 54-60     Vitvi18g00828, _t001, _P001
+    #   12X, releases up to 53         VIT_00s0125g00090, .t01
+    #   NCBI locus tags                VIT_00032725001
+    # vvi's Ensembl build is PN_T2T, so only the first form is in its identifier
+    # index; the other three are grape all the same, and describeHint says how
+    # many it found in the index rather than promising a match.
+    (r"Vitis\d{2}g\d{5}(?:\.t\d+(?:\.CDS)?)?|Vitvi\d{2}g\d{5}(?:_[tP]\d+)?"
+     r"|VIT_\d{2}s\d{4}g\d{5}(?:\.t\d+)?|VIT_\d{11}", ("vvi",), "Vitis vinifera"),
     # Cameor v2 gene ids (Psat.cameor.v2.1g00050, Psat.cameor.v2.0s1040g10400),
     # which psat accepts through common_resources/identifier_aliases/psat.tsv.gz.
     # A transcript's .1 names the organism as surely as the gene does.
@@ -354,8 +374,13 @@ def openLookup():
 # --- Decision ---------------------------------------------------------------
 
 def _candidate(code, hits, total, names, method):
+    """One organism's score. `counted` says what `hits` counts: "index" when it
+    is identifiers found in the organism's identifier index, "form" when a
+    pattern supplied it (see the pattern layer in detectOrganism), in which
+    case `indexHits` keeps what the index itself found."""
     return {"code": code, "name": names.get(code, code), "hits": hits, "total": total,
-            "fraction": (hits / float(total)) if total else 0.0, "method": method}
+            "fraction": (hits / float(total)) if total else 0.0, "method": method,
+            "counted": "index"}
 
 
 def decide(scored):
@@ -387,7 +412,8 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
     names         override of speciesNames() (tests)
 
     Result keys, all always present:
-      selected     {code, name, hits, total, fraction} or None
+      selected     {code, name, hits, total, fraction, counted} or None; every
+                   candidate has the same keys, plus indexHits when counted is "form"
       selectedOk   True when the chosen organism recognises enough -- say nothing
       confident    the one organism the sample fits, or None
       candidates   ranked list to show (the winner, or the tie), possibly empty
@@ -450,11 +476,17 @@ def detectOrganism(identifiers, selected=None, lookup=None, installed=None, name
                     # numbers. An xref without that namespace must not silence a
                     # definitional prefix -- but then hits and fraction have to
                     # move together, or the sentence reads "(0 of 120 matched)"
-                    # while claiming the organism.
+                    # while claiming the organism. And the count is then the
+                    # pattern's, not the index's: maize v4 transcript ids
+                    # (Zm00001d027230_T001) are in no identifier index, and
+                    # describeHint used to report all 150 of them as matching
+                    # zma's. `counted` and `indexHits` carry the difference.
                     floor = int(round(fraction * total))
                     if candidate["hits"] < floor:
+                        candidate["indexHits"] = candidate["hits"]
                         candidate["hits"] = floor
                         candidate["fraction"] = candidate["hits"] / float(total)
+                        candidate["counted"] = "form"
                     scored.append(candidate)
                 confident, candidates = decide(scored)
                 result.update(confident=confident, candidates=candidates, method="pattern")
@@ -502,10 +534,22 @@ def describeHint(result):
         return None
     confident = result.get("confident")
     if confident:
-        return ("They look like %s identifiers (%d of %d match its identifier index): go "
-                "back to step 1 and choose that organism." % (confident["name"],
-                                                              confident["hits"],
-                                                              confident["total"]))
+        name, hits, total = confident["name"], confident["hits"], confident["total"]
+        if confident.get("counted") != "form":
+            return ("They look like %s identifiers (%d of %d match its identifier index): go "
+                    "back to step 1 and choose that organism." % (name, hits, total))
+        # A pattern counted these, so say so, and say what the index found:
+        # "150 of 150 match its identifier index" for transcript ids the index
+        # does not hold is the sentence this replaces.
+        # The step 2 message this is appended to already says what to do about
+        # the identifiers themselves (strip a version suffix, or check the kind
+        # of identifier), which is the advice when the index holds none of them.
+        indexed = int(confident.get("indexHits") or 0)
+        inIndex = ("but none is" if indexed <= 0 else
+                   "1 is" if indexed == 1 else "%d are" % indexed)
+        return ("They look like %s identifiers (%d of %d have the form of its identifiers, "
+                "%s in its identifier index): go back to step 1 and choose that organism."
+                % (name, hits, total, inIndex))
     candidates = result.get("candidates") or []
     if len(candidates) >= 2:
         return ("They look like %s identifiers: go back to step 1 and choose the one your "

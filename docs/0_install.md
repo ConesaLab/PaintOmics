@@ -282,8 +282,8 @@ the run, so one absent organism does not cost you the rest of a batch.
   16 of the shipped scripts do. Reactome also does not cover every KEGG
   organism: installing one it does not curate fails with a message naming the
   species and telling you to use `--reactome=0`.
-* **[MapMan](1_3_mapman.md)** is produced by the build script of five plant
-  species (`ath`, `bvu`, `osa`, `sly`, `sot`). There is no flag for it.
+* **[MapMan](1_3_mapman.md)** is produced by the build script of four plant
+  species (`ath`, `osa`, `sly`, `sot`). There is no flag for it.
 * **[OmniPath](1_6_omnipath.md)** has its own installer and serves only human,
   mouse and rat — the web service rejects every other organism:
 
