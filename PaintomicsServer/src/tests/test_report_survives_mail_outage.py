@@ -167,7 +167,15 @@ class MailOutageTest(unittest.TestCase):
                          "delivery must be reported honestly as not delivered")
 
     def test_a_host_that_has_the_organism_installed_changes_nothing(self):
-        """The same answer on a machine whose KEGG_DATA lists fox."""
+        """The list _runHandler pins replaces the machine's own.
+
+        KEGG_DATA_DIR starts out at a list that holds fox, as it does on
+        paintomics.org, and the handler must never read that list: it sees the
+        pinned one, so the request goes through. Take the pin out of _runHandler
+        and this test fails on every machine, even one with no organisms, where
+        the other tests here would still pass. A request for an organism the
+        handler does see as installed is test_organism_request_rejects_installed.
+        """
         host = _keggDataDir(INSTALLED + [{"name": "Fusarium oxysporum", "value": "fox"}])
         saved = AdminServlet.KEGG_DATA_DIR
         AdminServlet.KEGG_DATA_DIR = host + "/"
