@@ -530,6 +530,10 @@ expression file uses.
     Unlike the upload form, miRNA2Genes always splits on tabs, and always treats
     the first line of the quantification file as a header. A comma-separated
     file, or one that begins with data, will not be read the way you intend.
+    The header needs one condition name per value column, with or without a
+    label for the miRNA id column first: over rows of four values, four or five
+    cells. A header with more or fewer is refused, and the message gives both
+    counts.
 
 Most miRNAs have many predicted targets and few real ones at any given moment,
 so the point of the tool is to discriminate:

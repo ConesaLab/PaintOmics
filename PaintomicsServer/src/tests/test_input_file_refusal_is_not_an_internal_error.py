@@ -47,6 +47,7 @@ from src.classes.JobInstances import MiRNA2GeneJob as MiRNA2GeneJob_module
 from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob, emptyResultError
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob, explainEmptyMapping
 from src.common.ServerErrorManager import InputFileError, handleException
+from src.common.bioscripts import miRNA2Target
 from src.conf.serverconf import SERVER_SUBDOMAIN
 from src.paintomicsserver import Response
 from src.servlets import MiRNA2GenesServlet
@@ -372,7 +373,7 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
                 self.assertEqual(answer.status, 400)
                 self.assertIs(answer.content["extra"]["input_error"], True)
                 self.assertIn("Your data has 1 condition column", answer.content["message"])
-                self.assertNotIn("The scoring step stopped", answer.content["message"])
+                self.assertNotIn("failed on our side", answer.content["message"])
 
     def test_pearson_does_abort_on_a_single_condition(self):
         """What the test above is there for: stats["aborted"] alone would call it a crash."""
@@ -402,17 +403,18 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
                     self.assertIs(answer.content["extra"]["input_error"], True)
                     self.assertIn("Your data has 1 condition column", answer.content["message"])
                     self.assertNotIn("not one target gene was found", answer.content["message"])
-                    self.assertNotIn("The scoring step stopped", answer.content["message"])
+                    self.assertNotIn("failed on our side", answer.content["message"])
 
-    def test_a_missing_target_does_not_hide_a_crash(self):
-        """A target was found and scoring crashed on it, whichever row comes first."""
+    def test_a_missing_target_does_not_hide_the_header_row(self):
+        """A target was found and its row could not be scored, whichever row comes first."""
         for targets in (["NOPE", "#gene"], ["#gene", "NOPE"]):
             for method in METHODS:
                 with self.subTest(method=method, targets=targets):
-                    answer = self._crashed(method, targets)
+                    answer = self._headerRowScored(method, targets)
                     self.assertEqual(answer.status, 400)
-                    self.assertIs(answer.content["extra"]["input_error"], False)
-                    self.assertIn("The scoring step stopped", answer.content["message"])
+                    self.assertIs(answer.content["extra"]["input_error"], True)
+                    self.assertIn("first cell of the header row of your gene expression file",
+                                  answer.content["message"])
                     self.assertNotIn("not one target gene was found", answer.content["message"])
 
     def test_targets_that_are_all_missing_are_still_refused(self):
@@ -430,7 +432,7 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
                         self.assertEqual("Once the targets match" in answer.content["message"], conditionsNote)
 
     def test_the_error_goes_by_what_the_text_explains(self):
-        """An abort under a sentence about the files is a refusal; the crash text is not."""
+        """An abort under a sentence about the files is a refusal; a failure of ours is not."""
         aborted = {"aborted": "boom", "abortedAfterPairs": 2, "regulators": 2, "pairs": 2, "scored": 0}
         for name, stats, sentence in (
                 ("no data rows", dict(aborted, regulators=0), "has no data rows"),
@@ -446,40 +448,70 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
         for stats in (aborted, dict(aborted, unmatchedTargets=1)):
             crash = emptyResultError(stats)
             self.assertNotIsInstance(crash, InputFileError)
-            self.assertIn("stopped after 2 miRNA-target pairs with: boom", str(crash))
+            self.assertIn("failed on our side after 2 of 2 miRNA-target pairs, with the error: boom",
+                          str(crash))
+        notANumber = dict(aborted, notANumber={"file": "gene expression", "row": "#gene", "cell": "C1",
+                                               "headerRow": True, "regulator": "m1", "target": "#gene"})
+        self.assertIsInstance(emptyResultError(notANumber), InputFileError)
+        self.assertIsInstance(emptyResultError({"headerMismatch": {"cells": 3, "values": 1}}), InputFileError)
         self.assertIsInstance(emptyResultError(dict(aborted, aborted=None, unmatchedTargets=2)), InputFileError)
 
-    def test_a_scoring_step_that_crashed_is_not_a_refusal(self):
-        """It says it is not a problem with the identifiers, so it keeps Report error.
+    def test_a_header_row_read_as_a_gene_is_named_as_such(self):
+        """The gene file is read with its header row, so a target named like its first
+        cell meets condition names. That is the files, and the message says which row.
 
-        float() quotes the cell it could not read, and this answer reaches a dialog
-        that takes HTML, so the text is escaped here. The quotes are left: the Step 1
-        dialog encodes this text again, and would show an entity.
+        It quotes the cell, and the dialog encodes a refusal, so the text stays raw.
         """
         for method in ("pearson", "kendall", "spearman"):
             with self.subTest(method=method):
-                message = self._crashed(method).content["message"]
-                self.assertIn("The scoring step stopped", message)
-                self.assertIn("not a problem with your identifiers", message)
-                self.assertNotIn("<img", message)
-                self.assertIn("float: '&lt;img src=x onerror=console.log(1)&gt;'", message)
+                answer = self._headerRowScored(method)
+                message = answer.content["message"]
+                self.assertIs(answer.content["extra"]["input_error"], True)
+                self.assertIn('a target called "#gene", which is also the first cell of the header row', message)
+                self.assertIn('its cell "%s" is not a number' % HOSTILE_MIRNA, message)
+                self.assertNotIn("not a problem with your identifiers", message)
+                self.assertNotIn("&lt;", message)
 
-    def test_that_crash_is_marked_as_ours(self):
+    def test_a_scoring_step_that_failed_on_our_side_keeps_report_error(self):
+        """Its text can quote the files and its dialog takes HTML, so it is escaped here.
+        The quotes are left: the Step 1 dialog encodes this text again."""
         for method in ("pearson", "kendall", "spearman"):
             with self.subTest(method=method):
-                answer = self._crashed(method)
+                answer = self._failedOnOurSide(method)
+                message = answer.content["message"]
                 self.assertEqual(answer.status, 400)
                 self.assertIs(answer.content["extra"]["input_error"], False)
+                self.assertIn("The scoring step failed on our side at miRNA-target pair 1 of 1", message)
+                self.assertNotIn("<img", message)
+                self.assertIn("float: '&lt;img src=x onerror=console.log(1)&gt;'", message)
 
     def test_stats_that_are_not_there_are_still_a_refusal(self):
         self.assertIsInstance(emptyResultError(None), InputFileError)
 
-    def _crashed(self, method="kendall", targets=("#gene",)):
-        """A target named as the gene file's header row is scored on its cell text."""
+    def _headerRowScored(self, method="kendall", targets=("#gene",)):
+        return _headerRowScoredAnswer(method, targets)
+
+    def _failedOnOurSide(self, method="kendall"):
+        return _failedOnOurSideAnswer(method)
+
+
+def _headerRowScoredAnswer(method="kendall", targets=("#gene",)):
+    """A target named as the gene file's header row is scored on its cell text."""
+    return _miRNAToolAnswer({
+        "values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"]],
+        "targets": [["mmu-miR-1", target] for target in targets],
+        "genes": [["#gene", HOSTILE_MIRNA, "C2"], ["G1", "1.0", "2.0"]]}, method=method)
+
+
+def _failedOnOurSideAnswer(method="kendall"):
+    """Files that score, and a scoring step that raises on them."""
+    def broken(*args):
+        raise ValueError("could not convert string to float: '%s'" % HOSTILE_MIRNA)
+    with mock.patch.object(miRNA2Target, "getScore", broken):
         return _miRNAToolAnswer({
             "values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"]],
-            "targets": [["mmu-miR-1", target] for target in targets],
-            "genes": [["#gene", HOSTILE_MIRNA, "C2"], ["G1", "1.0", "2.0"]]}, method=method)
+            "targets": [["mmu-miR-1", "G1"]],
+            "genes": [["#gene", "C1", "C2"], ["G1", "1.0", "2.0"]]}, method=method)
 
 
 def _answerTo(exception, userID=None):
@@ -517,6 +549,8 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
                 "internalError": _answerTo(ValueError("The table is broken."), userID="17"),
                 "anonymousError": _answerTo(ValueError("The table is broken.")),
                 "miRNATool": _miRNAToolAnswer(ROWS).content,
+                "miRNAHeaderRow": _headerRowScoredAnswer().content,
+                "miRNAOurFailure": _failedOnOurSideAnswer().content,
             }),
             "lines": json.dumps({
                 "fullStop": "InputFileError: AT S.py: f. ERROR MESSAGE: PaintOmics recognised.. User ID: 17",
@@ -569,6 +603,22 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         self.assertNotIn("<NA>", result["body"])
         self.assertIn("&lt;img src=x", result["body"])
         self.assertIn("&lt;NA&gt;", result["body"])
+
+    def test_a_header_row_read_as_a_gene_is_a_refusal_shown_as_text(self):
+        result = self.results["miRNAHeaderRow"]
+        self.assertIn("Please check your input files", result["title"])
+        self.assertEqual(result["report"], "none")
+        self.assertNotIn("<img", result["body"])
+        self.assertIn("&lt;img src=x", result["body"])
+        self.assertIn("header row of your gene expression file", result["body"])
+
+    def test_a_scoring_step_that_failed_on_our_side_offers_report_error(self):
+        result = self.results["miRNAOurFailure"]
+        self.assertIn("Oops..Internal error!", result["title"])
+        self.assertEqual(result["report"], "inline-block")
+        self.assertIn("The scoring step failed on our side", result["body"])
+        self.assertIn("no partial result was saved", result["body"])
+        self.assertNotIn("<img", result["body"])
 
     def test_the_markup_a_refusal_is_written_in_still_works(self):
         body = self.results["markedUpRefusal"]["body"]
