@@ -5,7 +5,7 @@ instance; `cd.yml`'s "deploy" is an ephemeral stack on the runner.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `pr.yml` | every pull request | The gate: lint, the unit-test sweep, one example dataset per pipeline class, a secret scan and a documentation build |
+| `pr.yml` | every pull request | The gate: lint and the client's JavaScript tests, the unit-test sweep, one example dataset per pipeline class, a secret scan and a documentation build |
 | `nightly.yml` | 03:17 daily, or by hand | All twelve example datasets against `tests/baseline/`, plus the species installer end to end against the live KEGG API |
 | `cd.yml` | push to `master` | Builds the deployable image and brings up a throwaway staging stack on the runner, checked with `deploy/smoke-test.sh` |
 | `data-cache.yml` | weekly, or by hand | Seeds the Actions cache with the species-data snapshot the baselines were recorded against. The only workflow that reads a secret |
@@ -141,16 +141,16 @@ datasets, so a stale baseline in the other eight is invisible until 03:17.
 
 ## Running the gate locally
 
-Lint is the cheapest job to fail, and the whole of it runs locally:
+Lint is the cheapest job to fail, and every check it makes on the code runs
+locally:
 
 ```bash
 pip install ruff==0.14.13 vulture==2.16
 ruff check --output-format concise .
 scripts/ci/vulture_gate.sh
 for s in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do bash -n "$s" || exit 1; done
-find PaintomicsClient -name '*.js' \
-  | grep -vEi '/(lib|libs|vendor|ext-[0-9]|extjs|jquery|node_modules)/' \
-  | xargs -n1 node --check
+npx --yes eslint@10.9.1 .
+sh PaintomicsClient/tests/run.sh
 python -m compileall -q scripts/ci/vulture_whitelist.py
 ```
 

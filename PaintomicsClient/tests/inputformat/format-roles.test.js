@@ -35,7 +35,7 @@ test("a two-column relevant list is accepted whatever the condition count", () =
   assert.strictEqual(R.validateRelevant([["G1","miR-1"]], 6).ok, true);
 });
 
-test("a design file needs 0/1 indicators with exactly one condition per sample", () => {
+test("a design file with 0/1 indicators passes and lists its conditions", () => {
   const good = [["Sample","Control","Treated"],["S1","1","0"],["S2","0","1"]];
   assert.strictEqual(R.validateDesign(good).ok, true);
   assert.deepStrictEqual(R.validateDesign(good).summary.conditions, ["Control","Treated"]);
@@ -46,9 +46,17 @@ test("a design file rejects condition labels instead of indicators", () => {
   assert.ok(R.validateDesign(bad).problems.some(p => p.code === "NOT_INDICATOR"));
 });
 
-test("a design file rejects a sample in two conditions at once", () => {
-  const bad = [["Sample","Control","Treated"],["S1","1","1"]];
-  assert.ok(R.validateDesign(bad).problems.some(p => p.code === "NOT_ONE_CONDITION"));
+test("a design file accepts a sample in two conditions at once", () => {
+  // A multi-factor row. more-rs, the MORE engine, reads it, and
+  // MOREServlet._designPatternNames handles it on purpose, so since 20ad645b
+  // the check refuses only text and a repeated sample. That rule was set
+  // against runMORE.R, removed in #166; more-rs takes the row too. This test
+  // still expected the older one-1-per-row rule;
+  // test_conditions_file_is_held_to_r_rules pins the same contract from the
+  // server side.
+  const multi = [["Sample","Control","Treated"],["S1","1","1"],["S2","0","1"]];
+  const report = R.validateDesign(multi);
+  assert.strictEqual(report.ok, true, JSON.stringify(report.problems));
 });
 
 test("roles are taken from the file name", () => {

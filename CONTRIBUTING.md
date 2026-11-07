@@ -209,9 +209,8 @@ pip install ruff==0.14.13 vulture==2.16
 ruff check --output-format concise .
 scripts/ci/vulture_gate.sh
 for s in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do bash -n "$s" || exit 1; done
-find PaintomicsClient -name '*.js' \
-  | grep -vEi '/(lib|libs|vendor|ext-[0-9]|extjs|jquery|node_modules)/' \
-  | xargs -n1 node --check
+npx --yes eslint@10.9.1 .
+sh PaintomicsClient/tests/run.sh
 python -m compileall -q scripts/ci/vulture_whitelist.py
 ```
 

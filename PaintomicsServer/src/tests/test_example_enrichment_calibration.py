@@ -50,7 +50,9 @@ Usage:
     cd PaintomicsServer
     python -m src.tests.test_example_enrichment_calibration
 """
+import math
 import os
+import re
 import sys
 import unittest
 
@@ -146,6 +148,58 @@ def declaredTargets(scenario):
                 continue
             rows.append(line.rstrip("\n").split("\t")[0].strip())
     return rows
+
+
+# `95/136 planted` or, for MORE, `7/9 planted (of 20 in the pathway)`.
+_RECORDED_SHARE = re.compile(r"^\s*(\d+)/(\d+) planted")
+
+
+def recordedTargets(scenario):
+    """{pathwayID: (name, planted, members)} as the generator wrote them.
+
+    Each line of the expected-pathways file carries the KEGG name and the
+    planted share the generator measured when it wrote the line:
+    `mmu04142<TAB>Lysosome<TAB>95/136 planted`. That line is the only record of
+    what a target pathway was at build time, so it is what tells a generator
+    that planted too little apart from a KEGG copy that differs from the one
+    the scenario was built on.
+    """
+    expected = scenario.get("expected", {})
+    path = ExampleDatasets.absolutePath(EXAMPLE_DIR, expected["pathwaysFile"])
+    recorded = {}
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip() or line.startswith("#"):
+                continue
+            cells = [cell.strip() for cell in line.rstrip("\n").split("\t")]
+            name = cells[1] if len(cells) > 1 else None
+            share = _RECORDED_SHARE.match(cells[2]) if len(cells) > 2 else None
+            recorded[cells[0]] = (name,
+                                  int(share.group(1)) if share else None,
+                                  int(share.group(2)) if share else None)
+    return recorded
+
+
+def nameDiffersFromRecord(recordedName, installedName):
+    """Does the KEGG here name this pathway differently from the scenario's
+    record?
+
+    A new name is KEGG saying the map now stands for something else. Example 01
+    records mmu04142 as "Lysosome", 136 mouse genes. That line dates from the
+    example's first commit (8a4eb452, whose manifest names a KEGG copy
+    downloaded 2025-11-18), and the regeneration in 37ea67d5 left it as it was.
+    paintomics.org's copy, downloaded 2026-08-13, calls it "Lysosome biogenesis",
+    253 genes, and the 95 planted genes are 38% of it. A pathway that grew or
+    shrank under the same name is not a rename: it is still held to the floor.
+    Case and spacing are ignored, and a name missing on either side is no
+    evidence of a rename.
+    """
+    if not recordedName or not installedName:
+        return False
+
+    def norm(name):
+        return " ".join(name.split()).casefold()
+    return norm(recordedName) != norm(installedName)
 
 
 def enrichmentShape(kegg, background, relevant, targets):
@@ -291,29 +345,80 @@ class TargetCoverageTest(unittest.TestCase):
                          if scenario.get("simulated")]
 
     def test_every_declared_target_carries_a_real_share_of_the_signal(self):
+        """Checked against the KEGG_DATA installed here, one target at a time.
+
+        A target under the floor whose KEGG name differs from the scenario's
+        record is held to a weaker rule instead: the planted genes still in it
+        must meet the floor against the size the record gives. If they do, the
+        floor is skipped with the reason, because the share was planted on the
+        old pathway and holding it to the new one blames the generator for a
+        KEGG change. Every other target is held to the floor.
+        """
         for scenario in self.scenarios:
             expected = scenario.get("expected", {})
             signalPath = ExampleDatasets.absolutePath(
                 EXAMPLE_DIR, expected["signalFeaturesFile"])
             signal = readColumn(signalPath)
             measured = measuredFeatures(scenario)
+            recorded = recordedTargets(scenario)
             for pathway in declaredTargets(scenario):
-                members = self.kegg.pathwayToGenes.get(pathway, ())
-                self.assertTrue(members, "%s declares unknown pathway %s"
-                                % (scenario["id"], pathway))
-                if measured is not None:
-                    members = [gene for gene in members if gene in measured]
-                    self.assertTrue(
-                        members,
-                        "%s declares %s as a target and measures none of its "
-                        "genes" % (scenario["id"], pathway))
-                planted = sum(1 for gene in members if gene in signal)
-                self.assertGreaterEqual(
-                    planted / float(len(members)), MIN_TARGET_COVERAGE,
-                    "%s declares %s as a target but planted %d of its %d "
-                    "genes. `expected_pathways.txt` says enrichment should "
-                    "rank it highly; nothing in the data makes that true."
-                    % (scenario["id"], pathway, planted, len(members)))
+                with self.subTest(scenario=scenario["id"], pathway=pathway):
+                    self._checkTarget(scenario["id"], pathway, signal, measured,
+                                      recorded.get(pathway, (None, None, None)))
+
+    def _checkTarget(self, scenarioId, pathway, signal, measured, recorded):
+        recordedName, recordedPlanted, recordedMembers = recorded
+        members = self.kegg.pathwayToGenes.get(pathway, ())
+        self.assertTrue(members, "%s declares unknown pathway %s"
+                        % (scenarioId, pathway))
+        if measured is not None:
+            members = [gene for gene in members if gene in measured]
+            self.assertTrue(
+                members,
+                "%s declares %s as a target and measures none of its "
+                "genes" % (scenarioId, pathway))
+        planted = sum(1 for gene in members if gene in signal)
+        if planted / float(len(members)) >= MIN_TARGET_COVERAGE:
+            return
+        installedName = self.kegg.pathwayNames.get(pathway)
+        if recordedMembers and nameDiffersFromRecord(recordedName, installedName):
+            # The floor was met on the old pathway. What can still be checked
+            # on the new one is that floor against the recorded size. An
+            # ordinary release moves a gene or two, which does not fail a
+            # target that kept its name, and must not fail this one either.
+            # Losing a real part of the planted genes means signal_features.txt
+            # lost them, or KEGG moved them out of the map, and either way the
+            # target no longer carries the signal it was built with.
+            self.assertGreaterEqual(
+                planted / float(recordedMembers), MIN_TARGET_COVERAGE,
+                "%s records %s as %r with %d genes, and this KEGG_DATA calls "
+                "it %r. It has only %d planted genes left (the build planted "
+                "%s), under the %d%% floor even on the recorded size. "
+                "`expected_pathways.txt` says enrichment should rank it "
+                "highly; the data no longer carries the signal it was built "
+                "with."
+                % (scenarioId, pathway, recordedName, recordedMembers,
+                   installedName, planted, recordedPlanted,
+                   round(100 * MIN_TARGET_COVERAGE)))
+            self.skipTest(
+                "%s records %s as %r with %d genes; this KEGG_DATA calls it "
+                "%r with %d genes. It still holds %d "
+                "planted genes (the build planted %s), but they are %d%% of "
+                "the new pathway, and the %d%% floor was met on the old one, "
+                "so the floor is not applied here. Rebuild the scenario on "
+                "this KEGG (python -m src.AdminTools.scripts.exampledata) to "
+                "check it again."
+                % (scenarioId, pathway, recordedName, recordedMembers,
+                   installedName, len(members), planted, recordedPlanted,
+                   round(100.0 * planted / len(members)),
+                   round(100 * MIN_TARGET_COVERAGE)))
+        self.fail(
+            "%s declares %s as a target but planted %d of its %d "
+            "genes (%s/%s when it was built). `expected_pathways.txt` says "
+            "enrichment should rank it highly; nothing in the data makes "
+            "that true."
+            % (scenarioId, pathway, planted, len(members),
+               recordedPlanted, recordedMembers))
 
     def test_the_manifest_records_the_coverage_it_achieved(self):
         """So a reader of the manifest can see the invariant without
@@ -326,6 +431,156 @@ class TargetCoverageTest(unittest.TestCase):
                              expected["targetPathways"], scenario["id"])
             self.assertGreaterEqual(expected["minTargetCoverage"],
                                     MIN_TARGET_COVERAGE, scenario["id"])
+
+
+class _StandInKegg(object):
+    """The two indexes TargetCoverageTest reads from a KeggSource."""
+
+    def __init__(self, pathwayToGenes, pathwayNames):
+        self.pathwayToGenes = pathwayToGenes
+        self.pathwayNames = pathwayNames
+
+
+class TargetCoverageAcrossKeggReleasesTest(unittest.TestCase):
+    """TargetCoverageTest's verdict on a stand-in KEGG, so it runs everywhere.
+
+    The KEGG-backed classes in this file skip wherever the KEGG_DATA has no
+    Ensembl mapping, and CI's snapshot ships none, so there they never run.
+    On paintomics.org's KEGG they ran and failed on mmu04142, which has a new
+    name there and nearly twice the genes example 01 records. These rebuild
+    each gene-single-condition target as its build record describes it (95
+    planted genes and 41 unplanted ones for `mmu04142 Lysosome 95/136`), then
+    change one target the way a KEGG release can: renamed, enlarged, or with
+    a planted gene gone. Nothing here names a pathway, so a rebuild of the
+    scenario on a newer KEGG leaves these tests meaningful.
+    """
+
+    SCENARIO = "gene-single-condition"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.scenario = ExampleDatasets.getScenario(EXAMPLE_DIR, cls.SCENARIO)
+        cls.signal = sorted(readColumn(ExampleDatasets.absolutePath(
+            EXAMPLE_DIR, cls.scenario["expected"]["signalFeaturesFile"])))
+        cls.recorded = recordedTargets(cls.scenario)
+        # Any declared target will do; the first one is the one changed.
+        cls.target = declaredTargets(cls.scenario)[0]
+        cls.name, cls.planted, cls.members = cls.recorded[cls.target]
+
+    def _kegg(self, renamed=False, enlarged=False, lostPlanted=0):
+        """Each target as recorded; the arguments change `self.target` only.
+
+        `enlarged` adds twice the recorded membership in unplanted genes, so
+        the share falls to a third of what was recorded, under the floor
+        whatever it was. `lostPlanted` swaps that many planted genes for
+        unplanted ones, the way a planted gene leaving the map would.
+        """
+        pathwayToGenes, pathwayNames = {}, {}
+        fakes = ("ENSMUSG9%010d" % index for index in range(10 ** 9))
+        for pathway in declaredTargets(self.scenario):
+            name, planted, members = self.recorded[pathway]
+            extra, lost = 0, 0
+            if pathway == self.target:
+                extra = 2 * members if enlarged else 0
+                lost = lostPlanted
+                name = "%s (renamed)" % name if renamed else name
+            genes = self.signal[:planted - lost]
+            genes += [next(fakes) for _ in range(members - planted + lost + extra)]
+            pathwayToGenes[pathway] = genes
+            pathwayNames[pathway] = name
+        return _StandInKegg(pathwayToGenes, pathwayNames)
+
+    def _verdict(self, kegg):
+        """(failure texts, skip reasons) from TargetCoverageTest on `kegg`."""
+        class StandIn(TargetCoverageTest):
+            @classmethod
+            def setUpClass(cls):
+                pass
+        StandIn.kegg = kegg
+        StandIn.scenarios = [self.scenario]
+        result = unittest.TestResult()
+        StandIn("test_every_declared_target_carries_a_real_share_of_the_signal").run(result)
+        return ([text for _test, text in result.failures + result.errors],
+                [reason for _test, reason in result.skipped])
+
+    def test_every_target_records_what_this_relies_on(self):
+        """A name, and a planted share that met the floor, for every target
+        of every simulated scenario. The rename rule compares that name and
+        measures against that size; the stand-in here is built from both, and
+        needs that many planted genes in signal_features.txt."""
+        for scenario in ExampleDatasets.loadManifest(EXAMPLE_DIR)["scenarios"]:
+            if not scenario.get("simulated"):
+                continue
+            signal = readColumn(ExampleDatasets.absolutePath(
+                EXAMPLE_DIR, scenario["expected"]["signalFeaturesFile"]))
+            recorded = recordedTargets(scenario)
+            for pathway in declaredTargets(scenario):
+                with self.subTest(scenario=scenario["id"], pathway=pathway):
+                    name, planted, members = recorded[pathway]
+                    self.assertTrue(name, "no KEGG name recorded")
+                    self.assertIsNotNone(planted, "no `N/M planted` recorded")
+                    self.assertGreaterEqual(planted / float(members),
+                                            MIN_TARGET_COVERAGE)
+                    self.assertLessEqual(planted, len(signal))
+
+    def test_a_kegg_that_matches_the_build_passes_with_nothing_skipped(self):
+        self.assertEqual(self._verdict(self._kegg()), ([], []))
+
+    def test_a_target_kegg_renamed_and_enlarged_is_skipped_not_failed(self):
+        """paintomics.org's KEGG: mmu04142 "Lysosome biogenesis", 253 genes,
+        all 95 planted genes still in it."""
+        failures, skips = self._verdict(self._kegg(renamed=True, enlarged=True))
+        self.assertEqual(failures, [])
+        self.assertEqual(len(skips), 1, skips)
+        self.assertIn(self.target, skips[0])
+        self.assertIn("%r" % ("%s (renamed)" % self.name), skips[0])
+        self.assertIn("still holds %d planted genes" % self.planted, skips[0])
+
+    def _lostAtTheFloor(self):
+        """The planted genes the target can lose and still meet the floor on
+        the size the build recorded."""
+        return self.planted - math.ceil(MIN_TARGET_COVERAGE * self.members)
+
+    def test_a_renamed_target_that_lost_a_few_planted_genes_is_still_skipped(self):
+        """One gene leaving a map is an ordinary KEGG update: it does not fail
+        a target that kept its name, and it must not fail a renamed one. The
+        same holds down to the floor on the size the build recorded."""
+        for lost in (1, self._lostAtTheFloor()):
+            with self.subTest(lost=lost):
+                failures, skips = self._verdict(
+                    self._kegg(renamed=True, enlarged=True, lostPlanted=lost))
+                self.assertEqual(failures, [])
+                self.assertEqual(len(skips), 1, skips)
+                self.assertIn("still holds %d planted genes" % (self.planted - lost),
+                              skips[0])
+
+    def test_a_renamed_target_that_lost_the_signal_still_fails(self):
+        """The rename excuses the share of the new pathway, not the planted
+        genes: under the floor on the size the build recorded is a failure."""
+        lost = self._lostAtTheFloor() + 1
+        failures, skips = self._verdict(
+            self._kegg(renamed=True, enlarged=True, lostPlanted=lost))
+        self.assertEqual(skips, [])
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn("It has only %d planted genes left (the build planted %d)" % (
+            self.planted - lost, self.planted), failures[0])
+
+    def test_a_renamed_target_that_still_meets_the_floor_is_checked_not_skipped(self):
+        self.assertEqual(self._verdict(self._kegg(renamed=True)), ([], []))
+
+    def test_a_target_enlarged_under_its_old_name_still_fails(self):
+        """No rename, no excuse: a short-planted target is the generator's."""
+        failures, skips = self._verdict(self._kegg(enlarged=True))
+        self.assertEqual(skips, [])
+        self.assertEqual(len(failures), 1, failures)
+        self.assertIn("planted %d of its %d genes" % (
+            self.planted, 3 * self.members), failures[0])
+
+    def test_a_change_of_case_or_spacing_is_not_a_rename(self):
+        self.assertFalse(nameDiffersFromRecord("Lysosome", "  lysosome "))
+        self.assertFalse(nameDiffersFromRecord(None, "Lysosome biogenesis"))
+        self.assertFalse(nameDiffersFromRecord("Lysosome", None))
+        self.assertTrue(nameDiffersFromRecord("Lysosome", "Lysosome biogenesis"))
 
 
 class CompoundSignalTest(unittest.TestCase):

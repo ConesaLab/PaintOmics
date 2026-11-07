@@ -282,3 +282,8 @@ test_identifier_aliases	0.8
 # here at 0.3 s. Without it 25 suites were unrecorded, and
 # test_shard_split_is_balanced allows fewer than 25.
 test_installer_small_and_unfinished_species	0.6
+# Added with fix/client-tests-in-ci (2026-11-07), charged like
+# test_gate_baseline_rules, which also only reads files from the repository:
+# on the VM the two took 1.0 and 0.9 s. Without it 25 suites were unrecorded,
+# and test_shard_split_is_balanced allows fewer than 25.
+test_client_tests_run_in_ci	0.1

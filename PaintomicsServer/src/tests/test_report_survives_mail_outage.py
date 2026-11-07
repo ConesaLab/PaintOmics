@@ -23,9 +23,12 @@ Two independent defects met there:
 Run:  PYTHONPATH=PaintomicsServer python3 PaintomicsServer/src/tests/test_report_survives_mail_outage.py
 """
 import importlib.util
+import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -85,8 +88,31 @@ class _Response(object):
         self.status = status
 
 
+# The organisms the server in these tests has installed. The default form asks
+# for Fusarium oxysporum, and adminServletSendReport turns away a request for
+# an organism that is already installed before it stores or mails anything.
+# Read from the host's KEGG_DATA_DIR, that made the result depend on the
+# machine: CI's snapshot holds only mouse, so the request went through, while
+# paintomics.org's KEGG_DATA holds fox, so it was refused there and five tests
+# failed for a reason that has nothing to do with mail. Pinned, as
+# test_organism_request_rejects_installed pins its own.
+INSTALLED = [{"name": "Homo sapiens (human)", "value": "hsa"},
+             {"name": "Mus musculus (house mouse)", "value": "mmu"}]
+
+
+def _keggDataDir(species):
+    """A throwaway KEGG_DATA_DIR whose current/species.json lists `species`."""
+    directory = tempfile.mkdtemp(prefix="paintomics-mail-outage-")
+    os.makedirs(os.path.join(directory, "current"))
+    with open(os.path.join(directory, "current", "species.json"), "w",
+              encoding="utf-8") as handle:
+        json.dump({"success": True, "species": species}, handle)
+    return directory
+
+
 def _runHandler(mailBehaviour, calls, form=None):
-    """Drive the real handler with a stubbed DAO and a stubbed mailer."""
+    """Drive the real handler with a stubbed DAO, a stubbed mailer and the
+    installed organisms in INSTALLED, whatever the host has installed."""
     # Named the way the dialog names it: a request without an organism is
     # refused before it is stored (test_organism_request_rejects_installed).
     form = form or {"type": "specie_request",
@@ -108,14 +134,17 @@ def _runHandler(mailBehaviour, calls, form=None):
         calls.append(("sendEmail",))
         mailBehaviour()
 
-    originalDAO, originalMail = AdminServlet.ReportDAO, AdminServlet.sendEmail
+    keggDataDir = _keggDataDir(INSTALLED)
+    saved = (AdminServlet.ReportDAO, AdminServlet.sendEmail, AdminServlet.KEGG_DATA_DIR)
     AdminServlet.ReportDAO, AdminServlet.sendEmail = _StubDAO, _stubSendEmail
+    AdminServlet.KEGG_DATA_DIR = keggDataDir + "/"
     try:
         response = _Response()
         AdminServlet.adminServletSendReport(_Request(form), response, "/tmp")
         return response
     finally:
-        AdminServlet.ReportDAO, AdminServlet.sendEmail = originalDAO, originalMail
+        (AdminServlet.ReportDAO, AdminServlet.sendEmail, AdminServlet.KEGG_DATA_DIR) = saved
+        shutil.rmtree(keggDataDir, ignore_errors=True)
 
 
 def _fail():
@@ -136,6 +165,28 @@ class MailOutageTest(unittest.TestCase):
                         "a mail outage still fails the submission: %r" % (response.content,))
         self.assertFalse(response.content.get("delivered"),
                          "delivery must be reported honestly as not delivered")
+
+    def test_a_host_that_has_the_organism_installed_changes_nothing(self):
+        """The list _runHandler pins replaces the machine's own.
+
+        KEGG_DATA_DIR starts out at a list that holds fox, as it does on
+        paintomics.org, and the handler must never read that list: it sees the
+        pinned one, so the request goes through. Take the pin out of _runHandler
+        and this test fails on every machine, even one with no organisms, where
+        the other tests here would still pass. A request for an organism the
+        handler does see as installed is test_organism_request_rejects_installed.
+        """
+        host = _keggDataDir(INSTALLED + [{"name": "Fusarium oxysporum", "value": "fox"}])
+        saved = AdminServlet.KEGG_DATA_DIR
+        AdminServlet.KEGG_DATA_DIR = host + "/"
+        try:
+            calls = []
+            response = _runHandler(_fail, calls)
+        finally:
+            AdminServlet.KEGG_DATA_DIR = saved
+            shutil.rmtree(host, ignore_errors=True)
+        self.assertTrue(response.content.get("success"), response.content)
+        self.assertIn("insert", [c[0] for c in calls], "the report was never stored")
 
     def test_the_report_is_stored_before_delivery_is_attempted(self):
         calls = []
