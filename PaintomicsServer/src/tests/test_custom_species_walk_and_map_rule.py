@@ -17,10 +17,11 @@ What this guards
 2. The maps. KEGG lists a map for an organism as soon as one of its genes has a
    KO on it, so the scope organism's list gave the fungus, the alga and the
    plants Toll-like receptor signalling, Neuroactive ligand signalling,
-   Cornified envelope formation and Bacterial invasion of epithelial cells. A
-   plant, fungus or protist now loses the classes of animal organs, animal cell
-   signalling and human disease, and every species the maps that draw fewer
-   than ``--min-kos`` of its KOs (two by default: one is a single box).
+   Cornified envelope formation, Bacterial invasion of epithelial cells and Viral
+   life cycle - HIV-1. A plant, fungus or protist now loses the classes of animal
+   organs, animal cell signalling, viruses and human disease and the maps of what
+   only animals or bacteria make, and every species the maps that draw fewer than
+   ``--min-kos`` of its KOs (two by default: one is a single box).
 
 3. ``--rebuild-maps`` applies both to a species installed before, from the KOs
    its database holds, and leaves its identifiers as they were.
@@ -74,6 +75,12 @@ MAPS = {
                  ["K05692", "K10352", "K12567"]),
     "map05100": ("Bacterial invasion of epithelial cells", "Human Diseases;Infectious disease: bacterial",
                  ["K05765", "K04392", "K04393"]),
+    "map03250": ("Viral life cycle - HIV-1", "Genetic Information Processing;Information processing in viruses",
+                 ["K90001", "K90002", "K90003"]),
+    "map00604": ("Glycosphingolipid biosynthesis - ganglio series", "Metabolism;Glycan biosynthesis and metabolism",
+                 ["K90004", "K90005"]),
+    "map00261": ("Monobactam biosynthesis", "Metabolism;Biosynthesis of other secondary metabolites",
+                 ["K90006", "K90007", "K90008"]),
     "map04712": ("Circadian rhythm - plant", "Organismal Systems;Environmental adaptation",
                  ["K12124", "K12125", "K12126"]),
     "map04144": ("Endocytosis", "Cellular Processes;Transport and catabolism",
@@ -330,10 +337,23 @@ class TheMapRuleTest(InstallerTestCase):
     def test_a_plant_fungus_or_protist_loses_animal_and_disease_maps(self):
         kept, _kgml, log = self.plan("non-animal")
         self.assertEqual(NON_ANIMAL_KEPT, kept)
-        for m in ("map04620", "map04082", "map05100", "map04820"):
+        for m in ("map04620", "map04082", "map05100", "map04820", "map03250"):
             self.assertRegex(log, r"dropped %s .*(does not apply|does not have)" % m)
         self.assertIn("dropped map04620 Toll-like receptor signaling pathway: class Organismal Systems;"
                       "Immune system does not apply to a plant, fungus or protist", log)
+        self.assertIn("dropped map03250 Viral life cycle - HIV-1: class Genetic Information Processing;"
+                      "Information processing in viruses does not apply to a plant, fungus or protist", log)
+
+    def test_what_only_animals_or_bacteria_make_goes_though_enough_enzymes_land_on_it(self):
+        """Shared enzymes put these on KEGG's lists, and they pass the count."""
+        kept, _kgml, log = self.plan("non-animal")
+        self.assertNotIn("map00604", kept)
+        self.assertNotIn("map00261", kept)
+        self.assertIn("dropped map00604 Glycosphingolipid biosynthesis - ganglio series: "
+                      "only animals make these glycolipids", log)
+        self.assertIn("dropped map00261 Monobactam biosynthesis: only bacteria make this antibiotic", log)
+        kept, _kgml, _log = self.plan("animal")
+        self.assertIn("map00604", kept, "an animal keeps its own glycolipids")
 
     def test_an_animal_and_an_unread_lineage_keep_every_class(self):
         for taxon in ("animal", None):
@@ -548,6 +568,8 @@ class RebuildMapsTest(InstallerTestCase):
         self.assertIn("%s:K00844\tpath:%s00010" % (CODE, CODE), rows)
         self.assertIn("taxon: non-animal (from lineage Eukaryotes;Fungi;Dikarya;Ascomycota)", log)
         self.assertIn("SUCCESS", log)
+        self.assertIn("Restart the server", log, "a running process keeps the old pathway list until then")
+        self.assertFalse(os.path.exists(os.path.join(self.org_dir, "gene2pathway.list.tmp")))
         self.assertEqual([], installer.verify(CODE, self.data_dir, "fake", 1, []))
         self.assertTrue(net_mod.has_graph_source(CODE, self.data_dir))
 

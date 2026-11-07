@@ -164,6 +164,20 @@
     border-radius: 8px;
     z-index: 20000;
 }
+/* No walk can run here (updateProgress, status "unavailable"): one sentence and
+   nothing to do, so the panel is as tall as the sentence, with no empty message
+   list, no chat field and nothing to read full screen. */
+.ai-widget-panel.is-note {
+    height: auto;
+}
+.ai-widget-panel.is-note .ai-widget-messages,
+.ai-widget-panel.is-note .ai-widget-input-area,
+.ai-widget-panel.is-note .ai-fullscreen-btn {
+    display: none;
+}
+.ai-widget-panel.is-note .ai-progress-detail {
+    margin-bottom: 0;
+}
 /* Fullscreen moves the scale up two steps, on the message area alone: it is a
    request to read the report, not to inflate the chrome around it.
 

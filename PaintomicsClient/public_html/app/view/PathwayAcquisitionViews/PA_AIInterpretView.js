@@ -18,6 +18,8 @@ function PA_AIInterpretView() {
     this.isExpanded = false;
     // A message arrived while the panel was collapsed (see expand).
     this.hasUnseen = false;
+    // The "no walk here" note has opened the panel once (see updateProgress).
+    this.noteOpened = false;
     this.chatHistory = [];
     this.isWaitingResponse = false;
     this.jobID = null;
@@ -322,17 +324,25 @@ function PA_AIInterpretView() {
                 this.loadReport();
             }
         } else if (status === "unavailable") {
-            // Failed, and retrying cannot help: the job it describes is no
-            // longer on the server. Same red treatment as an error, minus the
-            // Retry button, which would re-post to /ai_interpret_initiate and
-            // be refused for exactly the same reason. A button that cannot
-            // work is worse than no button -- it reads as "we could fix this
-            // if you asked again".
-            $progress.show().removeClass("is-done is-idle").addClass("is-error");
-            this.$root.find(".ai-progress-fill").css("width", "100%");
+            // Nothing went wrong, and asking again cannot change it: the organism
+            // has no graph to walk, or the job is no longer on the server. So no
+            // red and no "!", which said error and hid the reason until someone
+            // clicked on it, and no Retry, which would re-post to
+            // /ai_interpret_initiate and get the same answer. The sentence is
+            // all the panel has to say, so it opens by itself and shows only
+            // that (is-note, ai-interpret.css). Once: minimised, it stays so,
+            // with the sentence on the launcher's tooltip.
+            $progress.show().removeClass("is-done is-error").addClass("is-idle");
+            this.$root.find(".ai-progress-fill").css("width", "0%");
             this.$root.find(".ai-progress-detail").text(detail || "Unavailable");
-            $fab.removeClass("is-processing");
-            $badge.css("background", "#c62828").html("!").show();
+            $fab.removeClass("is-processing").attr("title", detail || "Unavailable");
+            $badge.hide();
+            this.$root.find(".ai-widget-panel").addClass("is-note");
+            if (!this.noteOpened) {
+                this.noteOpened = true;
+                if (this.isFullscreen) { this.toggleFullscreen(); }
+                if (!this.isExpanded) { this.expand(); }
+            }
         } else if (status === "error") {
             $progress.show().removeClass("is-done is-idle").addClass("is-error");
             this.$root.find(".ai-progress-fill").css("width", "100%");

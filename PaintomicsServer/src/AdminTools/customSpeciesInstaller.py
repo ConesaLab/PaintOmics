@@ -63,9 +63,10 @@ Bacterial invasion of epithelial cells. A map is kept only when
      not one of DEFAULT_EXCLUDED_CLASSES);
   2. for a plant, fungus or protist (taxon_of: the species' own lineage, else
      the scope organism's KEGG lineage), its class is not one that describes
-     animal organs, animal cells or human disease (NON_ANIMAL_EXCLUDED_CLASSES,
-     NON_ANIMAL_EXCLUDED_MAPS); an animal, a prokaryote or a lineage the tool
-     cannot read keeps every class;
+     animal organs, animal cells, viruses or human disease
+     (NON_ANIMAL_EXCLUDED_CLASSES), and it is not a map of something such an
+     organism does not have or make (NON_ANIMAL_EXCLUDED_MAPS); an animal, a
+     prokaryote or a lineage the tool cannot read keeps every class;
   3. at least ``--min-kos`` (MIN_KOS, 2) of the species' KOs are drawn on it.
 
 Every map dropped is logged with its reason, and the KEGG version document
@@ -73,7 +74,11 @@ records the scope organism and ``--min-kos`` (map_rule). ``--rebuild-maps``
 applies the rule, and writes the KGML, for a species this tool installed before
 either existed, reading its KOs from the installed database: the identifier
 graph is not touched, so no annotation file is needed. It reuses the recorded
-scope organism when none is given; installs before 2026-11-07 recorded none.
+scope organism when none is given; installs before 2026-11-07 recorded none. The
+server must be restarted afterwards: until then a running process keeps the
+species' old pathway list in memory (KeggInformationManager.getKeggData), and a
+new job there still lists the maps just dropped (a run on thaz: 149 in the table,
+129 after a restart).
 
 Deliberately NOT produced, and what each absence does to the species:
 
@@ -132,17 +137,17 @@ DEFAULT_EXCLUDED_CLASSES = ("Human Diseases", "Drug Development")
 # Fewest of the species' KOs a map must draw to be kept. A map drawing one is
 # one painted box, an enzyme other maps share: on the five species installed on
 # paintomics.org by 2026-11-06 that was Staurosporine and Exopolysaccharide
-# biosynthesis, lacto-series glycosphingolipids, Diterpenoid biosynthesis. Two
-# is kept on purpose. At three, Anthocyanin biosynthesis left Petunia and
-# N. benthamiana (KEGG's own tobacco genome draws one KO on it) and Nitrogen
-# cycle, the nitrate assimilation every one of them has, left all five; what
-# three would also remove, Caffeine metabolism in four and a few bacterial or
-# animal maps, costs a sparse row in the table. --min-kos 3 is that stricter cut.
+# biosynthesis, Diterpenoid biosynthesis. Two is kept on purpose. At three,
+# Anthocyanin biosynthesis left both Petunias and N. benthamiana (KEGG's own
+# tobacco genome draws one KO on it) and Nitrogen cycle, the nitrate assimilation
+# they all have, left five of the six; what three would also remove, Caffeine
+# metabolism in most of them, costs a sparse row in the table. --min-kos 3 is
+# that stricter cut.
 MIN_KOS = 2
 # KEGG BRITE br08901 classes ("A" or "A;B", the classification the pathway
 # documents carry) whose maps describe animal organs and tissues, animal
-# cell-to-cell signalling, or human disease and drugs. Not applied to a plant,
-# fungus or protist's own Environmental adaptation or Aging maps (Circadian
+# cell-to-cell signalling, viruses, or human disease and drugs. Not applied to a
+# plant, fungus or protist's own Environmental adaptation or Aging maps (Circadian
 # rhythm - plant, Plant-pathogen interaction, Longevity regulating pathway -
 # multiple species), which KEGG already narrows by taxon.
 NON_ANIMAL_EXCLUDED_CLASSES = (
@@ -160,11 +165,29 @@ NON_ANIMAL_EXCLUDED_CLASSES = (
     "Environmental Information Processing;Signaling molecules and interaction",
     # focal adhesion, adherens, tight and gap junctions, stem-cell pluripotency
     "Cellular Processes;Cellular community - eukaryotes",
+    # Viral life cycle - HIV-1, Virion - Hepatitis viruses: listed because the host
+    # proteins a virus uses (ESCRT, Ran) share KOs with any eukaryote
+    "Genetic Information Processing;Information processing in viruses",
 )
-# Maps of an otherwise shared class that are defined by an animal cell type.
+_ANIMAL_GLYCOLIPIDS = "only animals make these glycolipids"
+_BACTERIAL_ANTIBIOTIC = "only bacteria make this antibiotic"
+# Maps of an otherwise shared class that such an organism has no use for: one
+# defined by an animal cell type, or the route to a product it does not make.
+# KEGG lists the second kind wherever shared proteins land on them (a hexosaminidase
+# and an alpha-galactosidase on the globo series, aspartate-pathway enzymes on
+# Monobactam, hexokinase on Neomycin), and two KOs pass the count. Metabolism is
+# otherwise left alone: an enzyme map is chemistry a species may well carry, so the
+# count decides.
 NON_ANIMAL_EXCLUDED_MAPS = {
-    "map04820": "it is about muscle cells",
-    "map04148": "it is the clearance of dead cells by animal phagocytes",
+    "map04820": "it is about muscle cells, which a plant, fungus or protist does not have",
+    "map04148": "it is the clearance of dead cells by animal phagocytes, "
+                "which a plant, fungus or protist does not have",
+    "map00601": _ANIMAL_GLYCOLIPIDS,
+    "map00603": _ANIMAL_GLYCOLIPIDS,
+    "map00604": _ANIMAL_GLYCOLIPIDS,
+    "map00261": _BACTERIAL_ANTIBIOTIC,
+    "map00332": _BACTERIAL_ANTIBIOTIC,
+    "map00524": _BACTERIAL_ANTIBIOTIC,
 }
 # The second field of a KEGG lineage (organisms_all.list) for eukaryotes that
 # are not animals, plus the words a person writes in --lineage for them.
@@ -424,9 +447,7 @@ def excluded_for_taxon(map_id, classification, taxon):
     for cls in NON_ANIMAL_EXCLUDED_CLASSES:
         if classification == cls or classification.startswith(cls + ";"):
             return "class %s does not apply to a plant, fungus or protist" % classification
-    if map_id in NON_ANIMAL_EXCLUDED_MAPS:
-        return "%s, which a plant, fungus or protist does not have" % NON_ANIMAL_EXCLUDED_MAPS[map_id]
-    return None
+    return NON_ANIMAL_EXCLUDED_MAPS.get(map_id)
 
 
 def select_maps(annotated_kos, ko2maps, classes, scope_maps, taxon=None):
@@ -849,11 +870,13 @@ def write_gene2pathway(kegg_data_dir, code, kegg_docs):
     os.makedirs(specie_dir, exist_ok=True)
     path = os.path.join(specie_dir, "gene2pathway.list")
     lines = 0
-    with open(path, "w") as fh:
+    # Renamed into place: --rebuild-maps runs beside a server whose jobs read it.
+    with open(path + ".tmp", "w") as fh:
         for doc in kegg_docs:
             for ko in sorted({g["id"] for g in doc["genes"]}):
                 fh.write("%s:%s\tpath:%s\n" % (code, ko, doc["ID"]))
                 lines += 1
+    os.replace(path + ".tmp", path)
     return path, lines
 
 
@@ -1237,7 +1260,9 @@ def rebuild_maps(args, kegg_data_dir, mongo_host, mongo_port, cache, cache_dir):
         for p in problems:
             log("PROBLEM: " + p)
         raise SystemExit(1)
-    log("SUCCESS: %s rebuilt: %d pathways, each with its KGML." % (args.code, len(kegg_docs)))
+    log("SUCCESS: %s rebuilt: %d pathways, each with its KGML. Restart the server: until then a "
+        "running process keeps the old pathway list in memory, and new jobs still list the maps "
+        "dropped here." % (args.code, len(kegg_docs)))
 
 
 if __name__ == "__main__":

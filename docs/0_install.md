@@ -319,10 +319,12 @@ Which maps the species gets:
 
 - only maps in the scope organism's KEGG list (`--scope-organism`, recommended);
 - for a plant, alga, fungus or protist, no map of animal organs, animal cell
-  signalling or human disease. KEGG lists those for any organism with one KO on
-  them, so tobacco's list has Toll-like receptor signalling and Cornified
-  envelope formation. The species' `--lineage` decides, or the scope organism's
-  KEGG lineage when that one is not recognised;
+  signalling, viruses or human disease, and none of what only animals or bacteria
+  make (three glycolipid series, three antibiotics). KEGG lists those for any
+  organism with one KO on them, so tobacco's list has Toll-like receptor signalling,
+  Cornified envelope formation and Viral life cycle - HIV-1. The species'
+  `--lineage` decides, or the scope organism's KEGG lineage when that one is not
+  recognised;
 - only maps that draw at least `--min-kos` of the species' KOs (2 by default).
 
 Every map left out is logged with the reason. A species installed before the
@@ -334,6 +336,11 @@ leaving its identifiers as they are:
 python src/AdminTools/customSpeciesInstaller.py \
     --code=nben --scope-organism=nta --rebuild-maps [--dry-run]
 ```
+
+Run it as the user who owns the data directory, and restart the server afterwards:
+until then a running process keeps the species' old pathway list in memory, and a
+new job there still lists the maps just dropped. Until a species has been rebuilt,
+the AI panel opens on one sentence saying the walk is not available for it.
 
 The pathway network file and Reactome/MapMan/OmniPath are deliberately not
 produced. On such a species:

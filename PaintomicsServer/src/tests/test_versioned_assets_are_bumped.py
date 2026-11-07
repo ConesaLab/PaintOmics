@@ -185,8 +185,12 @@ PUBLISHED = {
     # v=1.10 drops the "AI Assistant" label from the walk report's bubble; the
     # chat's own messages keep theirs.
     # v=1.11 sets a failure's text as text: Step 3 hands it a server refusal as it came.
+    # v=1.12 shows "no walk here" as a sentence on an open panel, not a red "!" on
+    # a closed one; it ships with ai-interpret.css v=1.10, which sizes that panel.
+    # Written as a second v=1.11 beside the one above; a browser holding
+    # master's v=1.11 would never have fetched it.
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.11", "e6f387d58b14f6406716daff73c0b0204bf331a0dbca00239a384f1b5c7b3f4d"),
+        "1.12", "6556ae36740fb62d80d69b0261995efff7dba05d3ad7341f8f32db313a3ae221"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph
