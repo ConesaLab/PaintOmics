@@ -39,7 +39,7 @@ MAX_GUEST_JOB_DAYS = getattr(_serverconf, "MAX_GUEST_JOB_DAYS", 7)
 # Whether a run acts on planExpiredFileSweep (PAINTOMICS_SWEEP_ORPHAN_FILES=1).
 # It is off unless a site turns it on, and a configuration file that predates
 # the setting counts as off: on a long-lived server the first run deletes a lot
-# for good (22,669 entries and 17.6 GB on paintomics.org on 2026-11-07), so it
+# for good (22,750 entries and 17.4 GB on paintomics.org on 2026-11-07), so it
 # takes somebody's yes. While it is off a run deletes nothing through the sweep
 # and logs what it would have deleted; a dry run lists it whatever this says.
 SWEEP_ORPHAN_FILES = bool(getattr(_serverconf, "SWEEP_ORPHAN_FILES", False))

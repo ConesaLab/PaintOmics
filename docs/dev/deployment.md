@@ -221,7 +221,7 @@ accounts' folders are not looked at. While it is off, each run deletes none of
 this and logs one line:
 
 ```text
-would delete 22669 entries, 17.60 GB; the orphan file sweep is off (PAINTOMICS_SWEEP_ORPHAN_FILES)
+would delete 22750 entries, 17.39 GB; the orphan file sweep is off (PAINTOMICS_SWEEP_ORPHAN_FILES)
 ```
 
 Read the full list without changing anything, whatever the setting says:
