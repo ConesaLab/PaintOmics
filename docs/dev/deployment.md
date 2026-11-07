@@ -179,6 +179,42 @@ Reactome and MapMan build products — live only in `current/` and have been los
 this way. Never bulk-reinstall species on the public instance to fix one of
 them, and read the guard's refusal rather than exempting the thing it names.
 
+## Mail that bounces
+
+The server cannot see bounces. Gmail's SMTP accepts an address that does not
+exist and sends the bounce later to our own mailbox, so every run that mails
+such an address bounces again. After reading a bounce there, turn mail off for
+that account:
+
+```bash
+docker exec -w /app/PaintomicsServer paintomics-app-1 \
+    python -m src.AdminTools.scripts.user_mail disable someone@example.org --reason "bounced: no such user"
+```
+
+`status <address>` shows the switch, `list` shows every account that has it,
+and `enable <address>` turns mail back on. Nothing else about the account
+changes: the user can still sign in and their jobs are kept. Every message to a
+user goes through `src/common/UserMail.py`, which honours the switch, and an
+address the SMTP server refuses while sending (a 5xx answer) is switched off
+automatically. Guest accounts are never mailed: their addresses are made up.
+
+## Retention
+
+The daily cleaning run (`AdminTools/scripts/clean_databases.py`, also behind the
+admin panel's *Clean databases* button) removes anonymous and guest jobs after
+`MAX_GUEST_JOB_DAYS` and registered users' jobs after `MAX_JOB_DAYS`, counted
+from the day the job was last opened. Registered users get one warning a day at
+most, listing every job that is due to go.
+
+It also removes files under `CLIENT_TMP/nologin` that no job in the database
+owns or names and that are older than `MAX_GUEST_JOB_DAYS`. Preview a run
+without changing anything:
+
+```bash
+docker exec -w /app/PaintomicsServer paintomics-app-1 \
+    python -m src.AdminTools.scripts.clean_databases --dry-run
+```
+
 ## After every deploy
 
 - `deploy/smoke-test.sh` for the container stack.

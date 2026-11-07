@@ -17,7 +17,7 @@ from conf.serverconf import (
     PAINTOMICS_BASE_URL,
 )
 
-from src.common.Util import sendEmail
+from src.common import UserMail
 from src.common.EmailTemplates import PRODUCT_NAME, jobExpiryEmail
 
 # serverconf.py is per-site and gitignored, so a deploy carries new code to a
@@ -54,8 +54,26 @@ NON_USER_CLIENT_TMP_DIRS = ("nologin", "gtfcache")
 ANONYMOUS_DIR = "nologin"
 ANONYMOUS_USER_IDS = (None, "None")
 
+# The three directories under CLIENT_TMP/nologin an anonymous job writes into.
+#
+# removeJobByJobID only ever removed jobsData/<jobID>. An anonymous job's
+# uploads go to inputData/ instead -- one directory shared by every anonymous
+# job, each file named "<jobID>_<original name>" (JobInformationManager) or,
+# for converter outputs, not named after any job at all ("B2G_output_...",
+# "MORE_output_...") -- and nothing ever removed them. On paintomics.org that
+# was 15,603 files and 11 GB on 2026-11-07, the oldest from November 2024,
+# kept by a server that promises anonymous work is gone after seven days.
+# sweepAnonymousFiles covers all three.
+ANONYMOUS_SUBDIRS = ("inputData", "jobsData", "tmp")
+
 # How long before a registered user's job expires they are warned about it.
 REMINDER_WINDOW_DAYS = 7
+
+# On the user's userCollection document: the day ("%Y%m%d") they were last sent
+# an expiry warning. Claimed atomically before sending, so one account gets at
+# most one warning a day even when two cleaning runs overlap -- the daily timer
+# and the admin panel's "clean databases" button run the same code.
+EXPIRY_MAIL_DAY_FIELD = "expiryMailDay"
 
 # Every index the running server depends on, as (collection, create_index keys).
 # Shared with paintomicsserver so startup and the nightly cron cannot drift:
@@ -76,8 +94,12 @@ JOBID_INDEXES = [
     ('aiWalkCollection', [("jobID", 1), ("scope", 1)]),
 ]
 
-def cleanDatabases(force=False):
-    log("Starting Clean Databases routine")
+def cleanDatabases(force=False, dry_run=False):
+    """The daily retention pass (startScheludeTasks) and the admin panel's button.
+
+    dry_run: report what would be removed and mailed, change nothing.
+    """
+    log("Starting Clean Databases routine" + (" (dry run)" if dry_run else ""))
 
     connection = MongoClient(MONGODB_HOST, MONGODB_PORT)
 
@@ -127,13 +149,21 @@ def cleanDatabases(force=False):
             # If guest user, check if should be removed
             users_to_remove.append(user_id)
             force_remove = True
-        else:
-            # Check if user has jobs to be removed soon that need to be remained about
-            # (only for "no guest" accounts)
-            reminders = checkRemindJobsForUser(connection, user_id)
-
-            if len(reminders) > 0:
-                jobs_to_remind[user_id] = reminders
+        elif not isGuest:
+            # Warnings go to registered accounts only, as the old comment here
+            # said and the old `else:` did not do. A guest's jobs last
+            # MAX_GUEST_JOB_DAYS, not the MAX_JOB_DAYS the window below is
+            # built on, and a guest's address is made up
+            # ("guest12345@" + PAINTOMICS_EMAIL_DOMAIN), so a warning to one
+            # can only bounce.
+            reminders = checkRemindJobsForUser(connection, user_id, details=True)
+            if reminders:
+                notMailable = UserMail.whyNotMail(user)
+                if notMailable is None:
+                    jobs_to_remind[user_id] = reminders
+                else:
+                    log("User " + str(user_id) + " has " + str(len(reminders)) +
+                        " job(s) to warn about but will not be mailed: " + notMailable + ".")
 
 
         # If check if user has jobs that should be removed
@@ -154,13 +184,29 @@ def cleanDatabases(force=False):
     if anonymous_to_remove:
         jobs_to_remove[ANONYMOUS_DIR] = anonymous_to_remove
 
+    # STEP 3c. FILES OF ANONYMOUS JOBS THAT NO LONGER EXIST.
+    #
+    # Planned here only for the summary, against the database as it will be
+    # once STEP 4 has run; STEP 4b plans again, after STEP 4, and acts on that.
+    removing = set(job_id for jobs in jobs_to_remove.values() for job_id in jobs)
+    anonymous_files = planAnonymousFileSweep(connection, removing)
+
     log("Summary:")
     log("   - " + str(str(sum(len(x) for x in jobs_to_remove.values()))) + " jobs will be removed.")
-    log("   - " + str(str(sum(len(x) for x in jobs_to_remind.values()))) + " reminder e-mails will be sent.")
+    log("   - " + str(len(jobs_to_remind)) + " reminder e-mails will be sent, about " +
+        str(sum(len(x) for x in jobs_to_remind.values())) + " jobs.")
     log("   - " + str(len(users_to_remove)) + " users will be removed.")
     log("   - " + str(len(users_to_fix)) + " users will be fixed.")
     log("   - " + str(len(user_dirs)) + " orphan directories will be removed.")
+    log("   - " + str(len(anonymous_files)) + " files and directories of anonymous jobs will be removed (" +
+        _megabytes(sum(size for _path, size, _reason in anonymous_files)) + ").")
     log("")
+
+    if dry_run:
+        for path, size, reason in anonymous_files:
+            log("   would remove " + path + " (" + _megabytes(size) + "): " + reason)
+        log("Dry run: nothing was changed.")
+        return
 
     if not force:
         if not confirm(prompt='"Proceed?', resp=False):
@@ -171,6 +217,10 @@ def cleanDatabases(force=False):
     for user_id, jobs_to_remove in jobs_to_remove.items():
         for job_id in jobs_to_remove:
             removeJobByJobID(connection, user_id, job_id)
+
+    # STEP 4b. REMOVE THE FILES OF ANONYMOUS JOBS THAT NO LONGER EXIST
+    # (the jobs STEP 4 has just removed, and every earlier one).
+    sweepAnonymousFiles(connection, removing)
 
     # STEP 5. REMOVE ALL OUTDATED GUEST USERS (+ FILES)
     for user_id in users_to_remove:
@@ -190,10 +240,9 @@ def cleanDatabases(force=False):
     for user_id in user_dirs:
         removeDirectoryByUserID(user_id)
 
-    # STEP 8. SEND REMINDER E-MAILS
-    for user_id, jobs_to_remind in jobs_to_remind.items():
-        for job_id in jobs_to_remind:
-            remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY)
+    # STEP 8. SEND REMINDER E-MAILS: one per user, listing all their jobs.
+    for user_id, expiring in jobs_to_remind.items():
+        remindUserOfJobs(connection, user_id, expiring, ROOT_DIRECTORY)
 
     # STEP 9. REBUILD INDEXES
     rebuildIndexes(connection)
@@ -260,11 +309,39 @@ def checkRemoveAnonymousJobs(connection):
             jobs_remove.append(job['jobID'])
     return jobs_remove
 
-def checkRemindJobsForUser(connection, user_id):
+def jobDeletionDate(accessDay, max_job_days=None):
+    """The first day the daily run deletes a job last opened on accessDay.
+
+    checkRemoveJobsForUser removes a job when accessDay < today - max_job_days,
+    so day max_job_days is still kept and the next day is the first without it.
+    """
+    days = MAX_JOB_DAYS if max_job_days is None else max_job_days
+    return accessDay + datetime.timedelta(days=days + 1)
+
+
+def alreadyWarned(job, deadline):
+    """Was this job already warned about for this deadline ("%Y%m%d")?
+
+    `reminderSent` holds the deadline the warning was about. /pa_touch_job
+    unsets it whenever the job is opened, because opening the job moves the
+    deadline, so a job is warned about once per deadline and never twice for
+    the same one. Records written before this change hold the number 1, which
+    meant "warned since it was last opened" -- the same thing, so they count.
+    """
+    sent = job.get("reminderSent")
+    if sent is None:
+        return False
+    return (not isinstance(sent, str)) or sent == deadline
+
+
+def checkRemindJobsForUser(connection, user_id, details=False):
+    """The jobs of a registered user to warn about in this run.
+
+    Job ids by default; with details=True, one dict per job with what the
+    message needs: jobID, name, deadline ("%Y%m%d") and deletionDate (a date).
+    """
     #Get all jobs for user
-    jobs_list = connection[MONGODB_DATABASE]['jobInstanceCollection'].find({"userID":str(user_id),
-                                                                            "reminderSent": {"$exists": False}
-                                                                            })
+    jobs_list = connection[MONGODB_DATABASE]['jobInstanceCollection'].find({"userID": str(user_id)})
     # A warning has to arrive BEFORE the thing it warns about. This selected
     # jobs whose accessDate was between MAX_JOB_DAYS and MAX_JOB_DAYS + 7 days
     # old -- every one of which is also older than MAX_JOB_DAYS, so STEP 4 had
@@ -286,8 +363,17 @@ def checkRemindJobsForUser(connection, user_id):
         if date is None:
             continue
         # Older than warn_from is already being deleted in this same run.
-        if warn_from < date <= warn_until:
-            log("Job " + str(job["jobID"]) + " (user " + str(user_id) + ") marked to be reminded.")
+        if not (warn_from < date <= warn_until):
+            continue
+        deletion = jobDeletionDate(date)
+        deadline = deletion.strftime("%Y%m%d")
+        if alreadyWarned(job, deadline):
+            continue
+        log("Job " + str(job["jobID"]) + " (user " + str(user_id) + ") marked to be reminded.")
+        if details:
+            jobs_remind.append({"jobID": job["jobID"], "name": job.get("name") or "",
+                                "deadline": deadline, "deletionDate": deletion})
+        else:
             jobs_remind.append(job['jobID'])
     return jobs_remind
 
@@ -319,24 +405,94 @@ def removeJobByJobID(connection, user_id, job_id):
     removeDirectoryByUserID(user_id, job_id)
 
 
-def remindJobByJobID(connection, user_id, job_id, ROOT_DIRECTORY):
-    log("Reminding job " + job_id)
+def _releaseExpiryMailDay(users, user_id, today, previous):
+    """Give back the day claimed in remindUserOfJobs, if it is still ours."""
+    undo = {"$set": {EXPIRY_MAIL_DAY_FIELD: previous}} if previous else \
+        {"$unset": {EXPIRY_MAIL_DAY_FIELD: ""}}
+    users.update_one({"userID": user_id, EXPIRY_MAIL_DAY_FIELD: today}, undo)
 
-    ROOT_DIRECTORY_CORRECTED = os.path.abspath(ROOT_DIRECTORY + '/../../../PaintomicsClient/') + '/'
 
+def remindUserOfJobs(connection, user_id, expiring, ROOT_DIRECTORY, today=None):
+    """Send user_id ONE message about every job in `expiring`.
+
+    `expiring` is checkRemindJobsForUser(..., details=True). Returns the ids of
+    the jobs the message was about; [] when nothing was sent.
+
+    This used to be remindJobByJobID, called once per job: a user with seven
+    jobs reaching the warning window on the same day got seven messages in
+    fifteen seconds (paintomics.org, 2026-11-05). Now:
+
+      * the user's day is claimed first, atomically, so at most one warning
+        reaches an account per day even if two runs overlap;
+      * each job is claimed for its deadline, atomically, so no job is warned
+        about twice for the same deadline;
+      * a failure that may be temporary (no SMTP password, network, a 4xx)
+        gives both claims back, so the next run tries again -- the window is
+        a week wide, so a missed day is not a missed warning;
+      * an address the server refuses outright has its mail turned off
+        (UserMail.sendToUser) and its claims are kept, so it is not retried.
+    """
+    db = connection[MONGODB_DATABASE]
+    users = db['userCollection']
+    jobs = db['jobInstanceCollection']
+
+    user = users.find_one({"userID": user_id})
+    if user is None or not expiring:
+        return []
+    reason = UserMail.whyNotMail(user)
+    if reason is not None:
+        log("Not warning user " + str(user_id) + ": " + reason + ".")
+        return []
+
+    day = (today or datetime.date.today()).strftime("%Y%m%d")
+    before = users.find_one_and_update(
+        {"userID": user_id, EXPIRY_MAIL_DAY_FIELD: {"$ne": day}},
+        {"$set": {EXPIRY_MAIL_DAY_FIELD: day}})
+    if before is None:
+        log("User " + str(user_id) + " was already warned today; " + str(len(expiring)) +
+            " job(s) wait for the next run.")
+        return []
+    previous = before.get(EXPIRY_MAIL_DAY_FIELD)
+
+    claimed = []
+    for job in expiring:
+        # The same test as alreadyWarned, as one atomic update: absent (or
+        # null), or a string naming another deadline. The legacy number 1
+        # matches neither, as alreadyWarned already decided.
+        result = jobs.update_one(
+            {"jobID": job["jobID"], "userID": str(user_id),
+             "$or": [{"reminderSent": None},
+                     {"reminderSent": {"$type": "string", "$ne": job["deadline"]}}]},
+            {"$set": {"reminderSent": job["deadline"]}})
+        if result.modified_count:
+            claimed.append(dict(job, link=PAINTOMICS_BASE_URL + "/?jobID=" + str(job["jobID"])))
+
+    if not claimed:
+        _releaseExpiryMailDay(users, user_id, day, previous)
+        return []
+
+    claimedIDs = [job["jobID"] for job in claimed]
+    log("Reminding user " + str(user_id) + " of " + str(len(claimed)) + " job(s): " +
+        ", ".join(str(job_id) for job_id in claimedIDs))
+    subject = PRODUCT_NAME + (": one job is going to expire soon" if len(claimed) == 1
+                              else ": %d jobs are going to expire soon" % len(claimed))
     try:
-        user_data = connection[MONGODB_DATABASE]['userCollection'].find_one({"userID": user_id})
+        message = jobExpiryEmail(user.get("userName"), claimed)
+        outcome = UserMail.sendToUser(user, subject, message, ROOT_DIRECTORY,
+                                      userCollection=users, isHTML=True)
+    except Exception as ex:
+        logging.error("Failed to send the expiry warning to user %s (%s); "
+                      "the next run will try again.", user_id, ex)
+        for job in claimed:
+            jobs.update_one({"jobID": job["jobID"], "reminderSent": job["deadline"]},
+                            {"$unset": {"reminderSent": ""}})
+        _releaseExpiryMailDay(users, user_id, day, previous)
+        return []
 
-        reminder_link = PAINTOMICS_BASE_URL + "/?jobID=" + job_id
-        message = jobExpiryEmail(user_data["userName"], job_id, reminder_link)
-
-        sendEmail(ROOT_DIRECTORY_CORRECTED, user_data["email"], user_data["userName"],
-                  PRODUCT_NAME + ": one job is going to expire soon", message, isHTML=True)
-    except Exception:
-        logging.error("Failed to send the email.")
-
-    #STEP 3.REMOVE THE JOB FROM DATABASE
-    connection[MONGODB_DATABASE]['jobInstanceCollection'].update_many({"jobID": job_id}, {'$set': {"reminderSent": 1}}, upsert=False)
+    if outcome != UserMail.SENT:
+        log("Expiry warning to user " + str(user_id) + " not delivered: " + outcome + ".")
+        return []
+    return claimedIDs
 
 
 def removeAllFilesByUserID(connection, user_id, only_db=False):
@@ -351,6 +507,13 @@ def removeDirectoryByUserID(user_id, job_id=None):
     #STEP 1. BUILD THE PATH
     dir = CLIENT_TMP_DIR.rstrip("/") + "/" + str(user_id)
     if job_id != None:
+        # The job's scratch directory (Job.setDirectories: <user>/tmp/<jobID>)
+        # too. A run normally empties it, a run that died does not, and
+        # nothing else ever looked there.
+        scratch = dir + "/tmp/" + job_id
+        if os.path.isdir(scratch) and not os.path.islink(scratch):
+            log("Removing scratch files of job " + job_id + " from " + scratch)
+            shutil.rmtree(scratch)
         dir+= "/jobsData/" + job_id
     #STEP 2. REMOVE THE DIRECTORY AND ALL CHILDREN
     if os.path.isdir(dir):
@@ -358,6 +521,134 @@ def removeDirectoryByUserID(user_id, job_id=None):
         shutil.rmtree(dir)
     else:
         log("Directory " + dir + " not found!")
+
+
+def _entrySize(path):
+    """Bytes under path, for the log; 0 for whatever cannot be read."""
+    try:
+        if os.path.islink(path) or not os.path.isdir(path):
+            return os.lstat(path).st_size
+    except OSError:
+        return 0
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.lstat(os.path.join(root, name)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def _megabytes(size):
+    return "%.1f MB" % (size / 1e6)
+
+
+def _namedInputFiles(job):
+    """Base names of the files a job's input omics point at.
+
+    geneBasedInputOmics / compoundBasedInputOmics entries carry them as
+    inputDataFile, relevantFeaturesFile, associationsFile, designFile and so
+    on; any key ending in "File" counts, so a field added later is covered.
+    """
+    names = set()
+    for key in ("geneBasedInputOmics", "compoundBasedInputOmics"):
+        for omic in job.get(key) or []:
+            if not isinstance(omic, dict):
+                continue
+            for field, value in omic.items():
+                if field.endswith("File") and isinstance(value, str) and value:
+                    names.add(os.path.basename(value))
+    return names
+
+
+def planAnonymousFileSweep(connection, removing=(), today=None):
+    """What sweepAnonymousFiles would delete now, as [(path, bytes, reason)].
+
+    An entry of CLIENT_TMP/nologin/{inputData,jobsData,tmp} goes when all of
+    these hold:
+
+      * no job in the database owns it: for jobsData/ and tmp/ the entry's
+        name is the job id; for inputData/ the part before the first "_" is
+        (jobIDs never contain "_", so "E7r3oPI1HS_x.tab" belongs to exactly
+        E7r3oPI1HS);
+      * for inputData/, no job in the database names it as an input file. A
+        converter's output ("B2G_output_...", or another job's
+        "<id>_regulator2Gene_output...") is read by the pathway job it was
+        made for, which may outlive the job that wrote it;
+      * it was last modified more than MAX_GUEST_JOB_DAYS days ago, the same
+        boundary as the jobs themselves. A job being submitted right now has
+        written its files but not yet its database record, and this keeps
+        them.
+
+    `removing` are job ids to treat as already gone (the dry run, and the
+    summary, plan before STEP 4 removes them).
+    """
+    root = os.path.join(CLIENT_TMP_DIR, ANONYMOUS_DIR)
+    removing = set(str(job_id) for job_id in removing)
+    live = set()
+    named = set()
+    projection = {"jobID": 1, "geneBasedInputOmics": 1, "compoundBasedInputOmics": 1}
+    for job in connection[MONGODB_DATABASE]['jobInstanceCollection'].find({}, projection):
+        job_id = job.get("jobID")
+        if job_id is None or str(job_id) in removing:
+            continue
+        live.add(str(job_id))
+        named |= _namedInputFiles(job)
+
+    cutoff = (today or datetime.date.today()) - datetime.timedelta(days=MAX_GUEST_JOB_DAYS)
+    plan = []
+    for subdir in ANONYMOUS_SUBDIRS:
+        base = os.path.join(root, subdir)
+        try:
+            entries = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for name in entries:
+            owner = name.split("_", 1)[0] if subdir == "inputData" else name
+            if owner in live:
+                continue
+            if subdir == "inputData" and name in named:
+                continue
+            path = os.path.join(base, name)
+            try:
+                modified = datetime.date.fromtimestamp(os.lstat(path).st_mtime)
+            except OSError:
+                continue
+            if modified >= cutoff:
+                continue
+            reason = "no job owns or names it" if subdir == "inputData" else "no job owns it"
+            plan.append((path, _entrySize(path),
+                         "%s, last changed %s" % (reason, modified.isoformat())))
+    return plan
+
+
+def sweepAnonymousFiles(connection, removing=()):
+    """Delete the files of anonymous jobs that no longer exist.
+
+    See planAnonymousFileSweep for the rule; cleanDatabases(dry_run=True)
+    lists the same plan without acting on it. Returns the plan it acted on.
+    Every path removed is logged, so the log is the record of what went.
+    """
+    plan = planAnonymousFileSweep(connection, removing)
+    removed = 0
+    freed = 0
+    for path, size, reason in plan:
+        try:
+            if os.path.isdir(path) and not os.path.islink(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+            removed += 1
+            freed += size
+            log("Removed " + path + " (" + reason + ")")
+        except FileNotFoundError:
+            pass
+        except OSError as ex:
+            log("Could not remove " + path + ": " + str(ex))
+    log("Removed " + str(removed) + " files and directories of anonymous jobs (" +
+        _megabytes(freed) + ").")
+    return plan
 
 
 def removeUserByUserID(connection, user_id):
@@ -483,4 +774,12 @@ def confirm(prompt=None, resp=False):
         if ans == 'n' or ans == 'N':
             return False
 
-# cleanDatabases(force=True)
+
+if __name__ == "__main__":
+    # Preview a run without changing anything -- what it would delete and how
+    # many warnings it would send:
+    #
+    #   cd PaintomicsServer && python -m src.AdminTools.scripts.clean_databases --dry-run
+    #
+    # Without --dry-run it asks before acting, as it always has.
+    cleanDatabases(force=False, dry_run="--dry-run" in sys.argv[1:])

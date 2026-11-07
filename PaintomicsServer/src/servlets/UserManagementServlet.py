@@ -31,7 +31,8 @@ from src.common.DAO.UserDAO import UserDAO
 from src.common.DAO.MessageDAO import MessageDAO
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException, CredentialException
-from src.common.Util import sendEmail, adapt_string
+from src.common.Util import adapt_string
+from src.common.UserMail import sendToUser
 from src.common.EmailTemplates import PRODUCT_NAME, welcomeEmail, passwordResetEmail
 
 from flask import url_for
@@ -184,8 +185,11 @@ def userManagementSignUp(request, response, ROOT_DIRECTORY):
         logging.info("STEP3 - SENDING CONFIRMATION EMAIL..." )
         try:
             message = welcomeEmail(userInstance.getUserName(), userInstance.getEmail())
-            sendEmail(ROOT_DIRECTORY, userInstance.getEmail(), userInstance.getUserName(),
-                      "Welcome to " + PRODUCT_NAME, message, isHTML=True)
+            # Through sendToUser, so that an address the mail server refuses
+            # outright has its mail turned off at once (src.common.UserMail).
+            sendToUser(userInstance, "Welcome to " + PRODUCT_NAME, message, ROOT_DIRECTORY,
+                       userCollection=daoInstance.dbManager.getCollection(daoInstance.collectionName),
+                       isHTML=True)
         except Exception:
             logging.error("Failed to send the email.")
 
@@ -390,8 +394,14 @@ def userManagementResetPassword(request, response, ROOT_DIRECTORY):
                                              PAINTOMICS_BASE_URL + restoreLink,
                                              randomPassword)
 
-                sendEmail(ROOT_DIRECTORY, userEmail, userInstance.getUserName(),
-                          "Reset your " + PRODUCT_NAME + " password", message, isHTML=True)
+                # sendToUser sends nothing to an account whose mail an
+                # administrator turned off (src.common.UserMail); the reply
+                # to the browser is the same either way, as it already was
+                # for a delivery that failed.
+                sendToUser(userInstance, "Reset your " + PRODUCT_NAME + " password", message,
+                           ROOT_DIRECTORY,
+                           userCollection=daoInstance.dbManager.getCollection(daoInstance.collectionName),
+                           isHTML=True)
             except Exception:
                 logging.error("Failed to send the reset password email.")
 

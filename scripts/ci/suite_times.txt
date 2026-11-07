@@ -101,6 +101,7 @@ test_example_scenarios_validate	1.8
 test_exception_handlers_reraise_a_real_name	7.9
 test_exp_design_draft_reads_every_panel	0.2
 test_exp_design_example_mode	2.6
+test_expiry_mail_and_anonymous_files	4.5
 test_find_input_omic_by_name	1.4
 test_finished_job_result_survives_a_lost_response	5.5
 test_flask3_compat	4.3

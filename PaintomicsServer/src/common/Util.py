@@ -134,6 +134,53 @@ def unifyAndSort(seq, criteria=None):
     return result
 
 
+class RecipientRejected(Exception):
+    """The mail server refused the address itself, with a permanent (5xx) code.
+
+    This is the only delivery failure the server learns about while sending.
+    Most bad addresses are accepted here and bounce later, as a message to the
+    sender's own mailbox that this server never reads; on paintomics.org a
+    Gmail address that does not exist was "sent successfully" six times in one
+    run and bounced six times. A 5xx answer to RCPT TO is different: the server has told us now that the address will never
+    work, so src.common.UserMail turns mail off for that account instead of
+    trying it again every day.
+
+    A 4xx answer (mailbox full, greylisting, try later) is temporary and is
+    raised as an ordinary failure, never as this.
+    """
+
+    def __init__(self, address, code, reply):
+        self.address = address
+        self.code = code
+        self.reply = reply
+        super(RecipientRejected, self).__init__(
+            "The mail server refused %s: %s %s" % (address, code, reply))
+
+
+def _permanentRecipientRefusal(refused):
+    """(address, code, reply) when every refused recipient got a 5xx, else None.
+
+    ``refused`` is SMTPRecipientsRefused.recipients: {address: (code, reply)},
+    where reply is bytes.
+    """
+    if not refused:
+        return None
+    first = None
+    for address, answer in refused.items():
+        try:
+            code, reply = answer
+            code = int(code)
+        except (TypeError, ValueError):
+            return None
+        if not 500 <= code < 600:
+            return None
+        if isinstance(reply, bytes):
+            reply = reply.decode("utf-8", "replace")
+        if first is None:
+            first = (address, code, str(reply))
+    return first
+
+
 def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None, fromName=None, isHTML=False):
     """
     Send email using SMTP via SendGrid.
@@ -149,6 +196,7 @@ def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None
         isHTML: Whether the message is HTML formatted (default: False)
 
     Raises:
+        RecipientRejected: the server refused the recipient with a 5xx code
         Exception: If SMTP credentials are not configured or email sending fails
     """
     import smtplib
@@ -206,6 +254,16 @@ def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None
         logging.info(f"Email sent successfully to {toEmail} (Subject: {subject})")
         return
 
+    except smtplib.SMTPRecipientsRefused as e:
+        # Before the generic branch below, which would flatten it into a plain
+        # Exception and lose the one failure that says "never try again".
+        permanent = _permanentRecipientRefusal(e.recipients)
+        if permanent is not None:
+            logging.error("The mail server refused %s: %s %s" % permanent)
+            raise RecipientRejected(*permanent) from e
+        error_msg = f"SMTP error sending email: {str(e)}"
+        logging.error(error_msg)
+        raise Exception(error_msg)
     except smtplib.SMTPException as e:
         error_msg = f"SMTP error sending email: {str(e)}"
         logging.error(error_msg)
