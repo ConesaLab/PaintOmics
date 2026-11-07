@@ -326,8 +326,26 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 _TRACKED_PREFIX = "PaintomicsClient/public_html/"
 
 
-def _committed(relativePath):
-    """The file as HEAD has it, or None when that cannot be determined.
+# Every cache-busted file in index.html, stylesheets included: _SRC above reads
+# only script tags, which is all PUBLISHED records.
+_ANY_MARKER = re.compile(r'(?:src|href)="([^"]+?)\?v=([0-9.]+)"')
+
+# The branch everything is rebased on. A ?v= it already serves is published.
+UPSTREAM = os.environ.get("PAINTOMICS_UPSTREAM_REF", "origin/master")
+
+
+def _git(*args):
+    """`git <args>` in the repository, or None when git cannot run."""
+    try:
+        import subprocess
+        return subprocess.run(["git"] + list(args), cwd=REPO_ROOT,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except (OSError, ImportError):
+        return None
+
+
+def _committed(relativePath, ref="HEAD"):
+    """The file as HEAD (or ``ref``) has it, or None when that cannot be determined.
 
     Deliberately not the working tree. This check compares content against a
     recorded digest, and a working-tree comparison fails continuously for as
@@ -336,14 +354,8 @@ def _committed(relativePath):
     ignored, and the thing it is actually protecting against is a *shipped*
     change with an unbumped marker. What ships is what is committed.
     """
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "show", "HEAD:" + _TRACKED_PREFIX + relativePath],
-            cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    except (OSError, ImportError):
-        return None
-    if result.returncode != 0:
+    result = _git("show", ref + ":" + _TRACKED_PREFIX + relativePath)
+    if result is None or result.returncode != 0:
         return None
     return result.stdout
 
@@ -468,6 +480,50 @@ class VersionedAssetTest(unittest.TestCase):
             self.assertIn("function %s" % name, source,
                           "Util.js no longer defines %s, which other views "
                           "call as a global" % name)
+
+    def test_a_marker_master_serves_still_means_masters_file(self):
+        """After a rebase, a ?v= that master already serves must not change content.
+
+        The checks above compare a file only with the digest this table holds,
+        so they cannot see two branches that each bump the same file to the
+        same number. fix/custom-species-ai-and-maps and #226 both took
+        PA_AIInterpretView.js from v=1.10 to v=1.11 with different changes.
+        The rebase merged the file and index.html without a conflict (both
+        sides wrote the same line), and recording the merged digest under 1.11
+        left every other check green. A browser holding master's v=1.11 would
+        then never fetch the merged file.
+
+        So on a branch that holds UPSTREAM (that is, after a rebase), every
+        file whose marker equals UPSTREAM's must be byte-for-byte UPSTREAM's
+        file. Skipped where UPSTREAM is not known (CI checks out one commit)
+        or the branch is not on top of it yet.
+        """
+        known = _git("rev-parse", "--verify", "--quiet", UPSTREAM + "^{commit}")
+        if known is None or known.returncode != 0:
+            self.skipTest("%s is not known to git here" % UPSTREAM)
+        onTop = _git("merge-base", "--is-ancestor", UPSTREAM, "HEAD")
+        if onTop is None or onTop.returncode != 0:
+            self.skipTest("HEAD is not on top of %s; rebase first" % UPSTREAM)
+
+        upstreamIndex = _committed("index.html", UPSTREAM)
+        headIndex = _committed("index.html")
+        if upstreamIndex is None or headIndex is None:
+            self.skipTest("index.html could not be read from %s and HEAD" % UPSTREAM)
+        upstreamMarkers = dict(_ANY_MARKER.findall(upstreamIndex.decode("utf-8", "replace")))
+        headMarkers = dict(_ANY_MARKER.findall(headIndex.decode("utf-8", "replace")))
+
+        reused = []
+        for path, version in sorted(headMarkers.items()):
+            if upstreamMarkers.get(path) != version:
+                continue
+            if _committed(path) != _committed(path, UPSTREAM):
+                reused.append("%s?v=%s" % (path, version))
+
+        self.assertEqual(reused, [],
+                         "%s already serves these markers with other content, so "
+                         "a browser that cached its copy keeps it: bump each "
+                         "marker past %s's and record the new version and "
+                         "digest in PUBLISHED: %s" % (UPSTREAM, UPSTREAM, reused))
 
 
 def main():
