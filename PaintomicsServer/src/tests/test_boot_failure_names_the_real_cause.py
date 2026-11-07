@@ -36,6 +36,11 @@ Pinned here, on the shipped app.js under a stubbed jQuery:
   * launch() goes through all that: it stops at the first module that fails, and
     its catch raises the dialog.
 
+The same one message dialog is why a page opened with a job link shows neither the
+Welcome nor a browser warning, and sets no cookie, so that the next bare visit does:
+the last answer to arrive replaced whichever came first, and a refused link's
+warning could be lost that way.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_boot_failure_names_the_real_cause
@@ -50,6 +55,7 @@ import unittest
 APP_JS = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", "..",
     "PaintomicsClient", "public_html", "app.js"))
+MAIN_VIEW_JS = os.path.join(os.path.dirname(APP_JS), "app", "view", "MainView.js")
 
 MODULE = "app/model/FeatureModels.js"
 
@@ -179,8 +185,70 @@ function otherFailure(expression) {
 results.referenceError = otherFailure("new ReferenceError('MainView is not defined')");
 results.nothingThrown = otherFailure("undefined");
 
+/* One page load: MainView's real Welcome check, then the real continueBoot. */
+function visit(search, browser, cookies) {
+    const app = boot(arrived);
+    const calls = [];
+    Object.assign(app.sandbox, {
+        location: {search: search, pathname: "/"},
+        SERVER_URL_GET_MESSAGE: "/um_get_message",
+        ajaxErrorHandler() {},
+        showInfoMessage(title) { calls.push("dialog: " + title); }
+    });
+    Object.assign(app.sandbox.Ext, {
+        urlDecode(query) { return Object.fromEntries(new URLSearchParams(query)); },
+        getCmp() { return undefined; },
+        isSafari: browser === "safari",
+        isIE: browser === "ie",
+        util: {Cookies: {get(name) { return name in cookies ? cookies[name] : null; },
+                         set(name, value) { cookies[name] = value; }}}
+    });
+    app.sandbox.$.ajax = function (opts) { calls.push("asked: " + opts.url); opts.success({success: true}); };
+    vm.runInContext(%(welcome)s, app.context);
+    const application = vm.runInContext("new Application()", app.context);
+    application.getController = function () {
+        return {recoverPAJobHandler(id) { calls.push("recover: " + id); },
+                showJobInstance() { calls.push("bare address"); }};
+    };
+    application.continueBoot({getJobID() { return null; }, getStepNumber() { return 1; }},
+                             vm.runInContext("jobIDInAddress()", app.context));
+    return {calls: calls, warnings: app.dialogs.map(function (d) { return d.title; }), cookies: Object.assign({}, cookies)};
+}
+
+const browserCookies = {};
+results.visits = {
+    emptyJobLink: visit("?jobID=", "chrome", {}),
+    jobLink: visit("?jobID=GoneJob", "chrome", browserCookies),
+    thenBareAddress: visit("", "chrome", browserCookies),
+    thenAnotherBareAddress: visit("", "chrome", browserCookies),
+    jobLinkWithTheCookie: visit("?jobID=GoneJob", "chrome", {silence: "true"}),
+    jobLinkInSafari: visit("?jobID=GoneJob", "safari", {}),
+    bareAddressInSafari: visit("", "safari", {}),
+    jobLinkInIE: visit("?jobID=GoneJob", "ie", {}),
+    bareAddressInIE: visit("", "ie", {})
+};
+
 process.stdout.write(JSON.stringify(results));
 """
+
+
+def _welcomeCheck():
+    """MainView's if/else chain around the Welcome message, as it ships."""
+    with open(MAIN_VIEW_JS, encoding="utf-8") as handle:
+        source = handle.read()
+    start = source.index('if (Ext.util.Cookies.get("silence") != null) {')
+    index = start
+    while True:
+        index = source.index("{", index)
+        depth = 0
+        while True:
+            depth += {"{": 1, "}": -1}.get(source[index], 0)
+            index += 1
+            if depth == 0:
+                break
+        following = source[index:].lstrip()
+        if not following.startswith("else"):
+            return source[start:index]
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")
@@ -194,13 +262,59 @@ class BootFailureTest(unittest.TestCase):
         try:
             script = os.path.join(scratch, "harness.js")
             with open(script, "w", encoding="utf-8") as handle:
-                handle.write(HARNESS % {"app": json.dumps(APP_JS), "module": json.dumps(MODULE)})
+                handle.write(HARNESS % {"app": json.dumps(APP_JS), "module": json.dumps(MODULE),
+                                        "welcome": json.dumps(_welcomeCheck())})
             done = subprocess.run(["node", script], capture_output=True, text=True, timeout=60)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         if done.returncode != 0:
             raise AssertionError("the harness failed:\n" + done.stderr)
         cls.results = json.loads(done.stdout)
+
+
+class AJobLinkLeavesTheMessageDialogToTheJobTest(BootFailureTest):
+
+    WELCOME = "dialog: Welcome to PaintOmics AI!"
+    MESSAGE_REQUEST = "asked: /um_get_message"
+
+    def visit(self, name):
+        return self.results["visits"][name]
+
+    def test_a_job_link_on_a_first_visit_asks_for_no_welcome(self):
+        visit = self.visit("jobLink")
+        self.assertEqual(visit["calls"], ["recover: GoneJob"])
+
+    def test_an_address_with_an_empty_job_id_is_a_bare_address(self):
+        """The recover handler does nothing with "", which left a blank page."""
+        visit = self.visit("emptyJobLink")
+        self.assertEqual(visit["calls"], [self.MESSAGE_REQUEST, self.WELCOME, "bare address"])
+        self.assertEqual(visit["cookies"], {"silence": True})
+
+    def test_a_job_link_does_not_use_up_the_welcome(self):
+        self.assertEqual(self.visit("jobLink")["cookies"], {})
+        later = self.visit("thenBareAddress")
+        self.assertEqual(later["calls"], [self.MESSAGE_REQUEST, self.WELCOME, "bare address"])
+        self.assertEqual(later["cookies"], {"silence": True})
+
+    def test_the_cookie_still_stops_it_on_the_visit_after_that(self):
+        self.assertEqual(self.visit("thenAnotherBareAddress")["calls"], ["bare address"])
+
+    def test_a_job_link_with_the_cookie_is_unchanged(self):
+        visit = self.visit("jobLinkWithTheCookie")
+        self.assertEqual(visit["calls"], ["recover: GoneJob"])
+        self.assertEqual(visit["cookies"], {"silence": "true"})
+
+    def test_no_browser_warning_takes_the_dialog_from_a_job_link(self):
+        """Safari's closes itself after 5 s, and with it whatever the dialog holds by then."""
+        for name in ("jobLinkInSafari", "jobLinkInIE"):
+            with self.subTest(visit=name):
+                self.assertEqual(self.visit(name)["warnings"], [])
+                self.assertEqual(self.visit(name)["cookies"], {})
+
+    def test_a_bare_address_still_gets_the_browser_warning_once(self):
+        self.assertEqual(self.visit("bareAddressInSafari")["warnings"], ["Using Safari?"])
+        self.assertEqual(self.visit("bareAddressInIE")["warnings"], ["Using Internet Explorer?"])
+        self.assertEqual(self.visit("bareAddressInSafari")["cookies"], {"silence": True})
 
 
 class ModuleFetchTest(BootFailureTest):

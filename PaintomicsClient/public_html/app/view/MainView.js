@@ -119,7 +119,10 @@ function MainView() {
 			return;
 		} else if (this.subviews[aViewName] == null) {
 			if (aViewName === "paintPathways") {
-				application.getController("JobController").showJobInstance(this.getLastJobView().getModel()); //DELEGATE TO JobController
+				var lastJobView = this.getLastJobView();
+				if (lastJobView !== null) {
+					application.getController("JobController").showJobInstance(lastJobView.getModel()); //DELEGATE TO JobController
+				}
 				return;
 			} else if (aViewName === "DM_MyDataListView") {
 				aView = new DM_MyDataListView();
@@ -471,9 +474,13 @@ function MainView() {
 					me.watchHeaderFit();
 					me.initThemeToggle();
 
+					// A job link's answer uses the one message dialog too, and a
+					// Welcome arriving after it replaced a refused link's warning.
+					// continueBoot sets no cookie on such a visit, so the Welcome
+					// waits for the next bare one.
 					if (Ext.util.Cookies.get("silence") != null) {
 						console.log("Message already shown, ignoring.");
-					} else {
+					} else if (jobIDInAddress() === null) {
 						$.ajax({
 							type: "POST",
 							url: SERVER_URL_GET_MESSAGE,

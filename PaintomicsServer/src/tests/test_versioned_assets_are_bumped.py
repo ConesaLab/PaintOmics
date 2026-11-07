@@ -304,8 +304,11 @@ PUBLISHED = {
     # analysis for every boot failure.
     # v=0.10 offers a module that threw a reload rather than the discard, because
     # launch() has read neither store at that point.
+    # v=0.11 reads the job in the address in one place, and on a page opened with
+    # one shows no browser warning and sets no "silence" cookie, so the next bare
+    # visit still gets them and the Welcome.
     "app.js": (
-        "0.10", "2df7fc946caba0126fc454193244d3d9cd6e379770055cec907c99b4ba2757fe"),
+        "0.11", "33a93703095aa208bf71cc824e53e13211a3c1d7a596492d276c978baecca8bb"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

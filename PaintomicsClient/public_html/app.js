@@ -132,6 +132,11 @@ function resetPaintomicsSession() {
     });
 }
 
+/* The job this page was opened for, or null when the address names none. */
+function jobIDInAddress() {
+    return Ext.urlDecode(location.search.substring(1)).jobID || null;
+}
+
 /**
  * How loadModule treats a module it could not fetch. The fetch is retried
  * because a connection that drops mid-boot is usually back within moments: on
@@ -323,8 +328,7 @@ function Application() {
         this.mainView.getComponent();
 
         // Try to load the jobID provided in the URL
-        var URLparams = Ext.urlDecode(location.search.substring(1));
-        var URLjobID = (URLparams["jobID"] !== undefined) ? URLparams.jobID : null;
+        var URLjobID = jobIDInAddress();
         var jobInstanceModel = new JobInstance(null);
 
         if (window.sessionStorage && sessionStorage.getItem("jobModel") != null) {
@@ -438,7 +442,10 @@ function Application() {
 
         if (Ext.util.Cookies.get("silence") != null) {
             console.log("Message already shown, ignoring.");
-        } else {
+        } else if (URLjobID === null) {
+            // Not on a job link: these share the one message dialog with the
+            // job's answer, and Safari's would close that answer after 5 s. With
+            // no cookie, the next bare visit still shows them and the Welcome.
             if (Ext.isIE) {
                 showWarningMessage("Using Internet Explorer?", {message: "Some features of PaintOmics AI do not work in Internet Explorer.<br>Please use Chrome, Firefox or Edge.", closeTimeout: 5, showButton: true});
             } else if (Ext.isSafari) {

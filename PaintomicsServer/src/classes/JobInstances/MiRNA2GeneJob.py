@@ -24,6 +24,7 @@
 #**************************************************************
 
 import logging
+from html import escape
 
 from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
@@ -53,12 +54,12 @@ def explainEmptyResult(stats):
     that would have used it is not written.
     """
     if not isinstance(stats, dict):
-        return (" - Your mirna2gene association process did not return any "
+        return ("Your mirna2gene association process did not return any "
                 "result. Please, check the files (same identifiers, etc) and "
                 "parameters.")
 
     dropped = stats.get("dropped") or {}
-    lines = [" - No miRNA was matched to a target gene, so there is nothing to analyse."]
+    lines = ["No miRNA was matched to a target gene, so there is nothing to analyse."]
 
     def sample(ids):
         return ", ".join(str(i) for i in (ids or [])[:3])
@@ -159,6 +160,21 @@ def explainEmptyResult(stats):
                      "; ".join(blanks) + ".")
 
     return " ".join(lines)
+
+
+def emptyResultError(stats):
+    """What a run with nothing to show raises.
+
+    A refusal of the files, which the dialog encodes because the message quotes
+    their first columns. A scoring step that crashed is no refusal: it stays an
+    error that can be reported, and its dialog takes HTML while its text can quote
+    a cell of the file ("could not convert string to float: '...'"). Quotes stay as
+    they are, because the Step 1 dialog encodes this text once more.
+    """
+    message = explainEmptyResult(stats)
+    if isinstance(stats, dict) and stats.get("aborted"):
+        return Exception(escape(message, quote=False))
+    return InputFileError(message)
 
 
 class MiRNA2GeneJob(Job):
@@ -494,7 +510,7 @@ class MiRNA2GeneJob(Job):
         # pearson and spearman alike).
         if isinstance(matchStats, dict) and matchStats.get("scored") \
                 and matchStats.get("nanScores") == matchStats.get("scored"):
-            raise Exception(explainEmptyResult(matchStats))
+            raise emptyResultError(matchStats)
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")
@@ -613,7 +629,7 @@ class MiRNA2GeneJob(Job):
                 # Abort the process to let the user know that there were no results.
                 if len(self.getInputGenesData()) < 1:
                     logging.info("MIRNA2GENES - NO RESULTS")
-                    raise Exception(explainEmptyResult(matchStats))
+                    raise emptyResultError(matchStats)
 
                 #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
                 #correlation, the script will calculate the FC

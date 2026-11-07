@@ -1315,6 +1315,17 @@ function JobController() {
 	this.recoverPAJobHandler = function (jobID) {
 		var me = this;
 
+		/* A link that cannot be opened, on a page with nothing on it yet: what a
+		   bare address shows goes behind the dialog, or closing it leaves a blank
+		   page. My Jobs comes through here too, with something on screen to keep.
+		   A job with no id leaves ?jobID= in the address, and that is what brings
+		   a signed-out owner to the job on the reload after signing in. */
+		var showStep1OnAnEmptyPage = function () {
+			if (application.getMainView().currentView === null) {
+				me.showJobInstance(new JobInstance(null));
+			}
+		};
+
 		var _recover = function (btn, jobID) {
 			if (btn === "ok" && jobID !== "") {
 				showInfoMessage("Loading job information...", {logMessage: "Sending new request (recover job).", showSpin: true});
@@ -1324,6 +1335,7 @@ function JobController() {
 					data: {jobID: jobID},
 					success: function (response) {
 						if (response.success === false) {
+							showStep1OnAnEmptyPage();
 							if (response.message) {
 								/* The Close button is the only way out of this modal, and
 								   the job can run for a while yet. */
@@ -1481,7 +1493,10 @@ function JobController() {
 
 						showSuccessMessage("Done", {logMessage: "Getting Job information...DONE", closeTimeout: 1});
 					},
-					error: ajaxErrorHandler
+					error: function (response) {
+						showStep1OnAnEmptyPage();
+						ajaxErrorHandler(response);
+					}
 				});
 			}
 		};

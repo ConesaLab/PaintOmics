@@ -43,10 +43,12 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "../..")))
 
 from src import paintomicsserver as server
+from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob, emptyResultError
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob, explainEmptyMapping
 from src.common.ServerErrorManager import InputFileError, handleException
 from src.conf.serverconf import SERVER_SUBDOMAIN
 from src.paintomicsserver import Response
+from src.servlets import MiRNA2GenesServlet
 from src.servlets import PathwayAcquisitionServlet as servlet
 from src.tests import fake_omics
 from src.tests.test_status_poll_retries_unreadable_answers import UTIL, extract_function, read
@@ -291,6 +293,93 @@ process.stdout.write(JSON.stringify(results));
 """
 
 
+HOSTILE_MIRNA = "<img src=x onerror=console.log(1)>"
+ROWS = {"values": [["#miRNA", "C1", "C2"], [HOSTILE_MIRNA, "0.1", "0.4"], ["<NA>", "0.2", "0.9"]],
+        "targets": [["other-miR-1", "G1"]],
+        "genes": [["#gene", "C1", "C2"], ["G1", "1.0", "2.0"]]}
+
+
+def _miRNAToolAnswer(rows, relevant=()):
+    """What the real tool answers, on the queue, for three files.
+
+    The real job, its real validation and the real miRNA2Target script, reached
+    through the servlet's real second step. Nothing is stored, because refusing
+    comes first.
+    """
+    root = tempfile.mkdtemp(prefix="paintomics_mirna_") + "/"
+    try:
+        job = MiRNA2GeneJob("mirnajob", None, root)
+        os.makedirs(job.getInputDir(), exist_ok=True)
+        os.makedirs(job.getTemporalDir(), exist_ok=True)
+        names = {"values": "values.tab", "targets": "targets.tab", "genes": "genes.tab", "relevant": "relevant.txt"}
+        for key, content in dict(rows, relevant=[[name] for name in relevant]).items():
+            with io.open(os.path.join(job.getInputDir(), names[key]), "w", encoding="utf-8") as handle:
+                for row in content:
+                    handle.write("\t".join(row) + "\n")
+        job.geneBasedInputOmics = [
+            {"omicName": "miRNA-seq", "inputDataFile": names["values"], "relevantFeaturesFile": names["relevant"],
+             "associationsFile": names["targets"]},
+            {"omicName": "Gene expression", "inputDataFile": names["genes"]}]
+        answer = _Response()
+        MiRNA2GenesServlet.fromMiRNAtoGenes_STEP2(job, None, False, answer, {})
+        return answer
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
+    """explainEmptyResult quotes the first column of the uploaded file."""
+
+    def test_identifiers_that_never_join(self):
+        answer = _miRNAToolAnswer(ROWS)
+        self.assertEqual(answer.status, 400)
+        self.assertIs(answer.content["extra"]["input_error"], True)
+        self.assertIn("none of them appears in the first column", answer.content["message"])
+        self.assertIn("<NA>", answer.content["message"])
+
+    def test_scores_that_are_all_undefined(self):
+        answer = _miRNAToolAnswer({
+            "values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.1"]],
+            "targets": [["mmu-miR-1", "G1"]],
+            "genes": [["#gene", "C1", "C2"], ["G1", "1.0", "1.0"]]})
+        self.assertEqual(answer.status, 400)
+        self.assertIs(answer.content["extra"]["input_error"], True)
+        self.assertIn("undefined correlation", answer.content["message"])
+
+    def test_the_message_reads_as_a_sentence_in_the_dialog(self):
+        """The dialog does not strip the " - " step1FailureReason does."""
+        message = _miRNAToolAnswer(ROWS).content["message"]
+        self.assertIn("ERROR MESSAGE: No miRNA was matched", message)
+
+    def test_a_scoring_step_that_crashed_is_not_a_refusal(self):
+        """It says it is not a problem with the identifiers, so it keeps Report error.
+
+        float() quotes the cell it could not read, and this answer reaches a dialog
+        that takes HTML, so the text is escaped here. The quotes are left: the Step 1
+        dialog encodes this text again, and would show an entity.
+        """
+        message = self._crashed().content["message"]
+        self.assertIn("The scoring step stopped", message)
+        self.assertIn("not a problem with your identifiers", message)
+        self.assertNotIn("<img", message)
+        self.assertIn("float: '&lt;img src=x onerror=console.log(1)&gt;'", message)
+
+    def test_that_crash_is_marked_as_ours(self):
+        answer = self._crashed()
+        self.assertEqual(answer.status, 400)
+        self.assertIs(answer.content["extra"]["input_error"], False)
+
+    def test_stats_that_are_not_there_are_still_a_refusal(self):
+        self.assertIsInstance(emptyResultError(None), InputFileError)
+
+    def _crashed(self):
+        """A target named as the gene file's header row is scored on its cell text."""
+        return _miRNAToolAnswer({
+            "values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"]],
+            "targets": [["mmu-miR-1", "#gene"]],
+            "genes": [["#gene", HOSTILE_MIRNA, "C2"], ["G1", "1.0", "2.0"]]})
+
+
 def _answerTo(exception, userID=None):
     """The body handleException really writes for this exception."""
     response = _Response()
@@ -325,6 +414,7 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
                 "markedUpRefusal": _answerTo(InputFileError(cls.MARKUP), userID="17"),
                 "internalError": _answerTo(ValueError("The table is broken."), userID="17"),
                 "anonymousError": _answerTo(ValueError("The table is broken.")),
+                "miRNATool": _miRNAToolAnswer(ROWS).content,
             }),
             "lines": json.dumps({
                 "fullStop": "InputFileError: AT S.py: f. ERROR MESSAGE: PaintOmics recognised.. User ID: 17",
@@ -367,6 +457,16 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         self.assertNotIn("<NA>", body)
         self.assertIn("&lt;img src=x onerror=console.log(1)&gt;", body)
         self.assertIn("&lt;NA&gt;", body, "an id the message relies on has vanished")
+
+    def test_the_mirna_tool_refusal_is_text_with_no_report_button(self):
+        result = self.results["miRNATool"]
+        self.assertIn("Please check your input files", result["title"])
+        self.assertEqual(result["report"], "none")
+        self.assertEqual(result["close"], "inline-block")
+        self.assertNotIn("<img", result["body"])
+        self.assertNotIn("<NA>", result["body"])
+        self.assertIn("&lt;img src=x", result["body"])
+        self.assertIn("&lt;NA&gt;", result["body"])
 
     def test_the_markup_a_refusal_is_written_in_still_works(self):
         body = self.results["markedUpRefusal"]["body"]
@@ -412,6 +512,19 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         self.assertNotEqual(split["onlyTheSuffix"]["readable"], "", "a dialog with nothing in it")
 
 
+PREPARATION_HARNESS = r"""
+const shown = [];
+function showErrorMessage(title, data) { shown.push({title: title, data: data}); }
+%(client)s
+const jobView = {failedRequests: 1};
+const response = {responseText: JSON.stringify(%(answer)s)};
+if (step1FailureIsInputRefusal(response)) { jobView.step1InputRefusals = 1; }
+jobView.step1FailureReasons = ["<b>miRNA-seq</b>: " + step1FailureReason(response)];
+showStep1PreparationFailure(jobView);
+console.log(JSON.stringify(shown[0]));
+"""
+
+
 class ThePreparationDialogWordsItToo(unittest.TestCase):
     """Region and miRNA files are prepared by their own jobs in Step 1; a refusal
     of those files reaches showStep1PreparationFailure, not ajaxErrorHandler."""
@@ -419,6 +532,30 @@ class ThePreparationDialogWordsItToo(unittest.TestCase):
     def setUp(self):
         with io.open(JOB_CONTROLLER_JS, encoding="utf-8") as handle:
             self.source = handle.read()
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not installed")
+    def test_a_refused_mirna_file_in_step_1(self):
+        script = PREPARATION_HARNESS % {
+            "client": "\n".join(extract_function(self.source, name, "JobController.js") for name in
+                                ("step1FailureReason", "step1FailureIsInputRefusal", "showStep1PreparationFailure")),
+            "answer": json.dumps(_miRNAToolAnswer(ROWS).content),
+        }
+        directory = tempfile.mkdtemp(prefix="paintomics-preparation-")
+        try:
+            path = os.path.join(directory, "check.js")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(script)
+            done = subprocess.run(["node", path], capture_output=True, text=True, timeout=60)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        dialog = json.loads(done.stdout)
+        self.assertEqual(dialog["title"], "Please check your input files")
+        self.assertIs(dialog["data"]["showReportButton"], False)
+        self.assertIn("<b>miRNA-seq</b>: No miRNA was matched", dialog["data"]["message"])
+        self.assertIn("&lt;NA&gt;", dialog["data"]["message"])
+        self.assertNotIn("<NA>", dialog["data"]["message"])
+        self.assertNotIn("<img", dialog["data"]["message"])
 
     def test_a_refused_preparation_is_counted(self):
         self.assertRegex(self.source, r"function step1FailureIsInputRefusal\(response\)")

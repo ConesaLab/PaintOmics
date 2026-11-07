@@ -37,7 +37,8 @@ from src.common.DesignFile import parse_design
 from src.common.DAO.PathwayAcquisitionJobDAO import PathwayAcquisitionJobDAO
 from src.common.DAO.FeatureDAO import FeatureDAO
 from src.common.DAO.UserDAO import UserDAO
-from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob, mappedTotal
+from src.common.PySiQ import JobStatus
+from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 from src.classes import PathwayEvidence
 
 from src.conf.serverconf import CLIENT_TMP_DIR
@@ -730,7 +731,10 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         handleException(RESPONSE, ex, __file__ , "pathwayAcquisitionStep2_PART2", userID=userID)
     finally:
         JobProgress.finish(jobID)
-        jobInstance.cleanDirectories()
+        # None when the job was removed while this waited on the queue. Raising
+        # here would lose the answer above and mark the queue entry FAILED.
+        if jobInstance is not None:
+            jobInstance.cleanDirectories()
         return RESPONSE
 
 #************************************************************************
@@ -843,11 +847,36 @@ def isSignedInToAnAccount(userID):
     return user is not None and not user.isGuest()
 
 
+def _isPlainCount(value):
+    """An int and not a bool, which isinstance(value, int) lets through."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _storedNoMatch(compoundOmic):
+    """[mapped, unmapped, ...] with mapped 0, as parseCompoundBasedFile writes it.
+
+    The first slot of a compound omic is a plain int: the dict mappedTotal also
+    reads belongs to gene omics. Any other shape says nothing about what matched,
+    so it does not count as zero.
+    """
+    summary = compoundOmic.get("omicSummary") if isinstance(compoundOmic, dict) else None
+    return (isinstance(summary, list) and len(summary) >= 2
+            and _isPlainCount(summary[0]) and _isPlainCount(summary[1])
+            and summary[0] == 0)
+
+
 def matchedNoCompounds(compoundOmics):
-    """Whether every compound omic stored a summary that says nothing matched."""
-    return all(isinstance(omic.get("omicSummary"), list) and omic["omicSummary"]
-               and mappedTotal(omic["omicSummary"]) == 0
-               for omic in compoundOmics)
+    """Whether every compound omic stored a readable summary that says nothing matched."""
+    return isinstance(compoundOmics, list) and all(_storedNoMatch(omic) for omic in compoundOmics)
+
+
+def hasGeneAnalysisToRun(geneOmics):
+    """Whether at least one gene omic stored a summary Step 2 can read and show."""
+    def readable(omic):
+        summary = omic.get("omicSummary") if isinstance(omic, dict) else None
+        return (isinstance(summary, list) and len(summary) >= 2
+                and (isinstance(summary[0], dict) or _isPlainCount(summary[0])))
+    return isinstance(geneOmics, list) and any(readable(omic) for omic in geneOmics)
 
 
 def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
@@ -888,7 +917,7 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         jobInstance = JobInformationManager().loadJobInstance(jobID)
         queueJob = QUEUE_INSTANCE.fetch_job(jobID)
 
-        if queueJob is not None and not queueJob.is_finished():
+        if queueJob is not None and queueJob.status in (JobStatus.QUEUED, JobStatus.STARTED):
             logging.info("RECOVER_JOB - JOB " + jobID + " HAS NOT FINISHED ")
             response.setContent({"success": False, "message": "Your job " + shownJobID + " is still running in the queue. Please, try again later to check if it has finished."})
             return response
@@ -986,13 +1015,19 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         for matchedclass in jobInstance.getMatchedClass().values():
             matchedClassJSONList.append( matchedclass.toBSON() )
 
-        compoundOmics = jobInstance.getCompoundBasedInputOmics()
         # A metabolomics file none of whose names matched has no compounds to
-        # store. Its job goes on to the normal Step 2 answer, as one with a single
-        # match does: the gene analysis in it can still run.
-        if len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( compoundOmics ) > 0 and not matchedNoCompounds(compoundOmics):
+        # store. With gene data its job goes on to the normal Step 2 answer, as one
+        # with a single match does: the gene analysis in it can still run. With
+        # none that answer leads only to 0 pathways, and to a later message that
+        # blames the organism or the databases.
+        compoundOmics = jobInstance.getCompoundBasedInputOmics()
+        noCompoundsStored = len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( compoundOmics ) > 0
+        if noCompoundsStored and not matchedNoCompounds(compoundOmics):
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS FOUND COMPOUNDS (STEP 2: OLD FORMAT?).")
             response.setContent(jobUnavailableAnswer("Job " + shownJobID + " does not contain saved information about the found compounds." + ANALYSE_AGAIN))
+        elif noCompoundsStored and not hasGeneAnalysisToRun(jobInstance.getGeneBasedInputOmics()):
+            logging.info("RECOVER_JOB - JOB " + jobID + " MATCHED NO COMPOUNDS AND HAS NO GENE DATA.")
+            response.setContent(jobUnavailableAnswer("None of the metabolite names in job " + shownJobID + " matched a KEGG compound, so there is nothing to analyse.<br>Check the names in your file." + ANALYSE_AGAIN))
         elif len( matchedPathwaysJSONList ) == 0 and jobInstance.getLastStep() > 2:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS PATHWAYS.")
             summary = jobInstance.summary
