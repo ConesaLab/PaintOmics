@@ -95,10 +95,10 @@ class ZeroMatchedOmicSaysSoTest(unittest.TestCase):
 
     def test_a_transcript_id_on_its_own_organism_is_told_to_lose_its_suffix(self):
         """That organism's alias table holds the gene id, and never the transcript id."""
-        for organism, samples, expected in (("zma", MAIZE_TRANSCRIPTS, "_T001 in Zm00001d027230_T001"),
-                                            ("psat", PEA_TRANSCRIPTS, ".1 in Psat.cameor.v2.1g306350.1")):
+        for organism, samples, suffix in (("zma", MAIZE_TRANSCRIPTS, "_T001"), ("zma", MAIZE_TRANSCRIPTS[1:], "_T002"),
+                                          ("psat", PEA_TRANSCRIPTS, ".1"), ("psat", PEA_TRANSCRIPTS[2:], ".2")):
             message = emptyMappingAdvice(organism, samples)
-            self.assertIn(expected, message, organism)
+            self.assertIn("These are transcript ids (the %s in %s);" % (suffix, samples[0]), message, organism)
             self.assertIn("remove the suffix and run again", message, organism)
             self.assertNotIn("Check the organism", message, organism)
             self.assertNotIn("go back to step 1", message, "the file fits the organism chosen")
@@ -124,6 +124,14 @@ class ZeroMatchedOmicSaysSoTest(unittest.TestCase):
             message = explainEmptyMapping(organism, [omic("Gene expression", 0, 5000)], lambda name: samples)
             self.assertNotIn("remove the suffix", message, samples[0])
             self.assertIn("Check the organism", message, samples[0])
+
+    def test_an_empty_sample_gets_the_generic_advice(self):
+        """sampleUnmatched gives [] when an omic has no unmatched file: all() of nothing is true, and the sentence reads samples[0]."""
+        for organism in ("zma", "psat"):
+            message = emptyMappingAdvice(organism, [])
+            self.assertIn("Check the organism", message, organism)
+            self.assertNotIn("transcript ids", message, organism)
+            self.assertNotIn("remove the suffix", message, organism)
 
     def test_has_data_rows(self):
         directory = tempfile.mkdtemp(prefix="matched-")

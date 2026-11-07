@@ -184,10 +184,14 @@ has the commands. A species build never runs it, and only the pea `rbh` step nee
 It reads the species' `mapping/` files through the build's own processors, not the
 installed database, because a database that already holds the aliases would answer "this
 sorghum gene reaches KEGG" and the table would regenerate empty. It stops without writing
-when a source is skipped, a KEGG list is absent, no rows come out, or a maize position source
-puts too few of its ids on a numbered chromosome: each GFF under 95 % of the ids in MaizeGDB's
-table (measured 99.2 % and 100 %), KEGG's list or gene_info under 85 % of KEGG's genes (94.4 %
-each). Without that, a file that downloads and parses to nothing would turn a check off.
+that species' table when a source cannot be fetched or read, a source is skipped, a KEGG list
+is absent, no rows come out, or a maize position source puts too few of its ids on a numbered
+chromosome: each GFF under 95 % of the ids in MaizeGDB's table (measured 99.2 % and 100 %),
+KEGG's list or gene_info under 85 % of KEGG's genes (94.4 % each). Without that, a file that
+downloads and parses to nothing would turn a check off. A source of rows that parses short,
+such as the locus-tag column or a MaizeGDB table missing lines, does not stop it: the run ends
+well with a smaller table, and only the MD5 and row-count pins in `test_identifier_aliases`
+catch that, once the table is committed.
 
 Run against the deployed `mapping/` files, with DIAMOND v2.2.8 and the sources downloaded
 afresh on 2026-11-06, the two GFF files on 2026-11-07, it gives these tables, byte for byte

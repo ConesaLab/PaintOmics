@@ -22,9 +22,12 @@ link, and regenerating from it would come out empty. It also reads
 DATA/<code>/gene2pathway.list, for the pathway counts it reports, so copy that
 beside mapping/ when running it on another machine.
 
-It stops rather than write a short table: a source the processors skipped, a
-missing KEGG list, a maize position source that places too few of its ids, or no
-rows at all, ends the run with a message and no file.
+It stops, writing no table for that species, on a source it cannot fetch or read, a
+source the processors skipped, a missing KEGG list, a maize position source under its
+floor (MIN_GFF_PLACED, MIN_LIST_PLACED), or no rows at all. It does not stop on every
+short table: a source of rows that parses short, such as the locus-tag column or a
+MaizeGDB table missing lines, ends the run well with a smaller table. Only the MD5 and
+SHIPPED_ROWS pins in test_identifier_aliases catch that, once the table is committed.
 
 Expect small differences on a later date. NCBI rewrites gene_info daily and KEGG
 and Ensembl move with each release, which is the point of being able to re-run it.

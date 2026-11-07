@@ -26,7 +26,7 @@ What is pinned here
 * The shipped tables' schema, order, uniqueness and the rows users asked for, each
   evidence label's target table, and the counts and MD5s the README states.
 * The regenerating script's selection rules, on tiny inputs, its maize build on small
-  files of each source, and that it stops rather than write a short table.
+  files of each source, and what it stops on, each position source's floor to the id.
 * The organism hint recognises Cameor v2 and everything it recognised before.
 
 Needs no network and no database.
@@ -730,17 +730,17 @@ class RegeneratingScriptTest(unittest.TestCase):
         species = _StubSpecies(kegg={"100", "200"},
                                tables={"ncbi_geneid": {"100", "200"}},
                                reach={("ensembl_gene", "V5A"): {"900"}, ("ensembl_gene", "V5B"): {"901"},
-                                      ("ensembl_gene", "V5C"): {"902"}, ("ensembl_gene", "V5E"): {"903"},
-                                      ("ensembl_gene", "V5F"): {"904"}})
+                                      ("ensembl_gene", "V5C"): {"902"}, ("ensembl_gene", "V5D"): {"905"},
+                                      ("ensembl_gene", "V5E"): {"903"}, ("ensembl_gene", "V5F"): {"904"}})
         here = ("1", 100, 200)
-        places = self.places(v5={"V5A": here, "V5B": here, "V5C": here, "V5E": here, "V5F": here},
-                             kegg={"900": here, "901": here, "902": here, "903": here, "904": here})
+        places = self.places(v5={"V5A": here, "V5B": here, "V5C": here, "V5D": here, "V5E": here, "V5F": here},
+                             kegg={"900": here, "901": here, "902": here, "903": here, "904": here, "905": here})
         tags = self.script.readLocusTags(
             ["4577\t100\tLOC100\tZEAMMB73_Zm00001d000001\t-\n",     # NCBI, in KEGG
              "4577\t300\tLOC300\tZEAMMB73_Zm00001d000002\t-\n",     # NCBI, not in KEGG
              "4577\t200\tLOC200\tZEAMMB73_Other01\t-\n",            # not a v4 gene id
              "4577\t400\tLOC400\t-\t-\n"], "ZEAMMB73_")
-        v4ToV5 = {"Zm00001d000001": ["V5D"],             # NCBI wins over this pair
+        v4ToV5 = {"Zm00001d000001": ["V5D"],             # NCBI wins over this pair, usable as it is
                   "Zm00001d000002": ["V5A"],             # NCBI has nothing to offer: 1:1
                   "Zm00001d000003": ["V5B", "V5C"],      # split between assemblies
                   "Zm00001d000004": ["V5E"],             # merged with Zm00001d000005
@@ -944,7 +944,7 @@ class RegeneratingScriptTest(unittest.TestCase):
                                        for gene, chromosome in genes.items()])
         lines("ensembl_mapping.list", ["Zm00001eb000020\t300\tP20\tT20", "Zm00001eb000040\t510\tP40\tT40",
                                        "Zm00001eb000050\t500\tP50\tT50", "Zm00001eb000050\t540\tP51\tT51",
-                                       "Zm00001eb000060\t600\tP60\tT60"])
+                                       "Zm00001eb000060\t600\tP60\tT60", "Zm00001eb000070\t200\tP70\tT70"])
         with open(os.path.join(self.workDir, "zma", "gene2pathway.list"), "w", encoding="utf-8") as handle:
             handle.write("zma:300\tpath:zma00010\n")
 
@@ -955,7 +955,8 @@ class RegeneratingScriptTest(unittest.TestCase):
             for gene, chromosome in genes.items():
                 tag = "ZEAMMB73_" + tagged[gene] if gene in tagged else "-"
                 handle.write("4577\t%s\tS\t%s\t-\t-\t%s\t-\tdesc\tprotein-coding\n" % (gene, tag, chromosome))
-        pairs = {"Zm00001d000002": "Zm00001eb000020",   # MaizeGDB, its KEGG gene 300 at its v5 gene: a row
+        pairs = {"Zm00001d000001": "Zm00001eb000070",   # a tag and a usable pair, its KEGG gene 200 at its v5 gene: NCBI's row
+                 "Zm00001d000002": "Zm00001eb000020",   # MaizeGDB, its KEGG gene 300 at its v5 gene: a row
                  "Zm00001d000004": "Zm00001eb000040",   # a skipped tag, and its pair reaches another gene there: a row
                  "Zm00001d000005": "Zm00001eb000050",   # a skipped tag, and its pair reaches that gene as well: none
                  "Zm00001d000006": "Zm00001eb000060"}   # MaizeGDB, its KEGG gene 600 elsewhere: none
@@ -970,7 +971,7 @@ class RegeneratingScriptTest(unittest.TestCase):
                     "Zm00001d000005": "4", "Zm00001d000006": "6"}
         # Zm00001eb000060 is at 3000, past its KEGG gene: same chromosome, no base shared.
         v5Places = {"Zm00001eb000020": ("3", 1500), "Zm00001eb000040": ("5", 1500), "Zm00001eb000050": ("4", 1500),
-                    "Zm00001eb000060": ("6", 3000)}
+                    "Zm00001eb000060": ("6", 3000), "Zm00001eb000070": ("2", 1500)}
         with gzip.open(v4Gff, "wt", encoding="utf-8") as handle:
             handle.write("##gff-version 3\n")
             for gene, chromosome in v4Places.items():
@@ -980,7 +981,7 @@ class RegeneratingScriptTest(unittest.TestCase):
             for gene, (chromosome, start) in v5Places.items():
                 handle.write("chr%s\tNAM\tgene\t%d\t%d\t.\t+\t.\tID=%s;biotype=protein_coding\n" % (chromosome, start, start + 200, gene))
         return {"mapping": mapping, "v4Gff": v4Gff, "v5Gff": v5Gff, "geneInfo": os.path.join(cache, "tax4577.gene_info.gz"),
-                "v4ToV5": os.path.join(cache, "B73v4_to_B73v5.tsv")}
+                "v4ToV5": os.path.join(cache, "B73v4_to_B73v5.tsv"), "v5ToV4": os.path.join(cache, "B73v5_to_B73v4.tsv")}
 
     def runMaize(self):
         """The real `tables --species zma`, on those files, with a download an error."""
@@ -1041,6 +1042,70 @@ class RegeneratingScriptTest(unittest.TestCase):
                 path = os.path.join(paths[source[0]], source[1]) if isinstance(source, tuple) else paths[source]
                 self.rewrite(path, spoil)
                 self.assertMaizeStops(expected)
+
+    #: What a run on writePlacedSources' files writes when it goes on.
+    PLACED_ROWS = [["Zm00001d000100", "gene_alias", "ncbi_geneid", "100", "ncbi_locus_tag"]]
+
+    def writePlacedSources(self, v4=100, v5=100, kegg=100, geneInfo=100):
+        """100 MaizeGDB pairs and 100 KEGG genes, so one id is one per cent, with this many of each on a numbered chromosome.
+
+        Each position source keeps the rest on a contig, on a plastid or as "Un", as the
+        real ones do. Gene 100's locus tag gives a run that goes on its one row.
+        """
+        shutil.rmtree(os.path.join(self.workDir, "out"), ignore_errors=True)
+        paths = self.writeMaizeSources()
+        genes = range(100, 200)
+
+        def chromosome(gene, placed, otherwise):
+            return "1" if gene < genes[0] + placed else otherwise
+
+        def write(path, rows):
+            self.rewrite(path, lambda lines: [row + "\n" for row in rows])
+
+        write(os.path.join(paths["mapping"], "ncbi-geneid2kegg.list"), ["ncbi-geneid:%d\tzma:%d" % (gene, gene) for gene in genes])
+        write(os.path.join(paths["mapping"], "kegg2genesymbol.list"),
+              ["zma:%d\tCDS\t%s:1000..2000\tg%d; a gene" % (gene, chromosome(gene, kegg, "Pltd"), gene) for gene in genes])
+        write(paths["geneInfo"], ["4577\t%d\tS\t%s\t-\t-\t%s\t-\tdesc\tprotein-coding"
+                                  % (gene, "ZEAMMB73_Zm00001d000100" if gene == 100 else "-", chromosome(gene, geneInfo, "Un"))
+                                  for gene in genes])
+        write(paths["v4ToV5"], ["Zm00001d%06d\tZm00001eb%06d" % (gene, gene) for gene in genes])
+        write(paths["v5ToV4"], ["Zm00001eb%06d\tZm00001d%06d" % (gene, gene) for gene in genes])
+        gff = "%s\tNAM\tgene\t1000\t2000\t.\t+\t.\tID=%s%06d;biotype=protein_coding"
+        write(paths["v4Gff"], [gff % ("Chr" + chromosome(gene, v4, "B73V4_ctg182"), "Zm00001d", gene) for gene in genes])
+        write(paths["v5Gff"], [gff % ("chr" + chromosome(gene, v5, "scaf_1"), "Zm00001eb", gene) for gene in genes])
+        return paths
+
+    def test_a_position_source_goes_on_at_its_floor_and_stops_one_id_under_it(self):
+        """The floors the README states, through the real build, so each source is held to its own."""
+        for source, name, floor in (("v4", "the v4 GFF", 95), ("v5", "the v5 GFF", 95),
+                                    ("kegg", "KEGG's gene list", 85), ("geneInfo", "gene_info", 85)):
+            with self.subTest(source=name):
+                self.writePlacedSources(**{source: floor})
+                self.assertEqual(self.PLACED_ROWS, self.runMaize())
+                self.writePlacedSources(**{source: floor - 1})
+                self.assertMaizeStops("%s puts %d of 100 ids on a numbered chromosome, under the %d %%"
+                                      % (name, floor - 1, floor))
+
+    def test_gene_info_and_keggs_list_are_measured_over_keggs_genes(self):
+        """Not over their own keys: every key can be placed while KEGG's genes are not, and the other way round."""
+        def outsideKegg(chromosome):
+            return ["4577\t%d\tS\t-\t-\t-\t%s\t-\tdesc\tprotein-coding\n" % (gene, chromosome) for gene in range(1000, 1100)]
+
+        with self.subTest("KEGG's list gives 16 genes no coordinates, so all it keeps is placed"):
+            paths = self.writePlacedSources(kegg=84)
+            self.rewrite(os.path.join(paths["mapping"], "kegg2genesymbol.list"),
+                         lambda lines: [line.replace("Pltd:1000..2000", "Unknown") for line in lines])
+            self.assertMaizeStops("KEGG's gene list puts 84 of 100 ids")
+
+        with self.subTest("gene_info lacks 16 KEGG genes and places 100 others"):
+            paths = self.writePlacedSources(geneInfo=84)
+            self.rewrite(paths["geneInfo"], lambda lines: [line for line in lines if "\tUn\t" not in line] + outsideKegg("1"))
+            self.assertMaizeStops("gene_info puts 84 of 100 ids")
+
+        with self.subTest("gene_info is at the floor for KEGG's genes and leaves 100 others unplaced"):
+            paths = self.writePlacedSources(geneInfo=85)
+            self.rewrite(paths["geneInfo"], lambda lines: lines + outsideKegg("Un"))
+            self.assertEqual(self.PLACED_ROWS, self.runMaize())
 
     def test_drop_rbh_only_leaves_the_published_rows(self):
         rows = [("V2A", "gene_alias", "ensembl_gene", "P1", "published_table_rbh+coord+refseq_rbh"),
