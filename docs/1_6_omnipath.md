@@ -42,7 +42,7 @@ recovered by aligning the mouse or rat interaction table against the human one
 on their shared source literature — not guessed from gene-symbol casing.
 
 In the STATegra mouse example the job found 120 OmniPath pathways, 10 of them
-significant, beside 364 from KEGG and 523 from Reactome.
+significant, beside 363 from KEGG and 523 from Reactome.
 
 ## What you see when you open one
 

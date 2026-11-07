@@ -17,12 +17,15 @@ database is filtered is still asked of every pathway the server sent, as
 before, because the server adjusted the p-values over a set that holds the map.
 
 The real functions from PA_Step3Views.js run under node against a stand-in
-model; no DOM.
+model; no DOM. The manual's worked example is checked against the stored STATegra
+response, so its numbers are the ones the page shows for that job.
 
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_step3_counts_what_the_table_lists
 """
+import collections
+import gzip
 import json
 import os
 import re
@@ -35,6 +38,9 @@ STEP3_VIEWS = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", "..",
     "PaintomicsClient", "public_html", "app", "view", "PathwayAcquisitionViews",
     "PA_Step3Views.js"))
+
+REPOSITORY = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+STATEGRA_RESPONSE = os.path.join(REPOSITORY, "tests", "baseline", "08-stategra-multiomics", "step2.json.gz")
 
 HELPER = "var paStep3IsGlobalMap = function"
 COUNTS = "this.getTotalVisiblePathways = function(db)"
@@ -236,6 +242,48 @@ class OnePredicateDecidesTest(unittest.TestCase):
                                   r"me\.getParent\(\)\.getTotalVisiblePathways\(me\.database\)\.listed",
                                   source),
                         "the network subtitle's total is not the listed count")
+
+
+class TheManualQuotesWhatThePageShowsTest(unittest.TestCase):
+    """The guide walks through the STATegra example, so it has to quote what the
+    page shows for that job: the map is in the response, and not in any count."""
+
+    @classmethod
+    def setUpClass(cls):
+        with gzip.open(STATEGRA_RESPONSE, "rt", encoding="utf-8") as handle:
+            pathways = json.load(handle)["pathwaysInfo"].values()
+        cls.mapInResponse = any(p["ID"] == "mmu01100" for p in pathways)
+        cls.found = collections.Counter(p["source"] for p in pathways if p["ID"] != "mmu01100")
+        cls.total = "{:,}".format(sum(cls.found.values()))
+
+    def manual(self, name):
+        with open(os.path.join(REPOSITORY, "docs", name), "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_response_holds_the_map_that_the_counts_leave_out(self):
+        self.assertTrue(self.mapInResponse)
+
+    def test_the_use_case_table_and_totals(self):
+        text = self.manual("6_1_use_case.md")
+        self.assertIn("## Step 3 — %s pathways found" % self.total, text)
+        self.assertIn("It is useful for ranking %s pathways" % self.total, text)
+        self.assertIn("| **Total** | **%s** |" % self.total, text)
+        for source, found in self.found.items():
+            self.assertIn("| %s | %d |" % (source, found), text)
+        self.assertIn("of the %d KEGG pathways" % self.found["KEGG"], text)
+
+    def test_the_other_pages(self):
+        kegg, reactome, omnipath = self.found["KEGG"], self.found["Reactome"], self.found["OmniPath"]
+        for name, quotes in (("4_1_pathway_enrichment.md", ("*%s pathways found" % self.total,
+                                                            "Most of the %s above" % self.total)),
+                             ("4_3_pathways_network.md", ("66 of the %d matched pathways" % kegg,
+                                                          "**66** of %d KEGG pathways" % kegg)),
+                             ("1_2_reactome.md", ("%d Reactome pathways" % reactome, "%d KEGG pathways" % kegg)),
+                             ("1_6_omnipath.md", ("%d OmniPath pathways" % omnipath,
+                                                  "%d from KEGG and %d from Reactome" % (kegg, reactome)))):
+            text = self.manual(name)
+            for quote in quotes:
+                self.assertIn(quote, text, name)
 
 
 if __name__ == "__main__":

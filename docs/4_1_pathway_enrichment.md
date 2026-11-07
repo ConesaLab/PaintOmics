@@ -19,12 +19,13 @@ the difference matters.
 
 ![The pathways summary](img/ui/step3-pathways-summary.png)
 
-*1,007 pathways found, 114 significant, in the STATegra 5-omic example. The
-same split is given per database.*
+*1,006 pathways found, 114 significant, in the STATegra 5-omic example. The
+same split is given per database. The screenshot is older and reads 1,007, and
+364 for KEGG: it counted KEGG's global map, which the table does not list.*
 
 **Found** means the pathway contains at least one feature your input matched.
 That is all it means. A pathway is found if one gene out of two hundred was
-measured, whether or not anything about it changed. Most of the 1,007 above
+measured, whether or not anything about it changed. Most of the 1,006 above
 are found and nothing else.
 
 **Significant** means a p-value of 0.05 or below. The counter always reads a
