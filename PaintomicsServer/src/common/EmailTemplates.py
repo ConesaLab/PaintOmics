@@ -3,7 +3,7 @@
 Four handlers used to build their own message by concatenating a string:
 ``userManagementSignUp`` and ``userManagementResetPassword`` in
 ``servlets/UserManagementServlet.py``, ``adminServletSendReport`` in
-``servlets/AdminServlet.py`` and ``remindJobByJobID`` in
+``servlets/AdminServlet.py`` and ``remindJobByJobID`` (now ``remindUserOfJobs``) in
 ``AdminTools/scripts/clean_databases.py``. All four opened with the same logo
 anchor, closed with the same ``mailto`` footer, and separated the two with the
 same dotted ``<div>``. Four copies meant the rebrand had to be applied four
@@ -639,31 +639,90 @@ def passwordResetEmail(userName, resetLink, temporaryPassword):
     )
 
 
-def jobExpiryEmail(userName, jobID, reminderLink):
-    """The week's notice before a stored job is deleted."""
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December")
+
+
+def longDate(day):
+    """``21 November 2026``: no reader has to guess whether 03/04 is March or
+    April, and the month name does not depend on the server's locale."""
+    if day is None:
+        return ""
+    return "%d %s %d" % (day.day, _MONTHS[day.month - 1], day.year)
+
+
+def _expiringJobRow(job):
+    """One line of the list: the job id as a link, its name, its date."""
+    jobText = "" if job.get("jobID") is None else str(job.get("jobID"))
+    label = _escape(jobText)
+    jobName = _escape(job.get("name"))
+    if jobName and jobName != label:
+        label += " &middot; " + jobName
+    when = longDate(job.get("deletionDate"))
+    return (
+        '<p class="po-text" style="margin:0;font-family:\'Helvetica Neue\',Helvetica,Arial,'
+        "sans-serif;font-size:14px;color:%s;mso-line-height-rule:exactly;line-height:26px;\">"
+        '<a href="%s" target="_blank" style="color:%s;font-weight:600;">%s</a>'
+        '%s</p>'
+    ) % (_BODY,
+         # Fail loud on a missing link, as in passwordResetEmail above.
+         html.escape(job["link"], quote=True), _AI_BLUE_DEEP, label,
+         (' <span class="po-muted" style="color:%s;">deleted on %s</span>' % (_MUTED, when))
+         if when else "")
+
+
+def jobExpiryEmail(userName, jobs):
+    """One warning listing every job of one account that is about to be deleted.
+
+    ``jobs`` is a list of dicts with ``jobID``, ``link`` (opens the job),
+    ``deletionDate`` (a datetime.date, or None) and optionally ``name``.
+
+    This used to be one message per job. clean_databases sent them back to
+    back, so on paintomics.org one user who had run seven jobs on the same day
+    got seven identical-looking mails within fifteen seconds, each saying
+    "will be deleted in one week". Each job now carries its own date instead,
+    because a job is not always first mentioned on its seventh day.
+    """
+    jobs = list(jobs or [])
+    if not jobs:
+        raise ValueError("a job-expiry warning needs at least one job")
     name = _escape(userName)
     opening = ("Hello %s," % name) if name else "Hello,"
     # Two forms of the same identifier: the body interpolates markup and needs
     # the escaped one, while renderEmail escapes the preheader itself and needs
     # the plain one. Escaping twice is what put "&amp;" in the preview line.
-    jobText = "" if jobID is None else str(jobID)
-    job = _escape(jobText)
-    inner = (
-        _heading("A job is about to expire")
-        + _paragraph(
-            "%s your analysis <strong>%s</strong> will be deleted in one week. "
-            "Opening it resets the clock &mdash; you do not have to re-run anything."
-            % (opening, job)
-        )
-        # Fail loud on a missing link, as in passwordResetEmail above.
-        + _button(html.escape(reminderLink, quote=True), "Keep this job")
-        + _paragraph(
-            "If you no longer need it, do nothing and it will be removed on schedule."
-        )
-    )
+    dates = [job.get("deletionDate") for job in jobs if job.get("deletionDate")]
+    first = longDate(min(dates)) if dates else ""
+
+    if len(jobs) == 1:
+        job = jobs[0]
+        jobText = "" if job.get("jobID") is None else str(job.get("jobID"))
+        when = longDate(job.get("deletionDate"))
+        jobName = _escape(job.get("name"))
+        heading = "A job is about to expire"
+        lead = ("%s your analysis <strong>%s</strong>%s will be deleted %s. "
+                "Opening it resets the clock &mdash; you do not have to re-run anything."
+                % (opening, _escape(jobText),
+                   (" (%s)" % jobName) if jobName and jobName != _escape(jobText) else "",
+                   ("on <strong>%s</strong>" % when) if when else "soon"))
+        action = _button(html.escape(job["link"], quote=True), "Keep this job")
+        preheader = "Job %s will be deleted %s." % (jobText, ("on " + when) if when else "soon")
+        closing = "If you no longer need it, do nothing and it will be removed on schedule."
+    else:
+        heading = "%d jobs are about to expire" % len(jobs)
+        lead = ("%s these %d analyses will be deleted on the dates shown. Opening "
+                "one resets its clock &mdash; you do not have to re-run anything."
+                % (opening, len(jobs)))
+        action = _panel("".join(_expiringJobRow(job) for job in jobs))
+        preheader = "%d jobs will be deleted soon%s." % (
+            len(jobs), (", the first on " + first) if first else "")
+        closing = ("If you no longer need them, do nothing and they will be removed "
+                   "on schedule.")
+
+    inner = _heading(heading) + _paragraph(lead) + action + _paragraph(closing)
     return renderEmail(
         _bodyRow(inner),
-        preheaderText="Job %s will be deleted in one week." % jobText,
+        preheaderText=preheader,
         legalNote=(
             "You are receiving this because you accepted the %s terms when the job was "
             "created. Your address is stored only to tell you about actions affecting "

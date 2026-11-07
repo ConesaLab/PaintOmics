@@ -73,6 +73,7 @@ Everything lives in `deploy/.env`. Nothing is baked into the image, and
 | `AI_CSIC_FALLBACK_MODELS` | Defaults to `default/llm`: when the pinned model stops being served, calls go to the gateway's default alias and each result records which model answered. Empty means no fallback, and an outage of the pinned model is an outage of every AI feature. |
 | `AI_INPUT_CONVERTER` | Defaults to `false`: every spreadsheet a user uploads, and every file the format check rejects, ends in *"AI file conversion is not enabled on this server"*. Set it to `true` on any deployment that has a gateway key. |
 | `AI_PUBMED_API_KEY` | Works, but NCBI rate-limits to 3 req/s instead of 10. |
+| `PAINTOMICS_SWEEP_ORPHAN_FILES` | Off: the daily cleaning run removes expired jobs but keeps the old files of anonymous and guest work that no job uses, and logs how many it would delete. Set it to `1` to delete them; see "Retention" in `docs/dev/deployment.md` first. |
 
 **Every setting must be listed in `compose.yaml`.** The app service's `environment`
 block is an allowlist. A variable that is set in `deploy/.env` but not named there is

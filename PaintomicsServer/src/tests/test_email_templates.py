@@ -65,7 +65,11 @@ def _allMessages():
     return {
         "welcome": T.welcomeEmail("Ada Lovelace", "ada@example.org"),
         "reset": T.passwordResetEmail("Ada", "https://example.org/reset?t=abc", "K7Q2M9XZ"),
-        "expiry": T.jobExpiryEmail("Ada", "JOB-2026-0412", "https://example.org/?jobID=x"),
+        "expiry": T.jobExpiryEmail("Ada", [{"jobID": "JOB-2026-0412",
+                                            "link": "https://example.org/?jobID=x"}]),
+        "expiry_list": T.jobExpiryEmail("Ada", [
+            {"jobID": "JOB-1", "link": "https://example.org/?jobID=1", "name": "a & b"},
+            {"jobID": "JOB-2", "link": "https://example.org/?jobID=2"}]),
         "report": T.reportNotificationEmail("New error notification", "Ada",
                                             "ada@example.org", "boom", "#C0392B"),
     }
@@ -127,7 +131,10 @@ class EscapingTest(unittest.TestCase):
         for name, message in {
             "welcome": T.welcomeEmail(self.HOSTILE, "a@b.org"),
             "reset": T.passwordResetEmail(self.HOSTILE, "https://x/", "PW"),
-            "expiry": T.jobExpiryEmail(self.HOSTILE, "JOB1", "https://x/"),
+            "expiry": T.jobExpiryEmail(self.HOSTILE, [{"jobID": "JOB1", "link": "https://x/"}]),
+            "expiry_list": T.jobExpiryEmail(self.HOSTILE, [
+                {"jobID": "JOB1", "link": "https://x/", "name": self.HOSTILE},
+                {"jobID": self.HOSTILE, "link": "https://x/"}]),
             "report": T.reportNotificationEmail("t", self.HOSTILE, "a@b.org", "m", "#333333"),
         }.items():
             self.assertNotIn("<script>", self._bodyOf(message),
@@ -164,7 +171,7 @@ class EscapingTest(unittest.TestCase):
 
     def test_an_ampersand_in_a_job_id_is_escaped_once(self):
         """The body needs the escaped id and the preheader needs the plain one."""
-        message = T.jobExpiryEmail("Ada", "a&b", "https://x/")
+        message = T.jobExpiryEmail("Ada", [{"jobID": "a&b", "link": "https://x/"}])
         self.assertIn("Job a&amp;b will", self._preheaderOf(message))
         self.assertNotIn("&amp;amp;", message)
 

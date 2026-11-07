@@ -19,6 +19,7 @@
 #**************************************************************
 import codecs
 import os
+import re
 import tempfile
 
 from PIL.Image import open as image_open
@@ -134,6 +135,84 @@ def unifyAndSort(seq, criteria=None):
     return result
 
 
+class RecipientRejected(Exception):
+    """The mail server refused the address itself, as one that will never work.
+
+    This is the only delivery failure the server learns about while sending.
+    Most bad addresses are accepted here and bounce later, as a message to the
+    sender's own mailbox that this server never reads; on paintomics.org a
+    Gmail address that does not exist was "sent successfully" six times in one
+    run and bounced six times. A refusal of the address at RCPT TO is
+    different: the server has told us now that the address will never work,
+    so src.common.UserMail turns mail off for that account instead of trying
+    it again every day. _deadAddressRefusal decides which refusals say that.
+    """
+
+    def __init__(self, address, code, reply):
+        self.address = address
+        self.code = code
+        self.reply = reply
+        super(RecipientRejected, self).__init__(
+            "The mail server refused %s: %s %s" % (address, code, reply))
+
+
+# A refusal turns mail off for good, so only the ones about the address itself
+# count. With an enhanced status code (RFC 3463, "550 5.1.1 ..."), these:
+# 5.1.1 no such mailbox, 5.1.2 no such domain, 5.1.3 malformed address,
+# 5.1.6 mailbox moved and no forwarding address, 5.1.10 the domain takes no
+# mail (null MX, RFC 7505). Without one, the basic codes for the same (550 no
+# such mailbox, 551 user not local, 553 mailbox name not allowed), and only
+# when the text says so: a bare 550 is just as often "relaying denied". A
+# refusal this misses is tried again the next day and can be turned off by hand.
+#
+# Every other refusal is raised as an ordinary failure and tried again on a
+# later day, even with a 5xx code. Two in particular:
+#   * 552 / 5.2.2, mailbox full: RFC 5321 (4.5.3.1.10) says a client SHOULD
+#     treat 552 at this step as temporary; the owner empties the mailbox and
+#     the address works again;
+#   * 5.7.x, refused by policy (relaying denied, a block list, our own
+#     sending limits): about us or the route, not the address. Read as a dead
+#     address, one misconfigured relay would turn mail off for every account
+#     it was asked to reach.
+_DEAD_ADDRESS_STATUS = frozenset(("5.1.1", "5.1.2", "5.1.3", "5.1.6", "5.1.10"))
+_DEAD_ADDRESS_CODES = frozenset((550, 551, 553))
+_DEAD_ADDRESS_WORDS = re.compile(
+    r"no such|user unknown|unknown (user|recipient|address|mailbox)|not exist|n.t exist|"
+    r"not found|not local|invalid (recipient|address|mailbox)|name not allowed", re.IGNORECASE)
+_ENHANCED_STATUS = re.compile(r"^\s*([245]\.\d{1,3}\.\d{1,3})(?![\d.])")
+
+
+def _deadAddressRefusal(refused):
+    """(address, code, reply) when every refused recipient was refused as an
+    address that will never work (see _DEAD_ADDRESS_STATUS), else None.
+
+    ``refused`` is SMTPRecipientsRefused.recipients: {address: (code, reply)},
+    where reply is bytes.
+    """
+    if not refused:
+        return None
+    first = None
+    for address, answer in refused.items():
+        try:
+            code, reply = answer
+            code = int(code)
+        except (TypeError, ValueError):
+            return None
+        if isinstance(reply, bytes):
+            reply = reply.decode("utf-8", "replace")
+        reply = str(reply)
+        status = _ENHANCED_STATUS.match(reply)
+        if status is not None:
+            dead = 500 <= code < 600 and status.group(1) in _DEAD_ADDRESS_STATUS
+        else:
+            dead = code in _DEAD_ADDRESS_CODES and _DEAD_ADDRESS_WORDS.search(reply) is not None
+        if not dead:
+            return None
+        if first is None:
+            first = (address, code, reply)
+    return first
+
+
 def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None, fromName=None, isHTML=False):
     """
     Send email using SMTP via SendGrid.
@@ -149,6 +228,8 @@ def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None
         isHTML: Whether the message is HTML formatted (default: False)
 
     Raises:
+        RecipientRejected: the server refused the recipient as an address that
+            will never work (see _deadAddressRefusal)
         Exception: If SMTP credentials are not configured or email sending fails
     """
     import smtplib
@@ -200,12 +281,34 @@ def sendEmail(ROOT_DIRECTORY, toEmail, toName, subject, _message, fromEmail=None
         # Send email
         server.sendmail(fromEmail, toEmail, msg.as_string())
 
-        # Close connection
-        server.quit()
+        # Close connection. Once sendmail() has returned the server has the
+        # message, and nothing QUIT does can take it back. A QUIT that fails
+        # used to fall into the handlers below and report the message as not
+        # sent, and a caller that tries again (the expiry warnings do) then
+        # mailed it a second time -- and once a day while QUIT kept failing.
+        try:
+            server.quit()
+        except Exception as quitError:
+            logging.warning("Email to %s was accepted by the mail server, but closing "
+                            "the connection failed: %s", toEmail, quitError)
+            try:
+                server.close()
+            except Exception:
+                pass
 
         logging.info(f"Email sent successfully to {toEmail} (Subject: {subject})")
         return
 
+    except smtplib.SMTPRecipientsRefused as e:
+        # Before the generic branch below, which would flatten it into a plain
+        # Exception and lose the one failure that says "never try again".
+        dead = _deadAddressRefusal(e.recipients)
+        if dead is not None:
+            logging.error("The mail server refused %s: %s %s" % dead)
+            raise RecipientRejected(*dead) from e
+        error_msg = f"SMTP error sending email: {str(e)}"
+        logging.error(error_msg)
+        raise Exception(error_msg)
     except smtplib.SMTPException as e:
         error_msg = f"SMTP error sending email: {str(e)}"
         logging.error(error_msg)

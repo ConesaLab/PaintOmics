@@ -136,6 +136,10 @@ services:
       # "AI file conversion is not enabled on this server" after the sandbox
       # has already read their file.
       AI_INPUT_CONVERTER: ${AI_INPUT_CONVERTER:-false}
+
+      # Whether the daily cleaning run deletes old files of anonymous and guest
+      # work that no job uses. Off until the operator says yes; see env.example.
+      PAINTOMICS_SWEEP_ORPHAN_FILES: ${PAINTOMICS_SWEEP_ORPHAN_FILES:-0}
     volumes:
       # Single volume for both trees. On the Drago VM the Docker root lives on
       # the 1 TiB Cinder volume mounted at /var/lib/docker, so this is backed
