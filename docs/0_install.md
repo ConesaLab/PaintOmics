@@ -308,12 +308,35 @@ python src/AdminTools/customSpeciesInstaller.py \
 ```
 
 It synthesises the pathway, cross-reference, identifier-registry and version
-collections from KEGG's reference KO pathways, registers the code so that the
-organism list regenerates, and makes the species appear in the picker. Mapping,
-pathway enrichment and the pathway maps work as for any other organism.
+collections from KEGG's reference KO pathways, writes each pathway's map as the
+species' own KGML (the reference map, with every box that carries one of the
+species' KOs as its gene), registers the code so that the organism list
+regenerates, and makes the species appear in the picker. Mapping, pathway
+enrichment, the pathway maps, the metabolite hub and the AI walk work as for any
+other organism.
 
-Hub data, per-organism KGML maps, the pathway network file and
-Reactome/MapMan/OmniPath are deliberately not produced. On such a species:
+Which maps the species gets:
+
+- only maps in the scope organism's KEGG list (`--scope-organism`, recommended);
+- for a plant, alga, fungus or protist, no map of animal organs, animal cell
+  signalling or human disease. KEGG lists those for any organism with one KO on
+  them, so tobacco's list has Toll-like receptor signalling and Cornified
+  envelope formation. The species' `--lineage` decides, or the scope organism's
+  KEGG lineage when that one is not recognised;
+- only maps that draw at least `--min-kos` of the species' KOs (2 by default).
+
+Every map left out is logged with the reason. A species installed before the
+installer wrote KGML has no graph, so its AI walk is not available; this applies
+the map rule and writes the KGML for it, reading its KOs from its database and
+leaving its identifiers as they are:
+
+```bash
+python src/AdminTools/customSpeciesInstaller.py \
+    --code=nben --scope-organism=nta --rebuild-maps [--dry-run]
+```
+
+The pathway network file and Reactome/MapMan/OmniPath are deliberately not
+produced. On such a species:
 
 - Step 1 lists MapMan, Reactome and OmniPath as *not installed*, and they cannot
   be ticked.
@@ -321,10 +344,6 @@ Reactome/MapMan/OmniPath are deliberately not produced. On such a species:
   pathway network is available for the organism
   (`/kegg_data/pathway_network/<code>` answers 404); the Tools panel beside it and
   the pathway table keep working.
-- The AI walk is not available, and with it the AI interpretation and its chat.
-  They need a pathway interaction graph, and an annotation does not give one. No
-  walk is queued and nothing is sent to the AI service; the AI panel and the Walk
-  column at Step 4 say why.
 
 ## AI settings
 

@@ -69,8 +69,9 @@ class FakeWalkDAO(object):
 
 
 def _no_graph_data_dir(organism="tst"):
-    """What customSpeciesInstaller.py leaves on disk for a species: the metagene
-    script's gene2pathway.list and nothing else. Caller removes it."""
+    """What customSpeciesInstaller.py left on disk for a species before it wrote
+    KGML (every species it installed by 2026-11-06, until --rebuild-maps): the
+    metagene script's gene2pathway.list and nothing else. Caller removes it."""
     root = tempfile.mkdtemp(prefix="walker-no-graph-")
     org_dir = os.path.join(root, "current", organism)
     os.makedirs(org_dir)
@@ -815,7 +816,7 @@ class RouteTest(unittest.TestCase):
 
     def _on_an_organism_with_no_graph(self):
         """The server's data directory holds only what customSpeciesInstaller.py
-        writes, and the organism's database no OmniPath."""
+        wrote before it wrote KGML, and the organism's database no OmniPath."""
         data_dir = _no_graph_data_dir()
         self.addCleanup(shutil.rmtree, data_dir, True)
         service_mod = self.servlet.walk_service
