@@ -117,7 +117,7 @@ process.stdout.write(JSON.stringify(results));
 """
 
 DIALOG_FUNCTIONS = ("showMessage", "showErrorMessage", "showWarningMessage", "ajaxErrorHandler",
-                    "extJSErrorHandler", "splitServerError", "isInvalidSessionAnswer",
+                    "extJSErrorHandler", "splitServerError", "serverTextAsHtml", "isInvalidSessionAnswer",
                     "readableAnswer", "connectionFailed", "showConnectionFailedMessage",
                     "describeUnansweredRequest")
 
