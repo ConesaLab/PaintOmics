@@ -43,7 +43,7 @@ from src.common.DesignFile import parse_design, derive_groupings
 from src.common.FormPlaceholders import designWithoutPlaceholder
 
 from src.common.KeggInformationManager import KeggInformationManager
-from src.common.FeatureNamesToKeggIDsMapper import _joinAllWithinDeadline
+from src.common.FeatureNamesToKeggIDsMapper import _joinAllWithinDeadline, _stillRunning
 from src.common import JobProgress
 
 from src.classes.Job import Job
@@ -1697,14 +1697,14 @@ class PathwayAcquisitionJob(Job):
         # worker (the same rule the identifier mapper applies).
         _joinAllWithinDeadline(threadsList, MAX_WAIT_THREADS)
 
-        isFinished = True
-        for thread in threadsList:
-            if thread.is_alive():
-                isFinished = False
-                thread.terminate()
-                logging.info("THREAD TERMINATED IN generatePathwaysList")
+        # Not thread.is_alive(): another job's Process.start() can make a
+        # finished worker look alive (see _stillRunning).
+        stillRunning = _stillRunning(threadsList)
+        for thread in stillRunning:
+            thread.terminate()
+            logging.info("THREAD TERMINATED IN generatePathwaysList")
 
-        if not isFinished:
+        if stillRunning:
             manager.shutdown()
             raise Exception(
                 'Your data took too long to process and it was killed. Try again later or upload smaller files if it persists.')

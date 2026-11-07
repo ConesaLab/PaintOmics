@@ -1,8 +1,10 @@
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 import logging, itertools
-import os, sys, signal, time
+import os, sys, signal, socket, time
 import re
 from multiprocessing import Process, Manager, RawArray
+from multiprocessing.connection import wait as _readySentinels
 from math import ceil
 from bisect import bisect_right
 from re import compile as compile_re, IGNORECASE as IGNORECASE_re
@@ -38,7 +40,11 @@ def _refreshStandardStreamsInForkChild():
     PyThread_acquire_lock_timed under a progress print until the
     MAX_WAIT_THREADS timeout killed the job -- and terminate() could not
     reap it, because the child also inherits uWSGI's SIGTERM handler, so
-    the default disposition is restored here as well.
+    the default disposition is restored here as well. It inherits the signal
+    mask of the thread that forked it too, and uWSGI's threads block every
+    signal: a stuck worker stayed alive with SIGTERM pending after its job
+    had failed, until the service restarted (SigBlk fffffffe7ffbfeff, seen
+    on a staging server, 2026-11-07). So SIGTERM is unblocked as well.
 
     Two rules keep this hook from re-creating the very deadlock it exists
     to prevent (both were violated by its first version, and a Manager
@@ -73,6 +79,41 @@ def _refreshStandardStreamsInForkChild():
         except Exception:
             pass
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGTERM])
+
+
+def _stillRunning(processes):
+    """
+    The processes in ``processes`` that have not exited: the ones the "took
+    too long" check must stop. Use this, never ``Process.is_alive()``, to
+    decide that, because ``is_alive()`` can call a worker that has finished
+    alive when two jobs map at once.
+
+    Why. Jobs run on threads of ONE server process (PySiQ, uWSGI threads),
+    and every ``Process.start()`` in that process first runs
+    multiprocessing's ``_cleanup()``, which calls ``os.waitpid`` on every
+    child the process has, the other jobs' workers included. ``is_alive()``
+    asks ``os.waitpid`` too. When another job's thread has just collected
+    one of our finished workers and not yet stored its exit code, our
+    ``waitpid`` fails with "no such child", which the standard library
+    (Python 3.11, ``popen_fork.Popen.poll``) reads as "not started yet" and
+    reports as alive. The job was then killed with "Your data took too long
+    to process" a second after it started, against a 900 s limit (seen
+    while testing PR #218: two Step 1 jobs started mapping in the same
+    second and one failed after 0.6 s; it passed when rerun alone).
+
+    The sentinel cannot be fooled that way. It is the read end of a pipe
+    whose write end the worker holds, so it becomes readable when the worker
+    exits, whichever thread collects the exit status afterwards. The exit
+    code is only asked when the sentinel is still quiet, because a quiet
+    sentinel does not prove the worker is there: a child that another job's
+    thread forks while our ``Process.start()`` has the pipe open inherits the
+    write end and keeps the pipe open until that child exits. Not rare when
+    two jobs start together (4 to 5 of 30 to 40 rounds on a staging server).
+    """
+    exited = set(_readySentinels([process.sentinel for process in processes], 0))
+    return [process for process in processes
+            if process.sentinel not in exited and process.exitcode is None]
 
 
 def _joinAllWithinDeadline(processes, seconds):
@@ -82,10 +123,24 @@ def _joinAllWithinDeadline(processes, seconds):
     gives every process its own budget, so with six workers the "took too
     long" kill only fired after up to six times MAX_WAIT_THREADS (90 minutes
     at the configured 900 s), while the client kept polling.
+
+    It watches the workers itself because ``join()`` sits on the sentinel
+    alone: a job whose workers had all finished waited for another job's
+    worker that had inherited one of their pipes (see _stillRunning). A
+    sentinel still ends the wait at once; the exit codes are read again every
+    half second for that one case.
     """
     deadline = time.monotonic() + seconds
+    while True:
+        running = _stillRunning(processes)
+        remaining = deadline - time.monotonic()
+        if not running or remaining <= 0:
+            break
+        _readySentinels([process.sentinel for process in running], min(remaining, 0.5))
+    # Collects whatever has exited, so that it does not stay a zombie until the
+    # next Process.start().
     for process in processes:
-        process.join(max(0.0, deadline - time.monotonic()))
+        process.join(0)
 
 
 if hasattr(os, "register_at_fork"):
@@ -115,17 +170,42 @@ def getDatabasesByOrganismCode(organism):
 
     return dicDatabases.get(organism, [{'KEGG': "kegg_id"}, {'KEGG': "kegg_gene_symbol"}])
 
-def getConnectionByOrganismCode(organism):
+def getConnectionByOrganismCode(organism, host=None):
     """
     Devuelve la conexion a la base de datos del organismo correspondiente asi como el nombre de la tabla
     que se usara para realizar la conversion para dicho organismo y un cursor asociado a ella
 
     @param {String} organism
+    @param {String} host, the address to use instead of MONGODB_HOST (see _mongoAddressForWorkers)
     @returns
     """
-    client = MongoClient(MONGODB_HOST, MONGODB_PORT)
+    client = MongoClient(host or MONGODB_HOST, MONGODB_PORT)
     db = client[organism + "-paintomics"]
     return client, db
+
+
+def _mongoAddressForWorkers():
+    """
+    MongoDB's address, looked up here in the parent, for the workers about to be
+    forked to connect to, so that no worker has to look up a host name.
+
+    A worker forked while another thread of the server is inside getaddrinfo
+    (any job's MongoClient opening a connection) can inherit the C library's
+    resolver in a locked state, and then no lookup of a host name returns in
+    that worker. pymongo's monitor thread sat in getaddrinfo, server selection
+    gave up after 30 s, and the worker's names were lost (1 to 4 jobs in 300 to
+    400 when two jobs started together, staging server, 2026-11-07). Measured
+    with four threads looking up the name while a fifth forks: 10 of 30,000
+    children hung on the name, all in getaddrinfo, and 0 of 30,000 on the
+    address, which the C library answers without taking those locks.
+
+    A name that does not resolve here is handed over as it is, and fails or not
+    in the worker as it always did.
+    """
+    try:
+        return socket.gethostbyname(MONGODB_HOST)
+    except (OSError, UnicodeError):
+        return MONGODB_HOST
 
 #*****************************************************************
 #   _____ ______ _   _ ______  _____
@@ -364,12 +444,15 @@ def findIDsByFeaturesName(jobID, featureNames, db, databaseConvertion_id):
                 if name not in matchedFeatures:
                     matchedFeatures[name] = []
             KeggInformationManager().updateTranslationCache(jobID, matchedFeatures, "id", databaseConvertion_id)
+    except PyMongoError:
+        # MongoDB did not answer, which says nothing about these names: see the
+        # same handler in findIDsByFeaturesNameForDatabases.
+        raise
     except Exception as ex:
         logging.error("EXCEPTION %s", ex)
-    finally:
-        matchedFeatures.update(cachedFeatureIDs)
 
-        return matchedFeatures
+    matchedFeatures.update(cachedFeatureIDs)
+    return matchedFeatures
 
 def _bridgeSecondHopForDatabases(db, unresolvedByTarget, bridgeIDsByTarget):
     """_bridgeSecondHop for several target databases at once.
@@ -583,6 +666,14 @@ def findIDsByFeaturesNameForDatabases(jobID, featureNames, db, databaseConvertio
                     if name not in matchedFeatures:
                         matchedFeatures[name] = []
                 KeggInformationManager().updateTranslationCache(jobID, matchedFeatures, "id", target)
+    except PyMongoError:
+        # MongoDB did not answer, which says nothing about these names. Logged
+        # and dropped, as any exception here used to be, they came back as "no
+        # translation" and the job finished as a success with valid genes
+        # listed as not matched, with no word about it: a worker lost 35 to 135
+        # names that way (see _mongoAddressForWorkers for one cause). Raised, the
+        # worker dies and the parent's lost-worker check fails the job.
+        raise
     except Exception as ex:
         logging.error("EXCEPTION %s", ex)
     finally:
@@ -767,7 +858,7 @@ def phytozomeToLocusTags(featureList, organism):
     return renamed
 
 
-def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None):
+def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray=None, progressSlot=0, databaseIds=None, cacheTables=None, resultSlot=None, mongoHost=None):
     """
     This function is used to query the database in different threads.
 
@@ -791,6 +882,8 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
                      the job's translation cache. A forked worker's own cache
                      writes die with the process, which is why, before this,
                      every omic of a job re-queried MongoDB for the same names.
+    @param  {String} mongoHost, optional address of MongoDB, resolved by the parent
+                     before the fork (see _mongoAddressForWorkers).
 
     @returns True
     """
@@ -808,7 +901,7 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     # Use/Not use features to count the total number of items matched
     featureEnrichment = (enrichment == "features")
 
-    client, db  = getConnectionByOrganismCode(organism)
+    client, db  = getConnectionByOrganismCode(organism, mongoHost)
 
     if databaseIds is None:
         databaseIds = resolveDatabaseIds(organism, databases, db)
@@ -1118,6 +1211,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
 
     # Resolved once here rather than 2 x n_db find_one calls in each worker.
     databaseIds = resolveDatabaseIds(organism, databases)
+    mongoHost = _mongoAddressForWorkers()
 
     #***********************************************************************************
     #* STEP 2. START THE MAPPING USING N DIFFERENT THREADS IN PARALLEL
@@ -1136,7 +1230,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
         threadsList = []
         i=0
         for genesListPart in genesListParts:
-            thread = Process(target=mapFeatureIdentifiers, args=(jobID, organism, databases, genesListPart, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray, i, databaseIds, cacheTables, i))
+            thread = Process(target=mapFeatureIdentifiers, args=(jobID, organism, databases, genesListPart, matchedFeatures, notMatchedFeatures, foundFeatures, enrichment, progressArray, i, databaseIds, cacheTables, i, mongoHost))
             threadsList.append(thread)
             thread.start()
             i+=1
@@ -1144,15 +1238,13 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
         #WAIT UNTIL ALL THREADS FINISHED (one shared budget, not one per thread)
         _joinAllWithinDeadline(threadsList, MAX_WAIT_THREADS)
 
-        isFinished = True
-        for thread in threadsList:
-            if thread.is_alive():
-                # TODO: possible deadlock with KeggInformationManager lock? Raise an exception to force the release there?
-                isFinished = False
-                thread.terminate()
-                logging.info("THREAD TERMINATED IN mapFeatureNamesToKeggIDs")
+        # Not thread.is_alive(): see _stillRunning.
+        stillRunning = _stillRunning(threadsList)
+        for thread in stillRunning:
+            thread.terminate()
+            logging.info("THREAD TERMINATED IN mapFeatureNamesToKeggIDs")
 
-        if not isFinished:
+        if stillRunning:
             raise Exception('Your data took too long to process and it was killed. Try it again later or upload smaller files if it persists.')
 
 
@@ -1168,13 +1260,16 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     # foundFeatures[0] then silently returns a mapping built from a subset of the
     # input, and _matched.txt is written short — wrong results reported as success.
     # Every child appends exactly once, so a short list means a child was lost.
-    if len(foundFeatures) != len(threadsList):
+    # Counted before the shutdown: foundFeatures lives in the manager, and asking
+    # it afterwards raised "[Errno 32] Broken pipe" in place of this message.
+    lostWorkers = len(threadsList) - len(foundFeatures)
+    if lostWorkers:
         manager.shutdown()
         raise Exception(
-            "Identifier mapping lost %d of %d worker processes. This is usually "
-            "memory pressure on the server; please try again, and upload smaller "
-            "files if it persists."
-            % (len(threadsList) - len(foundFeatures), len(threadsList)))
+            "Identifier mapping lost %d of %d worker processes: the server ran "
+            "short of memory or a worker could not reach the database. Please try "
+            "again, and upload smaller files if it persists."
+            % (lostWorkers, len(threadsList)))
 
     #COMBINE DICTIONARIES
     sumFoundFeatures = dict.fromkeys(foundFeatures[0].keys())
@@ -1588,14 +1683,13 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
         #WAIT UNTIL ALL THREADS FINISHED (one shared budget, not one per thread)
         _joinAllWithinDeadline(threadsList, MAX_WAIT_THREADS)
 
-        isFinished = True
-        for thread in threadsList:
-            if(thread.is_alive()):
-                isFinished = False
-                thread.terminate()
-                logging.info("THREAD TERMINATED IN mapFeatureNamesToCompoundsIDs")
+        # Not thread.is_alive(): see _stillRunning.
+        stillRunning = _stillRunning(threadsList)
+        for thread in stillRunning:
+            thread.terminate()
+            logging.info("THREAD TERMINATED IN mapFeatureNamesToCompoundsIDs")
 
-        if not isFinished:
+        if stillRunning:
             raise Exception('Your data took too long to process and it was killed. Try it again later or upload smaller files if it persists.')
 
     except Exception as ex:
