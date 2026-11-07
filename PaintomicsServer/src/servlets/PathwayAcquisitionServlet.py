@@ -26,7 +26,7 @@ from time import time
 
 from collections import defaultdict
 
-from src.common.ServerErrorManager import handleException, InputFileError
+from src.common.ServerErrorManager import handleException, InputFileError, JobUnavailableError
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common import JobProgress
@@ -68,9 +68,19 @@ def loadRequestedJob(jobID, action):
     jobInstance = JobInformationManager().loadJobInstance(jobID)
 
     if jobInstance is None:
-        raise UserWarning("Job " + escape(str(jobID)) + " was not found at database.")
+        raise JobUnavailableError(removedJobMessage(jobID))
 
     return jobInstance
+
+
+def removedJobMessage(jobID):
+    """What a page that had a job open is told when the job has gone from the database.
+
+    The same note about retention as the job's link gets (pathwayAcquisitionRecoverJob),
+    and the job id escaped, because the dialog inserts this with .html().
+    """
+    return ("Job " + escape(str(jobID)) + " was not found at database." +
+            RETENTION_NOTE + ANALYSE_AGAIN)
 
 
 #************************************************************************
@@ -581,8 +591,11 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         logging.info("STEP2 - LOADING JOB " + jobID + "...")
         jobInstance = JobInformationManager().loadJobInstance(jobID)
 
+        # Removed while this waited on the queue, with its page polling for the
+        # answer: the poll hands this to ajaxErrorHandler, which shows it as the
+        # job's link would, a warning with no Report button.
         if jobInstance is None:
-            raise UserWarning("Job " + escape(jobID) + " was not found at database.")
+            raise JobUnavailableError(removedJobMessage(jobID))
 
         jobInstance.setDirectories(CLIENT_TMP_DIR)
         jobInstance.initializeDirectories()
@@ -811,6 +824,32 @@ def pathwayAcquisitionStep3(request, response):
 # that matched no pathway comes out the same from the same files.
 ANALYSE_AGAIN = "<br>To analyse the data again, start a new analysis."
 
+# For a job that is not in the database. test_retention_matches_the_promise
+# reads the two numbers out of this sentence, as the source text has it, and
+# checks them against the cleaner, so it stays on one line.
+RETENTION_NOTE = "<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users."
+
+
+def firstStepStoppedUnsaved(queueJob):
+    """Whether the queue's entry for a job is a Step 1 that ended without saving it.
+
+    pathwayAcquisitionStep1_PART2 stores the job only once its files are read, so a
+    run that raised (FAILED) or answered an error (FINISHED with a status other than
+    200: refused files, a crash it caught) left nothing in the database. The link the
+    Step 1 dialog shows is then opened on a job that never existed there, and the
+    answer about retention was false for it. The entry stays until its result is
+    collected and acknowledged, or ten minutes after it was first collected, so this
+    is what a reader who left the page during Step 1 finds.
+
+    @param {Job} queueJob, QUEUE_INSTANCE.fetch_job's answer, or None
+    @returns {bool}
+    """
+    if queueJob is None or getattr(queueJob, "fn", None) is not pathwayAcquisitionStep1_PART2:
+        return False
+    if queueJob.status == JobStatus.FAILED:
+        return True
+    return queueJob.status == JobStatus.FINISHED and getattr(queueJob.result, "status", None) != 200
+
 
 def jobUnavailableAnswer(message):
     """The answer for a job this caller cannot open, which is not a fault of ours.
@@ -931,10 +970,15 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
             response.setContent({"success": False, "message": "Your job " + shownJobID + " is still running in the queue. Please, try again later to check if it has finished."})
             return response
 
+        if jobInstance is None and firstStepStoppedUnsaved(queueJob):
+            # Never saved, so the note about retention would be false here.
+            logging.info("RECOVER_JOB - JOB " + jobID + " STOPPED AT STEP 1 BEFORE IT WAS SAVED.")
+            response.setContent(jobUnavailableAnswer("Job " + shownJobID + " did not finish its first step, so nothing was saved for it and there is nothing to open.<br>To try again, start a new analysis."))
+            return response
+
         if jobInstance == None:
-            #TODO DIAS BORRADO?
             logging.info("RECOVER_JOB - JOB " + jobID + " NOT FOUND AT DATABASE.")
-            response.setContent(jobUnavailableAnswer("Job " + shownJobID + " not found at database.<br>Please, note that jobs are automatically removed after 7 days for guests and 14 days for registered users." + ANALYSE_AGAIN))
+            response.setContent(jobUnavailableAnswer("Job " + shownJobID + " not found at database." + RETENTION_NOTE + ANALYSE_AGAIN))
             return response
 
         # Allow "no user" jobs to be viewed by anyone, logged or not
@@ -1130,7 +1174,11 @@ def pathwayAcquisitionTouchJob(request, response):
 
         response.setContent({"success": True})
     except Exception as ex:
-        handleException(response, ex, __file__, "pathwayAcquisitionTouchJob", jobID=jobID)
+        # handleException takes no jobID. Passing one raised TypeError here, and
+        # the return in the finally discarded it, so a failed touch answered 200
+        # with an empty body: the browser logged a success and the server logged
+        # nothing, while the job's access date, which retention reads, stayed old.
+        handleException(response, ex, __file__, "pathwayAcquisitionTouchJob")
     finally:
         return response
 

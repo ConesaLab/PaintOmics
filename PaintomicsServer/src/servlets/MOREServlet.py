@@ -14,7 +14,7 @@ from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.servlets.DataManagementServlet import saveFile
 from src.common.Util import ensure_utf8
-from src.common.ServerErrorManager import handleException
+from src.common.ServerErrorManager import handleException, CredentialException
 from src.common import ExampleDatasets
 from src.conf.serverconf import CLIENT_TMP_DIR
 
@@ -609,6 +609,15 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
             "success": True,
             "jobID": JOB_ID
         })
+
+    except CredentialException as e:
+        # A stale session (isValidUser above). The browser signs its reader
+        # out only on the answer handleException frames for it,
+        # "CredentialException: AT ... ERROR MESSAGE: [b]User not valid[/b]..."
+        # (isInvalidSessionAnswer in Util.js), as every other servlet sends it.
+        # The bare sentence below showed "Oops..Internal error!" with Report,
+        # and a retry can never succeed on a session the server forgot.
+        handleException(RESPONSE, e, __file__, "fromMOREtoGenes_STEP1")
 
     except Exception as e:
         logging.error(f"MORE_STEP1 - ERROR: {str(e)}")

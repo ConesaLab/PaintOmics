@@ -818,9 +818,16 @@ function readableAnswer(jqXHR) {
  * of the two no-status cases it was. jQuery reports "timeout" as the
  * textStatus of a request its own `timeout` cut off, and a status of 0 for a
  * connection that was dropped or refused.
+ *
+ * A 2xx that reaches here is a body jQuery could not parse, and "HTTP 200 OK" in
+ * a sentence about a failure says nothing to anyone. A form sent through a hidden
+ * frame has no status at all, only the text the frame holds.
  */
 function describeUnansweredRequest(jqXHR, textStatus) {
     var status = Number(jqXHR && jqXHR.status) || 0;
+    if ((status >= 200 && status < 300) || (status === 0 && jqXHR && jqXHR.responseText)) {
+        return "the answer arrived cut off or unreadable";
+    }
     if (status > 0) {
         var text = (jqXHR && jqXHR.statusText && jqXHR.statusText !== "error")
             ? " " + jqXHR.statusText : "";
@@ -871,6 +878,50 @@ function ajaxWithStallTimeout(settings) {
     return jqXHR;
 }
 
+/*
+ * Ends the wait on an upload whose answer stopped arriving.
+ *
+ * A form with a file field (every Step 1 form) goes through a hidden frame, and
+ * ExtJS learns the answer from the frame's load event. A connection that breaks
+ * part-way through that answer leaves the frame's document at readyState "loading"
+ * with half the answer in it, and load never fires. In headless Chromium, with the
+ * body of the answer really cut on the wire (a Content-Length it did not reach, a
+ * chunked body with no last chunk), the page still said "Uploading files..." under
+ * its spinner 50 s later, with no way out and the form's submit lock held.
+ *
+ * So once an answer has started, this watches whether it is still growing. The
+ * answers to these forms are a line of JSON, sent at once, so one that has not
+ * grown for this long is not coming. Before the first byte there is nothing to
+ * tell: a large file takes as long as it takes, and the frame stays on about:blank,
+ * whose readyState is "complete". A failed navigation leaves a document this page
+ * may not read, and load does fire for that one.
+ *
+ * onStalled is called once, and reads what the frame holds as any answer is read.
+ */
+var UPLOAD_ANSWER_STALL_LIMIT = 15000;   /*MILISECONDS without a new byte*/
+var UPLOAD_ANSWER_POLL = 1000;           /*MILISECONDS*/
+
+function watchUploadFrame(frame, onStalled) {
+    var seen = -1, since = 0;
+    var timer = setInterval(function () {
+        if (!frame.parentNode) {          // ExtJS removes the frame once it has read the answer
+            clearInterval(timer);
+            return;
+        }
+        var doc = null;
+        try { doc = frame.contentDocument; } catch (notOurs) { doc = null; }
+        if (!doc || doc.readyState !== "loading") { return; }
+        var length = doc.body ? doc.body.textContent.length : 0;
+        if (length !== seen) {
+            seen = length;
+            since = Date.now();
+        } else if (Date.now() - since >= UPLOAD_ANSWER_STALL_LIMIT) {
+            clearInterval(timer);
+            onStalled();
+        }
+    }, UPLOAD_ANSWER_POLL);
+}
+
 /* The line the dialogs show for an answer they cannot read. It used to be
    "Unable to parse the error message.", which describes the client's
    difficulty; the guest whose report reached us on 2026-09-11 had been shown
@@ -879,6 +930,43 @@ function ajaxWithStallTimeout(settings) {
 function unreadableAnswerMessage(jqXHR, textStatus) {
     return "The server did not send a readable answer (" +
         describeUnansweredRequest(jqXHR, textStatus) + ").";
+}
+
+/*
+ * Whether a request failed for want of a whole answer, not because of what an
+ * answer said. Nothing arrived (status 0), or a 2xx arrived and its body cannot be
+ * read: a connection that broke part-way through a body with no declared length
+ * reaches the page as a 200 holding half a JSON document, which jQuery reports as
+ * "parsererror".
+ *
+ * A form sent through a hidden frame (every Step 1 upload) has no status. There an
+ * empty frame, or text that opens as our JSON does, is the same thing; anything
+ * else in it is a page some proxy wrote, and stays what the generic dialog says.
+ * ExtJS's own text for a frame it could not read opens with "{" too.
+ */
+function connectionFailed(jqXHR) {
+    if (readableAnswer(jqXHR) !== null) { return false; }
+    var status = Number(jqXHR && jqXHR.status) || 0;
+    if (status > 0) { return status >= 200 && status < 300; }
+    var body = String((jqXHR && jqXHR.responseText) || "").trim();
+    return body === "" || body.charCodeAt(0) === 123;   // 123: an opening brace
+}
+
+/*
+ * The dialog for connectionFailed. The dialog it replaces titled this
+ * "Oops..Internal error!", advised private mode or clearing the cache, and offered
+ * Report: a report of a broken connection tells us nothing we can act on. The
+ * Close button stays because a reload loses what a form holds. The request may
+ * have reached the server, so a job it started goes on and the reload finds it.
+ */
+function showConnectionFailedMessage(jqXHR) {
+    showErrorMessage("The connection failed", {
+        message: "This request did not finish: " + describeUnansweredRequest(jqXHR) + "." +
+            "</br><a href='#' onclick='location.reload(); return false;'>Reload the page</a> to try again." +
+            "</br>If it keeps happening, contact us at <a href='mailto:paintomicsai@gmail.com'>paintomicsai@gmail.com</a>.",
+        showButton: true,
+        showReportButton: false
+    });
 }
 
 /*
@@ -916,6 +1004,11 @@ function ajaxErrorHandler(responseObj) {
 
     ignoreOtherErrors = true;
 
+    if (connectionFailed(responseObj)) {
+        showConnectionFailedMessage(responseObj);
+        return;
+    }
+
     var err;
     try {
         // Parse, don't eval. The body is JSON from the server and it echoes
@@ -930,7 +1023,7 @@ function ajaxErrorHandler(responseObj) {
         err = err || {message: unreadableAnswerMessage(responseObj)};
     }
 
-    if (err.message && err.message.indexOf("User not valid") !== -1) {
+    if (isInvalidSessionAnswer(err)) {
         showErrorMessage("Invalid session", {
             message: "<b>Your session is not valid.</b> Please sign-in again to continue.",
             callback: deleteCredentials,
@@ -965,6 +1058,21 @@ function ajaxErrorHandler(responseObj) {
     // where a stale cached model genuinely can be the cause.
     var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
     var halves = splitServerError(err.message);
+
+    // The job is no longer in the database (JobUnavailableError in
+    // ServerErrorManager.py): it was removed while this page had it open, and
+    // Next step, a pathway or the status poll of a run that was waiting asked
+    // for it. The job's link shows that answer as a warning with no Report
+    // button (JobController.recoverPAJobHandler), and this showed the same
+    // sentence under "Oops..Internal error!" with Report. The message is the
+    // server's own HTML, with the job id escaped there.
+    if (err.extra && err.extra.job_unavailable === true) {
+        showWarningMessage("This job is not available", {
+            message: halves.readable,
+            showButton: true
+        });
+        return;
+    }
 
     // The server refused the uploaded files and said why (InputFileError in
     // ServerErrorManager.py). Titled "Internal error", with "retrying will not
@@ -1043,6 +1151,30 @@ function splitServerError(message) {
     var user = body.match(/\. (User ID: \S+)$/);
     return { readable: (user ? body.slice(0, user.index) : body) || raw,
              technical: (raw.slice(0, at).trim() + (user ? " " + user[1] : "")).trim() };
+}
+
+/*
+ * Whether an error answer is the server saying this browser's session is not
+ * valid.
+ *
+ * UserSessionManager.isValidUser raises one sentence for that, and
+ * handleException frames it as
+ *
+ *     CredentialException: AT <servlet>: <function>. ERROR MESSAGE: [b]User not valid[/b]. It looks like ...
+ *
+ * The dialog for it has no Close button, signs the reader out and reloads the
+ * page, so it has to be that answer and no other. It was found by
+ * indexOf("User not valid") anywhere in the message, and messages quote the
+ * user's own data: a refusal of a file whose sample was named "User not valid"
+ * signed its reader out instead of saying what was wrong with the file. Now the
+ * exception has to be a CredentialException and its sentence has to open with
+ * those words, which no other answer does.
+ */
+function isInvalidSessionAnswer(err) {
+    if (!err || typeof err.message !== "string") { return false; }
+    var halves = splitServerError(err.message);
+    return halves.technical.indexOf("CredentialException: AT ") === 0 &&
+        halves.readable.indexOf("[b]User not valid[/b]") === 0;
 }
 
 /* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
@@ -1160,14 +1292,20 @@ function extJSErrorHandler(form, responseObj) {
         return;
     }
 
+    if (connectionFailed(responseObj.response)) {
+        showConnectionFailedMessage(responseObj.response);
+        return;
+    }
+
     var err;
     try {
         err = JSON.parse(responseObj.response.responseText);
     } catch (error) {
         err = {message: unreadableAnswerMessage(responseObj.response)};
     }
+    err = err || {message: unreadableAnswerMessage(responseObj.response)};
 
-    if (err.message && err.message.indexOf("User not valid") !== -1) {
+    if (isInvalidSessionAnswer(err)) {
         showErrorMessage("Invalid session", {
             message: "<b>Your session is not valid.</b> Please sign-in again to continue.",
             callback: deleteCredentials,

@@ -1695,3 +1695,26 @@ Ext.define('Ext.slider.MultiCustom', {
 Ext.override(Ext.window.Window, {
     shadow: false
 });
+
+/************************************************************
+ *
+ * An upload whose answer stops part-way ends the wait.
+ *
+ * ExtJS waits for the hidden frame's load event, which a connection broken part-way
+ * through the answer never fires: see watchUploadFrame in Util.js. The frame is the
+ * one this call has just appended to the body. Reading it as any answer is read sends
+ * half a line of JSON to the form's failure handler. The listener goes first, so
+ * a load that comes late cannot answer the same form twice.
+ *
+ ************************************************************/
+Ext.override(Ext.data.Connection, {
+    upload: function (form, url, params, options) {
+        var me = this;
+        me.callParent(arguments);
+        var frames = document.body.getElementsByTagName("iframe"), frame = frames[frames.length - 1];
+        watchUploadFrame(frame, function () {
+            Ext.fly(frame).clearListeners();
+            me.onUploadComplete(frame, options || {});
+        });
+    }
+});

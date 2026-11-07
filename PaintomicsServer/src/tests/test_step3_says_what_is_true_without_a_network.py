@@ -20,14 +20,18 @@ test_walk_service_and_routes; this file holds the page's half.
 The rule pinned here: a 404 says no network is available for the organism, on any
 database, stated in the card, in words that also hold for a normal species whose
 file is away during a reinstall. Any other failed answer (a 500, a dropped
-connection, a body that is not JSON) says the network could not be loaded and to
-reload, and over a graph already drawn every failed answer says that. A failed
-answer ends the wait and stores nothing, and the row IndexedDB may hold for the
-organism decides nothing.
+connection, a body that is not JSON) says the network could not be loaded, with a
+link to reload, and over a graph already drawn every failed answer says that. A
+dropped connection, or a 200 whose body was cut off on the way and so does not
+parse, says the connection failed. A failed answer ends the wait and stores
+nothing, and the row IndexedDB may hold for the organism decides nothing.
 
-One wait is left as it was. A 200 whose body generateNetwork cannot read throws
-inside the success callback, no failure handler runs, and the card goes on saying
-"Building network...". No installer writes such a file.
+A 200 whose body holds no network generateNetwork can draw ({}, null, a list of
+nodes with no edges, an element with no data) threw inside the success callback,
+where no failure handler runs, and the card went on saying "Building network...".
+No installer writes such a file. It now says the network could not be loaded and
+to reload, draws nothing and stores nothing, like any other failed answer. The
+same goes for anything else that stops the drawing.
 
 The AI panel said the same refusal with a red "!" on a collapsed launcher, the look
 of a failed job, and kept the sentence behind a click. It now opens by itself on
@@ -42,6 +46,7 @@ Usage:
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -121,7 +126,7 @@ function makePage(db) {
             },
             text(value) {
                 if (value === undefined) { return list[0] ? list[0].html : ""; }
-                list.forEach((r) => { r.html = String(value); });
+                list.forEach((r) => { r.html = String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;"); });
                 return wrapped;
             },
             html(value) {
@@ -202,6 +207,7 @@ function visit(db, answers, options) {
         SERVER_URL_GET_PATHWAY_NETWORK_MAPMAN: "/net/MapMan",
         SERVER_URL_GET_PATHWAY_NETWORK_OMNIPATH: "/net/OmniPath",
     });
+    vm.runInContext("Date.logFormat = function () { return ''; };", context);
     vm.runInContext(fs.readFileSync(__VIEWS__, "utf8"), context, {filename: "PA_Step3Views.js"});
     const handler = vm.runInContext("(function () { " + __HANDLER__ + "; return this; })", context);
     const controller = handler.call({
@@ -222,6 +228,7 @@ function visit(db, answers, options) {
         drawn += 1;
         try { realGenerate.call(view, data, forceStop); } catch (error) { if (error !== STOP) { throw error; } }
         if (options.draws) { view.network = {drawn: true}; }
+        if (options.drawThrows) { throw new TypeError("Cannot read properties of undefined"); }
     };
     if (options.drawn) { view.network = {drawn: true}; }
     if (options.narrowWindow) { separatorOf(page, db).sheetHides = true; }
@@ -255,6 +262,20 @@ results.narrowWindow = {
     failedThenGood: visit("KEGG", [{status: 404}, {body: {nodes: [], edges: []}}], {narrowWindow: true}),
 };
 results.wideWindow = visit("KEGG", [{status: 404}, {body: {nodes: [], edges: []}}]);
+
+/* 200s whose JSON holds no network that can be drawn. */
+const UNREADABLE = {
+    empty: {}, nothing: null, noEdges: {nodes: []}, nodesNotAList: {nodes: {}, edges: []},
+    elementWithNoData: {nodes: [{group: "nodes"}], edges: []}, edgeThatIsNull: {nodes: [], edges: [null]},
+    aString: "truncated"
+};
+results.unreadable = {};
+Object.keys(UNREADABLE).forEach((name) => { results.unreadable[name] = visit("KEGG", [{body: UNREADABLE[name]}]); });
+results.unreadableUnderItsDatabase = {};
+__DATABASES__.forEach((db) => { results.unreadableUnderItsDatabase[db] = visit(db, [{body: {[db]: {}}}]); });
+results.olderFormat = visit("Reactome", [{body: {Reactome: {nodes: [{group: "nodes", data: {id: "a"}}], edges: []}}}]);
+results.unreadableOverDrawn = visit("KEGG", [{body: {}}], {drawn: true});
+results.drawThrows = visit("KEGG", [{body: {nodes: [], edges: []}}], {drawThrows: true});
 
 /* Apply with "Save node positions" ticked goes through updateNodePositions. */
 (function () {
@@ -397,6 +418,11 @@ def read(path):
         return handle.read()
 
 
+def plain(html):
+    """What a reader reads of a piece of markup."""
+    return re.sub(r"<[^>]+>", "", html)
+
+
 def run_node(script):
     directory = tempfile.mkdtemp(prefix="paintomics-step3-")
     try:
@@ -448,10 +474,33 @@ class NetworkCardTest(unittest.TestCase):
                 with self.subTest(database=database, status=status):
                     self.assertNoSpinner(shown)
                     self.assertTrue(shown["waitBoxVisible"], "the message is not on screen")
-                    self.assertIn("The %s pathway network could not be loaded." % database, shown["waitBox"])
-                    self.assertIn("Reload the page", shown["waitBox"])
+                    self.assertIn("%s pathway network could not be loaded." % database, shown["waitBox"])
+                    self.assertIn("Reload the page</a> to try again.", shown["waitBox"], "no link to reload")
                     self.assertNotIn("is available", shown["waitBox"],
                                      "a server fault was reported as an organism with no network")
+
+    def test_a_body_cut_off_on_the_way_says_the_connection_failed(self):
+        """A truncated body does not parse, so jQuery fails the request and hands
+        .fail the 200. Nothing the server said was wrong: the connection was."""
+        for database in DATABASES:
+            for status in ("0", "200"):
+                with self.subTest(database=database, status=status):
+                    shown = self.results["otherFailures"][database][status]
+                    self.assertTrue(plain(shown["waitBox"]).startswith("The connection failed, so the %s" % database))
+                    self.assertEqual(shown["drawn"], 0)
+                    self.assertEqual(shown["stored"], [])
+
+    def test_a_fault_of_the_server_does_not_blame_the_connection(self):
+        for database in DATABASES:
+            for status in ("500", "502"):
+                with self.subTest(database=database, status=status):
+                    self.assertNotIn("connection", self.results["otherFailures"][database][status]["waitBox"])
+
+    def test_the_reload_link_is_a_link(self):
+        """The box takes markup for it, so a stray .text() would print the tag."""
+        shown = self.results["otherFailures"]["KEGG"]["200"]
+        self.assertRegex(shown["waitBox"], r'<a href="#" onclick="location\.reload\(\); return false;">Reload the page</a>')
+        self.assertTrue(shown["waitBox"].startswith("<span>"), "the box is a flex row: three items, two gaps")
 
     def test_a_failed_answer_draws_nothing_and_stores_nothing(self):
         answers = [self.results["notFound"]["KEGG"], self.results["otherFailures"]["KEGG"]["500"]]
@@ -503,8 +552,8 @@ class NetworkCardTest(unittest.TestCase):
                 self.assertEqual(shown["drawn"], 1, "the first answer drew the graph")
                 self.assertTrue(shown["hasNetwork"], "the graph already drawn was taken away")
                 self.assertFalse(shown["waitBoxVisible"], "the wait box covers a graph that is there")
-                self.assertIn("The KEGG pathway network could not be loaded. Reload the page to try again.",
-                              shown["subtitle"])
+                self.assertIn("KEGG pathway network could not be loaded. Reload the page to try again.",
+                              plain(shown["subtitle"]))
                 self.assertNotIn("is available", shown["subtitle"], "the line denies the network under it")
                 self.assertTrue(all(shown["tools"].values()), "the tools work on the graph that is still there")
 
@@ -530,6 +579,42 @@ class NetworkCardTest(unittest.TestCase):
         self.assertTrue(shown["subtitleVisible"], "updateNetworkSubtitle writes into a hidden line")
         self.assertTrue(all(shown["tools"].values()))
         self.assertTrue(shown["details"])
+
+    def test_a_body_with_no_network_in_it_ends_the_wait(self):
+        """A 200 that parses but holds nothing to draw: the success callback threw
+        and the card said "Building network..." for as long as the tab stayed open."""
+        cases = dict(self.results["unreadable"])
+        cases.update({"under " + db: shown for db, shown in self.results["unreadableUnderItsDatabase"].items()})
+        for name, shown in cases.items():
+            with self.subTest(body=name):
+                self.assertNoSpinner(shown)
+                self.assertTrue(shown["waitBoxVisible"], "the message is not on screen")
+                self.assertIn("pathway network could not be loaded. Reload the page to try again.", plain(shown["waitBox"]))
+                self.assertNotIn("is available", shown["waitBox"])
+                self.assertNotIn("connection", shown["waitBox"], "this answer arrived whole")
+                self.assertEqual(shown["drawn"], 0, "generateNetwork ran on a body with nothing to draw")
+                self.assertEqual(shown["stored"], [], "an unreadable body was written to IndexedDB")
+                self.assertFalse(any(shown["tools"].values()), "tools that need a graph are offered")
+
+    def test_a_body_with_no_network_keeps_the_graph_already_drawn(self):
+        shown = self.results["unreadableOverDrawn"]
+        self.assertTrue(shown["hasNetwork"])
+        self.assertFalse(shown["waitBoxVisible"])
+        self.assertIn("could not be loaded", shown["subtitle"])
+
+    def test_a_drawing_that_throws_ends_the_wait(self):
+        """Whatever else in a body stops generateNetwork, the card does not go on
+        saying it is building."""
+        shown = self.results["drawThrows"]
+        self.assertEqual(shown["drawn"], 1)
+        self.assertNoSpinner(shown)
+        self.assertIn("could not be loaded", shown["waitBox"])
+
+    def test_the_older_format_under_the_database_key_still_draws(self):
+        shown = self.results["olderFormat"]
+        self.assertEqual(shown["drawn"], 1)
+        self.assertEqual(shown["stored"], [{"store": "networks", "id": "vsub"}])
+        self.assertEqual(shown["waitBox"], shown["spinner"])
 
     def test_a_good_answer_still_draws_and_caches_on_every_database(self):
         """The control: a species with a network behaves as it always did."""

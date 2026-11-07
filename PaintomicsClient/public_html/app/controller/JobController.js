@@ -194,6 +194,39 @@ function showInvalidStep1FormMessage(jobView) {
 	showInvalidFieldMessage((jobView && jobView.firstFormError) ? jobView.firstFormError() : null);
 }
 
+/**
+* What the logo, or Step 1's Reset, asks before starting a new analysis, or null
+* when starting one loses nothing.
+*
+* Both asked "Are you sure you want to exit the current job?" on every page,
+* the untouched Step 1 form included, where no job is open. Starting over drops
+* every view (cleanStoredApplicationData), so what it can lose is an open job, or
+* what someone has entered into a form and not run. A job is asked about as
+* before. Without one, the question comes only when a field holds a value the
+* user gave it: an organism, a file, a changed setting. ExtJS's isDirty() says
+* exactly that, and an untouched Step 1 has no dirty field (checked in the
+* browser: 36 fields, none dirty, until an organism or a file is chosen). An
+* empty form has nothing to lose, so the logo just goes there.
+*
+* @param {MainView} mainView
+* @returns {String|null} the question, or null to go on without one
+*/
+function resetQuestion(mainView) {
+	var lastJobView = mainView.getLastJobView();
+	var jobModel = (lastJobView && lastJobView.getModel) ? lastJobView.getModel() : null;
+	if (jobModel && jobModel.getJobID() != null) {
+		return "Are you sure you want to exit the current job?";
+	}
+	for (var name in mainView.subviews) {
+		var component = mainView.subviews[name] ? mainView.subviews[name].component : null;
+		if (component && !component.isDestroyed && typeof component.query === "function" &&
+			component.query("field").some(function (field) { return field.isDirty(); })) {
+			return "Start a new analysis? What you have entered so far will be cleared.";
+		}
+	}
+	return null;
+}
+
 /* Tells the server the answer for `jobID` arrived, so it can drop its copy of
    the result. Fire-and-forget: nothing waits on it, and a lost
    acknowledgement only means the server keeps the entry until its ten-minute
@@ -284,6 +317,49 @@ function JobController() {
 			  "<a href=\"" + jobURL + "\" target=\"_blank\">" + jobURL + "</a>"
 			: "";
 
+		// No readable answer: nginx's 502/504 page, the empty body of a dropped
+		// connection, this request's own timeout, or a 200 with nothing in it that
+		// can be read. Verdicts about the wire, none about the job, and every one
+		// worth asking again until the budget is spent.
+		var retryUnreadable = function (response, textStatus) {
+			var outage = other.statusOutage || (other.statusOutage = {since: 0, attempts: 0});
+			var what = describeUnansweredRequest(response, textStatus);
+			var delay = statusPollRetryDelay(outage, Date.now());
+			if (delay < 0) {
+				// Budget spent. Report through the same handler a failed
+				// job uses, with a body that says what happened, so the
+				// callers' own handlers -- the one that unlocks the Step 1
+				// form, the one that counts a failed conversion -- run as
+				// they would for any other failure. The custom handler is
+				// reached here and above only: never for a poll that is
+				// still being retried.
+				other.statusOutage = null;
+				console.error("Job " + jobID + ": no readable status answer for " +
+					Math.round((Date.now() - outage.since) / 1000) + " s (last: " + what + "); giving up.");
+				errorHandler(unansweredStatusResponse(response, what, jobID, showURL ? jobURL : null),
+				             jobID, jobView, other);
+				return;
+			}
+
+			console.warn("Job " + jobID + ": status check got no readable answer (" + what +
+				"); trying again in " + Math.round(delay / 1000) + " s (attempt " + outage.attempts + ").");
+			if (showURL || other.multipleJobs) {
+				// The dialog this poll owns keeps its spinner, and says why
+				// it is still there rather than freezing on the last
+				// progress it saw.
+				showInfoMessage(dialogTitle, {
+					message: dialogBody + (dialogBody ? "<br/>" : "") +
+						"<i>The server did not answer the last status check (" + what +
+						"). Trying again in " + Math.round(delay / 1000) + " s\u2026</i>",
+					logMessage: "Job " + jobID + " status unanswered (" + what + "), retrying.",
+					showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "play"
+				});
+			}
+			setTimeout(function () {
+				me.checkJobStatus(jobID, jobView, callback, other, showURL);
+			}, delay);
+		};
+
 		console.info("Checking status for Job " + jobID);
 		ajaxWithStallTimeout({
 			type: "POST",
@@ -298,6 +374,14 @@ function JobController() {
 			// (see ajaxWithStallTimeout in Util.js).
 			timeout: JOB_STATUS_REQUEST_TIMEOUT,
 			success: function (response, textStatus, jqXHR) {
+				// jQuery parses a body only when it is labelled JSON. An empty 200 or
+				// a page some proxy answered with arrives here as a string, and went
+				// on as the job's finished result: the callback read nothing from it,
+				// and the Step 1 dialog stayed on "Generating Metabolites list..."
+				if (response === null || typeof response !== "object") {
+					retryUnreadable(jqXHR, textStatus);
+					return;
+				}
 				other.statusOutage = null;   // the server answered: any outage is over
 				if (response.success === false) {
 					if (response.status === "JobStatus.STARTED" || response.status === "started") {
@@ -352,43 +436,7 @@ function JobController() {
 					errorHandler(response, jobID, jobView, other);
 					return;
 				}
-
-				var outage = other.statusOutage || (other.statusOutage = {since: 0, attempts: 0});
-				var what = describeUnansweredRequest(response, textStatus);
-				var delay = statusPollRetryDelay(outage, Date.now());
-				if (delay < 0) {
-					// Budget spent. Report through the same handler a failed
-					// job uses, with a body that says what happened, so the
-					// callers' own handlers -- the one that unlocks the Step 1
-					// form, the one that counts a failed conversion -- run as
-					// they would for any other failure. The custom handler is
-					// reached here and above only: never for a poll that is
-					// still being retried.
-					other.statusOutage = null;
-					console.error("Job " + jobID + ": no readable status answer for " +
-						Math.round((Date.now() - outage.since) / 1000) + " s (last: " + what + "); giving up.");
-					errorHandler(unansweredStatusResponse(response, what, jobID, showURL ? jobURL : null),
-					             jobID, jobView, other);
-					return;
-				}
-
-				console.warn("Job " + jobID + ": status check got no readable answer (" + what +
-					"); trying again in " + Math.round(delay / 1000) + " s (attempt " + outage.attempts + ").");
-				if (showURL || other.multipleJobs) {
-					// The dialog this poll owns keeps its spinner, and says why
-					// it is still there rather than freezing on the last
-					// progress it saw.
-					showInfoMessage(dialogTitle, {
-						message: dialogBody + (dialogBody ? "<br/>" : "") +
-							"<i>The server did not answer the last status check (" + what +
-							"). Trying again in " + Math.round(delay / 1000) + " s\u2026</i>",
-						logMessage: "Job " + jobID + " status unanswered (" + what + "), retrying.",
-						showSpin: true, append: other.multipleJobs, itemId: jobID, icon: "play"
-					});
-				}
-				setTimeout(function () {
-					me.checkJobStatus(jobID, jobView, callback, other, showURL);
-				}, delay);
+				retryUnreadable(response, textStatus);
 			}
 		});
 	};
@@ -1217,12 +1265,32 @@ function JobController() {
 		   customSpeciesInstaller.py answers 404 here, on every job. */
 		var fetchNetwork = function(url) {
 			$.getJSON(url + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
+				/* A 200 whose JSON holds no network generateNetwork can draw -- an
+				   empty object, a list with no edges -- threw at data.nodes.length
+				   inside this callback, where no failure handler runs, and the card
+				   said "Building network..." for as long as the tab stayed open. It
+				   now ends the wait like any other failed answer, and nothing is
+				   stored. A body cut off on the wire does not parse, so it is
+				   jQuery's "parsererror" and comes to .fail below with its 200. */
+				if (!jobView.isDrawableNetwork(pathwaysNetworkData)) {
+					console.error(Date.logFormat() + "JobController.js : the " + jobView.database +
+						" pathway network for " + jobView.getModel().getOrganism() + " arrived but holds no nodes and edges to draw.");
+					jobView.showNetworkFailure();
+					return;
+				}
 				// Set the id key as organism
 				pathwaysNetworkData.id = jobView.getModel().getOrganism();
 				pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
 
 				me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
-				jobView.generateNetwork(pathwaysNetworkData);
+				/* Whatever else in a body stops the drawing has the same effect as
+				   the check above if nothing catches it. */
+				try {
+					jobView.generateNetwork(pathwaysNetworkData);
+				} catch (error) {
+					console.error(Date.logFormat() + "JobController.js : could not draw the " + jobView.database + " pathway network.", error);
+					jobView.showNetworkFailure();
+				}
 			}).fail(function (jqXHR) {
 				jobView.showNetworkFailure(jqXHR.status);
 			});
@@ -1728,23 +1796,27 @@ function JobController() {
 	*/
 	this.resetButtonClickHandler = function (jobView, force, callback) {
 		var me = this;
-		if (force === true) {
+		var startOver = function () {
 			me.cleanStoredApplicationData();
 			me.abandonStep1Submission();
 			me.showJobInstance(new JobInstance(null));
 			if (callback !== undefined) {
 				callback();
 			}
+		};
+		if (force === true) {
+			startOver();
 			return;
 		}
-		Ext.MessageBox.confirm('Confirm', 'Are you sure you want to exit the current job?', function (opcion) {
+		var question = resetQuestion(application.getMainView());
+		if (question === null) {
+			startOver();
+			window.history.replaceState(null, null, window.location.pathname);
+			return;
+		}
+		Ext.MessageBox.confirm('Confirm', question, function (opcion) {
 			if (opcion === "yes") {
-				me.cleanStoredApplicationData();
-				me.abandonStep1Submission();
-				me.showJobInstance(new JobInstance(null));
-				if (callback !== undefined) {
-					callback();
-				}
+				startOver();
 				window.history.replaceState(null, null, window.location.pathname);
 			}
 		});
@@ -1812,8 +1884,12 @@ function JobController() {
 				success: function (response) {
 					console.info(Date.logFormat() + " job's access date succesfully updated.");
 				},
-				error: function (response) {
-					console.error(Date.logFormat() + " failed when updating job's access date.");
+				error: function (response, textStatus) {
+					// With the server's own words: before pathwayAcquisitionTouchJob
+					// was fixed a failure there answered 200 and nothing reached here.
+					var answer = readableAnswer(response);
+					console.error(Date.logFormat() + " failed when updating job's access date: " +
+						((answer && answer.message) || describeUnansweredRequest(response, textStatus)));
 				},
 			});
 		}

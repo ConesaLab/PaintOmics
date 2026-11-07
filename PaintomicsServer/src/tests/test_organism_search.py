@@ -190,9 +190,57 @@ class MultiWordQueries(unittest.TestCase):
         self.assertEqual("eco", codes("ecoli")[0])
 
     def test_a_single_letter_is_a_genus_initial(self):
-        # "x" is a whole word of "Citrus x clementina"; an initial is not a word.
+        # Alone it is only that: "x" is a word of "Citrus x clementina", and it is
+        # also how Xenopus starts.
         self.assertEqual(["xtr"], codes("x"))
         self.assertEqual("hsa", codes("h sapiens")[0])
+
+    def test_a_hybrid_is_found_by_the_name_as_written(self):
+        # The x was read as a genus initial, and Citrus and Petunia do not start
+        # with x, so the name exactly as the list holds it found no organism.
+        self.assertEqual(["cic"], codes("Citrus x clementina"))
+        self.assertEqual(["cic"], codes("citrus X clementina"))
+        self.assertEqual(["cic"], codes("Citrus x"))
+        self.assertEqual(["cic"], codes("x clementina"))
+        self.assertEqual(["cic"], codes("c x clementina"))
+
+    def test_a_hybrid_is_found_without_the_x_and_with_the_other_sign(self):
+        self.assertEqual(["cic"], codes("Citrus clementina"))
+        self.assertEqual(["cic"], codes("Citrus \u00d7 clementina"))
+
+    def test_a_one_letter_word_of_the_name_narrows_the_list(self):
+        listed = node("""S.rank("Petunia x hybrida", [
+            {name: "Petunia x hybrida (garden petunia)", value: "phyb"},
+            {name: "Petunia axillaris", value: "pax"},
+            {name: "Xiphophorus hybrida", value: "xhy"}
+        ]).map(r => r.value)""")
+        self.assertEqual(["phyb"], listed)
+        serotype = node("""S.rank("Clostridium botulinum A", [
+            {name: "Clostridium botulinum A str. ATCC 3502", value: "cbo"},
+            {name: "Clostridium botulinum B1 str. Okra", value: "cbb"}
+        ]).map(r => r.value)""")
+        self.assertEqual(["cbo"], serotype)
+
+    def test_the_initial_outranks_a_word_of_one_letter(self):
+        # The fixture list holds no such row: Campylobacter would otherwise tie
+        # or lead on "e coli", which is the search that must not change.
+        listed = node("""S.rank("e coli", [
+            {name: "Campylobacter coli E", value: "cce"},
+            {name: "Escherichia coli K-12 MG1655", value: "eco"}
+        ]).map(r => r.value)""")
+        self.assertEqual(["eco", "cce"], listed)
+        self.assertEqual("eco", codes("E. coli")[0])
+        self.assertEqual("cel", codes("C. elegans")[0])
+
+    def test_a_letter_still_never_matches_a_fragment(self):
+        # Mus musculus holds a "u", only inside its words.
+        self.assertEqual([], codes("sapiens x"))
+        self.assertEqual([], codes("musculus u"))
+
+    def test_the_hybrid_marks_the_x_it_matched(self):
+        marked = node("""S.highlight("Petunia x hybrida (garden petunia)", "Petunia x hybrida", "phyb")""")
+        self.assertIn("<mark>x</mark>", marked)
+        self.assertIn("<mark>hybrida</mark>", marked)
 
     def test_quoted_names_search_by_their_words(self):
         self.assertEqual("naz", codes("azollae")[0])

@@ -566,8 +566,10 @@ class ThePageShowsItAsTextTest(unittest.TestCase):
         util = read(UTIL)
         cls.results = _node(DIALOG_HARNESS % {
             "client": "\n".join(extract_function(util, name, "Util.js") for name in
-                                ("showMessage", "showErrorMessage", "serverTextAsHtml", "ajaxErrorHandler",
-                                 "extJSErrorHandler", "splitServerError")),
+                                ("showMessage", "showErrorMessage", "showWarningMessage", "serverTextAsHtml",
+                                 "ajaxErrorHandler", "extJSErrorHandler", "splitServerError",
+                                 "isInvalidSessionAnswer", "readableAnswer", "connectionFailed",
+                                 "showConnectionFailedMessage", "describeUnansweredRequest")),
             "bodies": json.dumps(cls.bodies),
         })
 

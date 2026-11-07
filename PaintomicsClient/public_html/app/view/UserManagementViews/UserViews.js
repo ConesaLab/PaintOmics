@@ -244,9 +244,6 @@ function SignInPanel() {
     this.forgotPassLinkClick = function () {
         this.getController().forgotPassLinkClickHandler(this);
     };
-    this.startGuestSessionButtonClick = function () {
-        this.getController().startGuestSessionButtonClickHandler(this);
-    };
     this.startNoLoginButtonClick = function () {
         this.getController().startNoLoginSessionButtonClickHandler(this);
     };
@@ -309,9 +306,9 @@ function SignInPanel() {
                       $("#signInLink").click(function () {
                           me.signInButtonClick();
                       });
-                      $("#guestUserButton").click(function () {
-                          me.startGuestSessionButtonClick();
-                      });
+                      /* No #guestUserButton binding: the panel draws no such button
+                         since "Continue without an account" replaced it, so the click
+                         handler was bound to nothing. */
                       $("#noLoginButton").click(function () {
                           me.startNoLoginButtonClick();
                       });

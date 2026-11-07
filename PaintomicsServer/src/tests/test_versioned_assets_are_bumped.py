@@ -145,21 +145,31 @@ PUBLISHED = {
     # v=3.6 encodes < and > of the server's message in both "Oops..Internal error!"
     # dialogs (serverTextAsHtml): what a message quotes (a file name in an OSError,
     # an omic name, an organism code) is text, however it got there.
+    # v=3.7 shows a job removed while its page had it open as the warning its
+    # link shows (extra.job_unavailable), signs the reader out only on the
+    # server's own answer for an invalid session (isInvalidSessionAnswer), says
+    # "The connection failed" for an answer cut off or never received
+    # (connectionFailed), and holds watchUploadFrame. Not 3.6: #226 published
+    # that number with other content.
     "app/view/common/Util.js": (
-        "3.6", "199c4c9bc684ec405d6dd6ddf58895cbe6a704d63ca02a0155d326d625a58d7f"),
+        "3.7", "31b23226c49cd193ae70ddde412f7faa20309fb6f294f5bfc8cf7c39f6f0c51b"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
+    # v=1.2 finds a hybrid by the name as written: beside other words a letter may
+    # be a one-letter word of the name, the x of "Petunia x hybrida".
     "app/view/common/OrganismSearch.js": (
-        "1.1", "41d70c698a396b0e33d8e686b9a8c8a3462cf9bf8ca58177b81f2d774ccb0642"),
+        "1.2", "12cc68ebb3837c599c6cf346079e61d61f0650c9693a59cbeba7ddb41939d37a"),
     # v=0.8 turns off ExtJS's own shadow element under every window
     # (`shadow: false` on Ext.window.Window): main.css draws the window's
     # shadow, and the framework's 5px-radius one only showed as a grey box
     # under each 8px corner. That is #132's shape.
     # v=1.0: the grid's Excel export submits with submitEmptyText: false, like
     # every form submit in the app (test_form_placeholder_is_not_a_design).
+    # v=1.1 ends the wait on an upload whose answer stopped part-way, which fires
+    # no load event on the hidden frame (watchUploadFrame in Util.js).
     "app/view/common/ExtJS_extensions.js": (
-        "1.0", "6e14af5505d55527e5f93af90422a1bda8350730d545d4176952a5725f4806a7"),
+        "1.1", "9e2a70a8541845eb7d17cf8e90c75038b0213bb2ba88d14d1e144f15705a4bd6"),
     "app/view/common/CookieConsent.js": (
         "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (
@@ -315,8 +325,10 @@ PUBLISHED = {
     # v=0.11 reads the job in the address in one place, and on a page opened with
     # one shows no browser warning and sets no "silence" cookie, so the next bare
     # visit still gets them and the Welcome.
+    # v=0.12 does not boot over a script index.html's loader could not fetch,
+    # and asks IndexedDB nothing on a bare address.
     "app.js": (
-        "0.11", "33a93703095aa208bf71cc824e53e13211a3c1d7a596492d276c978baecca8bb"),
+        "0.12", "2c91eab4981bcecfd7ff71042b83e0760e0ab93865b3bb4dd5624c3fa4318ef7"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')
