@@ -226,6 +226,29 @@ results.timeoutThenDone = drive(function (opts, n) {
     else { finished(opts, "deliv-1"); }
 });
 
+// A 200 whose body was cut off: labelled JSON, so jQuery fails the request.
+results.cutOffThenDone = drive(function (opts, n) {
+    if (n === 1) { opts.error(answer(200, "OK", '{"success":true,"jo'), "parsererror"); }
+    else { finished(opts, "deliv-1"); }
+});
+
+// A 200 with nothing readable that jQuery does not fail, because nothing labels it
+// JSON: the string reaches `success`. It is not the job's result.
+["", "<html><body>Sign in to this network</body></html>"].forEach(function (body, index) {
+    results["stringThenDone" + index] = drive(function (opts, n) {
+        if (n === 1) { opts.success(body, "success", answer(200, "OK", body)); }
+        else { finished(opts, "deliv-1"); }
+    });
+});
+results.nullThenDone = drive(function (opts, n) {
+    if (n === 1) { opts.success(null, "success", answer(200, "OK", "null")); }
+    else { finished(opts, "deliv-1"); }
+});
+results.persistentString = drive(function (opts) { opts.success("", "success", answer(200, "OK", "")); });
+results.persistentCutOff = drive(function (opts) {
+    opts.error(answer(200, "OK", '{"success":true,"jo'), "parsererror");
+});
+
 // A readable refusal: the job is gone. Final, whatever the status code.
 const JOB_GONE = JSON.stringify({success: false, status: "failed",
     message: "Your job is not on the queue anymore. Check your job list, if it's not there the process stopped and you must resend the data again."});
@@ -338,6 +361,31 @@ class StatusPollRetryTest(unittest.TestCase):
         outcome = self.results["timeoutThenDone"]
         self.assertEqual(outcome["callbacks"], 1)
         self.assertEqual(outcome["handled"], [])
+
+    def test_a_body_cut_off_on_the_way_is_retried(self):
+        outcome = self.results["cutOffThenDone"]
+        self.assertEqual(outcome["callbacks"], 1)
+        self.assertEqual(outcome["handled"], [])
+
+    def test_a_200_with_nothing_to_read_is_not_the_jobs_result(self):
+        """It went on to the callback as a finished job, which read nothing from
+        it, and the caller's next dialog was left spinning."""
+        for name in ("stringThenDone0", "stringThenDone1", "nullThenDone"):
+            with self.subTest(name):
+                outcome = self.results[name]
+                self.assertEqual(outcome["requests"], 2, "not asked again")
+                self.assertEqual(outcome["callbacks"], 1, "only the real answer reaches the callback")
+                self.assertEqual(outcome["acks"], [{"url": "/ack_job_result/JOB1", "delivery": "deliv-1"}])
+
+    def test_a_200_that_never_becomes_readable_is_reported_as_cut_off_not_as_http_200(self):
+        for name in ("persistentString", "persistentCutOff"):
+            with self.subTest(name):
+                outcome = self.results[name]
+                self.assertEqual(outcome["callbacks"], 0)
+                self.assertEqual(len(outcome["handled"]), 1, "the wait must end")
+                message = outcome["handled"][0]["body"]["message"]
+                self.assertIn("the answer arrived cut off or unreadable", message)
+                self.assertNotIn("HTTP 200", message)
 
     def test_the_first_retry_is_five_seconds_out(self):
         outcome = self.results["one504ThenDone"]

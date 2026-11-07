@@ -146,23 +146,30 @@ PUBLISHED = {
     # dialogs (serverTextAsHtml): what a message quotes (a file name in an OSError,
     # an omic name, an organism code) is text, however it got there.
     # v=3.7 shows a job removed while its page had it open as the warning its
-    # link shows (extra.job_unavailable), and signs the reader out only on the
-    # server's own answer for an invalid session (isInvalidSessionAnswer).
+    # link shows (extra.job_unavailable), signs the reader out only on the
+    # server's own answer for an invalid session (isInvalidSessionAnswer), says
+    # "The connection failed" for an answer cut off or never received
+    # (connectionFailed), and holds watchUploadFrame. Not 3.6: #226 published
+    # that number with other content.
     "app/view/common/Util.js": (
-        "3.7", "977af3ec0ec5a0ebb13231e5b3885dce240b336a82e30b95b7c60a758a2750f1"),
+        "3.7", "bc9bbdd89ac6773b782f578cfc8368c61b3fb5f63fc470e7f47c159f108e5d15"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
+    # v=1.2 finds a hybrid by the name as written: beside other words a letter may
+    # be a one-letter word of the name, the x of "Petunia x hybrida".
     "app/view/common/OrganismSearch.js": (
-        "1.1", "41d70c698a396b0e33d8e686b9a8c8a3462cf9bf8ca58177b81f2d774ccb0642"),
+        "1.2", "12cc68ebb3837c599c6cf346079e61d61f0650c9693a59cbeba7ddb41939d37a"),
     # v=0.8 turns off ExtJS's own shadow element under every window
     # (`shadow: false` on Ext.window.Window): main.css draws the window's
     # shadow, and the framework's 5px-radius one only showed as a grey box
     # under each 8px corner. That is #132's shape.
     # v=1.0: the grid's Excel export submits with submitEmptyText: false, like
     # every form submit in the app (test_form_placeholder_is_not_a_design).
+    # v=1.1 ends the wait on an upload whose answer stopped part-way, which fires
+    # no load event on the hidden frame (watchUploadFrame in Util.js).
     "app/view/common/ExtJS_extensions.js": (
-        "1.0", "6e14af5505d55527e5f93af90422a1bda8350730d545d4176952a5725f4806a7"),
+        "1.1", "9e2a70a8541845eb7d17cf8e90c75038b0213bb2ba88d14d1e144f15705a4bd6"),
     "app/view/common/CookieConsent.js": (
         "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (

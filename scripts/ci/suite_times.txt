@@ -30,6 +30,7 @@
 # twice). Same instrument as the rows above, not a laptop.
 test_a_bare_address_asks_indexeddb_nothing	0.5
 test_a_blank_identifier_is_refused	0.9
+test_a_cut_off_answer_says_the_connection_failed	1.5
 test_a_job_removed_under_its_page_is_a_warning	2.0
 test_a_metabolites_only_job_is_refused_on_its_first_run	1.5
 test_admin_and_readonly_guards	1.1

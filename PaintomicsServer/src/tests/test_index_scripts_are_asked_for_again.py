@@ -19,10 +19,18 @@ runs the text in the failed script's place. A script that still has not arrived
 is named on the page with a reload button, built from the DOM alone, and app.js
 does not boot.
 
+A body cut off on the wire with no declared length looks whole to the browser. It
+fires no error at the script: it runs half a file, which raises a SyntaxError on
+window, and Util.js lost that way left the same black page. A SyntaxError from one
+of these files is treated as a lost file, and asked for again past the HTTP cache,
+because these addresses are cached for a long time and the cut copy may be there.
+
 Pinned here: the loader as it ships in index.html, run under node against a
 stand-in for the page, and app.js's guard. The same cases ran in headless
 Chromium (not Chrome) on staging: Util.js reset once booted to Step 1, Util.js
-reset every time or answering 502 showed the message, ext-all.js reset once booted.
+reset every time or answering 502 showed the message, ext-all.js reset once booted,
+and Util.js really cut on the wire, once and every time, each of the three ways a
+body can end early.
 
 Usage:
     cd PaintomicsServer
@@ -85,7 +93,18 @@ function node(tag) {
     return self;
 }
 let page = null;
-function ran(child) { if (child.tagName === "SCRIPT" && child.text) { page.ran.push(child.text); } }
+function ran(child) {
+    if (child.tagName === "SCRIPT" && child.text) { page.ran.push(child.text); }
+}
+/* Inside the page, `window` is the context's global and not the sandbox object. */
+function pageWindow() { return vm.runInContext("window", page.context); }
+function raise(event) {
+    (page.listeners.window.error || []).slice().forEach((l) => l.fn(event));
+    return page;
+}
+function syntaxError(filename) {
+    return raise({target: pageWindow(), filename: filename, message: "Uncaught SyntaxError: Unexpected end of input"});
+}
 
 /* One page load. `answer(n)` is what the n-th request the loader sends gets:
    {status, type, text}, or {drop: true} for a request that throws. */
@@ -99,6 +118,7 @@ function load(answer) {
     const document = Object.assign(on("document"), {
         head: head, body: body,
         createElement: node,
+        getElementsByTagName(tag) { return head.children.filter((c) => c.tagName === tag.toUpperCase()); },
         createTextNode(text) { return {textContent: String(text), children: []}; }
     });
     function XMLHttpRequest() {}
@@ -117,8 +137,8 @@ function load(answer) {
     sandbox.window = sandbox;
     const context = vm.createContext(sandbox);
     vm.runInContext("Date.now = function () { return (globalThis.__tick = (globalThis.__tick || 0) + 50); };", context);
-    vm.runInContext(loader, context);
     page.context = context;
+    vm.runInContext(loader, context);
     page.head = head;
     page.body = body;
     page.window = sandbox;
@@ -150,7 +170,8 @@ function seen(p) {
     const find = (n, tag) => n && n.children ? (n.tagName === tag ? n : n.children.map((c) => find(c, tag)).find(Boolean)) : null;
     const button = box ? find(box, "BUTTON") : null;
     return {
-        ran: p.ran, requests: p.requests.map((r) => ({url: r.url, async: r.async})),
+        ran: p.ran, requests: p.requests.map((r) => ({url: r.url.replace(/&_=[0-9]+$/, ""), async: r.async})),
+        pastTheCache: p.requests.every((r) => /&_=[0-9]+$/.test(r.url)),
         waited: p.requests.length ? vm.runInContext("globalThis.__tick", p.context) : 0,
         failures: vm.runInContext("JSON.parse(JSON.stringify(window.PA_BOOT_SCRIPT_FAILURES))", p.context),
         box: box ? box.textContent : null, role: box ? box.getAttribute("role") : null,
@@ -191,6 +212,34 @@ results.afterTheParse = (function () {
     return seen(fail(scriptTag(...UTIL)));
 })();
 results.nothingLost = seen(domReady(load(() => JS)));
+
+/* A body cut off with no declared length: nothing fires at the script. */
+const CUT = {status: 200, type: "application/javascript", text: "function half( /* CUT OFF */"};
+const OWN = "https://paintomics.org/app/view/common/Util.js?v=3.6";
+/* The parser has just run `last`, and an error reports on window. By default a
+   SyntaxError under the name Util.js gives itself on its first line. */
+function cutOff(answer, options) {
+    options = options || {};
+    load(answer);
+    const last = options.last === undefined ? scriptTag("app/view/common/Util.js?v=3.6", OWN) : options.last;
+    if (last) { page.head.appendChild(last); }
+    if (options.domReadyFirst) { domReady(); }
+    raise({target: pageWindow(), filename: options.filename || "Util.js",
+           message: options.message || "Uncaught SyntaxError: Unexpected end of input"});
+    return options.domReadyFirst ? seen(page) : seen(domReady());
+}
+results.cutOffOnce = cutOff(() => JS);
+results.cutOffUnderItsAddress = cutOff(() => JS, {filename: OWN});
+results.cutOffAgainThenWhole = cutOff((n) => n === 1 ? CUT : JS);
+results.cutOffEveryTime = cutOff(() => CUT);
+results.cutOffThenDropped = cutOff(() => DROPPED);
+const inline = node("script");
+results.syntaxErrorInAnotherSite = cutOff(() => JS, {last: scriptTag("https://cdn.example/x.js", "https://cdn.example/x.js"), filename: "https://cdn.example/x.js"});
+results.syntaxErrorInline = cutOff(() => JS, {last: inline, filename: "https://paintomics.org/"});
+results.asyncScriptOfAnotherSite = cutOff(() => JS, {filename: "https://www.googletagmanager.com/gtag/js"});
+results.anotherOfOurFilesNamed = cutOff(() => JS, {filename: "app.js"});
+results.notASyntaxError = cutOff(() => JS, {message: "Uncaught ReferenceError: View is not defined"});
+results.syntaxErrorAfterTheParse = cutOff(() => JS, {domReadyFirst: true});
 results.listener = (function () {
     const p = load(() => JS);
     return {capture: (p.listeners.window.error || []).map((l) => l.capture === true)};
@@ -271,7 +320,7 @@ class TheLoaderTest(unittest.TestCase):
     def test_a_script_that_never_arrives_is_named_with_a_reload_button(self):
         result = self.results["alwaysDropped"]
         self.assertEqual(result["ran"], [])
-        self.assertEqual(result["failures"], [{"file": "app/view/common/Util.js", "status": 0}])
+        self.assertEqual(result["failures"], [{"file": "app/view/common/Util.js", "status": 0, "cutOff": False}])
         self.assertIn("PaintOmics AI could not start", result["box"])
         self.assertIn("because the connection dropped while fetching app/view/common/Util.js.", result["box"])
         self.assertIn("Your analysis and your jobs are not affected.", result["box"])
@@ -296,6 +345,53 @@ class TheLoaderTest(unittest.TestCase):
 
     def test_only_this_sites_scripts_during_the_parse(self):
         for name in ("anotherSite", "notAScript", "afterTheParse"):
+            with self.subTest(case=name):
+                self.assertEqual(self.results[name]["requests"], [])
+                self.assertEqual(self.results[name]["failures"], [])
+                self.assertIsNone(self.results[name]["box"])
+
+    def test_it_asks_past_the_http_cache(self):
+        """A copy cut off with no declared length may be in the cache, under an
+        address the server says to keep for a long time."""
+        self.assertTrue(self.results["droppedTwice"]["pastTheCache"])
+        self.assertTrue(self.results["cutOffOnce"]["pastTheCache"])
+
+    def test_a_script_cut_off_on_the_wire_is_asked_for_again(self):
+        result = self.results["cutOffOnce"]
+        self.assertEqual(result["requests"], [{"url": "https://paintomics.org/app/view/common/Util.js?v=3.6", "async": False}])
+        self.assertEqual(len(result["ran"]), 1)
+        self.assertIn("var utilLoaded = true;", result["ran"][0])
+        self.assertEqual(result["failures"], [])
+        self.assertIsNone(result["box"])
+        self.assertEqual(len(self.results["cutOffUnderItsAddress"]["requests"]), 1,
+                         "a file cut off before its //# sourceURL line reports under its address")
+
+    def test_a_second_cut_is_asked_for_again_too(self):
+        result = self.results["cutOffAgainThenWhole"]
+        self.assertEqual(len(result["requests"]), 2)
+        self.assertEqual(result["failures"], [])
+        self.assertIsNone(result["box"])
+
+    def test_a_script_cut_off_every_time_is_named(self):
+        result = self.results["cutOffEveryTime"]
+        self.assertEqual(result["failures"], [{"file": "app/view/common/Util.js", "status": 0, "cutOff": True}])
+        self.assertEqual(result["ran"], [], "half a file was run; in a browser that throws out of the listener")
+        self.assertEqual(len(result["requests"]), 2, "the same three attempts, the browser's own being the first")
+        self.assertIn("because the answer arrived cut off or unreadable while fetching app/view/common/Util.js.", result["box"])
+        self.assertEqual(result["button"], "Reload the page")
+
+    def test_a_script_cut_off_and_then_not_answered_is_a_dropped_connection(self):
+        result = self.results["cutOffThenDropped"]
+        self.assertEqual(result["failures"], [{"file": "app/view/common/Util.js", "status": 0, "cutOff": False}])
+        self.assertIn("because the connection dropped", result["box"])
+
+    def test_only_a_syntax_error_in_these_files_during_the_parse_counts(self):
+        """A top-level exception in a script that arrived whole is not a lost file:
+        pages have run with those. Nor is a SyntaxError in another site's script
+        (one that was async can report while ours is the last parsed), inline, under
+        another name, or after the parse."""
+        for name in ("syntaxErrorInAnotherSite", "syntaxErrorInline", "asyncScriptOfAnotherSite",
+                     "anotherOfOurFilesNamed", "notASyntaxError", "syntaxErrorAfterTheParse"):
             with self.subTest(case=name):
                 self.assertEqual(self.results[name]["requests"], [])
                 self.assertEqual(self.results[name]["failures"], [])

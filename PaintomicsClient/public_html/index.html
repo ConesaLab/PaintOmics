@@ -83,7 +83,11 @@
 	     as loadModule does) and runs the text in its place. A script that still
 	     has not arrived after three attempts is named on the page, with a reload
 	     button, using nothing but the DOM; app.js then does not boot. Only the
-	     page's own scripts, and only until the page has been parsed. -->
+	     page's own scripts, and only until the page has been parsed.
+
+	     A body cut off with no declared length looks whole to the browser: it
+	     runs half a file, which does not parse, and fires nothing at the script.
+	     A SyntaxError from one of these files is that, and is treated the same. -->
 	<script type="text/javascript">
 	(function () {
 		var ATTEMPTS = 3, PAUSE_MS = 500;   /* as MODULE_FETCH_ATTEMPTS and MODULE_FETCH_RETRY_PAUSE in app.js */
@@ -95,40 +99,90 @@
 			while (Date.now() < until) { /* wait: the next script must not run first */ }
 		}
 
-		/* A body counts only with a 2xx status and a JavaScript type. nginx's 502
-		   page is HTML, and nosniff has the browser refuse that as a script too. */
+		/* A body counts only with a 2xx status, a JavaScript type and text that
+		   parses. nginx's 502 page is HTML, and nosniff has the browser refuse that
+		   as a script too. new Function parses without running; ExtJS's templates
+		   need the same permission of the browser. */
 		function fetchScript(url) {
 			var request = new XMLHttpRequest();
 			try {
-				request.open("GET", url, false);
+				/* Past the HTTP cache, which may hold the copy that was cut off:
+				   these addresses are cached for a long time. jQuery does the same
+				   for loadModule's requests. */
+				request.open("GET", url + (url.indexOf("?") === -1 ? "?" : "&") + "_=" + Date.now(), false);
 				request.send(null);
 			} catch (error) {
 				return {status: 0};
 			}
 			var type = request.getResponseHeader("Content-Type") || "";
-			if (request.status >= 200 && request.status < 300 && /javascript|ecmascript/i.test(type)) {
-				return {status: request.status, text: request.responseText};
+			if (!(request.status >= 200 && request.status < 300 && /javascript|ecmascript/i.test(type))) {
+				return {status: request.status};
 			}
-			return {status: request.status};
+			try {
+				new Function(request.responseText);
+			} catch (notWhole) {
+				if (notWhole instanceof SyntaxError) {
+					return {status: 0, cutOff: true};
+				}
+			}
+			return {status: request.status, text: request.responseText};
+		}
+
+		/* Asks again and hands the text to `place`, which runs it, or records the
+		   file as lost. */
+		function askAgain(src, file, place) {
+			var answer = {status: 0};
+			for (var attempt = 2; attempt <= ATTEMPTS; attempt++) {
+				pause(PAUSE_MS * (attempt - 1));
+				answer = fetchScript(src);
+				if (answer.text !== undefined) {
+					var copy = document.createElement("script");
+					copy.text = answer.text + "\n//# sourceURL=" + src;
+					place(copy);
+					return;
+				}
+			}
+			failures.push({file: file, status: answer.status, cutOff: answer.cutOff === true});
+		}
+
+		/* Which listed script a SyntaxError on window is about, or "". The parser
+		   runs them one at a time, so it is the last one parsed. event.filename
+		   checks that, because an async script of another site's could report in
+		   between: it is the address, or the name a file gives itself in its first
+		   line (Util.js says //# sourceURL=Util.js). */
+		function scriptThatDidNotParse(event) {
+			var scripts = document.getElementsByTagName("script");
+			var src = scripts.length ? scripts[scripts.length - 1].src : "";
+			var named = String(event.filename);
+			return (src && (named === src || named === src.split("?")[0].split("/").pop())) ? src : "";
+		}
+
+		/* The file arrived and does not parse. A file that is wrong on the server
+		   ends the same way. The parser is still in the head, so the end of the
+		   head is where it stands. */
+		function retryCutOff(event) {
+			if (!/SyntaxError/.test(String(event.message))) {
+				return;
+			}
+			var src = scriptThatDidNotParse(event);
+			if (src.indexOf(ownOrigin) !== 0) {
+				return;
+			}
+			askAgain(src, src.slice(ownOrigin.length).split("?")[0], function (copy) { document.head.appendChild(copy); });
 		}
 
 		function retry(event) {
 			var script = event.target;
+			if (script === window) {
+				retryCutOff(event);
+				return;
+			}
 			if (!script || script.tagName !== "SCRIPT" || !script.src || script.src.indexOf(ownOrigin) !== 0) {
 				return;
 			}
-			var answer = {status: 0};
-			for (var attempt = 2; attempt <= ATTEMPTS; attempt++) {
-				pause(PAUSE_MS * (attempt - 1));
-				answer = fetchScript(script.src);
-				if (answer.text !== undefined) {
-					var copy = document.createElement("script");
-					copy.text = answer.text + "\n//# sourceURL=" + script.src;
-					script.parentNode.insertBefore(copy, script.nextSibling);
-					return;
-				}
-			}
-			failures.push({file: script.getAttribute("src").split("?")[0], status: answer.status});
+			askAgain(script.src, script.getAttribute("src").split("?")[0], function (copy) {
+				script.parentNode.insertBefore(copy, script.nextSibling);
+			});
 		}
 
 		function paragraph(text) {
@@ -139,10 +193,11 @@
 		}
 
 		function showFailure() {
-			var status = 0, files = [];
+			var status = 0, cutOff = false, files = [];
 			for (var i = 0; i < failures.length; i++) {
 				files.push(failures[i].file);
 				status = failures[i].status || status;
+				cutOff = cutOff || failures[i].cutOff === true;
 			}
 			var box = document.createElement("div");
 			box.id = "bootScriptFailure";
@@ -154,7 +209,8 @@
 			title.style.cssText = "font-size:20px;margin:0 0 12px;";
 			title.appendChild(document.createTextNode("PaintOmics AI could not start"));
 			var cause = paragraph("The page could not finish loading because " +
-				(status > 0 ? "the server answered HTTP " + status : "the connection dropped") + " while fetching ");
+				(status > 0 ? "the server answered HTTP " + status :
+					(cutOff ? "the answer arrived cut off or unreadable" : "the connection dropped")) + " while fetching ");
 			var names = document.createElement("b");
 			names.appendChild(document.createTextNode(files.join(", ")));
 			cause.appendChild(names);
@@ -242,8 +298,8 @@
 	<script type="text/javascript" src="resources/ServerConfiguration.js?v=1.9"></script>
 	<!--CUSTOM SENCHA EXTENSIONS-->
 	<script type="text/javascript" src="app/view/common/Util.js?v=3.7"></script>
-	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=1.0"></script>
-	<script type="text/javascript" src="app/view/common/OrganismSearch.js?v=1.1"></script>
+	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=1.1"></script>
+	<script type="text/javascript" src="app/view/common/OrganismSearch.js?v=1.2"></script>
 	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.4"></script>
 	<!--LAYOUT DEBUG OVERLAY - inert until ctrl+alt+G or ?guides=1 -->
 	<script type="text/javascript" src="app/view/common/AlignmentGuides.js?v=4.2"></script>

@@ -3086,7 +3086,14 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	this.showNetworkFailure = function(httpStatus) {
 		var waitBox = $("#pathwayNetworkWaitBox_" + this.dbid).stop(true, true);
 		var subtitle = $("#step3-network-subtitle_" + this.dbid);
-		var couldNotLoad = "The " + this.database + " pathway network could not be loaded. Reload the page to try again.";
+		/* Status 0 is a dropped connection and a 2xx here a body cut off on the way
+		   (see connectionFailed in Util.js). With no status the answer was whole and
+		   held no network, which a connection cannot be blamed for. */
+		var lostOnTheWay = httpStatus === 0 || (httpStatus >= 200 && httpStatus < 300);
+		var couldNotLoad = (lostOnTheWay
+			? "The connection failed, so the " + this.database + " pathway network could not be loaded. "
+			: "The " + this.database + " pathway network could not be loaded. ") +
+			'<a href="#" onclick="location.reload(); return false;">Reload the page</a> to try again.';
 
 		if (this.network !== null) {
 			waitBox.hide();
@@ -3094,9 +3101,11 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			return this;
 		}
 
-		waitBox.text((httpStatus === 404)
+		/* One span, because the box is a flex row: text, link and text would be
+		   three items with a gap between each. */
+		waitBox.html((httpStatus === 404)
 			? "No " + this.database + " pathway network is available for this organism. The pathway table and maps work as usual."
-			: couldNotLoad).show();
+			: "<span>" + couldNotLoad + "</span>").show();
 		/* Said once, where the spinner was. The line above it said "Building
 		   network..." too: emptied, and hidden so no empty strip is left. */
 		subtitle.empty().hide();

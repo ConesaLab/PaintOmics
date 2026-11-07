@@ -34,7 +34,10 @@
  * A common-name match edges out the same match in the scientific name, the
  * head word of a common name ("mouse" in "house mouse") edges out another
  * word of it, and the genus edges out the species epithet. A single letter
- * is a genus initial ("e coli", "c elegans"), not a word. Misspellings are
+ * is a genus initial ("e coli", "c elegans"). Beside other words it may also be
+ * a word of the name written with one letter, the "x" of a hybrid ("Petunia x
+ * hybrida") or a serotype ("Clostridium botulinum A"), scored below the initial
+ * so "e coli" still leads with Escherichia. Misspellings are
  * accepted only for words of four letters or more (one edit; two from eight
  * letters), so "cat" never becomes "rat". Ties go to the model organisms, in
  * the curated order below, then to the name: with all 11,550 KEGG organisms
@@ -276,18 +279,33 @@
      * when the match is in the name, the range of the name it covers. Null
      * when the word matches nothing.
      */
-    function matchToken(token, entry) {
+    function matchToken(token, entry, alone) {
         var best = null, i, k, w, at, score, edits, maxEdits, list = entry.words, phrases = entry.phrases;
 
         function consider(s, start, end) {
             if (!best || s > best.score) best = {score: s, start: start, end: end};
         }
 
-        /* One letter is an initial: "e coli", "h sapiens". As a word it would
-           match a fragment of nearly every name and the "x" of a hybrid. */
+        /* One letter is an initial: "e coli", "h sapiens". It never matches a
+           fragment, which nearly every name holds. It also matches a whole
+           one-letter word, or nothing could find "Petunia x hybrida (garden
+           petunia)" or "Citrus x clementina" by the name as written: the x has
+           no genus to be the initial of and the row was dropped. Only beside
+           other words (a lone "x" is the start of Xenopus), and at a fragment's
+           score, below the initial, so a row with a stray "E" does not pass
+           Escherichia on "e coli". */
         if (token.length === 1) {
             w = phrases[0].words[0];
-            if (w && w.text.charAt(0) === token) consider(SCORE.prefix + SCORE.lead, w.start, w.start + 1);
+            if (w && w.text.charAt(0) === token) {
+                consider(SCORE.prefix + SCORE.lead, w.start, w.start + 1);
+            } else if (!alone) {
+                for (i = 0; i < list.length; i++) {
+                    if (list[i].text === token) {
+                        consider(SCORE.fragment, list[i].start, list[i].end);
+                        break;
+                    }
+                }
+            }
             return best;
         }
 
@@ -340,7 +358,7 @@
     function scoreOrganism(tokens, entry) {
         var total = 0, ranges = [], i, k, m, phrase = tokens.join(" ");
         for (i = 0; i < tokens.length; i++) {
-            m = matchToken(tokens[i], entry);
+            m = matchToken(tokens[i], entry, tokens.length === 1);
             if (!m) return null;
             total += m.score;
             if (m.start >= 0) ranges.push([m.start, m.end]);

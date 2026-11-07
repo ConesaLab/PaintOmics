@@ -111,7 +111,9 @@ process.stdout.write(JSON.stringify(results));
 """
 
 DIALOG_FUNCTIONS = ("showMessage", "showErrorMessage", "showWarningMessage", "ajaxErrorHandler",
-                    "extJSErrorHandler", "splitServerError", "isInvalidSessionAnswer")
+                    "extJSErrorHandler", "splitServerError", "isInvalidSessionAnswer",
+                    "readableAnswer", "connectionFailed", "showConnectionFailedMessage",
+                    "describeUnansweredRequest")
 
 
 def runDialogs(bodies, forms=()):
