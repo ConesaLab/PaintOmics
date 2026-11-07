@@ -25,6 +25,7 @@
 
 import logging
 import logging.config
+from html import escape
 
 from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob
 from src.common.UserSessionManager import UserSessionManager
@@ -114,12 +115,13 @@ def fromMiRNAtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FI
             logging.info("STEP1 - EXAMPLE '%s' REGISTERED", scenario["id"])
         else:
             # See Bed2GenesServlet: a bare NotImplementedError reaches the user
-            # as "ERROR MESSAGE: " with nothing after it.
+            # as "ERROR MESSAGE: " with nothing after it, and the answer is
+            # inserted as HTML.
             raise NotImplementedError(
-                "Unrecognised example mode %r for miRNA2Genes: expected no "
+                "Unrecognised example mode %s for miRNA2Genes: expected no "
                 "value for an upload, 'example' for the default dataset, or "
-                "'example/<dataset-id>' for a specific one."
-                % (exampleMode,))
+                "'example/&lt;dataset-id&gt;' for a specific one."
+                % (escape(repr(exampleMode)),))
 
         #****************************************************************
         # Step 4. READ PARAMS

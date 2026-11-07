@@ -142,8 +142,11 @@ PUBLISHED = {
     # v=3.5 encodes the text of that refusal, which quotes the user's identifiers
     # (Ext.String.htmlEncode, so [b] and the like still work), and moves the
     # ". User ID: N" a server message ends with into the half a report sends.
+    # v=3.6 encodes < and > of the server's message in both "Oops..Internal error!"
+    # dialogs (serverTextAsHtml): what a message quotes (a file name in an OSError,
+    # an omic name, an organism code) is text, however it got there.
     "app/view/common/Util.js": (
-        "3.5", "ee1c5eed4336d8cc88051d5a6294d81c6712bf7fb5fa6751514cec68df095635"),
+        "3.6", "199c4c9bc684ec405d6dd6ddf58895cbe6a704d63ca02a0155d326d625a58d7f"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
@@ -181,8 +184,9 @@ PUBLISHED = {
     # (nothing redraws its bubble), so only the digest moved.
     # v=1.10 drops the "AI Assistant" label from the walk report's bubble; the
     # chat's own messages keep theirs.
+    # v=1.11 sets a failure's text as text: Step 3 hands it a server refusal as it came.
     "app/view/PathwayAcquisitionViews/PA_AIInterpretView.js": (
-        "1.10", "c89be3e1c1be9c8d6dac8ba423119e4107ae692738b4ef002f90acdcd60492e3"),
+        "1.11", "e6f387d58b14f6406716daff73c0b0204bf331a0dbca00239a384f1b5c7b3f4d"),
     "app/view/PathwayAcquisitionViews/PA_Step3RegTargetNetworkView.js": (
         "0.7", "b135712a9564f8ae0eac94daf9c567ef275c4c748dbc270fdbdeb7d25fc79e34"),
     # OmniPath ships no diagram, so its pathways render as an interactive graph

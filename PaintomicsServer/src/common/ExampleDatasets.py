@@ -35,6 +35,8 @@ import os
 import re
 import threading
 
+from src.common.ServerErrorManager import quotable
+
 
 MANIFEST_NAME = os.path.join("datasets", "manifest.json")
 
@@ -234,10 +236,17 @@ def getScenario(exampleFilesDir, scenarioId=None):
         if scenario.get("id") == wanted:
             return scenario
 
+    # The id comes off the URL (/pa_step1/example/<id>, ?scenario=<id>), and this
+    # message is shown as HTML by the Step 1 dialogs and as text by the experiment
+    # design note, so it repeats the id only when no page can misread it.
+    shown = quotable(wanted)
+    if shown is None:
+        logging.info("EXAMPLE DATASETS - unknown scenario %r requested", wanted)
     raise UnknownScenario(
-        "There is no example dataset called '%s'. Available datasets: %s."
-        % (wanted, ", ".join(sorted(entry.get("id", "?")
-                                    for entry in manifest["scenarios"]))))
+        "There is no example dataset %s. Available datasets: %s."
+        % ("called '%s'" % shown if shown is not None else "by that name",
+           ", ".join(sorted(entry.get("id", "?")
+                            for entry in manifest["scenarios"]))))
 
 
 # Leading "NN-" of a scenario's directory, e.g. "07-region-based" -> 7.

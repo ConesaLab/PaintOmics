@@ -473,8 +473,9 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
                 self.assertNotIn("&lt;", message)
 
     def test_a_scoring_step_that_failed_on_our_side_keeps_report_error(self):
-        """Its text can quote the files and its dialog takes HTML, so it is escaped here.
-        The quotes are left: the Step 1 dialog encodes this text again."""
+        """Its text can quote the files, and it is left as it is: both pages that show
+        it encode it, once (test_echoed_request_values_are_text). Escaped here as well,
+        the Step 1 dialog showed "&lt;img"."""
         for method in ("pearson", "kendall", "spearman"):
             with self.subTest(method=method):
                 answer = self._failedOnOurSide(method)
@@ -482,8 +483,8 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
                 self.assertEqual(answer.status, 400)
                 self.assertIs(answer.content["extra"]["input_error"], False)
                 self.assertIn("The scoring step failed on our side at miRNA-target pair 1 of 1", message)
-                self.assertNotIn("<img", message)
-                self.assertIn("float: '&lt;img src=x onerror=console.log(1)&gt;'", message)
+                self.assertIn("float: '%s'" % HOSTILE_MIRNA, message)
+                self.assertNotIn("&lt;", message)
 
     def test_stats_that_are_not_there_are_still_a_refusal(self):
         self.assertIsInstance(emptyResultError(None), InputFileError)
@@ -542,7 +543,8 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         util = read(UTIL)
         script = DIALOG_HARNESS % {
             "client": "\n".join(extract_function(util, name, "Util.js") for name in
-                                ("showMessage", "showErrorMessage", "ajaxErrorHandler", "splitServerError")),
+                                ("showMessage", "showErrorMessage", "serverTextAsHtml", "ajaxErrorHandler",
+                                 "splitServerError")),
             "bodies": json.dumps({
                 "hostileRefusal": _answerTo(InputFileError(hostile), userID="17"),
                 "markedUpRefusal": _answerTo(InputFileError(cls.MARKUP), userID="17"),

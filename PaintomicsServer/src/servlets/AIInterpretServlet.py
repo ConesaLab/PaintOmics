@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from src.common.ServerErrorManager import handleException
+from src.common.ServerErrorManager import handleException, quotable
 from src.common.UserSessionManager import UserSessionManager
 from src.common.DAO.AIInterpretDAO import AIInterpretDAO
 from src.common.DAO.AIWalkDAO import AIWalkDAO
@@ -185,8 +185,16 @@ def _requireJobAccess(jobID, userID):
     """
     jobInstance = JobInformationManager().loadJobInstance(jobID)
 
+    # The id is off the request, and these refusals are read two ways: the walk
+    # panel sets them as text, while the compound suggestion routes reach
+    # ajaxErrorHandler, which inserts them as HTML. So the id is repeated only
+    # when it is plain (every real job id is), and left out otherwise. The
+    # client tells these two answers apart by "not found" and "Invalid Job ID".
+    shownJobID = quotable(jobID)
+
     if jobInstance is None:
-        raise UserWarning("Job " + str(jobID) + " was not found.")
+        raise UserWarning(("Job " + shownJobID if shownJobID is not None else "This job")
+                          + " was not found.")
 
     if (str(jobInstance.getUserID()) != 'None'
             and str(jobInstance.getUserID()) != str(userID)
@@ -197,7 +205,8 @@ def _requireJobAccess(jobID, userID):
         # with no account to sign in instead, because its link is how an owner
         # comes back to a job; nobody arrives on these routes from a link, so
         # they say no more than this to anyone.
-        raise UserWarning("Invalid Job ID (" + str(jobID) + ") for current user.")
+        raise UserWarning("Invalid Job ID" + (" (" + shownJobID + ")" if shownJobID is not None else "")
+                          + " for current user.")
 
     return jobInstance
 

@@ -986,13 +986,33 @@ function ajaxErrorHandler(responseObj) {
     }
 
     showErrorMessage("Oops..Internal error!", {
-        message: halves.readable + "</br>" + (serverSide
+        message: serverTextAsHtml(halves.readable) + "</br>" + (serverSide
             ? "This happened on the server, so retrying in the browser will not help. " + adminLink
             : "Try running it in private mode or clear your web cache in your browser.</br>" + adminLink),
         extra: err.extra,
         hidden: halves.technical,
         showButton: true
     });
+}
+
+/*
+ * A server message's readable half, as HTML for a dialog.
+ *
+ * A server message is text, whatever it says. str(exception) can quote anything off
+ * the request or the user's files: an OSError the file name or omic name in its path,
+ * R's output the omic name, a mapper's refusal the organism code, int() the value it
+ * could not read. No server message is written in raw HTML, so escaping each value
+ * where it is raised was never going to be finished, and here it does not have to be:
+ * nothing a message quotes can become an element. [b], [br], [ul] and [li] still
+ * work: showMessage converts them after this.
+ *
+ * Only < and > are encoded, which is what makes an element. & is left alone because
+ * the server does escape the values it repeats on some routes, for the pages that
+ * insert those answers directly: its "&lt;" stays "&lt;" and reads "<", once. Encoding
+ * & as well would put "&lt;" on the screen.
+ */
+function serverTextAsHtml(text) {
+    return String(text).replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /*
@@ -1159,7 +1179,7 @@ function extJSErrorHandler(form, responseObj) {
 
     var halves = splitServerError(err.message);
     showErrorMessage("Oops..Internal error!", {
-        message: halves.readable + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
+        message: serverTextAsHtml(halves.readable) + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
         hidden: halves.technical,
         showButton: true
     });

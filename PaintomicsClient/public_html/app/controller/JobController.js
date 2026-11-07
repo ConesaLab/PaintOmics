@@ -85,6 +85,9 @@ function step1FailureReason(response) {
 	   split UserController and convert-drawer already make. The text is the
 	   user's own identifiers, so it is escaped before the [b]-style markup is
 	   turned into tags: "<NA>" is an id, not an element, and "A&B" stays A&B.
+	   This is the one place it is escaped: a conversion job's answer arrives as
+	   text. A crash of the miRNA scoring step used to arrive escaped already, so
+	   a cell "<x>" of the file read "&lt;x&gt;" here.
 	   The " - " the server puts at the head of a message is a marker, not a
 	   separator: it used to become a line break wherever it appeared, which
 	   split "hsa-miR-1 - 5p" in two. */

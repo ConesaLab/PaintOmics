@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import shutil
+from html import escape
 from src.classes.JobInstances.MOREJob import MOREJob
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
@@ -247,7 +248,9 @@ def engineRefusal(method, engine=None):
     from the port to R, has no meaning with one engine and is gone with it.
     """
     if engineIdFor(method) is None:
-        return "'%s' is not a regulatory model this server offers." % method
+        # `method` is the form's more_method, and STEP1's answer is inserted as
+        # HTML by extJSErrorHandler.
+        return "'%s' is not a regulatory model this server offers." % escape(str(method))
 
     report = describeMOREBackends()
     if report["anyAvailable"]:
@@ -464,12 +467,14 @@ def fromMOREtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
 
     isExampleRequest, scenarioId = ExampleDatasets.scenarioIdFromMode(exampleMode)
     if isExampleRequest is None:
+        # The mode is the URL's own text and extJSErrorHandler inserts this
+        # answer as HTML, as it does the "<dataset-id>" below.
         RESPONSE.setContent({
             "success": False,
-            "message": ("Unrecognised example mode %r for MORE: expected no "
+            "message": ("Unrecognised example mode %s for MORE: expected no "
                         "value for an upload, 'example' for the default "
-                        "dataset, or 'example/<dataset-id>' for a specific one."
-                        % (exampleMode,))})
+                        "dataset, or 'example/&lt;dataset-id&gt;' for a specific one."
+                        % (escape(repr(exampleMode)),))})
         return RESPONSE
 
     try:

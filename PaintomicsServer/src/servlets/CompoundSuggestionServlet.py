@@ -31,6 +31,7 @@ stores a compound selection.
 """
 
 import logging
+from html import escape
 
 from src.common.JobInformationManager import JobInformationManager
 from src.common.PySiQ import JobStatus
@@ -47,7 +48,7 @@ try:
 except ImportError:
     AI_COMPOUND_SUGGESTIONS_ENABLED = True
 
-from src.common.ServerErrorManager import handleException
+from src.common.ServerErrorManager import handleException, quotable
 
 #: Queue ids are namespaced so a suggestion run and the step-2 run it advises
 #: can never collide on the same job.
@@ -130,7 +131,11 @@ def runCompoundSuggestion(jobID):
 
     jobInstance = JobInformationManager().loadJobInstance(jobID)
     if jobInstance is None:
-        raise UserWarning("Job " + str(jobID) + " was not found at database.")
+        # Removed while it waited on the queue. The id is the request's; worded
+        # as _requireJobAccess words it.
+        shownJobID = quotable(jobID)
+        raise UserWarning(("Job " + shownJobID if shownJobID is not None else "This job")
+                          + " was not found at database.")
 
     # Reopened jobs hand back plain Feature objects with no accessors;
     # see coerceCompoundSets for why that is normalised here.
@@ -261,8 +266,10 @@ def compoundSuggestionStatus(REQUEST, RESPONSE, QUEUE_INSTANCE):
             message = QUEUE_INSTANCE.get_error_message(queueID) or "unknown error"
             QUEUE_INSTANCE.get_result(queueID, remove=True)
             logging.warning("COMPOUND SUGGESTION - job %s failed: %s", jobID, message)
+            # The worker's exception text, which can quote the job's compound
+            # names; the page shows errorMessage through showErrorMessage, as HTML.
             RESPONSE.setContent({"success": False, "jobID": jobID, "status": "failed",
-                                 "errorMessage": "AI compound selection failed: " + str(message)})
+                                 "errorMessage": "AI compound selection failed: " + escape(str(message))})
         elif status == JobStatus.NOT_QUEUED:
             RESPONSE.setContent({"success": True, "jobID": jobID, "status": "not_queued"})
         else:
