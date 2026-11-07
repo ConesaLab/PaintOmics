@@ -336,10 +336,9 @@ function PA_AIInterpretView() {
         } else if (status === "error") {
             $progress.show().removeClass("is-done is-idle").addClass("is-error");
             this.$root.find(".ai-progress-fill").css("width", "100%");
-            this.$root.find(".ai-progress-detail").html(
-                (detail || "Unknown error") +
-                ' <button class="ai-retry-btn">Retry</button>'
-            );
+            // Text: `detail` can be a server message, which quotes what it likes.
+            this.$root.find(".ai-progress-detail").text(detail || "Unknown error")
+                .append(' <button class="ai-retry-btn">Retry</button>');
             $fab.removeClass("is-processing");
             $badge.css("background", "#c62828").html("!").show();
             // Bind retry

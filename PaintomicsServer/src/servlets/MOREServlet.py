@@ -987,9 +987,8 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
 
     except Exception as ex:
         jobInstance.cleanDirectories(remove_output=True)
-        # Ensure we capture as much detail as possible in the response. Text, not
-        # HTML (see Bed2GenesServlet): it names the omics and files of the form.
-        handleException(RESPONSE, ex, __file__, "fromMOREtoGenes_STEP2", plainText=True)
+        # Ensure we capture as much detail as possible in the response.
+        handleException(RESPONSE, ex, __file__, "fromMOREtoGenes_STEP2")
 
     finally:
         return RESPONSE

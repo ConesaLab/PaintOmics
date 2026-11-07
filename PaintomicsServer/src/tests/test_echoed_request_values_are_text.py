@@ -15,15 +15,18 @@ into the page as HTML:
 - the hub panel's errors and the cluster number of /pa_get_clusters, which
   int() quotes ("invalid literal for int() with base 10: '...'").
 
-A value goes one of three ways. Where every page that shows the message inserts it
-as HTML, the server escapes it, as #218 did. Where one page sets it as text and
-another inserts it as HTML (the AI refusals; the example dataset id, which the
-experiment design note shows as text), escaping would show "&lt;" on the first, so
-the value is repeated only when it is letters, digits, '.', '_' and '-', as every
-real id is, and left out otherwise. And a converter's answer (regions, miRNA, MORE
-to genes) is marked as text with extra.plain_text and escaped by nobody but the
-page: Step 1 encodes it where it shows it, and the server escaped a crash of the
-miRNA scoring step as well, so Step 1 showed "&lt;" where the file had "<".
+Escaping those could never be finished, because str(exception) goes out as it is and
+can quote anything: an OSError the uploaded file name or the omic name in its path, a
+failed R step the omic name, the identifier mapper the organism code. So the two
+"Oops..Internal error!" dialogs treat every server message as text, and these tests
+give them the server's real answers. The server still escapes the values above, as
+#218 did, for the pages that insert an answer directly and for a page still open from
+before this; "&lt;" arriving at a dialog reads "<", once. Where a message is also set
+as text somewhere (the AI refusals; the example dataset id, which the experiment
+design note shows as text), escaping would show "&lt;" there, so the value is repeated
+only when it is letters, digits, '.', '_' and '-', as every real id is, and left out
+otherwise. Step 1 encodes a converter's answer itself, and the server escaped a crash
+of the miRNA scoring step as well, so it showed "&lt;" where the file had "<".
 
 The client half runs the real functions under node on the server's real answers;
 the omic name, which is raw in Step 2's cluster setting, is checked the same way.
@@ -40,6 +43,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from html import escape
 from unittest import mock
 from urllib.parse import quote
@@ -51,35 +55,39 @@ from src import paintomicsserver as server
 from src.classes.JobInstances import PathwayAcquisitionJob as jobModule
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
 from src.common import ExampleDatasets
+from src.common import FeatureNamesToKeggIDsMapper as mapperModule
 from src.common.PySiQ import JobStatus
-from src.common.ServerErrorManager import InputFileError, handleException, quotable
+from src.common.ServerErrorManager import handleException, quotable
 from src.conf.serverconf import SERVER_SUBDOMAIN
 from src.paintomicsserver import Response
 from src.servlets import AIInterpretServlet
 from src.servlets import Bed2GenesServlet
 from src.servlets import CompoundSuggestionServlet
+from src.servlets import DataManagementServlet
 from src.servlets import MiRNA2GenesServlet
 from src.servlets import MOREServlet
 from src.servlets import PathwayAcquisitionServlet
-from src.tests.test_input_file_refusal_is_not_an_internal_error import _miRNAToolAnswer
+from src.tests.test_input_file_refusal_is_not_an_internal_error import HOSTILE_MIRNA, _failedOnOurSideAnswer
 from src.tests.test_status_poll_retries_unreadable_answers import UTIL, extract_function, read
 from src.tests.test_step1_invalid_form_names_the_field import extract_block
 
 CLIENT_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", "PaintomicsClient", "public_html"))
 JOB_CONTROLLER_JS = os.path.join(CLIENT_ROOT, "app", "controller", "JobController.js")
 STEP2_VIEWS_JS = os.path.join(CLIENT_ROOT, "app", "view", "PathwayAcquisitionViews", "PA_Step2Views.js")
+AI_VIEW_JS = os.path.join(CLIENT_ROOT, "app", "view", "PathwayAcquisitionViews", "PA_AIInterpretView.js")
 
 HOSTILE = "<img src=x onerror=console.log(1)>"
 # The same value as the two encoders on the page write it.
 STEP1_ENCODED = "&lt;img src=x onerror=console.log(1)&gt;"      # step1FailureReason: & < >
 SERVER_ESCAPED = escape(HOSTILE)                                # html.escape, the server
 assert SERVER_ESCAPED == STEP1_ENCODED                          # no quote in HOSTILE
-
-# A target named after the gene file's header row: the scoring step reads that
-# row's cell as a number and crashes, quoting it.
-CRASH_ROWS = {"values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"]],
-              "targets": [["mmu-miR-1", "#gene"]],
-              "genes": [["#gene", HOSTILE, "C2"], ["G1", "1.0", "2.0"]]}
+# A real value that holds no space and no dot gets past Mongo's database name check.
+HOSTILE_ORGANISM = "<img\tsrc=x\tonerror=console.log(1)>"
+# Too long for the file system, so saving it raises an OSError that quotes it.
+HOSTILE_FILE_NAME = HOSTILE + "a" * 300 + ".tab"
+# _failedOnOurSideAnswer is the real miRNA tool with a scoring step that raises
+# "could not convert string to float: '<HOSTILE_MIRNA>'", which it quotes.
+assert HOSTILE_MIRNA == HOSTILE
 
 HAS_NODE = shutil.which("node") is not None
 
@@ -202,7 +210,6 @@ class HandMadeRequestsTest(unittest.TestCase):
         self.assertIn("None of the requested pathways belong to this job: %s, mmu00010." % SERVER_ESCAPED,
                       body["message"])
         self.assertNoMarkup(body["message"])
-        self.assertIs(body["extra"]["plain_text"], False, "an HTML answer whose values the server escaped")
 
     def test_the_name_of_an_uploaded_part_is_escaped(self):
         """saveFiles names the form field it is missing after the part's own name."""
@@ -310,47 +317,137 @@ class TheCompoundSelectionTest(unittest.TestCase):
 
 
 # ----------------------------------------------------------------------------
-# A converter's answer is text, escaped once, by the page
+# Real answers that quote what they were given, as the dialogs receive them
 # ----------------------------------------------------------------------------
 
-def _answer(exception, **kwargs):
-    response = _Response()
+def _metagenesFailure():
+    """What the status poll delivers when R fails on an omic: the real step, R's run mocked."""
+    root = tempfile.mkdtemp(prefix="paintomics_echo_metagenes_") + "/"
     try:
-        raise exception
-    except Exception as ex:
-        handleException(response, ex, "S.py", "f", **kwargs)
+        job = PathwayAcquisitionJob("echoJob04", None, root)
+        job.setOrganism("mmu")
+        job.setDatabases(["KEGG"])
+        job.addGeneBasedInputOmic({"omicName": HOSTILE})
+        os.makedirs(job.getOutputDir(), exist_ok=True)
+        os.makedirs(job.getTemporalDir(), exist_ok=True)
+        with zipfile.ZipFile(job.getOutputDir() + "/mapping_results_echoJob04.zip", "w") as archive:
+            archive.writestr("matched-marker", "")
+        with open(job.getTemporalDir() + "/" + HOSTILE + "_matched.txt", "w", encoding="utf-8") as handle:
+            handle.write("a\tA\t1\tKEGG\t1.0\t1\n")
+        failed = {(HOSTILE, "KEGG"): (1, ("cannot open file '%s_matched.txt'" % HOSTILE).encode())}
+        response = _Response()
+        with mock.patch.object(jobModule, "_runMetagenesScripts", return_value=failed), \
+                mock.patch.object(jobModule, "JobProgress", mock.MagicMock()):
+            try:
+                job.generateMetagenesList("/x/", [])
+            except Exception as ex:
+                handleException(response, ex, "PathwayAcquisitionServlet.py", "pathwayAcquisitionStep2_PART2")
+        return response.content
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _organismRefusal():
+    """The identifier mapper's real refusal of an organism code off the form."""
+    response = _Response()
+    db = mock.MagicMock()
+    db.dbname.find_one.return_value = None
+    with mock.patch.object(mapperModule, "getDatabasesByOrganismCode",
+                           return_value=({"KEGG": "kegg_id"}, {"KEGG": "kegg_symbol"})):
+        try:
+            mapperModule.resolveDatabaseIds(HOSTILE_ORGANISM, ["KEGG"], db=db)
+        except Exception as ex:
+            handleException(response, ex, "PathwayAcquisitionServlet.py", "pathwayAcquisitionStep1_PART2")
     return response.content
 
 
-class AConverterAnswerIsTextTest(unittest.TestCase):
+def _fileNameAnswers():
+    """The answer each upload route gives for a file name too long to save."""
+    tmp = tempfile.mkdtemp(prefix="paintomics_echo_names_") + "/"
+    patches = [mock.patch.object(module, name, value) for module, name, value in (
+        (PathwayAcquisitionServlet, "UserSessionManager", mock.MagicMock()),
+        (Bed2GenesServlet, "UserSessionManager", mock.MagicMock()),
+        (MiRNA2GenesServlet, "UserSessionManager", mock.MagicMock()),
+        (MOREServlet, "UserSessionManager", mock.MagicMock()),
+        (DataManagementServlet, "UserSessionManager", mock.MagicMock()),
+        (server, "CLIENT_TMP_DIR", tmp),
+        (PathwayAcquisitionServlet, "CLIENT_TMP_DIR", tmp),
+        (Bed2GenesServlet, "CLIENT_TMP_DIR", tmp),
+        (MiRNA2GenesServlet, "CLIENT_TMP_DIR", tmp),
+        (MOREServlet, "CLIENT_TMP_DIR", tmp),
+        (PathwayAcquisitionServlet, "DatabaseAvailability", mock.MagicMock(
+            resolveDatabases=mock.MagicMock(return_value=["KEGG"]))),
+        (MOREServlet, "moreBinary", mock.MagicMock(return_value="/x/more-rs")),
+    )]
+    for patch in patches:
+        patch.start()
+    try:
+        client = _Routes.get().app.test_client()
+        client.set_cookie("userID", "1")
+        step1 = {"specie": "mmu", "omic0_omic_name": "Gene expression", "omic0_origin": "client",
+                 "omic0_file_type": "Gene expression file", "omic0_match_type": "gene",
+                 "omic0_relevant_origin": "none"}
+        converter = dict(step1, name_prefix="omic0")
+        answers = {}
+        for name, route, fields, part in (
+                ("nameStep1", "/pa_step1", step1, "omic0_file"),
+                ("nameRegions", "/dm_fromBEDtoGenes", converter, "omic0_file"),
+                ("nameMiRNA", "/dm_fromMiRNAtoGenes", converter, "omic0_file"),
+                ("nameMORE", "/dm_fromMOREtoGenes", {"more_method": "PLS1", "omic_name_0": "x"}, "rnaseqaux_file"),
+                # My Data's upload, whose failure extJSErrorHandler shows.
+                ("nameUpload", "/dm_upload_file", {}, "file")):
+            data = dict(fields)
+            data[part] = (io.BytesIO(b"#id\tc1\nA\t1\n"), HOSTILE_FILE_NAME)
+            answer = client.post(SERVER_SUBDOMAIN + route, data=data, content_type="multipart/form-data")
+            answers[name] = json.loads(answer.get_data(as_text=True))
+        return answers
+    finally:
+        for patch in patches:
+            patch.stop()
+        shutil.rmtree(tmp, ignore_errors=True)
 
-    def test_the_flag(self):
-        self.assertIs(_answer(InputFileError("x"))["extra"]["plain_text"], True)
-        self.assertIs(_answer(ValueError("x"))["extra"]["plain_text"], False)
-        self.assertIs(_answer(ValueError("x"), plainText=True)["extra"]["plain_text"], True)
 
-    def test_every_converter_marks_its_answer(self):
-        bed = Response()
-        job = mock.MagicMock()
-        job.validateInput.side_effect = Exception("Distance " + HOSTILE)
-        Bed2GenesServlet.fromBEDtoGenes_STEP2(job, None, False, bed)
-        mirna = Response()
-        MiRNA2GenesServlet.fromMiRNAtoGenes_STEP2(job, None, False, mirna, {})
-        more = Response()
-        job.targetExpressionFile = None
-        MOREServlet.fromMOREtoGenes_STEP2(job, None, more, {})
-        for name, answer in (("regions", bed), ("miRNA", mirna), ("MORE", more)):
-            with self.subTest(converter=name):
-                self.assertIs(answer.content["success"], False)
-                self.assertIs(answer.content["extra"]["plain_text"], True)
-        self.assertIn("Distance " + HOSTILE, bed.content["message"], "the text is left to the page")
+def _downloadOffsetAnswer():
+    """/dm_downloadFile with an offset that is not a number: int() quotes it.
 
-    def test_a_crash_of_the_mirna_scoring_step_is_not_escaped_on_the_server(self):
-        """The page encodes it, once: Step 1 always has, and the tool page does by the flag."""
-        answer = _miRNAToolAnswer(CRASH_ROWS)
+    The page always sends a number (offset | 0), but viewFilesHandler hands any
+    failure of this route to ajaxErrorHandler, so a hand-made one reaches a dialog.
+    """
+    with mock.patch.object(DataManagementServlet, "UserSessionManager", mock.MagicMock()):
+        client = _Routes.get().app.test_client()
+        client.set_cookie("userID", "1")
+        answer = client.get(SERVER_SUBDOMAIN + "/dm_downloadFile",
+                            query_string={"fileName": "a.tab", "fileType": "input", "offset": HOSTILE})
+    return json.loads(answer.get_data(as_text=True))
+
+
+class TheServerSendsWhatItWasGivenTest(unittest.TestCase):
+    """That these answers do quote the value is what makes the dialog tests below mean
+    something: a route that stopped quoting it would pass them for the wrong reason."""
+
+    def test_a_failed_r_step_quotes_the_omic_name(self):
+        body = _metagenesFailure()
+        self.assertIn("Metagenes generation failed for omic '%s'" % HOSTILE, body["message"])
+
+    def test_the_mapper_quotes_the_organism(self):
+        self.assertIn("[b]%s cannot translate identifiers" % HOSTILE_ORGANISM, _organismRefusal()["message"])
+
+    def test_an_oserror_quotes_the_file_name(self):
+        answers = _fileNameAnswers()
+        self.assertEqual(sorted(answers), ["nameMORE", "nameMiRNA", "nameRegions", "nameStep1", "nameUpload"])
+        for name, body in answers.items():
+            with self.subTest(route=name):
+                self.assertIs(body["success"], False)
+                self.assertIn(HOSTILE, body["message"])
+
+    def test_int_quotes_a_download_offset(self):
+        self.assertIn("invalid literal for int() with base 10: '%s'" % HOSTILE, _downloadOffsetAnswer()["message"])
+
+    def test_a_failure_of_the_mirna_scoring_step_is_not_escaped_on_the_server(self):
+        """The page encodes it, once. Escaped here as well, Step 1 showed "&lt;"."""
+        answer = _failedOnOurSideAnswer()
         self.assertEqual(answer.status, 400)
-        self.assertIs(answer.content["extra"]["input_error"], False, "a crash keeps Report error")
-        self.assertIs(answer.content["extra"]["plain_text"], True)
+        self.assertIs(answer.content["extra"]["input_error"], False, "a failure of ours keeps Report error")
         self.assertIn("could not convert string to float: '%s'" % HOSTILE, answer.content["message"])
         self.assertNotIn("&lt;", answer.content["message"])
 
@@ -454,11 +551,18 @@ class ThePageShowsItAsTextTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         cls.bodies = {
-            "mirnaCrash": _miRNAToolAnswer(CRASH_ROWS).content,
+            "mirnaCrash": _failedOnOurSideAnswer().content,
             "bedFormValue": bed.content,
             "bedMode": mode.content,
             "moreMode": more.content,
+            "metagenes": _metagenesFailure(),
+            "organism": _organismRefusal(),
+            "downloadOffset": _downloadOffsetAnswer(),
+            # /check_job_status for a job the queue itself saw fail: no "extra".
+            "queueFailure": {"success": False, "status": "JobStatus.FAILED", "message": "boom " + HOSTILE},
+            "ampersand": {"success": False, "message": "A&B and x < y"},
         }
+        cls.bodies.update(_fileNameAnswers())
         util = read(UTIL)
         cls.results = _node(DIALOG_HARNESS % {
             "client": "\n".join(extract_function(util, name, "Util.js") for name in
@@ -472,12 +576,49 @@ class ThePageShowsItAsTextTest(unittest.TestCase):
         self.assertNotIn("<img", body)
         self.assertNotIn("&amp;lt;", body, "encoded twice: the reader sees &lt;")
 
-    def test_a_crash_of_the_mirna_tool_is_text_on_its_own_page(self):
+    def test_a_failure_of_the_mirna_tool_is_text_on_its_own_page(self):
         for how in ("ajax", "extjs"):
             with self.subTest(handler=how):
                 result = self.results["mirnaCrash." + how]
                 self.assertIn("Oops..Internal error!", result["title"])
-                self.assertTextOnce(result["body"], "float: &#39;" + STEP1_ENCODED + "&#39;")
+                self.assertTextOnce(result["body"], "float: '" + STEP1_ENCODED + "'")
+
+    def test_a_failed_r_step_names_the_omic_as_text(self):
+        """One click after Step 2's label: "Next step" with the omic so named."""
+        for how in ("ajax", "extjs"):
+            with self.subTest(handler=how):
+                self.assertTextOnce(self.results["metagenes." + how]["body"],
+                                    "Metagenes generation failed for omic '" + STEP1_ENCODED + "'")
+
+    def test_an_organism_code_off_the_form_is_text(self):
+        encoded = HOSTILE_ORGANISM.replace("<", "&lt;").replace(">", "&gt;")
+        for how in ("ajax", "extjs"):
+            with self.subTest(handler=how):
+                body = self.results["organism." + how]["body"]
+                self.assertTextOnce(body, "<b>" + encoded + " cannot translate identifiers")
+                self.assertIn("</b>", body, "the message's own emphasis still works")
+
+    def test_a_file_name_an_oserror_quotes_is_text_on_every_route(self):
+        for name in ("nameStep1", "nameRegions", "nameMiRNA", "nameMORE", "nameUpload"):
+            for how in ("ajax", "extjs"):
+                with self.subTest(route=name, handler=how):
+                    self.assertTextOnce(self.results[name + "." + how]["body"], STEP1_ENCODED)
+
+    def test_a_download_offset_int_quotes_is_text(self):
+        """viewFilesHandler's .fail(ajaxErrorHandler)."""
+        self.assertTextOnce(self.results["downloadOffset.ajax"]["body"],
+                            "invalid literal for int() with base 10: '" + STEP1_ENCODED + "'")
+
+    def test_a_job_the_queue_saw_fail_is_text(self):
+        """Its answer has no "extra", so a flag on the answer could not have covered it."""
+        for how in ("ajax", "extjs"):
+            with self.subTest(handler=how):
+                self.assertTextOnce(self.results["queueFailure." + how]["body"], "boom " + STEP1_ENCODED)
+
+    def test_an_ampersand_and_a_lone_bracket_read_as_written(self):
+        for how in ("ajax", "extjs"):
+            with self.subTest(handler=how):
+                self.assertIn("A&B and x &lt; y", self.results["ampersand." + how]["body"])
 
     def test_a_form_value_a_converter_repeats_is_text_on_its_page(self):
         """The regions tool page read Distance and report raw from the answer."""
@@ -495,15 +636,57 @@ class ThePageShowsItAsTextTest(unittest.TestCase):
                 self.assertIn("'example/&lt;dataset-id&gt;'", body)
 
 
+AI_PANEL_HARNESS = r"""
+/* What each element of the panel was given, by its selector. */
+const shown = {};
+function element(selector) {
+    const record = function (how) {
+        return function (value) { (shown[selector] = shown[selector] || {})[how] = value; return self; };
+    };
+    const self = {
+        html: record("html"), text: record("text"), append: record("append"),
+        css() { return self; }, show() { return self; }, hide() { return self; },
+        addClass() { return self; }, removeClass() { return self; }, on() { return self; },
+        prop() { return self; }, attr() { return self; },
+        find(inner) { return element(inner); }
+    };
+    return self;
+}
+const CHAT_PLACEHOLDER = "ask", CHAT_WAIT_PLACEHOLDER = "wait";
+const view = {$root: element("root"), _renderActivity() {}, isWaitingResponse: false};
+(function () {
+    %(update)s;
+}).call(view);
+view.updateProgress("error", 100, %(detail)s);
+process.stdout.write(JSON.stringify(shown[".ai-progress-detail"] || {}));
+"""
+
+
+@unittest.skipUnless(HAS_NODE, "node is not installed")
+class TheAIPanelShowsAFailureAsTextTest(unittest.TestCase):
+    """Step 3 hands updateProgress a refusal of /ai_interpret_initiate as it came."""
+
+    def test_the_detail_is_text_and_the_button_is_still_a_button(self):
+        source = read(AI_VIEW_JS)
+        result = _node(AI_PANEL_HARNESS % {
+            "update": extract_block(source, "this.updateProgress = function(status, percent, detail, trace, toolCalls)",
+                                    "PA_AIInterpretView.js"),
+            "detail": json.dumps("no such job " + HOSTILE),
+        })
+        self.assertNotIn("<img", result.get("html", ""), "the detail went in as HTML")
+        self.assertEqual(result.get("text"), "no such job " + HOSTILE)
+        self.assertIn('<button class="ai-retry-btn">Retry</button>', result.get("append", ""))
+
+
 @unittest.skipUnless(HAS_NODE, "node is not installed")
 class Step1EscapesItOnceTest(unittest.TestCase):
     """A converter's answer in the Step 1 preparation dialog (step1FailureReason)."""
 
-    def test_a_crash_of_the_mirna_scoring_step_reads_as_the_file_had_it(self):
+    def test_a_failure_of_the_mirna_scoring_step_reads_as_the_file_had_it(self):
         source = read(JOB_CONTROLLER_JS)
         results = _node(STEP1_HARNESS % {
             "client": extract_function(source, "step1FailureReason", "JobController.js"),
-            "answers": json.dumps({"mirnaCrash": _miRNAToolAnswer(CRASH_ROWS).content}),
+            "answers": json.dumps({"mirnaCrash": _failedOnOurSideAnswer().content}),
         })
         text = results["mirnaCrash"]
         self.assertIn("could not convert string to float: '" + STEP1_ENCODED + "'", text)

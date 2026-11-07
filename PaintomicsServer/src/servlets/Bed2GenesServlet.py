@@ -253,10 +253,7 @@ def fromBEDtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE):
         #****************************************************************
         jobInstance.cleanDirectories(remove_output=True)
 
-        # Text, not HTML: Step 1 encodes a conversion job's answer where it shows
-        # it, and the tool page does too because of this flag. It can quote the
-        # form's own fields and the user's file, so it is escaped once, there.
-        handleException(RESPONSE, ex, __file__ , "fromBEDtoGenes_STEP2", plainText=True)
+        handleException(RESPONSE, ex, __file__ , "fromBEDtoGenes_STEP2")
 
     finally:
         return RESPONSE

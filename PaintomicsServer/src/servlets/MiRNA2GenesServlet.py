@@ -241,9 +241,7 @@ def fromMiRNAtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formField
         #****************************************************************
         jobInstance.cleanDirectories(remove_output=True)
 
-        # Text, not HTML: see Bed2GenesServlet. A crash of the scoring step
-        # quotes the cell of the file it could not read.
-        handleException(RESPONSE, ex, __file__ , "fromMiRNAtoGenes_STEP2", plainText=True)
+        handleException(RESPONSE, ex, __file__ , "fromMiRNAtoGenes_STEP2")
 
     finally:
         return RESPONSE
