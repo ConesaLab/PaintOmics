@@ -119,6 +119,16 @@ GATES = ("artifact", "title", "direction", "context", "anchor")
 # water, NAD; artifact_gate's currency_legs) is a definite artifact, not a
 # low-power statistic, and hides a pathway walk's text as it always did.
 ADVISORY_ON_PATHWAY = ("artifact",)
+# Told to a job on an organism with nothing to draw a graph from. All five species
+# AdminTools/customSpeciesInstaller.py has put on paintomics.org (nben, thaz, tobl,
+# paxi, vsub; 2026-11-06) are like that for good, and were told their identifiers
+# "did not map". The check reads the organism's files and never the job, and a
+# KEGG-built species whose kgml directory came up empty reads the same as those
+# five, so these words may not say how the species was added, nor that this job's
+# genes mapped: a job whose genes mapped nothing, or that has none, reads them too.
+NO_GRAPH_MESSAGE = ("This organism has no pathway interaction graph installed, so the AI walk is not available "
+                    "for it. That comes from the organism, not from your identifiers. Pathway enrichment and "
+                    "the pathway maps are not affected.")
 
 
 def narrate_reserve(n_statements):
@@ -379,6 +389,14 @@ def resolve_scope(network, scope):
                     "OmniPath pathways carry edges; MapMan bins do not)." % wanted)
 
 
+def no_graph_reason(organism, data_dir=None, use_mongo=True):
+    """What to tell a job on an organism with nothing to draw a graph from, or
+    None for an organism a walk can run on (see net_mod.has_graph_source)."""
+    if net_mod.has_graph_source(organism, data_dir or KEGG_DATA_DIR, mongo_for if use_mongo else None):
+        return None
+    return NO_GRAPH_MESSAGE
+
+
 def org_dir_for(job, data_dir=None):
     return os.path.join(data_dir or KEGG_DATA_DIR, "current", job.getOrganism())
 
@@ -547,6 +565,11 @@ def run(job, job_id, scope, policy="greedy", data_dir=None, writer=True, use_mon
         except Exception:                                             # noqa: BLE001
             logger.warning("[walker] progress callback failed", exc_info=True)
 
+    # Before the design card: on a model walk that is a call to the gateway,
+    # with the user's design in it, for a walk that cannot happen.
+    reason = no_graph_reason(job.getOrganism(), data_dir, use_mongo)
+    if reason:
+        raise WalkError(reason)
     timings = {}
     checks = {"gates": {}}
     client = llm_client() if policy == "model" else None

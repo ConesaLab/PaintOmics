@@ -55,6 +55,13 @@ class _Job:
     def getAllowSharing(self):
         return False
 
+    def getOrganism(self):
+        # The route asks whether the organism has a graph to walk before it reads
+        # the walk. A code nothing is installed under has no install to judge, so
+        # the answer is yes (network.has_graph_source) and the trace is reached.
+        # Not "tst": that is a real KEGG organism, installed on a full mirror.
+        return "no-such-organism"
+
 
 class _Request:
     cookies = {"userID": "u", "sessionToken": "t"}

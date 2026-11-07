@@ -1200,46 +1200,33 @@ function JobController() {
 	************************************************************/
 	this.step3GetPathwaysNetworkDataHandler = function (jobView) {
 		var me = this;
+		/* Declared with a success callback only, a failed answer ran nothing: no
+		   generateNetwork, and the card said "Building network..." under its
+		   spinner for as long as the tab stayed open. Every species installed by
+		   customSpeciesInstaller.py answers 404 here, on every job. */
+		var fetchNetwork = function(url) {
+			$.getJSON(url + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
+				// Set the id key as organism
+				pathwaysNetworkData.id = jobView.getModel().getOrganism();
+				pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
+
+				me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
+				jobView.generateNetwork(pathwaysNetworkData);
+			}).fail(function (jqXHR) {
+				jobView.showNetworkFailure(jqXHR.status);
+			});
+		};
 		// IndexDB has an async nature so we need to provide a callback
 		var callback = function(networkData) {
 			// Make sure that the time
 			if (jobView.database == "Reactome") {
-				$.getJSON(SERVER_URL_GET_PATHWAY_NETWORK_REACTOME + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
-					// Set the id key as organism
-					pathwaysNetworkData.id = jobView.getModel().getOrganism();
-					pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
-
-					me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
-					jobView.generateNetwork(pathwaysNetworkData);
-				});
+				fetchNetwork(SERVER_URL_GET_PATHWAY_NETWORK_REACTOME);
 			} else if (jobView.database == "KEGG") {
-				$.getJSON(SERVER_URL_GET_PATHWAY_NETWORK + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
-					// Set the id key as organism
-					pathwaysNetworkData.id = jobView.getModel().getOrganism();
-					pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
-
-					me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
-					jobView.generateNetwork(pathwaysNetworkData);
-				});
+				fetchNetwork(SERVER_URL_GET_PATHWAY_NETWORK);
 			} else if (jobView.database == "MapMan") {
-			    $.getJSON(SERVER_URL_GET_PATHWAY_NETWORK_MAPMAN + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
-					// Set the id key as organism
-					pathwaysNetworkData.id = jobView.getModel().getOrganism();
-					pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
-
-					me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
-					jobView.generateNetwork(pathwaysNetworkData);
-				});
-
+				fetchNetwork(SERVER_URL_GET_PATHWAY_NETWORK_MAPMAN);
 			} else if (jobView.database == "OmniPath") {
-			    $.getJSON(SERVER_URL_GET_PATHWAY_NETWORK_OMNIPATH + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
-					pathwaysNetworkData.id = jobView.getModel().getOrganism();
-					pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
-
-					me.updateStoredApplicationDataIndexDB("networks", pathwaysNetworkData);
-					jobView.generateNetwork(pathwaysNetworkData);
-				});
-
+				fetchNetwork(SERVER_URL_GET_PATHWAY_NETWORK_OMNIPATH);
 			} else {
 				/* A source with no network file reached this branch silently and left
 				   the tab spinning forever, which reads as a broken view rather than

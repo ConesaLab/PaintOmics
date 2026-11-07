@@ -256,6 +256,11 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
                 "analysis with 'Enable AI pathway interpretation' ticked if you "
                 "want its values sent to the external AI service.")
 
+        unavailable = _walkUnavailable(jobInstance, jobID, INTERPRETATION_SCOPE)
+        if unavailable:
+            RESPONSE.setContent(unavailable)
+            return RESPONSE
+
         restart = str(formFields.get("restart", "")).lower() in ("1", "true", "yes")
         if restart:
             _requireRewriteRight(jobInstance, userID)
@@ -279,6 +284,21 @@ def aiInterpretInitiate(REQUEST, RESPONSE, QUEUE_INSTANCE):
 # walk (Step 4's Walk column) is scoped to one pathway and does not replace it.
 INTERPRETATION_SCOPE = "network"
 _TRACE_LEGS = 12
+
+
+def _walkUnavailable(jobInstance, jobID, scope):
+    """The answer for a job whose organism has no graph to walk, or None.
+
+    Asked before a walk is filed, so none takes a queue slot and a gateway call
+    only to fail, and before a stored walk is read, so a walk that failed on
+    such an organism reads the same as one that never started. Its own status,
+    not "error": the page offers Retry on an error, and no retry can help.
+    """
+    reason = walk_service.no_graph_reason(jobInstance.getOrganism())
+    if reason is None:
+        return None
+    return {"success": True, "jobID": jobID, "scope": scope, "status": "unavailable",
+            "percent": 100, "detail": reason}
 
 
 def _walkTrace(doc):
@@ -311,7 +331,12 @@ def aiInterpretStatus(REQUEST, RESPONSE, QUEUE_INSTANCE=None):
         # Progress is thin, but it confirms a job id is real and says whether
         # someone is interpreting it; the client polls every 3 s, so it is also
         # the cheapest oracle for guessing ids.
-        _requireJobAccess(jobID, userID)
+        jobInstance = _requireJobAccess(jobID, userID)
+
+        unavailable = _walkUnavailable(jobInstance, jobID, INTERPRETATION_SCOPE)
+        if unavailable:
+            RESPONSE.setContent(unavailable)
+            return RESPONSE
 
         dao = AIWalkDAO()
         doc = dao.find(jobID, INTERPRETATION_SCOPE)
@@ -959,6 +984,11 @@ def aiWalkStart(REQUEST, RESPONSE, QUEUE_INSTANCE):
                 "AI interpretation was not enabled for this job, so nothing "
                 "about it can be sent to the external AI service.")
 
+        unavailable = _walkUnavailable(jobInstance, jobID, scope)
+        if unavailable:
+            RESPONSE.setContent(unavailable)
+            return RESPONSE
+
         restart = str(formFields.get("restart", "")).lower() in ("1", "true", "yes")
         if restart or card is not None:
             _requireRewriteRight(jobInstance, userID)
@@ -997,6 +1027,11 @@ def aiWalkStatus(REQUEST, RESPONSE, QUEUE_INSTANCE):
             raise UserWarning(str(ex))
 
         jobInstance = _requireJobAccess(jobID, userID)
+
+        unavailable = _walkUnavailable(jobInstance, jobID, scope)
+        if unavailable:
+            RESPONSE.setContent(unavailable)
+            return RESPONSE
 
         dao = AIWalkDAO()
         doc = dao.find(jobID, scope)

@@ -877,9 +877,9 @@ function PA_Step3JobView() {
 	// was reported. A run polls every 3s for 5-15 minutes, so one blip (a
 	// deploy, a sleep/wake, a VPN reconnect) was enough to trigger it.
 	//
-	// Only done/error/cancelled end the chain now. A transport failure backs
-	// off so a server that is down is not hammered, and the normal cadence
-	// returns as soon as it answers again.
+	// Only done/error/cancelled/unavailable end the chain now. A transport
+	// failure backs off so a server that is down is not hammered, and the
+	// normal cadence returns as soon as it answers again.
 	//
 	// Two kinds of failure, two rules. A request that got NO READABLE ANSWER
 	// -- nginx's 502/504 page, an empty body, this request's own timeout --
@@ -959,7 +959,10 @@ function PA_Step3JobView() {
 					// until someone presses Start, which polls again itself.
 					return;
 				}
-				if (r.status !== "done" && r.status !== "error" && r.status !== "cancelled") {
+				// "unavailable": the organism has no graph to walk
+				// (AIInterpretServlet._walkUnavailable). No later answer differs.
+				if (r.status !== "done" && r.status !== "error" && r.status !== "cancelled" &&
+				    r.status !== "unavailable") {
 					// A job with no walk yet is asked about less often: its walk
 					// starts when the Step 2 request lands or the user presses Start.
 					schedule(r.status === "not_started" ? AI_POLL_INTERVAL * 5 : AI_POLL_INTERVAL);
@@ -2373,7 +2376,12 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		/********************************************************/
 		/* STEP 0. CLEAN PREVIOUS NETWORK                       */
 		/********************************************************/
-		$("#pathwayNetworkWaitBox_" + me.dbid).fadeIn();
+		/* The wording and the tools come back here because a failed answer
+		   (showNetworkFailure) may have replaced them, and a later Apply can
+		   still bring the network. */
+		$("#pathwayNetworkWaitBox_" + me.dbid).html('<i class="fa fa-cog fa-spin"></i> Building network...').fadeIn();
+		$("#step3-network-subtitle_" + me.dbid).show();
+		me.showNetworkTools(true);
 
 		//FORCE STOPPING OF PLUGIN ALWAYS
 		sigma.layouts.killForceLink();
@@ -3006,6 +3014,75 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	};
 
 	/**
+	* The card when the network did not arrive: what is true, and no spinner.
+	*
+	* A 404 means no network file is there now. A species installed by
+	* customSpeciesInstaller.py never has one, and a normal species has none while
+	* a reinstall has it away (DBManager builds it after promotion), so the card
+	* says none is available, which holds in both, and not that none exists.
+	* Anything else (a 500, a dropped connection, a body that is not JSON) is the
+	* server or the wire, on a species that may well have a network, and reloading
+	* is the advice.
+	*
+	* A refresh that fails over a graph already drawn leaves that graph in place:
+	* it is still this job's, and only the status line changes. There every failed
+	* answer, a 404 too, reads "could not be loaded", because "no network is
+	* available" written directly above one would be false.
+	*
+	* @chainable
+	* @param {Number} httpStatus the answer's status; 0 for a dropped connection
+	* @returns {PA_Step3PathwayNetworkView}
+	*/
+	this.showNetworkFailure = function(httpStatus) {
+		var waitBox = $("#pathwayNetworkWaitBox_" + this.dbid).stop(true, true);
+		var subtitle = $("#step3-network-subtitle_" + this.dbid);
+		var couldNotLoad = "The " + this.database + " pathway network could not be loaded. Reload the page to try again.";
+
+		if (this.network !== null) {
+			waitBox.hide();
+			subtitle.html('<span class="pa-net-warn">' + couldNotLoad + '</span>');
+			return this;
+		}
+
+		waitBox.text((httpStatus === 404)
+			? "No " + this.database + " pathway network is available for this organism. The pathway table and maps work as usual."
+			: couldNotLoad).show();
+		/* Said once, where the spinner was. The line above it said "Building
+		   network..." too: emptied, and hidden so no empty strip is left. */
+		subtitle.empty().hide();
+		this.showNetworkTools(false);
+		this.showRailPane("tools");
+		return this;
+	};
+
+	/**
+	* Show or hide the controls that act on a drawn graph. With no graph they
+	* could only fail: Resume layout read this.network.renderers, Save positions
+	* this.network.graph, and the downloads a canvas that was never made. Details
+	* held the panel's placeholder text, which STEP 7 of generateNetwork fills in.
+	* Tools and Configure stay, because Tools also drives the table.
+	*
+	* @chainable
+	* @param {Boolean} visible
+	* @returns {PA_Step3PathwayNetworkView}
+	*/
+	this.showNetworkTools = function(visible) {
+		var dbid = this.dbid;
+		/* Showing clears the inline display rather than setting one, so the
+		   stylesheet still decides. .toggle(true) writes a display of its own over
+		   any rule that hides the element, and the separator has such a rule at
+		   900 px or narrower (network-views.css). */
+		var display = visible ? "" : "none";
+		$(["#fullscreenSettingsPanelButton_", "#resumeLayoutButton_", "#saveNodePositionsButton_",
+		   "#toggleTooltipsButton_", "#downloadNetworkTool_", "#downloadNetworkToolSVG_"].map(function(id) {
+			return id + dbid;
+		}).join(", ")).css("display", display);
+		$("#step3-network-toolbar_" + dbid + " .pa-net-toolbar-sep").css("display", display);
+		$("#networkview_" + dbid + " .paNetRailTab[data-pane=details]").css("display", display);
+		return this;
+	};
+
+	/**
 	* This function starts/resumes the network layout
 	* @chainable
 	* @returns {PA_Step3PathwayNetworkView}
@@ -3298,6 +3375,10 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		return getClusterColor(cluster);
 	};
 	this.updateNodePositions = function(updateCache, preserveExisting=false){
+		// No graph (showNetworkFailure), no positions: Apply must still reach the table.
+		if (this.network === null) {
+			return this;
+		}
 		var visualOptions = this.getParent().getVisualOptions(this.database);
 		var indexedPathways = this.getParent().getIndexedPathways(this.database);
 		//Invalidate previous position

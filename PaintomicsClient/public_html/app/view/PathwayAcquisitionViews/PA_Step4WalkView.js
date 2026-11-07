@@ -986,7 +986,8 @@ function PA_Step4WalkView() {
 		body.empty();
 		var status = state.status;
 
-		if (status === "refused") {
+		// "unavailable" is the server's refusal: the organism has no graph to walk.
+		if (status === "refused" || status === "unavailable") {
 			root.appendChild(paWalkEl("p", "pa-walk-note", state.detail));
 			this.clearLayer();
 			return;
