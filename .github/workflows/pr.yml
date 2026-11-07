@@ -1,6 +1,6 @@
-# Pull-request gate: lint, the unit-test sweep, the fastest example dataset of
-# each pipeline class through the regression harness, a secret scan and a
-# documentation build.
+# Pull-request gate: lint and the client's JavaScript tests, the unit-test
+# sweep, the fastest example dataset of each pipeline class through the
+# regression harness, a secret scan and a documentation build.
 #
 # Budget: under 10 minutes wall clock. The five jobs run in parallel, so the
 # wall clock is the slowest of them; each has a hard timeout below it. A sixth
@@ -69,6 +69,18 @@ jobs:
       # a 300 s cap. The version is pinned for the same reason ruff's is.
       - name: Client JavaScript
         run: npx --yes eslint@10.9.1 .
+      # PaintomicsClient/tests holds the client's own tests (node:test, no
+      # dependencies): the input-format checks, the classification palette and
+      # the walk's Results draft. No workflow ran them, so one sat failing on
+      # master from 2026-08-27 until this step was added: format-roles.test.js
+      # still expected a design-file rule that 20ad645b had removed on purpose.
+      # They need only the node this runner already has for ESLint, and take
+      # about a second, so they run here rather than in a job of their own.
+      # test_client_tests_run_in_ci keeps this step and run.sh's glob honest.
+      - name: Client tests
+        run: |
+          node --version
+          sh PaintomicsClient/tests/run.sh
       # "Byte-compile the server" stood here. ruff selects E9 and parses every
       # file compileall did except one -- scripts/ci/vulture_whitelist.py, which
       # ruff.toml excludes because its bare names read as F821 -- so the step

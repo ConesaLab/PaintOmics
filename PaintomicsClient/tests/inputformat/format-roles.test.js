@@ -46,9 +46,15 @@ test("a design file rejects condition labels instead of indicators", () => {
   assert.ok(R.validateDesign(bad).problems.some(p => p.code === "NOT_INDICATOR"));
 });
 
-test("a design file rejects a sample in two conditions at once", () => {
-  const bad = [["Sample","Control","Treated"],["S1","1","1"]];
-  assert.ok(R.validateDesign(bad).problems.some(p => p.code === "NOT_ONE_CONDITION"));
+test("a design file accepts a sample in two conditions at once", () => {
+  // A multi-factor row. runMORE.R reads it, and MOREServlet._designPatternNames
+  // handles it on purpose, so since 20ad645b the check refuses only what R
+  // refuses: text and a repeated sample. This test still expected the older
+  // one-1-per-row rule; test_conditions_file_is_held_to_r_rules pins the same
+  // contract from the server side.
+  const multi = [["Sample","Control","Treated"],["S1","1","1"],["S2","0","1"]];
+  const report = R.validateDesign(multi);
+  assert.strictEqual(report.ok, true, JSON.stringify(report.problems));
 });
 
 test("roles are taken from the file name", () => {
