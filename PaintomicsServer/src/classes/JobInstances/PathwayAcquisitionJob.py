@@ -491,11 +491,35 @@ class PathwayAcquisitionJob(Job):
 
     def explainEmptyMapping(self, selectedCompounds=None):
         """See explainEmptyMapping(): None unless every gene-based omic mapped
-        nothing and no compound was selected either."""
+        nothing and no compound was selected either. A job with no gene-based
+        omic at all is explainNoCompoundSelected's."""
         if selectedCompounds:
             return None
+        if not self.getGeneBasedInputOmics():
+            return self.explainNoCompoundSelected()
         return explainEmptyMapping(self.getOrganism(), self.getGeneBasedInputOmics(),
                                    self.sampleUnmatched, detect=organismHint)
+
+    def explainNoCompoundSelected(self):
+        """Why a job whose only data is metabolomics has nothing to analyse, or None.
+
+        With no compound selected such a job has nothing to run on. Step 2 used to
+        run anyway and the job finished with 0 pathways and nothing said about why,
+        while the same job reopened from its link at Step 2 was refused with the
+        sentence below (pathwayAcquisitionRecoverJob). The first run now says it too.
+
+        No name matched when Step 1 stored no found compound. Otherwise names did
+        match and the user unticked every one: Step 1 ticks the best match of each
+        name it finds.
+        """
+        if not self.getCompoundBasedInputOmics():
+            return None
+        if not self.getFoundCompounds():
+            return ("None of the metabolite names in your data matched a KEGG compound, so "
+                    "there is nothing to analyse. Check the names in your file: the mapping "
+                    "summary on this page says how many were recognised.")
+        return ("No compound is selected, and the job has no gene data, so there is nothing "
+                "to analyse. Select at least one compound on this page and run it again.")
 
     def getMappedRatios(self):
         # Calculate the mapped/unmapped ratio of each omic

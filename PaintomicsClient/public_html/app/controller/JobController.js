@@ -194,6 +194,39 @@ function showInvalidStep1FormMessage(jobView) {
 	showInvalidFieldMessage((jobView && jobView.firstFormError) ? jobView.firstFormError() : null);
 }
 
+/**
+* What the logo, or Step 1's Reset, asks before starting a new analysis, or null
+* when starting one loses nothing.
+*
+* Both asked "Are you sure you want to exit the current job?" on every page,
+* the untouched Step 1 form included, where no job is open. Starting over drops
+* every view (cleanStoredApplicationData), so what it can lose is an open job, or
+* what someone has entered into a form and not run. A job is asked about as
+* before. Without one, the question comes only when a field holds a value the
+* user gave it: an organism, a file, a changed setting. ExtJS's isDirty() says
+* exactly that, and an untouched Step 1 has no dirty field (checked in the
+* browser: 36 fields, none dirty, until an organism or a file is chosen). An
+* empty form has nothing to lose, so the logo just goes there.
+*
+* @param {MainView} mainView
+* @returns {String|null} the question, or null to go on without one
+*/
+function resetQuestion(mainView) {
+	var lastJobView = mainView.getLastJobView();
+	var jobModel = (lastJobView && lastJobView.getModel) ? lastJobView.getModel() : null;
+	if (jobModel && jobModel.getJobID() != null) {
+		return "Are you sure you want to exit the current job?";
+	}
+	for (var name in mainView.subviews) {
+		var component = mainView.subviews[name] ? mainView.subviews[name].component : null;
+		if (component && !component.isDestroyed && typeof component.query === "function" &&
+			component.query("field").some(function (field) { return field.isDirty(); })) {
+			return "Start a new analysis? What you have entered so far will be cleared.";
+		}
+	}
+	return null;
+}
+
 /* Tells the server the answer for `jobID` arrived, so it can drop its copy of
    the result. Fire-and-forget: nothing waits on it, and a lost
    acknowledgement only means the server keeps the entry until its ten-minute
@@ -1217,6 +1250,18 @@ function JobController() {
 		   customSpeciesInstaller.py answers 404 here, on every job. */
 		var fetchNetwork = function(url) {
 			$.getJSON(url + "/" + jobView.getModel().getOrganism(), function (pathwaysNetworkData) {
+				/* A 200 whose JSON holds no network generateNetwork can draw -- a
+				   file cut short, an empty object -- threw at data.nodes.length
+				   inside this callback, where no failure handler runs, and the card
+				   said "Building network..." for as long as the tab stayed open. It
+				   now ends the wait like any other failed answer, and nothing is
+				   stored. */
+				if (!jobView.isDrawableNetwork(pathwaysNetworkData)) {
+					console.error(Date.logFormat() + "JobController.js : the " + jobView.database +
+						" pathway network for " + jobView.getModel().getOrganism() + " arrived but holds no nodes and edges to draw.");
+					jobView.showNetworkFailure();
+					return;
+				}
 				// Set the id key as organism
 				pathwaysNetworkData.id = jobView.getModel().getOrganism();
 				pathwaysNetworkData.timestamp = Math.floor( Date.now() / 1000 );
@@ -1728,23 +1773,27 @@ function JobController() {
 	*/
 	this.resetButtonClickHandler = function (jobView, force, callback) {
 		var me = this;
-		if (force === true) {
+		var startOver = function () {
 			me.cleanStoredApplicationData();
 			me.abandonStep1Submission();
 			me.showJobInstance(new JobInstance(null));
 			if (callback !== undefined) {
 				callback();
 			}
+		};
+		if (force === true) {
+			startOver();
 			return;
 		}
-		Ext.MessageBox.confirm('Confirm', 'Are you sure you want to exit the current job?', function (opcion) {
+		var question = resetQuestion(application.getMainView());
+		if (question === null) {
+			startOver();
+			window.history.replaceState(null, null, window.location.pathname);
+			return;
+		}
+		Ext.MessageBox.confirm('Confirm', question, function (opcion) {
 			if (opcion === "yes") {
-				me.cleanStoredApplicationData();
-				me.abandonStep1Submission();
-				me.showJobInstance(new JobInstance(null));
-				if (callback !== undefined) {
-					callback();
-				}
+				startOver();
 				window.history.replaceState(null, null, window.location.pathname);
 			}
 		});
@@ -1812,8 +1861,12 @@ function JobController() {
 				success: function (response) {
 					console.info(Date.logFormat() + " job's access date succesfully updated.");
 				},
-				error: function (response) {
-					console.error(Date.logFormat() + " failed when updating job's access date.");
+				error: function (response, textStatus) {
+					// With the server's own words: before pathwayAcquisitionTouchJob
+					// was fixed a failure there answered 200 and nothing reached here.
+					var answer = readableAnswer(response);
+					console.error(Date.logFormat() + " failed when updating job's access date: " +
+						((answer && answer.message) || describeUnansweredRequest(response, textStatus)));
 				},
 			});
 		}

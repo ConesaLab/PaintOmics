@@ -145,8 +145,11 @@ PUBLISHED = {
     # v=3.6 encodes < and > of the server's message in both "Oops..Internal error!"
     # dialogs (serverTextAsHtml): what a message quotes (a file name in an OSError,
     # an omic name, an organism code) is text, however it got there.
+    # v=3.7 shows a job removed while its page had it open as the warning its
+    # link shows (extra.job_unavailable), and signs the reader out only on the
+    # server's own answer for an invalid session (isInvalidSessionAnswer).
     "app/view/common/Util.js": (
-        "3.6", "199c4c9bc684ec405d6dd6ddf58895cbe6a704d63ca02a0155d326d625a58d7f"),
+        "3.7", "977af3ec0ec5a0ebb13231e5b3885dce240b336a82e30b95b7c60a758a2750f1"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
@@ -315,8 +318,10 @@ PUBLISHED = {
     # v=0.11 reads the job in the address in one place, and on a page opened with
     # one shows no browser warning and sets no "silence" cookie, so the next bare
     # visit still gets them and the Welcome.
+    # v=0.12 does not boot over a script index.html's loader could not fetch,
+    # and asks IndexedDB nothing on a bare address.
     "app.js": (
-        "0.11", "33a93703095aa208bf71cc824e53e13211a3c1d7a596492d276c978baecca8bb"),
+        "0.12", "2c91eab4981bcecfd7ff71042b83e0760e0ab93865b3bb4dd5624c3fa4318ef7"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

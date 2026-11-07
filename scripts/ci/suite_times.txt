@@ -28,7 +28,10 @@
 # Suites added since the table above, measured on GitHub run 33256914603
 # (both shards; the worse of the two observations where a suite appears
 # twice). Same instrument as the rows above, not a laptop.
+test_a_bare_address_asks_indexeddb_nothing	0.5
 test_a_blank_identifier_is_refused	0.9
+test_a_job_removed_under_its_page_is_a_warning	2.0
+test_a_metabolites_only_job_is_refused_on_its_first_run	1.5
 test_admin_and_readonly_guards	1.1
 test_admin_gate	3.0
 test_admin_user_list_has_no_secrets	1.8
@@ -40,6 +43,7 @@ test_ai_sdk_transport	1.8
 test_ai_servlet_handlers	0.9
 test_ai_status_poll_survives_a_failed_request	0.5
 test_an_empty_id_is_not_a_join_key	3.7
+test_an_invalid_session_is_told_by_its_own_answer	1.5
 test_apply_replicate_mapping_servlet	1.8
 test_bed2genes_association	19.5
 test_bed2genes_validation	1.6
@@ -121,6 +125,7 @@ test_hub_scorer	1.2
 test_hub_subgraph_route	1.8
 test_identifier_mapping_check	0.0
 test_index_html_revalidates	4.0
+test_index_scripts_are_asked_for_again	0.5
 test_input_check_covers_every_omic_slot	2.7
 test_input_convert_gateway_timeout	1.0
 test_input_converter_survives_deploy	5.1
@@ -144,6 +149,7 @@ test_llm_gateway_live	0.3
 test_llm_schema_json	0.1
 test_logging_cfg_template	0.1
 test_logging_setup	0.1
+test_logo_asks_only_about_what_it_would_lose	0.5
 test_manifest_matches_its_generator	5.4
 test_mapman_install_sources	0.1
 test_matching_summary_shapes	0.9
@@ -227,6 +233,7 @@ test_secondary_files_by_reference	1.2
 test_secret_generation	0.3
 test_selected_compound_without_values	1.9
 test_shard_split_is_balanced	0.1
+test_sign_in_panel_binds_what_it_draws	0.5
 test_significance_context_shape	0.1
 test_species_build_scripts_declare_their_resources	0.1
 test_species_json_is_written_by_name	0.3
@@ -247,6 +254,7 @@ test_stouffer_unit_pvalue_clamp	1.3
 test_svg_export_is_sandboxed	2.5
 test_the_poll_gives_up_on_a_dead_session	0.0
 test_tool_descriptions	2.9
+test_touch_job_reports_its_own_error	1.5
 test_transport_respects_the_deadline	15.3
 test_unavailable_job_is_not_an_error	1.8
 test_uniprot_two_hop_mapping	0.3

@@ -3106,6 +3106,31 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	};
 
 	/**
+	* Whether an answer holds a network generateNetwork can draw: a list of nodes
+	* and a list of edges, each element carrying its `data`, at the top or under
+	* this database's key (the older format, which generateNetwork unwraps). The
+	* check costs one pass over a few hundred pathways.
+	*
+	* @param {Object} data the parsed body of /kegg_data/pathway_network*
+	* @returns {Boolean}
+	*/
+	this.isDrawableNetwork = function(data) {
+		var isElementList = function(list) {
+			return Array.isArray(list) && list.every(function(element) {
+				return element !== null && typeof element === "object" &&
+					element.data !== null && typeof element.data === "object";
+			});
+		};
+		if (data === null || typeof data !== "object") {
+			return false;
+		}
+		if (this.database in data) {
+			data = data[this.database];
+		}
+		return data !== null && typeof data === "object" && isElementList(data.nodes) && isElementList(data.edges);
+	};
+
+	/**
 	* Show or hide the controls that act on a drawn graph. With no graph they
 	* could only fail: Resume layout read this.network.renderers, Save positions
 	* this.network.graph, and the downloads a canvas that was never made. Details

@@ -73,6 +73,123 @@
 	})();
 	</script>
 
+	<!-- A script this page lists that does not arrive is asked for again.
+	     app.js's loadModule already retries the views, models and controllers it
+	     fetches. These scripts were fetched once by the browser, so a connection
+	     that dropped for a moment left the page without one of them: without
+	     Util.js the boot error had no dialog to show it in, and the page stayed
+	     empty and dark. The browser fires `error` on a script it could not fetch,
+	     before it runs the next one, so this listener asks again (synchronously,
+	     as loadModule does) and runs the text in its place. A script that still
+	     has not arrived after three attempts is named on the page, with a reload
+	     button, using nothing but the DOM; app.js then does not boot. Only the
+	     page's own scripts, and only until the page has been parsed. -->
+	<script type="text/javascript">
+	(function () {
+		var ATTEMPTS = 3, PAUSE_MS = 500;   /* as MODULE_FETCH_ATTEMPTS and MODULE_FETCH_RETRY_PAUSE in app.js */
+		var failures = window.PA_BOOT_SCRIPT_FAILURES = [];
+		var ownOrigin = location.protocol + "//" + location.host + "/";
+
+		function pause(ms) {
+			var until = Date.now() + ms;
+			while (Date.now() < until) { /* wait: the next script must not run first */ }
+		}
+
+		/* A body counts only with a 2xx status and a JavaScript type. nginx's 502
+		   page is HTML, and nosniff has the browser refuse that as a script too. */
+		function fetchScript(url) {
+			var request = new XMLHttpRequest();
+			try {
+				request.open("GET", url, false);
+				request.send(null);
+			} catch (error) {
+				return {status: 0};
+			}
+			var type = request.getResponseHeader("Content-Type") || "";
+			if (request.status >= 200 && request.status < 300 && /javascript|ecmascript/i.test(type)) {
+				return {status: request.status, text: request.responseText};
+			}
+			return {status: request.status};
+		}
+
+		function retry(event) {
+			var script = event.target;
+			if (!script || script.tagName !== "SCRIPT" || !script.src || script.src.indexOf(ownOrigin) !== 0) {
+				return;
+			}
+			var answer = {status: 0};
+			for (var attempt = 2; attempt <= ATTEMPTS; attempt++) {
+				pause(PAUSE_MS * (attempt - 1));
+				answer = fetchScript(script.src);
+				if (answer.text !== undefined) {
+					var copy = document.createElement("script");
+					copy.text = answer.text + "\n//# sourceURL=" + script.src;
+					script.parentNode.insertBefore(copy, script.nextSibling);
+					return;
+				}
+			}
+			failures.push({file: script.getAttribute("src").split("?")[0], status: answer.status});
+		}
+
+		function paragraph(text) {
+			var element = document.createElement("p");
+			element.style.margin = "0 0 12px";
+			element.appendChild(document.createTextNode(text));
+			return element;
+		}
+
+		function showFailure() {
+			var status = 0, files = [];
+			for (var i = 0; i < failures.length; i++) {
+				files.push(failures[i].file);
+				status = failures[i].status || status;
+			}
+			var box = document.createElement("div");
+			box.id = "bootScriptFailure";
+			box.setAttribute("role", "alert");
+			box.style.cssText = "max-width:560px;margin:80px auto;padding:24px 28px;background:#fff;color:#222;" +
+				"border:1px solid #ddd;border-top:4px solid #c9302c;border-radius:4px;" +
+				"font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
+			var title = document.createElement("h1");
+			title.style.cssText = "font-size:20px;margin:0 0 12px;";
+			title.appendChild(document.createTextNode("PaintOmics AI could not start"));
+			var cause = paragraph("The page could not finish loading because " +
+				(status > 0 ? "the server answered HTTP " + status : "the connection dropped") + " while fetching ");
+			var names = document.createElement("b");
+			names.appendChild(document.createTextNode(files.join(", ")));
+			cause.appendChild(names);
+			cause.appendChild(document.createTextNode("."));
+			var reload = document.createElement("button");
+			reload.type = "button";
+			reload.id = "bootScriptFailureReload";
+			reload.style.cssText = "font:inherit;padding:6px 14px;margin:0 0 12px;cursor:pointer;";
+			reload.appendChild(document.createTextNode("Reload the page"));
+			reload.onclick = function () { location.reload(); };
+			var contact = paragraph("If it keeps happening, contact us at ");
+			var mail = document.createElement("a");
+			mail.href = "mailto:paintomicsai@gmail.com";
+			mail.appendChild(document.createTextNode("paintomicsai@gmail.com"));
+			contact.appendChild(mail);
+			contact.appendChild(document.createTextNode("."));
+			box.appendChild(title);
+			box.appendChild(cause);
+			box.appendChild(paragraph("Your analysis and your jobs are not affected."));
+			box.appendChild(reload);
+			box.appendChild(contact);
+			document.body.appendChild(box);
+			reload.focus();
+		}
+
+		window.addEventListener("error", retry, true);
+		document.addEventListener("DOMContentLoaded", function () {
+			window.removeEventListener("error", retry, true);
+			if (failures.length > 0) {
+				showFailure();
+			}
+		});
+	})();
+	</script>
+
 	<!--Cookies consent -->
 	<link rel="stylesheet" type="text/css" href="resources/css/cookie-consent.css?v=1.2" />
 	<script src="app/view/common/CookieConsent.js?v=1.0"></script>
@@ -124,7 +241,7 @@
 	<!--SCRIPTS FOR SERVER CONNECTION CONFIGURATION-->
 	<script type="text/javascript" src="resources/ServerConfiguration.js?v=1.9"></script>
 	<!--CUSTOM SENCHA EXTENSIONS-->
-	<script type="text/javascript" src="app/view/common/Util.js?v=3.6"></script>
+	<script type="text/javascript" src="app/view/common/Util.js?v=3.7"></script>
 	<script type="text/javascript" src="app/view/common/ExtJS_extensions.js?v=1.0"></script>
 	<script type="text/javascript" src="app/view/common/OrganismSearch.js?v=1.1"></script>
 	<script type="text/javascript" src="app/view/common/upload/Panel.js?v=0.4"></script>
@@ -155,7 +272,7 @@
 	<script type="text/javascript" src="app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js?v=2.7"></script>
 
 	<!--LAUNCH APPLICATION -->
-	<script type="text/javascript" src="app.js?v=0.11"></script>
+	<script type="text/javascript" src="app.js?v=0.12"></script>
 
 	<script type="text/javascript">
 	window.onbeforeunload = function (e) {

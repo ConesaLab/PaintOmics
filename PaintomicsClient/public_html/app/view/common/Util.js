@@ -930,7 +930,7 @@ function ajaxErrorHandler(responseObj) {
         err = err || {message: unreadableAnswerMessage(responseObj)};
     }
 
-    if (err.message && err.message.indexOf("User not valid") !== -1) {
+    if (isInvalidSessionAnswer(err)) {
         showErrorMessage("Invalid session", {
             message: "<b>Your session is not valid.</b> Please sign-in again to continue.",
             callback: deleteCredentials,
@@ -965,6 +965,21 @@ function ajaxErrorHandler(responseObj) {
     // where a stale cached model genuinely can be the cause.
     var serverSide = !!(err.extra && (err.extra.file_name || err.extra.exc_type));
     var halves = splitServerError(err.message);
+
+    // The job is no longer in the database (JobUnavailableError in
+    // ServerErrorManager.py): it was removed while this page had it open, and
+    // Next step, a pathway or the status poll of a run that was waiting asked
+    // for it. The job's link shows that answer as a warning with no Report
+    // button (JobController.recoverPAJobHandler), and this showed the same
+    // sentence under "Oops..Internal error!" with Report. The message is the
+    // server's own HTML, with the job id escaped there.
+    if (err.extra && err.extra.job_unavailable === true) {
+        showWarningMessage("This job is not available", {
+            message: halves.readable,
+            showButton: true
+        });
+        return;
+    }
 
     // The server refused the uploaded files and said why (InputFileError in
     // ServerErrorManager.py). Titled "Internal error", with "retrying will not
@@ -1043,6 +1058,30 @@ function splitServerError(message) {
     var user = body.match(/\. (User ID: \S+)$/);
     return { readable: (user ? body.slice(0, user.index) : body) || raw,
              technical: (raw.slice(0, at).trim() + (user ? " " + user[1] : "")).trim() };
+}
+
+/*
+ * Whether an error answer is the server saying this browser's session is not
+ * valid.
+ *
+ * UserSessionManager.isValidUser raises one sentence for that, and
+ * handleException frames it as
+ *
+ *     CredentialException: AT <servlet>: <function>. ERROR MESSAGE: [b]User not valid[/b]. It looks like ...
+ *
+ * The dialog for it has no Close button, signs the reader out and reloads the
+ * page, so it has to be that answer and no other. It was found by
+ * indexOf("User not valid") anywhere in the message, and messages quote the
+ * user's own data: a refusal of a file whose sample was named "User not valid"
+ * signed its reader out instead of saying what was wrong with the file. Now the
+ * exception has to be a CredentialException and its sentence has to open with
+ * those words, which no other answer does.
+ */
+function isInvalidSessionAnswer(err) {
+    if (!err || typeof err.message !== "string") { return false; }
+    var halves = splitServerError(err.message);
+    return halves.technical.indexOf("CredentialException: AT ") === 0 &&
+        halves.readable.indexOf("[b]User not valid[/b]") === 0;
 }
 
 /* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
@@ -1167,7 +1206,7 @@ function extJSErrorHandler(form, responseObj) {
         err = {message: unreadableAnswerMessage(responseObj.response)};
     }
 
-    if (err.message && err.message.indexOf("User not valid") !== -1) {
+    if (isInvalidSessionAnswer(err)) {
         showErrorMessage("Invalid session", {
             message: "<b>Your session is not valid.</b> Please sign-in again to continue.",
             callback: deleteCredentials,

@@ -544,7 +544,7 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         script = DIALOG_HARNESS % {
             "client": "\n".join(extract_function(util, name, "Util.js") for name in
                                 ("showMessage", "showErrorMessage", "serverTextAsHtml", "ajaxErrorHandler",
-                                 "splitServerError")),
+                                 "splitServerError", "isInvalidSessionAnswer")),
             "bodies": json.dumps({
                 "hostileRefusal": _answerTo(InputFileError(hostile), userID="17"),
                 "markedUpRefusal": _answerTo(InputFileError(cls.MARKUP), userID="17"),

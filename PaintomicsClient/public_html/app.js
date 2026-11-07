@@ -138,7 +138,9 @@ function jobIDInAddress() {
 }
 
 /**
- * How loadModule treats a module it could not fetch. The fetch is retried
+ * How loadModule treats a module it could not fetch. The scripts index.html
+ * lists itself get the same attempts and pause from the loader at the top of
+ * that page. The fetch is retried
  * because a connection that drops mid-boot is usually back within moments: on
  * 2026-10-27 06:48 UTC one client's IP changed between two modules, the second
  * never reached the server, and the reload 81 s later worked. The pause is what
@@ -394,6 +396,23 @@ function Application() {
 
     this.loadFromIndexedDB = function(jobInstanceModel, URLjobID) {
         var me = this;
+
+        /* A bare address boots as a first visit, and asks IndexedDB nothing.
+         *
+         * It used to ask for "the most recent job" with
+         * db.table("jobs").orderBy('timestamp').last(). The store's only index is
+         * jobID (openPaintomicsDB), so Dexie rejected that every time, the
+         * rejection handler below booted a fresh job and logged "could not read
+         * the cached job from IndexedDB" on every visit. Making the query work
+         * would change what a bare address does: every job opened is written to
+         * that store, and the logo's "exit the current job" clears sessionStorage
+         * only, so the next load would reopen the job just left. A bare address
+         * has always shown a new analysis; this keeps that and drops the query. */
+        if (!URLjobID) {
+            me.continueBoot(jobInstanceModel, URLjobID);
+            return;
+        }
+
         var db = openPaintomicsDB();
 
         /* Same containment as the sessionStorage path: a row that cannot be
@@ -419,13 +438,7 @@ function Application() {
          * read only. Chaining .catch() instead also catches whatever bootWith()
          * throws, and booting a second time from inside the failure of the first
          * boot is how a single bad model turned into an unrecoverable page. */
-        var jobIdToLoad = URLjobID;
-        if (!jobIdToLoad) {
-            // If no URL ID, try to find the most recent job in DB
-            db.table("jobs").orderBy('timestamp').last().then(bootWith, onReadFailed).catch(showBootFailureMessage);
-        } else {
-            db.table("jobs").get(jobIdToLoad).then(bootWith, onReadFailed).catch(showBootFailureMessage);
-        }
+        db.table("jobs").get(URLjobID).then(bootWith, onReadFailed).catch(showBootFailureMessage);
     };
 
     this.continueBoot = function(jobInstanceModel, URLjobID) {
@@ -501,6 +514,13 @@ function Application() {
 }
 
 $(document).ready(function () {
+    /* A script index.html lists did not arrive, even asked again: the loader at
+     * the top of index.html has already said which one and offered a reload.
+     * Booting without it would only throw where nothing can show a dialog, which
+     * is how a lost Util.js left an empty dark page. */
+    if (window.PA_BOOT_SCRIPT_FAILURES && window.PA_BOOT_SCRIPT_FAILURES.length > 0) {
+        return;
+    }
     application = new Application();
     Ext.application({name: 'Paintomics', launch: function () {
             try {

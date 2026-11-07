@@ -89,7 +89,9 @@ def handleException(responseInstance, exceptionInstance, filename, function, res
         "exc_type": str(exc_type), "file_name": str(file_name), "exc_line": str(exc_tb.tb_lineno),
         # Tells the client a refusal of the user's files from a fault of ours
         # (see InputFileError); ajaxErrorHandler words the two differently.
-        "input_error": isinstance(exceptionInstance, InputFileError)}})
+        "input_error": isinstance(exceptionInstance, InputFileError),
+        # And a job that is no longer there from either (see JobUnavailableError).
+        "job_unavailable": isinstance(exceptionInstance, JobUnavailableError)}})
 
 class CredentialException(Exception):
     pass
@@ -102,5 +104,19 @@ class InputFileError(Exception):
     offered to report it: both error reports of 2026-09-23 and 2026-09-26 were
     users reporting their own files (six condition columns beside ten; a DESeq2
     table with an up/down column) as a fault of ours.
+    """
+    pass
+
+class JobUnavailableError(UserWarning):
+    """The job a request names is not in the database any more.
+
+    Raised when a page that had the job open asks for it again (Next step,
+    a pathway, a save) and it has been removed in the meantime, on schedule or
+    by its owner. The message says so. As a plain UserWarning it reached the
+    browser as "Oops..Internal error!" with a Report button, the same dialog as
+    a crash, while the link to that job already showed it as a warning titled
+    "This job is not available". ajaxErrorHandler now shows this one the same way.
+
+    A UserWarning still, so code and tests that expect one keep working.
     """
     pass
