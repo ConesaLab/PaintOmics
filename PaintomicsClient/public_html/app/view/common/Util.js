@@ -972,9 +972,13 @@ function ajaxErrorHandler(responseObj) {
     // users sending us their own files' problems -- six condition columns beside
     // ten, a DESeq2 table with an up/down column -- as a fault of ours. The
     // message already says what to fix; the log half is for the log.
+    //
+    // Encoded because it quotes the first column of the user's file: "<NA>" is an
+    // id, not an element. showMessage turns [b], [br], [ul] and [li] into tags
+    // after this point, so these messages use those and no raw HTML.
     if (err.extra && err.extra.input_error === true) {
         showErrorMessage("Please check your input files", {
-            message: halves.readable,
+            message: Ext.String.htmlEncode(halves.readable),
             showButton: true,
             showReportButton: false
         });
@@ -1006,13 +1010,19 @@ function ajaxErrorHandler(responseObj) {
  * that "Report error" already sends, so the report loses nothing. Same split
  * UserController, JobController and convert-drawer already make on their own
  * paths.
+ *
+ * handleException also ends the line with ". User ID: 17" for anyone with a
+ * session, so a refusal read "...recognised.. User ID: 17". It goes with the
+ * prefix: a report still says whose it is.
  */
 function splitServerError(message) {
     var raw = String(message || "");
     var at = raw.indexOf("ERROR MESSAGE:");
     if (at === -1) return { readable: raw, technical: "" };
-    return { readable: raw.slice(at + "ERROR MESSAGE:".length).trim() || raw,
-             technical: raw.slice(0, at).trim() };
+    var body = raw.slice(at + "ERROR MESSAGE:".length).trim();
+    var user = body.match(/\. (User ID: \S+)$/);
+    return { readable: (user ? body.slice(0, user.index) : body) || raw,
+             technical: (raw.slice(0, at).trim() + (user ? " " + user[1] : "")).trim() };
 }
 
 /* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */

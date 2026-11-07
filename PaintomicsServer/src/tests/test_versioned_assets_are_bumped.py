@@ -139,8 +139,11 @@ PUBLISHED = {
     # v=3.4 shows the server's refusal of the uploaded files (InputFileError) as
     # "Please check your input files" with no Report button, and an organism
     # request that names no organism as a warning.
+    # v=3.5 encodes the text of that refusal, which quotes the user's identifiers
+    # (Ext.String.htmlEncode, so [b] and the like still work), and moves the
+    # ". User ID: N" a server message ends with into the half a report sends.
     "app/view/common/Util.js": (
-        "3.4", "4d8b96d34f7798d312c928e389429d14a7ac80bfe518659e4ff81dad5c1c173b"),
+        "3.5", "ee1c5eed4336d8cc88051d5a6294d81c6712bf7fb5fa6751514cec68df095635"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
@@ -297,8 +300,15 @@ PUBLISHED = {
     # `this.controllers` passed every check here.
     # v=0.8 rewords the boot-failure and browser warnings: no empty first line,
     # the real menu path back to a job, and a plain browser recommendation.
+    # v=0.9 retries a module that did not arrive and stops blaming the stored
+    # analysis for every boot failure.
+    # v=0.10 offers a module that threw a reload rather than the discard, because
+    # launch() has read neither store at that point.
+    # v=0.11 reads the job in the address in one place, and on a page opened with
+    # one shows no browser warning and sets no "silence" cookie, so the next bare
+    # visit still gets them and the Welcome.
     "app.js": (
-        "0.8", "3ed26b1ab6e92fb0b602d893fff4ab4e4b54b93e99b1ee458c860d771f43d710"),
+        "0.11", "33a93703095aa208bf71cc824e53e13211a3c1d7a596492d276c978baecca8bb"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

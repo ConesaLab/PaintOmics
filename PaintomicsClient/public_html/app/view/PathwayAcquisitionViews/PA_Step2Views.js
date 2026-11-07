@@ -288,7 +288,7 @@ function PA_Step2JobView() {
 					items: paClassActivityItems(me.getModel(), omicName)
 				});
 			}
-			omicCards.push(new PA_OmicSummaryPanel(omicName, dataDistribution[omicName], isCompoundBased).getComponent());
+			omicCards.push(new PA_OmicSummaryPanel(omicName, dataDistribution[omicName], isCompoundBased, me.items.length > 0).getComponent());
 		}
 
 		if (numberOfClusters.length) {
@@ -2284,7 +2284,7 @@ function renderMappingDonut(divName, omicName, mapped, unmapped, note) {
 	});
 }
 
-function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
+function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic, hasCompoundsPanel) {
 	/***********************************************************************
 	* ATTRIBUTES
 	***********************************************************************/
@@ -2362,10 +2362,12 @@ function PA_OmicSummaryPanel(omicName, dataDistribution, isCompoundOmic) {
 					}
 
 					// A real control now. It used to be a bare <b> styled like a
-					// link: it looked clickable and did nothing when clicked.
+					// link: it looked clickable and did nothing when clicked. No
+					// link when there is no panel to go to: nothing matched, or
+					// every match resolved by itself.
 					$('#' + divName + 'mapping_summary_caption')
 						.html(mappingSummaryCaption(mappedFeatures, me.dataDistribution[1]) +
-							(isCompoundOmic
+							(isCompoundOmic && hasCompoundsPanel
 								? '<div class="mappingSummaryJump">' +
 								  '<a href="javascript:void(0)" class="compoundsJumpLink">' +
 								  'See compounds disambiguation</a></div>'

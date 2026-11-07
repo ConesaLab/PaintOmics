@@ -24,6 +24,7 @@
 #**************************************************************
 
 import logging
+from html import escape
 
 from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
@@ -52,13 +53,24 @@ def explainEmptyResult(stats):
     estimated and nothing is invented; when a number is not known the sentence
     that would have used it is not written.
     """
-    if not isinstance(stats, dict):
-        return (" - Your mirna2gene association process did not return any "
-                "result. Please, check the files (same identifiers, etc) and "
-                "parameters.")
+    return _emptyResultExplanation(stats)[0]
 
+
+def _emptyResultExplanation(stats):
+    """explainEmptyResult's text, and whether that text reports a crash.
+
+    Both come from the branch that writes the sentence, so they cannot disagree.
+    stats["aborted"] cannot say it alone: pearson on a single condition aborts too,
+    and what it is told is the too-few-conditions explanation.
+    """
+    if not isinstance(stats, dict):
+        return ("Your mirna2gene association process did not return any "
+                "result. Please, check the files (same identifiers, etc) and "
+                "parameters."), False
+
+    reportsACrash = False
     dropped = stats.get("dropped") or {}
-    lines = [" - No miRNA was matched to a target gene, so there is nothing to analyse."]
+    lines = ["No miRNA was matched to a target gene, so there is nothing to analyse."]
 
     def sample(ids):
         return ", ".join(str(i) for i in (ids or [])[:3])
@@ -84,8 +96,11 @@ def explainEmptyResult(stats):
             "of them appears in the first column of your targets/associations "
             "file. The two files have to use the same miRNA identifiers."
             % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
-    # 2. They joined, but not one target id exists in the expression file.
-    elif stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0):
+    # 2. They joined, but not one target id exists in the expression file. Scoring
+    #    only ever aborts on a target it found, before counting it as scored, so
+    #    after an abort a target missing earlier in the file is not the cause.
+    elif (stats.get("scored", 0) == 0 and stats.get("unmatchedTargets", 0)
+          and not stats.get("aborted")):
         lines.append(
             "%d miRNA-target pairs were read, but not one target gene was found "
             "in your gene expression file, so no correlation could be computed."
@@ -121,6 +136,7 @@ def explainEmptyResult(stats):
             "associations file so the pairs are taken from it instead of being "
             "scored." % (conditions, stats.get("pairs", 0)))
     elif stats.get("aborted"):
+        reportsACrash = True
         lines.append(
             "The scoring step stopped after %d miRNA-target pairs with: %s. The "
             "result file was truncated there, so this is not a problem with "
@@ -158,7 +174,26 @@ def explainEmptyResult(stats):
         lines.append("Rows skipped because an identifier was blank: " +
                      "; ".join(blanks) + ".")
 
-    return " ".join(lines)
+    return " ".join(lines), reportsACrash
+
+
+def emptyResultError(stats):
+    """What a run with nothing to show raises, going by what its text explains.
+
+    A refusal of the files, which the dialog encodes because the message quotes
+    their first columns. That holds for a single condition column under every
+    method: pearson raises on the first target it finds and kendall and spearman
+    score nan, and all three read the same sentence whichever row comes first (only
+    pearson's count of pairs stops where it raised). Only a text that reports a crash
+    of the scoring step is no refusal: it stays an error that can be reported, and
+    its dialog takes HTML while its text can quote a cell of the file ("could not
+    convert string to float: '...'"). Quotes stay as they are, because the Step 1
+    dialog encodes this text once more.
+    """
+    message, reportsACrash = _emptyResultExplanation(stats)
+    if reportsACrash:
+        return Exception(escape(message, quote=False))
+    return InputFileError(message)
 
 
 class MiRNA2GeneJob(Job):
@@ -494,7 +529,7 @@ class MiRNA2GeneJob(Job):
         # pearson and spearman alike).
         if isinstance(matchStats, dict) and matchStats.get("scored") \
                 and matchStats.get("nanScores") == matchStats.get("scored"):
-            raise Exception(explainEmptyResult(matchStats))
+            raise emptyResultError(matchStats)
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")
@@ -613,7 +648,7 @@ class MiRNA2GeneJob(Job):
                 # Abort the process to let the user know that there were no results.
                 if len(self.getInputGenesData()) < 1:
                     logging.info("MIRNA2GENES - NO RESULTS")
-                    raise Exception(explainEmptyResult(matchStats))
+                    raise emptyResultError(matchStats)
 
                 #EVEN WHEN THE USER HAS CHOOSE THE OPTION "FC", if the conditions do no allow to calculate the
                 #correlation, the script will calculate the FC

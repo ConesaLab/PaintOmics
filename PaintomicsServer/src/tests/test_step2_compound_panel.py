@@ -23,6 +23,9 @@ Three properties of that filter are load bearing and are what this file pins:
      number of cards. Its value is posted as thresholdMetaboliteClass and fed
      to compundsClassification(); gating it on the filtered list would drop it
      from the request.
+  4. The "See compounds disambiguation" link IS gated on the cards, because the
+     panel it jumps to is: a job that matched nothing, or whose compounds all
+     resolved by themselves, has nothing for it to go to.
 
 The behavioural half runs the real view file inside node with stubs for Ext,
 jQuery and View, so the assertions are about what the code does rather than
@@ -63,6 +66,26 @@ function htmlEncode(value) {
 }
 
 const created = [];
+const widgets = [];
+const captions = [];
+
+// The real boxready runs chained jQuery calls; only the caption's text matters.
+function chain(selector) {
+    const self = new Proxy(function () {}, {
+        get: function (target, name) {
+            if (name === 'length') { return 0; }
+            if (name === 'html') {
+                return function (value) {
+                    if (String(selector).indexOf('mapping_summary_caption') !== -1) { captions.push(value); }
+                    return self;
+                };
+            }
+            return function () { return self; };
+        }
+    });
+    return self;
+}
+chain.extend = Object.assign;
 
 const sandbox = {
     console: {log: function () {}, info: function () {}, warn: function () {}, error: function () {}},
@@ -77,12 +100,14 @@ const sandbox = {
     },
     Ext: {
         String: {htmlEncode: htmlEncode},
-        widget: function () { return {}; },
-        create: function (name) { created.push(name); return {}; }
+        widget: function (config) { widgets.push(config); return {}; },
+        create: function (name) { created.push(name); return {}; },
+        getBody: function () { return {getViewSize: function () { return {width: 1500}; }}; }
     },
-    $: function () { return {length: 0, on: function () {}, html: function () {}}; },
+    $: chain,
     initializeTooltips: function () {},
-    showWarningMessage: function () {}
+    showWarningMessage: function () {},
+    setTimeout: function () {}
 };
 sandbox.globalThis = sandbox;
 
@@ -155,7 +180,7 @@ var withAlts      = compoundSet("Serine",     [compound("C00065", "L-Serine", tr
                                                compound("C00740", "DL-Serine", false)]);
 
 var out = {
-    extCreateCalls: created,
+    extCreateCalls: created.slice(),
 
     needsDisambiguation: {
         resolved: setView(resolved).needsDisambiguation(),
@@ -223,6 +248,44 @@ reloaded.loadModel({
     getJobID: function () { return "job1"; }
 });
 out.reloadedCards = reloaded.items.length;
+
+// --- the jump link, through the real initComponent and the card's real boxready
+var RealSummaryPanel = sandbox.PA_OmicSummaryPanel;
+function captionsOf(sets) {
+    widgets.length = 0;
+    captions.length = 0;
+    sandbox.PA_OmicSummaryPanel = function (omicName, distribution, isCompound, hasPanel) {
+        var panel = new RealSummaryPanel(omicName, distribution, isCompound, hasPanel);
+        panel.initComponent();
+        widgets[widgets.length - 1].listeners.boxready();
+        this.getComponent = function () { return {}; };
+    };
+    var view = new api.PA_Step2JobView();
+    view.loadModel({
+        getFoundCompounds: function () { return sets; },
+        deleteObserver: function () {},
+        getJobID: function () { return "job1"; },
+        getDatabases: function () { return ["KEGG"]; },
+        getCompoundBasedInputOmics: function () { return [{omicName: "Metabolomics"}]; },
+        getGeneBasedInputOmics: function () { return [{omicName: "Gene expression"}]; },
+        getDataDistributionSummaries: function () {
+            return {"Gene expression": [{KEGG: 5, Total: 5}, 3], "Metabolomics": [sets.length, 3]};
+        }
+    });
+    view.initComponent();
+    sandbox.PA_OmicSummaryPanel = RealSummaryPanel;
+    var page = widgets[widgets.length - 1];
+    var modules = page.items[1].items;
+    return {
+        captions: captions.slice(),
+        panelOnPage: modules.some(function (module) { return module && module.itemId === "compoundsPanelsContainer"; })
+    };
+}
+out.jumpLink = {
+    nothingMatched: captionsOf([]),
+    allResolved: captionsOf([resolved]),
+    someToDecide: captionsOf([resolved, withAlts])
+};
 
 process.stdout.write(JSON.stringify(out));
 """
@@ -301,6 +364,16 @@ class Step2BehaviourTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.out = run_harness()
+
+    def test_the_jump_link_appears_only_with_the_panel_it_jumps_to(self):
+        LINK = "See compounds disambiguation"
+        for name, expected in (("nothingMatched", False), ("allResolved", False), ("someToDecide", True)):
+            with self.subTest(job=name):
+                job = self.out["jumpLink"][name]
+                geneCard, compoundCard = job["captions"]
+                self.assertEqual(job["panelOnPage"], expected)
+                self.assertEqual(LINK in compoundCard, expected)
+                self.assertNotIn(LINK, geneCard)
 
     def test_a_resolved_set_is_skipped(self):
         self.assertFalse(self.out["needsDisambiguation"]["resolved"])

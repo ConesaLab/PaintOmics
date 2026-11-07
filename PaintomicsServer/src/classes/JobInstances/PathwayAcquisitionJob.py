@@ -894,7 +894,7 @@ class PathwayAcquisitionJob(Job):
                         "inputDataFile") + ", skipping remaining lines...\n"
             elif nLine < 1:
                 error += "The file " + inputOmic.get(
-                    "inputDataFile") + " <b>does not seem to have any feature lines</b>. Maybe the association process returned empty files, check the files and configuration options just in case."
+                    "inputDataFile") + " [b]does not seem to have any feature lines[/b]. Maybe the association process returned empty files, check the files and configuration options just in case."
 
         else:
             error += " - Error while processing " + omicName + ": File " + inputOmic.get(

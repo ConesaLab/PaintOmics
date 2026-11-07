@@ -100,6 +100,14 @@ function step1FailureReason(response) {
 		.replace(/\n\s*-\s+/g, "<br/>");
 }
 
+/* The omic's name as the preparation dialogs show it. The user typed it, and all
+   of them reach showMessage's .html(): the name of the file being prepared in the
+   titles, and beside the server's encoded text in showStep1PreparationFailure. */
+function step1OmicLabelAsHtml(itemsContainer) {
+	var nameField = itemsContainer.queryById("omicNameField");
+	return Ext.String.htmlEncode((nameField && nameField.getValue()) || "input");
+}
+
 /* Whether a pre-processing job was refused for its input files.
  *
  * The server marks a refusal of the uploaded files -- its InputFileError, as
@@ -560,7 +568,7 @@ function JobController() {
 						// another. Said so in the dialog, because a line reading
 						// "Job X is waiting" followed by "Running job Y" reads as the
 						// job having changed id.
-						var omicLabel = (itemsContainer.queryById("omicNameField") && itemsContainer.queryById("omicNameField").getValue()) || "input";
+						var omicLabel = step1OmicLabelAsHtml(itemsContainer);
 						showInfoMessage("Preparing " + omicLabel + " (conversion job " + response.jobID + ") is waiting at job queue...", {logMessage: "Now Job is in the queue...", showSpin: true, append: true, itemId: response.jobID, icon: "clock-o"});
 
 						/* Restore elements used to create the temporal form */
@@ -1315,6 +1323,17 @@ function JobController() {
 	this.recoverPAJobHandler = function (jobID) {
 		var me = this;
 
+		/* A link that cannot be opened, on a page with nothing on it yet: what a
+		   bare address shows goes behind the dialog, or closing it leaves a blank
+		   page. My Jobs comes through here too, with something on screen to keep.
+		   A job with no id leaves ?jobID= in the address, and that is what brings
+		   a signed-out owner to the job on the reload after signing in. */
+		var showStep1OnAnEmptyPage = function () {
+			if (application.getMainView().currentView === null) {
+				me.showJobInstance(new JobInstance(null));
+			}
+		};
+
 		var _recover = function (btn, jobID) {
 			if (btn === "ok" && jobID !== "") {
 				showInfoMessage("Loading job information...", {logMessage: "Sending new request (recover job).", showSpin: true});
@@ -1324,8 +1343,22 @@ function JobController() {
 					data: {jobID: jobID},
 					success: function (response) {
 						if (response.success === false) {
+							showStep1OnAnEmptyPage();
 							if (response.message) {
-								showInfoMessage(response.message);
+								/* The Close button is the only way out of this modal, and
+								   the job can run for a while yet. */
+								showInfoMessage(response.message, {showButton: true});
+							} else if (response.jobUnavailable === true) {
+								/* Nothing is broken: the job was removed on schedule, or is
+								   under an account the caller is not signed in to, or holds
+								   nothing to show. As an error this offered Report error, and
+								   11 reports up to 2026-11-03 were guests telling us retention
+								   had worked. */
+								showWarningMessage("This job is not available", {
+									message: response.errorMessage,
+									logMessage: "Job " + jobID + " is not available.",
+									showButton: true
+								});
 							} else {
 								showErrorMessage(response.errorMessage);
 							}
@@ -1468,7 +1501,10 @@ function JobController() {
 
 						showSuccessMessage("Done", {logMessage: "Getting Job information...DONE", closeTimeout: 1});
 					},
-					error: ajaxErrorHandler
+					error: function (response) {
+						showStep1OnAnEmptyPage();
+						ajaxErrorHandler(response);
+					}
 				});
 			}
 		};

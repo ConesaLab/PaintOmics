@@ -193,10 +193,10 @@ def _requireJobAccess(jobID, userID):
             and not jobInstance.getAllowSharing()):
         logging.info("AI_INTERPRET - JOB " + str(jobID) + " DOES NOT BELONG TO USER "
                      + str(userID) + " JOB HAS USER " + str(jobInstance.getUserID()))
-        # Deliberately the same wording pa_recover_job uses for the same
-        # refusal. A distinct message here would tell a caller that the job
-        # exists and is someone else's, which is more than they asked and more
-        # than they should learn.
+        # The wording pa_recover_job gives a signed-in caller. It tells a caller
+        # with no account to sign in instead, because its link is how an owner
+        # comes back to a job; nobody arrives on these routes from a link, so
+        # they say no more than this to anyone.
         raise UserWarning("Invalid Job ID (" + str(jobID) + ") for current user.")
 
     return jobInstance
