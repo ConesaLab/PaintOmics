@@ -29,7 +29,10 @@ What is pinned here
   files of each source, and what it stops on, each position source's floor to the id.
 * The position test both species use: a maize locus tag naming a GeneID far along the
   id's own chromosome is skipped (Zm00001d034536, 44 Mb), and a pea sequence match is
-  kept only where the trusted pairs around it put its GeneID.
+  kept only where the trusted pairs around it put its GeneID, pairs both routes agree on.
+* A maize id a position check skipped is kept only where one KEGG gene with its protein
+  sits where the v5 genome has it (Zm00001d012944, Zm00001d004346), and a family of
+  such genes gives nothing.
 * The organism hint recognises Cameor v2 and everything it recognised before.
 
 Needs no network and no database.
@@ -67,12 +70,13 @@ REGISTRY = os.path.join(SCRIPTS, "common_resources", "ensembl_genebuilds.json")
 DEFAULT_BUILD = os.path.join(SCRIPTS, "default", "build_database.py")
 
 COLUMNS = ["alias", "alias_dbname", "target_dbname", "target_display_id", "evidence"]
-SHIPPED_ROWS = {"zma": 27763, "psat": 21979, "sbi": 3192}
+SHIPPED_ROWS = {"zma": 27769, "psat": 21979, "sbi": 3192}
 ALIAS_SHAPE = {"zma": r"Zm00001d\d{6}", "psat": r"Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+",
                "sbi": r"SORBI_3(?:\d{3}G|K)\d{6}"}
 #: Per table, each evidence label and the table its rows target. A published pea
 #: row names the v1a gene the authors paired it with, a sequence match the GeneID.
-EVIDENCE = {"zma": {"ncbi_locus_tag": "ncbi_geneid", "maizegdb_1to1": "ensembl_gene"},
+EVIDENCE = {"zma": {"ncbi_locus_tag": "ncbi_geneid", "maizegdb_1to1": "ensembl_gene",
+                    "protein+maizegdb_v5": "ncbi_geneid", "protein+neighbour": "ncbi_geneid"},
             "psat": {"published_table_rbh+coord": "ensembl_gene", "published_table_rbh+coord+refseq_rbh": "ensembl_gene",
                      "refseq_rbh+collinear": "ncbi_geneid"},
             "sbi": {"ncbi_locus_tag": "ncbi_geneid"}}
@@ -629,9 +633,8 @@ class ShippedTablesTest(unittest.TestCase):
         # A v5 gene linked to a KEGG gene elsewhere, with an NCBI cross-reference to test (the first) and without.
         for wrong in ("Zm00001d025106", "Zm00001d031839", "Zm00001d014241"):
             self.assertNotIn(wrong, rows)
-        # A skipped tag whose MaizeGDB pair reaches the gene it was skipped for, among others: no row at all.
-        for blocked in ("Zm00001d017669", "Zm00001d025539"):
-            self.assertNotIn(blocked, rows)
+        # A skipped tag whose MaizeGDB pair reaches the gene it was skipped for, among others: no row from either.
+        self.assertNotIn("Zm00001d017669", rows)
         # A skipped tag whose pair reaches only another gene, at the pair's v5 gene: that pair stands.
         self.assertEqual(["Zm00001d052718", "gene_alias", "ensembl_gene", "Zm00001eb198420", "maizegdb_1to1"],
                          rows["Zm00001d052718"])
@@ -639,9 +642,22 @@ class ShippedTablesTest(unittest.TestCase):
         for kept in ("Zm00001d002318", "Zm00001d007959", "Zm00001d051239"):
             self.assertEqual("maizegdb_1to1", rows[kept][4], kept)
         # A locus tag naming a GeneID on the id's own chromosome, but far from where the v5 genome has the id:
-        # 44 and 12 Mb from its MaizeGDB v5 gene and its neighbours' place; 223 and 170 Mb from its neighbours'.
-        for far in ("Zm00001d034536", "Zm00001d041103", "Zm00001d044362", "Zm00001d012944"):
+        # 44 and 12 Mb from its MaizeGDB v5 gene and its neighbours' place, 223 Mb from its neighbours'.
+        for far in ("Zm00001d034536", "Zm00001d041103", "Zm00001d044362"):
             self.assertNotIn(far, rows)
+        # Skipped by a position check, and kept because one KEGG gene with the same protein is at the v5 gene
+        # MaizeGDB pairs the id with: two skipped tags, and three pairs whose v5 gene Ensembl links to a copy nearby.
+        for skipped, geneId in (("Zm00001d025539", "103641698"), ("Zm00001d035986", "109939246"),
+                                ("Zm00001d004346", "103646782"), ("Zm00001d005043", "100136884"),
+                                ("Zm00001d041568", "110485087")):
+            self.assertEqual([skipped, "gene_alias", "ncbi_geneid", geneId, "protein+maizegdb_v5"], rows[skipped])
+        # 170 Mb from where its 3 next neighbours put it, but 1.7 kb from the v5 gene of the nearest, 1.4 kb from it on v4.
+        self.assertEqual(["Zm00001d012944", "gene_alias", "ncbi_geneid", "103648360", "protein+neighbour"],
+                         rows["Zm00001d012944"])
+        # The same protein, and no place that agrees: waxy 1's, a v4 gene whose only neighbour that agrees is
+        # another skipped tag (Zm00001d018010), and copies near the v5 gene that do not overlap it.
+        for out in ("Zm00001d033937", "Zm00001d018011", "Zm00001d003725", "Zm00001d025598"):
+            self.assertNotIn(out, rows)
         # 89 Mb from its MaizeGDB v5 gene, but where its neighbours on v4 sit on v5: NCBI's GeneID stands.
         self.assertEqual(["Zm00001d010350", "gene_alias", "ncbi_geneid", "109941422", "ncbi_locus_tag"],
                          rows["Zm00001d010350"])
@@ -677,7 +693,10 @@ class ShippedTablesTest(unittest.TestCase):
         for needed in ("10.57745/5MDE99", "Kreplak", "Etalab", "MaizeGDB", "All_Plants.gene_info", "GCF_024323335.1",
                        "refseq_rbh+collinear", "DIAMOND", "Zm00001d.2.gff3.gz", "Zm00001eb.1.gff3.gz",
                        "CAMEOR_V2_ANNOTATION_1.gff3", "feature_table", "U.S. Public Domain",
-                       "https://agdatacommons.nal.usda.gov/articles/dataset/MaizeGDB/24660768"):
+                       "https://agdatacommons.nal.usda.gov/articles/dataset/MaizeGDB/24660768",
+                       # The sources disagree on MaizeGDB's licence; the strictest, CC BY, asks for credit and the link.
+                       "CC0", "https://creativecommons.org/licenses/by/4.0/", "10.1186/s12870-021-03173-5",
+                       "Zm00001d.2.protein.fa.gz", "GCF_902167145.1"):
             self.assertIn(needed, readme)
 
     def test_the_tables_apply_to_a_build_that_has_their_targets(self):
@@ -994,6 +1013,17 @@ class RegeneratingScriptTest(unittest.TestCase):
             handle.write("##gff-version 3\n")
             for gene, (chromosome, start) in v5Places.items():
                 handle.write("chr%s\tNAM\tgene\t%d\t%d\t.\t+\t.\tID=%s;biotype=protein_coding\n" % (chromosome, start, start + 200, gene))
+        # Zm00001d000005's protein is 540's, at its v5 gene, and 500's, the gene its tag was skipped for: kept, on 540.
+        # Zm00001d000003's is 400's, its tag's gene on another chromosome, with no trusted pair on its own: not kept.
+        protein = "MKTAYIAKQRQISFVKSHFSRQ" * 5
+        with gzip.open(os.path.join(cache, self.script.MAIZE_V4_PROTEIN_URL.rsplit("/", 1)[1]), "wt", encoding="utf-8") as handle:
+            handle.write(">Zm00001d000005_P001\n%s\n%s*\n>Zm00001d000003_P001\n%s*\n" % (protein[:60], protein[60:], protein))
+        with gzip.open(os.path.join(cache, self.script.REFSEQ_MAIZE_FEATURES), "wt", encoding="utf-8") as handle:
+            for gene in ("540", "500", "400"):
+                handle.write("CDS\twith_protein\tA\tP\tchromosome\t1\tNC_1.1\t1\t9\t+\tXP_%s.1\t\t\tx\tLOC%s\t%s\t\t3\t1\t\n"
+                             % (gene, gene, gene))
+        with gzip.open(os.path.join(cache, self.script.REFSEQ_MAIZE_PROTEINS), "wt", encoding="utf-8") as handle:
+            handle.write("".join(">XP_%s.1 a protein [Zea mays]\n%s\n" % (gene, protein) for gene in ("540", "500", "400")))
         return {"mapping": mapping, "v4Gff": v4Gff, "v5Gff": v5Gff, "geneInfo": os.path.join(cache, "tax4577.gene_info.gz"),
                 "v4ToV5": os.path.join(cache, "B73v4_to_B73v5.tsv"), "v5ToV4": os.path.join(cache, "B73v5_to_B73v4.tsv")}
 
@@ -1010,7 +1040,8 @@ class RegeneratingScriptTest(unittest.TestCase):
         self.writeMaizeSources()
         self.assertEqual([["Zm00001d000001", "gene_alias", "ncbi_geneid", "200", "ncbi_locus_tag"],
                           ["Zm00001d000002", "gene_alias", "ensembl_gene", "Zm00001eb000020", "maizegdb_1to1"],
-                          ["Zm00001d000004", "gene_alias", "ensembl_gene", "Zm00001eb000040", "maizegdb_1to1"]],
+                          ["Zm00001d000004", "gene_alias", "ensembl_gene", "Zm00001eb000040", "maizegdb_1to1"],
+                          ["Zm00001d000005", "gene_alias", "ncbi_geneid", "540", "protein+maizegdb_v5"]],
                          self.runMaize())
 
     def assertMaizeStops(self, expected):
@@ -1237,6 +1268,86 @@ class RegeneratingScriptTest(unittest.TestCase):
         self.assertEqual(["Zm00001d000001", "Zm00001d000005"], skippedNcbi)
         self.assertEqual(["Zm00001d000002", "Zm00001d000003", "Zm00001d000004"],
                          sorted(row[0] for row in rows if row[4] == "ncbi_locus_tag"))
+
+    def test_two_proteins_are_the_same_when_one_holds_the_other_nearly_whole(self):
+        self.assertEqual(0.95, self.script.SAME_PROTEIN, "the value README.md measures")
+        protein = "M" + "ACDEFGHIKLMNPQRSTVWY" * 5
+        self.assertTrue(self.script.sameProtein(protein, protein))
+        self.assertTrue(self.script.sameProtein(protein[:96], protein), "96 of 101 residues, held whole")
+        self.assertTrue(self.script.sameProtein(protein, protein[3:]), "either way round")
+        self.assertFalse(self.script.sameProtein(protein[:95], protein), "95 of 101 is under 95 %")
+        self.assertFalse(self.script.sameProtein(protein[:50] + "W" + protein[51:], protein), "one residue differs")
+
+    def test_a_skipped_maize_id_is_kept_only_where_one_gene_with_its_protein_is_where_v5_has_it(self):
+        """Measured on the 2026-11 sources: these shapes keep 6 of the 35 skipped ids, and leave out the rest.
+
+        V4_AT_V5 is Zm00001d004346: Ensembl links its v5 gene to a copy 48 kb away, with the
+        same protein, and 103646782 overlaps the v5 gene. V4_NEAR is Zm00001d012944: no
+        MaizeGDB v5 gene, the nearest trusted pair 1.4 kb away on v4 and 1.7 kb from the
+        GeneID on v5, the next three pairs 170 Mb away. V4_ALONE is Zm00001d018011: the same
+        protein, on another chromosome than every trusted pair near it.
+        """
+        mb = 1000000
+        protein, other = "MKTAYIAKQRQISFVKSHFSRQ" * 5, "MSTNPKPQRKTKRNTNRRPQDVKFPGG" * 4
+        geneIds = {"100", "101", "200", "300", "301", "400", "500", "600", "700", "800"}
+        species = _StubSpecies(kegg=geneIds - {"800"}, tables={"ncbi_geneid": geneIds - {"700"}},
+                               reach={("ensembl_gene", "V5_AT"): {"101"}, ("ensembl_gene", "V5_TWO"): {"301"},
+                                      ("ensembl_gene", "V5_NEAR"): {"301"}, ("ensembl_gene", "V5_DIFFERS"): {"999"}})
+        # Five 1:1 pairs along v4 chromosome 5, on v5 chromosome 5 170 Mb further along, but for the nearest one.
+        v4ToV5 = {"Zm00001dP%d" % index: ["Zm00001ebP%d" % index] for index in range(5)}
+        v4 = {"Zm00001dP%d" % index: ("5", 2 * mb + index * 100000, 2 * mb + index * 100000 + 500) for index in range(5)}
+        v5 = {"Zm00001ebP%d" % index: ("5", 172 * mb + index * 100000, 172 * mb + index * 100000 + 500) for index in range(5)}
+        v5["Zm00001ebP0"] = ("5", 2 * mb, 2 * mb + 500)
+        ids = {  # id: (v4 place, its tag's GeneID, its MaizeGDB v5 gene or None)
+            "Zm00001dAT_V5": (("2", 1000, 2000), None, ("V5_AT", ("2", 50000, 51000))),
+            "Zm00001dTWO_AT_V5": (("2", 9000, 9900), None, ("V5_TWO", ("2", 60000, 61000))),
+            "Zm00001dNEAR_V5": (("2", 1000, 2000), None, ("V5_NEAR", ("2", 70000, 71000))),
+            "Zm00001dNEAR": (("5", 2 * mb - 1500, 2 * mb - 1000), "500", None),
+            "Zm00001dALONE": (("5", 2 * mb + 120000, 2 * mb + 120500), "600", None),
+            "Zm00001dDIFFERS": (("2", 1000, 2000), None, ("V5_DIFFERS", ("2", 80000, 81000)))}
+        keggPlaces = {"100": ("2", 50100, 50900), "101": ("2", 98000, 99000),        # at V5_AT, and a copy 47 kb on
+                      "200": ("2", 60100, 60500), "300": ("2", 60600, 60900),        # two at V5_TWO
+                      "301": ("2", 99000, 99500), "400": ("2", 120000, 121000),      # a copy near V5_NEAR, not at it
+                      "500": ("5", 2 * mb - 1200, 2 * mb - 700),                     # where the nearest pair puts it
+                      "600": ("2", 10 * mb, 10 * mb + 500),
+                      # Beside 500 with the same protein, but no row may name them: 700 is no NCBI GeneID here, 800 not in KEGG.
+                      "700": ("5", 2 * mb - 1200, 2 * mb - 700), "800": ("5", 2 * mb - 1200, 2 * mb - 700)}
+        tags, v5ToV4 = {}, {v5s[0]: [v4Id] for v4Id, v5s in v4ToV5.items()}
+        for v4Id, (place, tag, pair) in ids.items():
+            v4[v4Id] = place
+            if tag:
+                tags[v4Id] = {tag}
+            if pair:
+                v4ToV5[v4Id], v5ToV4[pair[0]], v5[pair[0]] = [pair[0]], [v4Id], pair[1]
+        places = self.places(v4=v4, v5=v5, kegg=keggPlaces, chromosomes={gene: place[0] for gene, place in keggPlaces.items()})
+        sequences = {gene: {protein} for gene in ("100", "101", "200", "300", "400", "500", "600", "700", "800")}
+        sequences["999"] = {other}
+        proteins = self.script.MaizeProteins({v4Id: {other if v4Id == "Zm00001dDIFFERS" else protein[2:]} for v4Id in ids},
+                                             sequences)
+
+        before = self.script.maizeRows(species, tags, v4ToV5, v5ToV4, places)
+        rows, skippedNcbi, skippedMaizeGdb = self.script.maizeRows(species, tags, v4ToV5, v5ToV4, places, proteins)
+
+        self.assertEqual(sorted(ids), sorted(before[1] + before[2]), "each id is one a position check skips")
+        self.assertEqual((before[1], before[2]), (skippedNcbi, skippedMaizeGdb), "and is still listed as skipped")
+        self.assertEqual([], [row for row in before[0] if row[0] in ids])
+        self.assertEqual([("Zm00001dAT_V5", "gene_alias", "ncbi_geneid", "100", "protein+maizegdb_v5"),
+                          ("Zm00001dNEAR", "gene_alias", "ncbi_geneid", "500", "protein+neighbour")],
+                         sorted(row for row in rows if row[0] in ids))
+        self.assertEqual(sorted(before[0]), sorted(row for row in rows if row[0] not in ids), "no other row changes")
+
+    def test_pea_anchors_are_only_pairs_both_routes_agree_on(self):
+        """A published pair whose sequence match names another gene is a conflict, and puts no other gene anywhere."""
+        genes = {"100", "150", "400"}
+        species = _StubSpecies(kegg=genes, tables={"ncbi_geneid": genes}, reach={("ensembl_gene", "P1"): {"100"}})
+        places = self.script.PeaPlaces({"V2A": ("1", 1000, 2000), "V2D": ("1", 5000, 6000)},
+                                       {"100": ("3", 10000, 11000), "150": ("3", 10000, 11000), "400": ("3", 14000, 15000)})
+
+        rows, conflicts, unsupported = self.script.peaRows(species, {"V2A": "P1"}, {"V2A": "150", "V2D": "400"}, places)
+
+        self.assertEqual([("V2A", "P1", "150")], conflicts)
+        self.assertEqual([("V2D", "400")], unsupported)
+        self.assertEqual([], rows)
 
     def test_pea_published_pairs_need_best_hits_both_ways_and_a_genome_overlap(self):
         v1OnV2 = [["P1.1", "V2A.1"], ["P2.1", "V2B.1"], ["P3.1", "V2Z.1"], ["P4.1", "V2D.1"]]

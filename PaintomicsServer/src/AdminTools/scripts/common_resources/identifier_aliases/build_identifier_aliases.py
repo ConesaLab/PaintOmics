@@ -58,6 +58,13 @@ MAIZE_V4_GFF_URL = ("https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/
                     "Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz")
 MAIZE_V5_GFF_URL = ("https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/"
                     "Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz")
+MAIZE_V4_PROTEIN_URL = ("https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/"
+                        "Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.protein.fa.gz")
+REFSEQ_MAIZE_URL = ("https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/902/167/145/GCF_902167145.1_Zm-B73-REFERENCE-NAM-5.0/"
+                    "GCF_902167145.1_Zm-B73-REFERENCE-NAM-5.0_")
+#: The names the maize RefSeq files are kept under in the cache.
+REFSEQ_MAIZE_PROTEINS = "GCF_902167145.1_protein.faa.gz"
+REFSEQ_MAIZE_FEATURES = "GCF_902167145.1_feature_table.txt.gz"
 PEA_DATASET_URL = ("https://entrepot.recherche.data.gouv.fr/api/datasets/:persistentId/"
                    "?persistentId=doi:10.57745/5MDE99")
 PEA_DATAFILE_URL = "https://entrepot.recherche.data.gouv.fr/api/access/datafile/%d"
@@ -92,6 +99,17 @@ MIN_GENOME_OVERLAP = 0.5
 #: through as rarely, but also fail genes beside a gap between the assemblies.
 NEIGHBOURS = 4
 SLACK = 1000000
+#: Two proteins are the same when one sequence holds the other whole and the shorter is at
+#: least this share of the longer. 76.6 % of the maize locus tags whose GeneID overlaps the
+#: v5 gene MaizeGDB pairs their id with, so the same gene by both sources, pass it on the
+#: 2026-11 files: a protein that differs says nothing against a row, and only one that is
+#: the same can keep an id a position check skipped (placedByProtein).
+SAME_PROTEIN = 0.95
+#: The evidence of a maize row a position check skipped and placedByProtein keeps: the same
+#: protein, at the v5 gene MaizeGDB pairs the id with, or, where MaizeGDB has none, where
+#: the nearest trusted pair puts it.
+PROTEIN_AT_V5 = "protein+maizegdb_v5"
+PROTEIN_NEAR = "protein+neighbour"
 
 DIAMOND_FIELDS = ("qseqid", "sseqid", "pident", "length", "qlen", "slen", "qcovhsp", "scovhsp", "evalue", "bitscore")
 #: The lists the processors only warn about, on stderr, when one is absent. Without
@@ -370,29 +388,32 @@ class Collinearity(object):
     """Where pairs of genes already trusted put an id's partner, on the partner's genome.
 
     Built from anchors, [(place on the id's genome, place on the partner's genome)], a place
-    being (sequence, start, end). supports() asks the NEIGHBOURS anchors nearest the id on
-    its own genome, and at least half of those asked, and at least one, have to sit on the
-    partner's sequence no further from the partner than they sit from the id, plus SLACK.
-    It compares distances, not order or strand, so a stretch the two assemblies orient
-    differently still agrees. An id with no anchor on its sequence has no support.
+    being (sequence, start, end). supports() asks the `neighbours` anchors nearest the id on
+    its own genome (NEIGHBOURS unless given), and at least half of those asked, and at least
+    one, have to sit on the partner's sequence no further from the partner than they sit
+    from the id, plus SLACK. It compares distances, not order or strand, so a stretch the
+    two assemblies orient differently still agrees. An id with no anchor on its sequence
+    has no support. With one neighbour it asks only whether the nearest anchor agrees, which
+    a stretch of one or two genes that moved together can pass and the majority of 4 cannot.
     """
 
-    def __init__(self, anchors):
+    def __init__(self, anchors, neighbours=NEIGHBOURS):
         bySequence = collections.defaultdict(list)
         for own, other in anchors:
             bySequence[own[0]].append((middle(own), other))
         self.anchors = {sequence: sorted(entries) for sequence, entries in bySequence.items()}
         self.middles = {sequence: [entry[0] for entry in entries] for sequence, entries in self.anchors.items()}
+        self.neighbours = neighbours
 
     def nearest(self, place):
-        """The NEIGHBOURS anchors nearest a place on its sequence, as (middle, other place); on a tie the lower one."""
+        """The `neighbours` anchors nearest a place on its sequence, as (middle, other place); on a tie the lower one."""
         entries = self.anchors.get(place[0], [])
         middles = self.middles.get(place[0], [])
         point = middle(place)
         right = bisect.bisect_left(middles, point)
         left = right - 1
         chosen = []
-        while len(chosen) < NEIGHBOURS and (left >= 0 or right < len(entries)):
+        while len(chosen) < self.neighbours and (left >= 0 or right < len(entries)):
             if right >= len(entries) or (left >= 0 and point - middles[left] <= middles[right] - point):
                 chosen.append(entries[left])
                 left -= 1
@@ -448,7 +469,46 @@ def reachesTheLocus(species, v5, places):
                                      for gene in species.reach("ensembl_gene", v5))
 
 
-def maizeRows(species, locusTags, v4ToV5, v5ToV4, places):
+#: The maize proteins placedByProtein compares: v4, {v4 id: set of sequences} from MaizeGDB's
+#: v4 proteins; genes, {GeneID: set of sequences} from RefSeq's, for the GeneIDs a row may name.
+MaizeProteins = collections.namedtuple("MaizeProteins", "v4 genes")
+
+
+def sameProtein(one, other):
+    """Whether one sequence holds the other whole, the shorter at least SAME_PROTEIN of the longer's length."""
+    if len(one) > len(other):
+        one, other = other, one
+    return len(one) >= SAME_PROTEIN * len(other) and one in other
+
+
+def placedByProtein(v4, v5s, places, proteins, nearest):
+    """For an id a position check skipped: (GeneID, evidence) where one KEGG gene has its protein where v5 has it, else None.
+
+    The candidates are the GeneIDs with a protein the same as one of the id's (sameProtein).
+    Where MaizeGDB pairs the id with v5 genes, a candidate has to overlap one of them, the
+    test reachesTheLocus asks of a MaizeGDB row: Zm00001d004346's v5 gene is linked by
+    Ensembl to a copy 48 kb away, and overlaps 103646782, whose protein is the same. Where
+    MaizeGDB has no v5 gene, the trusted pair nearest the id on v4 has to put the candidate
+    there (`nearest`, a Collinearity of one neighbour): Zm00001d012944 sits 1.4 kb from
+    Zm00001d012943 on v4, and its GeneID 1.7 kb from that gene's v5 gene, 170 Mb from where
+    the 3 next pairs put it. Two candidates passing are a family, and give nothing.
+    """
+    sequences = proteins.v4.get(v4, ())
+    candidates = sorted(gene for gene, theirs in proteins.genes.items() if gene in places.kegg
+                        and any(sameProtein(mine, their) for mine in sequences for their in theirs))
+    partners = [places.v5[v5] for v5 in v5s if v5 in places.v5]
+    if partners:
+        found = [gene for gene in candidates if any(overlaps(places.kegg[gene], partner) for partner in partners)]
+        evidence = PROTEIN_AT_V5
+    elif v4 in places.v4:
+        found = [gene for gene in candidates if nearest.supports(places.v4[v4], places.kegg[gene])]
+        evidence = PROTEIN_NEAR
+    else:
+        return None
+    return (found[0], evidence) if len(found) == 1 else None
+
+
+def maizeRows(species, locusTags, v4ToV5, v5ToV4, places, proteins=None):
     """B73 v4 gene ids: returns (rows, ids NCBI's pass skipped, ids MaizeGDB's pass skipped).
 
     NCBI's locus tag where its GeneID is in KEGG, unless the GeneID is away from where
@@ -459,11 +519,16 @@ def maizeRows(species, locusTags, v4ToV5, v5ToV4, places):
     whose tag was skipped loses its pair only when the pair's v5 gene reaches the very
     gene the tag was skipped for: Zm00001d017669 and Zm00001d025539 do, and
     Zm00001d052718's reaches only another gene, so that id keeps its pair.
+
+    An id skipped either way and left with no row is kept when placedByProtein finds one
+    KEGG gene with its protein where the v5 genome has it; `proteins`, a MaizeProteins,
+    gives the sequences, and without it no skipped id is kept. Both skipped lists name
+    every id skipped, kept that way or not.
     """
     kegg = species.displayIds("kegg_id")
-    collinearity = Collinearity([(places.v4[v4], places.v5[v5s[0]]) for v4, v5s in v4ToV5.items()
-                                 if len(v5s) == 1 and v5ToV4.get(v5s[0]) == [v4]
-                                 and v4 in places.v4 and v5s[0] in places.v5])
+    trusted = [(places.v4[v4], places.v5[v5s[0]]) for v4, v5s in v4ToV5.items()
+               if len(v5s) == 1 and v5ToV4.get(v5s[0]) == [v4] and v4 in places.v4 and v5s[0] in places.v5]
+    collinearity = Collinearity(trusted)
     rows = {}
     skippedNcbi = {}
     skippedMaizeGdb = []
@@ -483,6 +548,14 @@ def maizeRows(species, locusTags, v4ToV5, v5ToV4, places):
                     rows[v4] = (v4, GENE_ALIAS, "ensembl_gene", v5s[0], "maizegdb_1to1")
                 else:
                     skippedMaizeGdb.append(v4)
+    if proteins is not None:
+        known = MaizeProteins(proteins.v4, {gene: sequences for gene, sequences in proteins.genes.items()
+                                            if gene in kegg and species.has("ncbi_geneid", gene)})
+        nearest = Collinearity(trusted, neighbours=1)
+        for v4 in sorted(set(skippedNcbi) | set(skippedMaizeGdb)):
+            placed = None if v4 in rows else placedByProtein(v4, v4ToV5.get(v4, ()), places, known, nearest)
+            if placed is not None:
+                rows[v4] = (v4, GENE_ALIAS, "ncbi_geneid", placed[0], placed[1])
     return list(rows.values()), sorted(skippedNcbi), sorted(skippedMaizeGdb)
 
 
@@ -608,6 +681,21 @@ def proteinGenes(lines):
         if fields[0] == "CDS" and fields[10]:
             genes[fields[10]] = fields[15]
     return genes
+
+
+def proteinsByGene(records, geneOf):
+    """{gene: set of sequences} from (accession, sequence) records; geneOf gives an accession's gene, or None to skip it."""
+    genes = collections.defaultdict(set)
+    for accession, sequence in records:
+        gene = geneOf(accession)
+        if gene is not None:
+            genes[gene].add(sequence)
+    return dict(genes)
+
+
+def maizeV4Gene(accession):
+    """Zm00001d000001_P001 -> Zm00001d000001, as MaizeGDB names the v4 proteins."""
+    return re.sub(r"_P\d+$", "", accession)
 
 
 def fastaRecords(lines):
@@ -758,12 +846,32 @@ def buildMaize(args):
     requirePlaced("the v5 GFF", {gene: place[0] for gene, place in places.v5.items()}, tables[1], MIN_GFF_PLACED)
     requirePlaced("KEGG's gene list", {gene: place[0] for gene, place in places.kegg.items()}, keggGenes, MIN_LIST_PLACED)
     requirePlaced("gene_info", places.chromosomes, keggGenes, MIN_LIST_PLACED)
-    rows, skippedNcbi, skippedMaizeGdb = maizeRows(species, locusTags, tables[0], tables[1], places)
+    rows, skippedNcbi, skippedMaizeGdb = maizeRows(species, locusTags, tables[0], tables[1], places,
+                                                   maizeProteins(args.cache))
     sys.stderr.write("zma: locus tag's GeneID away from where v5 has the id, %d skipped: %s\n"
                      % (len(skippedNcbi), " ".join(skippedNcbi)))
     sys.stderr.write("zma: v5 gene's KEGG genes elsewhere, %d skipped: %s\n"
                      % (len(skippedMaizeGdb), " ".join(skippedMaizeGdb)))
+    kept = sorted("%s>%s" % (row[0], row[3]) for row in rows if row[4] in (PROTEIN_AT_V5, PROTEIN_NEAR))
+    sys.stderr.write("zma: of those, kept by the same protein where v5 has the id, %d: %s\n" % (len(kept), " ".join(kept)))
     return species, rows
+
+
+def maizeProteins(cache):
+    """MaizeGDB's v4 proteins and RefSeq's v5 ones, by gene: see placedByProtein.
+
+    A source that parses short only keeps fewer skipped ids, a source of rows like the
+    locus tags, so there is no floor: the MD5 pin catches it.
+    """
+    with gzip.open(fetch(MAIZE_V4_PROTEIN_URL, os.path.join(cache, MAIZE_V4_PROTEIN_URL.rsplit("/", 1)[1])), "rt",
+                   encoding="utf-8") as handle:
+        v4 = proteinsByGene(fastaRecords(handle), maizeV4Gene)
+    features = fetch(REFSEQ_MAIZE_URL + "feature_table.txt.gz", os.path.join(cache, REFSEQ_MAIZE_FEATURES))
+    with gzip.open(features, "rt", encoding="utf-8") as handle:
+        genes = proteinGenes(handle)
+    with gzip.open(fetch(REFSEQ_MAIZE_URL + "protein.faa.gz", os.path.join(cache, REFSEQ_MAIZE_PROTEINS)), "rt",
+                   encoding="utf-8") as handle:
+        return MaizeProteins(v4, proteinsByGene(fastaRecords(handle), genes.get))
 
 
 def buildPea(args):
