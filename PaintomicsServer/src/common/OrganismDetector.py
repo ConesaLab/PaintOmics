@@ -148,7 +148,8 @@ _PATTERN_TABLE = [
     (r"AT[1-5CM]G\d{5}(?:\.\d+)?", ("ath",), "Arabidopsis thaliana"),
     (r"Os\d{2}g\d{7}", ("dosa", "osa"), "Oryza sativa japonica"),
     (r"LOC_Os\d{2}g\d{5}", ("osa", "dosa"), "Oryza sativa japonica"),
-    (r"Zm00001[de]\d{6}", ("zma",), "Zea mays"),
+    # A v4 transcript's _T001 names the organism as surely as the gene does.
+    (r"Zm00001[de]\d{6}(?:_T\d+)?", ("zma",), "Zea mays"),
     (r"GRMZM\d?G\d{6}", ("zma",), "Zea mays"),
     (r"Solyc\d{2}g\d{6}(?:\.\d+)?", ("sly",), "Solanum lycopersicum"),
     (r"Glyma\.?\d{2}[Gg]\d{6}", ("gmx",), "Glycine max"),

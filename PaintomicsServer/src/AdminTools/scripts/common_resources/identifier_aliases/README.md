@@ -42,39 +42,54 @@ added for one.
 ### `zma.tsv.gz`: maize B73 RefGen_v4 gene ids (`Zm00001d...`)
 
 KEGG's maize genes and the installed Ensembl genebuild are both on v5 (`Zm00001eb...`).
-27,766 rows: NCBI's locus tag where its GeneID is in KEGG, otherwise MaizeGDB, where the
+27,767 rows: NCBI's locus tag where its GeneID is in KEGG, otherwise MaizeGDB, where the
 v5 gene's link to KEGG comes from Ensembl.
 
 | `evidence` | Rows | Target | How |
 |---|---:|---|---|
 | `ncbi_locus_tag` | 27,163 | `ncbi_geneid` | NCBI's locus tag for the gene is `ZEAMMB73_<v4 id>`, KEGG has its GeneID, and the position check below passes |
-| `maizegdb_1to1` | 603 | `ensembl_gene` | MaizeGDB pairs the v4 gene with one v5 gene and that v5 gene with it alone, and the position check below passes |
+| `maizegdb_1to1` | 604 | `ensembl_gene` | MaizeGDB pairs the v4 gene with one v5 gene and that v5 gene with it alone, and the position check below passes |
 
-Each route has a position check, so that a source naming a gene elsewhere on the genome
-costs the row instead of giving a wrong answer. 32 of the 27,798 rows the routes give
-without them fail one and leave the table.
+Each route has a position check, so that a source naming a gene elsewhere can cost the row
+instead of giving a wrong answer. 31 of the 27,798 ids the routes give without them leave
+the table.
 
 * **A locus tag on another chromosome.** A row is skipped when the GeneID's chromosome in
   gene_info differs from the v4 id's in the v4 GFF, unless MaizeGDB pairs that v4 id with
   a v5 gene on the GeneID's chromosome, where the two assemblies placed the gene
   differently. 17 skipped. `Zm00001d033937` is on chromosome 1 and carries the locus tag of
   waxy 1 (GeneID 541854, chromosome 9), whose v5 gene MaizeGDB pairs with `Zm00001d045462`,
-  which keeps it. An id skipped here gets no MaizeGDB row either: `Zm00001d017669`'s pair
-  reaches 5 KEGG genes, one of them the gene its tag was skipped for. 228 `ncbi_locus_tag`
-  rows have one side on a contig or nowhere, and are not checked.
+  which keeps it. An id skipped here loses its MaizeGDB row only when that pair's v5 gene
+  reaches the gene its tag was skipped for: `Zm00001d017669`'s pair reaches 5 KEGG genes and
+  `Zm00001d025539`'s reaches 2, that gene among them, so neither has a row, while
+  `Zm00001d052718`'s reaches only 110485089, and that row stays. 228 `ncbi_locus_tag` rows
+  have one side on a contig or nowhere, and are not checked.
 * **A v5 gene linked elsewhere.** A MaizeGDB pair is skipped when no KEGG gene its v5 gene
   reaches overlaps that v5 gene, by the v5 GFF and the positions in KEGG's gene list. 15
   of the 618 rows this route gave are skipped. The link is Ensembl's, so the v5 id itself
   still gives that answer. `Zm00001d014241` goes because its only KEGG gene, 118475437, has
   no position.
 
-They reach 27,739 of KEGG's 37,712 maize genes, 6,302 of its 9,704 pathway genes. 21
+The locus-tag check compares chromosome names only, so a far row on the same chromosome
+stays. Measured against the GFF files, KEGG's positions and the proteins: `Zm00001d034536`
+(103644213, 44 Mb from its v5 gene) and `Zm00001d041103` (103652087, 12 Mb from its v5 gene)
+look wrong and stay; `Zm00001d044362` (103649614, 221 Mb from the v4 id) and `Zm00001d012944`
+(103648360, 170 Mb) stay and look like moved genes, because their proteins match.
+
+It goes by position only, so it also removes ids that may be the same gene. Of the 17 it
+skips, 9 have the old target as their only best-scoring GeneID at 95 % identity or more
+against RefSeq's maize proteins (`GCF_902167145.1`), and 5 of those are exact protein
+matches, `Zm00001d033937` among them. These ids map nothing instead of risking a wrong gene.
+Sequence does not prove the locus: a v4 copy missing from the v5 RefSeq set would look the
+same.
+
+The rows reach 27,740 of KEGG's 37,712 maize genes, 6,303 of its 9,704 pathway genes. 21
 aliases reach more than one KEGG gene, because their v5 target does; for 18 of them one of
 those genes overlaps the v5 gene and another does not. MaizeGDB lists
 about 44,100 v4 gene models. Of the 16,400 or so left out, about 9,800 have no v5 gene in
 MaizeGDB's table, about 3,700 have a 1:1 v5 gene that reaches no KEGG gene, about 1,600
 point at several v5 genes, about 1,300 share one v5 gene with another v4 id and are left
-out by the strict 1:1 rule (about 470 of those genes reach KEGG), and 32 failed a position
+out by the strict 1:1 rule (about 470 of those genes reach KEGG), and 31 failed a position
 check.
 
 ### `psat.tsv.gz`: pea Cameor v2 gene ids (`Psat.cameor.v2...`)
@@ -157,7 +172,7 @@ gene).
 | Kreplak, Jonathan. Dataset from "A new genome assembly of the pea cultivar Cameor provides resources for functional genomics and genetics". Recherche Data Gouv, V1, 2025-04-01. [doi:10.57745/5MDE99](https://doi.org/10.57745/5MDE99): `v1_genes_to_v2.xlsx`, `CAMEOR_V2_ANNOTATION_1_prot.fasta`. Article: Kreplak J. et al., Sci Data 2026, [doi:10.1038/s41597-026-07347-4](https://doi.org/10.1038/s41597-026-07347-4) | pea, both routes | [Etalab Open Licence 2.0](https://spdx.org/licenses/etalab-2.0.html). **Attribution is required**: reuse must name the source and its date, as this row does. Rows were derived from the files, which are not redistributed here |
 | NCBI Gene, `GENE_INFO/Plants/All_Plants.gene_info.gz`, taxa 4577 and 4558 | maize and sorghum locus tags, and maize chromosomes for the position check | [NCBI policy](https://www.ncbi.nlm.nih.gov/home/about/policies/): NCBI places no restrictions on use or distribution of its molecular data; contributors may hold their own rights |
 | NCBI RefSeq, `GCF_024323335.1` (CAAS_Psat_ZW6_1.0), proteins and feature table | pea, sequence route | As above |
-| MaizeGDB, [`Pan-genes/B73_gene_xref`](https://download.maizegdb.org/Pan-genes/B73_gene_xref/): `B73v4_to_B73v5.tsv`, `B73v5_to_B73v4.tsv` | maize, the 603 `maizegdb_1to1` rows | The directory states no licence and MaizeGDB's terms page could not be read (it sits behind a browser check, 2026-11-06). Credited as MaizeGDB, RRID:SCR_006600. **Confirm the terms with MaizeGDB before relying on these rows being redistributable** |
+| MaizeGDB, [`Pan-genes/B73_gene_xref`](https://download.maizegdb.org/Pan-genes/B73_gene_xref/): `B73v4_to_B73v5.tsv`, `B73v5_to_B73v4.tsv` | maize, the 604 `maizegdb_1to1` rows | The directory states no licence and MaizeGDB's terms page could not be read (it sits behind a browser check, 2026-11-06). Credited as MaizeGDB, RRID:SCR_006600. **Confirm the terms with MaizeGDB before relying on these rows being redistributable** |
 | MaizeGDB, gene models: [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz), [`Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz) | maize, the position checks | As above. Used to choose rows and not redistributed |
 | MaizeGDB, [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.full_gene_data.txt.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.full_gene_data.txt.gz) | the counts of v4 gene models and of those left out above, only: 44,146 models, where `B73v4_to_B73v5.tsv` lists 38,356. The script does not read it | As above. Nothing from it is in the tables |
 | KEGG and Ensembl, as the species' installed `mapping/` files, among them `kegg2genesymbol.list`, which is KEGG's gene list (`rest.kegg.jp/list/<code>`) with its positions | which targets exist and reach KEGG, and maize positions for the check on `maizegdb_1to1` rows | Used to choose rows and not redistributed: the tables hold GeneIDs, Ensembl ids and the aliases above, and no KEGG data |
@@ -169,7 +184,10 @@ has the commands. A species build never runs it, and only the pea `rbh` step nee
 It reads the species' `mapping/` files through the build's own processors, not the
 installed database, because a database that already holds the aliases would answer "this
 sorghum gene reaches KEGG" and the table would regenerate empty. It stops without writing
-when a source is skipped, a KEGG list is absent or no rows come out.
+when a source is skipped, a KEGG list is absent, no rows come out, or a maize position source
+puts too few of its ids on a numbered chromosome: each GFF under 95 % of the ids in MaizeGDB's
+table (measured 99.2 % and 100 %), KEGG's list or gene_info under 85 % of KEGG's genes (94.4 %
+each). Without that, a file that downloads and parses to nothing would turn a check off.
 
 Run against the deployed `mapping/` files, with DIAMOND v2.2.8 and the sources downloaded
 afresh on 2026-11-06, the two GFF files on 2026-11-07, it gives these tables, byte for byte
@@ -177,7 +195,7 @@ from one run to the next:
 
 | Table | Rows | Bytes | MD5 |
 |---|---:|---:|---|
-| `zma.tsv.gz` | 27,766 | 167,039 | `a7df9c42c9248284b20e5852f985b866` |
+| `zma.tsv.gz` | 27,767 | 167,049 | `4b0e1f13db7c9c674b1294e8b50ee196` |
 | `psat.tsv.gz` | 22,200 | 141,303 | `1bbcf94dcd5de933a2625f5145b6f17a` |
 | `sbi.tsv.gz` | 3,192 | 20,854 | `902915412cb3bfc070c9c7f126aff035` |
 

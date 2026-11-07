@@ -171,11 +171,12 @@ def hasDataRows(path):
 
 
 _ENSEMBL_VERSIONED = re.compile(r"^ENS[A-Z]*[GTP]\d{5,}\.\d+$")
-# Transcript ids of the two genome versions PaintOmics accepts as gene ids only
-# (AdminTools/scripts/common_resources/identifier_aliases): pea Cameor v2 and
-# maize B73 v4. The organism hint names these files correctly and they still map
-# nothing on that organism until the suffix is gone.
-_ALIAS_TRANSCRIPT = re.compile(r"^(?:Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+(\.\d+)|Zm00001d\d{6}(_T\d+))$")
+# Transcript ids of the genome version each organism accepts as gene ids only
+# (AdminTools/scripts/common_resources/identifier_aliases). Only on that organism
+# does removing the suffix help: on any other the gene id matches nothing either, so
+# there the advice stays "check the organism", and the organism hint names the right one.
+_ALIAS_TRANSCRIPT = {"psat": re.compile(r"^Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+(\.\d+)$"),
+                     "zma": re.compile(r"^Zm00001d\d{6}(_T\d+)$")}
 
 
 def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor, detect=None):
@@ -207,15 +208,15 @@ def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor, detect=None):
             (", e.g. " + ", ".join(sample)) if sample else ""))
     lines = ["None of the identifiers in your data matched %s's KEGG genes: %s "
              "matched 0, so there is nothing to analyse." % (organism, "; ".join(parts))]
+    aliasTranscript = _ALIAS_TRANSCRIPT.get(organism)
     if samples and all(_ENSEMBL_VERSIONED.match(x) for x in samples):
         lines.append("These carry an Ensembl version suffix (the .%s in %s); KEGG "
                      "knows them without it, so strip the suffix and run again."
                      % (samples[0].rsplit(".", 1)[1], samples[0]))
-    elif samples and all(_ALIAS_TRANSCRIPT.match(x) for x in samples):
-        match = _ALIAS_TRANSCRIPT.match(samples[0])
+    elif samples and aliasTranscript and all(aliasTranscript.match(x) for x in samples):
         lines.append("These are transcript ids (the %s in %s); only the gene ids of "
                      "this genome version are accepted, so remove the suffix and "
-                     "run again." % (match.group(1) or match.group(2), samples[0]))
+                     "run again." % (aliasTranscript.match(samples[0]).group(1), samples[0]))
     else:
         lines.append("Check the organism you chose and the kind of identifier "
                      "in the first column: the mapping summary on this page "

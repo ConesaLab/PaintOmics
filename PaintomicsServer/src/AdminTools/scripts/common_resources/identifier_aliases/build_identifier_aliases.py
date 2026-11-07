@@ -22,8 +22,9 @@ link, and regenerating from it would come out empty. It also reads
 DATA/<code>/gene2pathway.list, for the pathway counts it reports, so copy that
 beside mapping/ when running it on another machine.
 
-It stops rather than write a short table: a source the processors skipped, or a
-missing KEGG list, or no rows at all, ends the run with a message and no file.
+It stops rather than write a short table: a source the processors skipped, a
+missing KEGG list, a maize position source that places too few of its ids, or no
+rows at all, ends the run with a message and no file.
 
 Expect small differences on a later date. NCBI rewrites gene_info daily and KEGG
 and Ensembl move with each release, which is the point of being able to re-run it.
@@ -76,6 +77,13 @@ DIAMOND_FIELDS = ("qseqid", "sseqid", "pident", "length", "qlen", "slen", "qcovh
 #: The lists the processors only warn about, on stderr, when one is absent. Without
 #: any of them a species still builds, with far fewer rows to choose from.
 REQUIRED_MAPPING_FILES = ("uniprot2kegg.list", "ncbi-geneid2kegg.list", "kegg2genesymbol.list")
+#: The share of its ids a maize position source has to put on a numbered chromosome.
+#: On the 2026-11 files: the v4 GFF 99.2 % and the v5 GFF 100 % of the ids in MaizeGDB's
+#: tables, KEGG's list and gene_info 94.4 % of KEGG's genes. They have margin below
+#: that for a later release, and stop a source that parses to little or nothing, which
+#: would turn its check off or lose the MaizeGDB rows and still end the run well.
+MIN_GFF_PLACED = 0.95
+MIN_LIST_PLACED = 0.85
 
 RBH_FILE = "psat_v2_refseq_rbh.tsv"
 RBH_HEADER = ("v2_gene", "geneid", "pident", "aln_len", "qlen", "slen", "qcov", "scov", "evalue", "bitscore",
@@ -344,28 +352,30 @@ def maizeRows(species, locusTags, v4ToV5, v5ToV4, places):
     Otherwise MaizeGDB's strict 1:1 pair, whose route goes through whatever the v5
     Ensembl gene is linked to, which is sometimes several genes and sometimes a gene
     elsewhere: at least one of them has to overlap the v5 gene. An id whose tag was
-    skipped gets no pair either: where it has one, the v5 gene can reach the very
-    gene the tag was skipped for.
+    skipped loses its pair only when the pair's v5 gene reaches the very gene the tag
+    was skipped for: Zm00001d017669 and Zm00001d025539 do, and Zm00001d052718's reaches
+    only another gene, so that id keeps its pair.
     """
     kegg = species.displayIds("kegg_id")
     rows = {}
-    skippedNcbi = []
+    skippedNcbi = {}
     skippedMaizeGdb = []
     for tag, geneIds in locusTags.items():
         if tag.startswith("Zm00001d"):
             known = sorted(gene for gene in geneIds if gene in kegg and species.has("ncbi_geneid", gene))
             if len(known) == 1:
                 if onAnotherChromosome(tag, known[0], v4ToV5.get(tag, ()), places):
-                    skippedNcbi.append(tag)
+                    skippedNcbi[tag] = known[0]
                 else:
                     rows[tag] = (tag, GENE_ALIAS, "ncbi_geneid", known[0], "ncbi_locus_tag")
-    unusable = rows.keys() | set(skippedNcbi)
     for v4, v5s in v4ToV5.items():
-        if v4 not in unusable and len(v5s) == 1 and v5ToV4.get(v5s[0]) == [v4] and species.reach("ensembl_gene", v5s[0]):
-            if reachesTheLocus(species, v5s[0], places):
-                rows[v4] = (v4, GENE_ALIAS, "ensembl_gene", v5s[0], "maizegdb_1to1")
-            else:
-                skippedMaizeGdb.append(v4)
+        if v4 not in rows and len(v5s) == 1 and v5ToV4.get(v5s[0]) == [v4]:
+            reached = species.reach("ensembl_gene", v5s[0])
+            if reached and skippedNcbi.get(v4) not in reached:
+                if reachesTheLocus(species, v5s[0], places):
+                    rows[v4] = (v4, GENE_ALIAS, "ensembl_gene", v5s[0], "maizegdb_1to1")
+                else:
+                    skippedMaizeGdb.append(v4)
     return list(rows.values()), sorted(skippedNcbi), sorted(skippedMaizeGdb)
 
 
@@ -589,6 +599,14 @@ def runRbh(args):
 
 # --- The tables step --------------------------------------------------------
 
+def requirePlaced(source, chromosomeOf, ids, least):
+    """Stop unless a position source puts this share of the ids it is meant to place on a numbered chromosome."""
+    placed = sum(1 for gene in ids if chromosomeOf.get(gene, "").isdigit())
+    if not ids or placed < least * len(ids):
+        raise SystemExit("zma: %s puts %d of %d ids on a numbered chromosome, under the %d %% it has to: no table written"
+                         % (source, placed, len(ids), least * 100))
+
+
 def buildMaize(args):
     species = Species("zma", args.kegg_data)
     geneInfo = geneInfoForTaxon(args.cache, MAIZE_TAXON)
@@ -605,6 +623,11 @@ def buildMaize(args):
         with gzip.open(fetch(url, os.path.join(args.cache, url.rsplit("/", 1)[1])), "rt", encoding="utf-8") as handle:
             genes.append(readGffGenes(handle))
     places = MaizePlaces(genes[0], genes[1], species.keggPlaces(), chromosomes)
+    keggGenes = species.displayIds("kegg_id")
+    requirePlaced("the v4 GFF", {gene: place[0] for gene, place in places.v4.items()}, tables[0], MIN_GFF_PLACED)
+    requirePlaced("the v5 GFF", {gene: place[0] for gene, place in places.v5.items()}, tables[1], MIN_GFF_PLACED)
+    requirePlaced("KEGG's gene list", {gene: place[0] for gene, place in places.kegg.items()}, keggGenes, MIN_LIST_PLACED)
+    requirePlaced("gene_info", places.chromosomes, keggGenes, MIN_LIST_PLACED)
     rows, skippedNcbi, skippedMaizeGdb = maizeRows(species, locusTags, tables[0], tables[1], places)
     sys.stderr.write("zma: locus tag on another chromosome, %d skipped: %s\n" % (len(skippedNcbi), " ".join(skippedNcbi)))
     sys.stderr.write("zma: v5 gene's KEGG genes elsewhere, %d skipped: %s\n"

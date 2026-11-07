@@ -25,8 +25,8 @@ What is pinned here
   refused: the warning in processEnsemblUniProtData's docstring, as a check.
 * The shipped tables' schema, order, uniqueness and the rows users asked for, each
   evidence label's target table, and the counts and MD5s the README states.
-* The regenerating script's selection rules, on tiny inputs, and that it stops
-  rather than write a short table.
+* The regenerating script's selection rules, on tiny inputs, its maize build on small
+  files of each source, and that it stops rather than write a short table.
 * The organism hint recognises Cameor v2 and everything it recognised before.
 
 Needs no network and no database.
@@ -64,7 +64,7 @@ REGISTRY = os.path.join(SCRIPTS, "common_resources", "ensembl_genebuilds.json")
 DEFAULT_BUILD = os.path.join(SCRIPTS, "default", "build_database.py")
 
 COLUMNS = ["alias", "alias_dbname", "target_dbname", "target_display_id", "evidence"]
-SHIPPED_ROWS = {"zma": 27766, "psat": 22200, "sbi": 3192}
+SHIPPED_ROWS = {"zma": 27767, "psat": 22200, "sbi": 3192}
 ALIAS_SHAPE = {"zma": r"Zm00001d\d{6}", "psat": r"Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+",
                "sbi": r"SORBI_3(?:\d{3}G|K)\d{6}"}
 #: Per table, each evidence label and the table its rows target. A published pea
@@ -626,8 +626,12 @@ class ShippedTablesTest(unittest.TestCase):
         # A v5 gene linked to a KEGG gene elsewhere, with an NCBI cross-reference to test (the first) and without.
         for wrong in ("Zm00001d025106", "Zm00001d031839", "Zm00001d014241"):
             self.assertNotIn(wrong, rows)
-        # A skipped tag whose MaizeGDB pair reaches the same gene and others: no row at all.
-        self.assertNotIn("Zm00001d017669", rows)
+        # A skipped tag whose MaizeGDB pair reaches the gene it was skipped for, among others: no row at all.
+        for blocked in ("Zm00001d017669", "Zm00001d025539"):
+            self.assertNotIn(blocked, rows)
+        # A skipped tag whose pair reaches only another gene, at the pair's v5 gene: that pair stands.
+        self.assertEqual(["Zm00001d052718", "gene_alias", "ensembl_gene", "Zm00001eb198420", "maizegdb_1to1"],
+                         rows["Zm00001d052718"])
         # Their KEGG genes overlap the v5 gene, though each id's NCBI tag names a GeneID KEGG does not have.
         for kept in ("Zm00001d002318", "Zm00001d007959", "Zm00001d051239"):
             self.assertEqual("maizegdb_1to1", rows[kept][4], kept)
@@ -792,17 +796,32 @@ class RegeneratingScriptTest(unittest.TestCase):
         self.assertEqual(["Zm00001dV4_CONTIG", "Zm00001dV4_NO_GFF", "Zm00001dV4_REPLACED", "Zm00001dV4_SAME", "Zm00001dV4_UN"],
                          sorted(row[0] for row in rows))
 
-    def test_a_skipped_locus_tag_gets_no_maizegdb_pair_either(self):
-        """Measured: Zm00001d017669's pair reaches 5 KEGG genes, one at its place and the one its tag was skipped for."""
+    def test_a_skipped_locus_tag_loses_its_maizegdb_pair_only_if_the_pair_reaches_the_same_gene(self):
+        """Measured: Zm00001d017669's pair reaches 5 KEGG genes, one at its place and the one its tag was skipped for.
+
+        Zm00001d052718's pair reaches only 110485089, at its v5 gene, and not the gene its tag was skipped for.
+        """
         species = _StubSpecies(kegg={"100"}, tables={"ncbi_geneid": {"100"}},
-                               reach={("ensembl_gene", "V5"): {"100", "900"}})
-        places = self.places(v4={"Zm00001d000001": ("5", 1, 2)}, v5={"V5": ("5", 1, 2)},
+                               reach={("ensembl_gene", "V5_SAME"): {"100", "900"}, ("ensembl_gene", "V5_OTHER"): {"900"}})
+        places = self.places(v4={"Zm00001d000001": ("5", 1, 2), "Zm00001d000002": ("5", 1, 2)},
+                             v5={"V5_SAME": ("5", 1, 2), "V5_OTHER": ("5", 1, 2)},
                              kegg={"100": ("4", 1, 2), "900": ("5", 1, 2)}, chromosomes={"100": "4"})
         rows, skippedNcbi, skippedMaizeGdb = self.script.maizeRows(
-            species, {"Zm00001d000001": {"100"}}, {"Zm00001d000001": ["V5"]}, {"V5": ["Zm00001d000001"]}, places)
-        self.assertEqual(["Zm00001d000001"], skippedNcbi)
+            species, {"Zm00001d000001": {"100"}, "Zm00001d000002": {"100"}},
+            {"Zm00001d000001": ["V5_SAME"], "Zm00001d000002": ["V5_OTHER"]},
+            {"V5_SAME": ["Zm00001d000001"], "V5_OTHER": ["Zm00001d000002"]}, places)
+        self.assertEqual(["Zm00001d000001", "Zm00001d000002"], skippedNcbi)
         self.assertEqual([], skippedMaizeGdb)
-        self.assertEqual([], rows)
+        self.assertEqual([("Zm00001d000002", "gene_alias", "ensembl_gene", "V5_OTHER", "maizegdb_1to1")], rows)
+
+    def test_a_locus_tag_naming_several_kegg_genes_gives_no_row(self):
+        """The tag has to name one GeneID in KEGG. A second GeneID outside KEGG does not make it ambiguous."""
+        genes = {"100", "200"}
+        species = _StubSpecies(kegg=genes, tables={"ncbi_geneid": genes}, reach={})
+        rows, skippedNcbi, _ = self.script.maizeRows(
+            species, {"Zm00001d000001": {"100", "200"}, "Zm00001d000002": {"100", "999"}}, {}, {}, self.places())
+        self.assertEqual([("Zm00001d000002", "gene_alias", "ncbi_geneid", "100", "ncbi_locus_tag")], rows)
+        self.assertEqual([], skippedNcbi)
 
     def test_the_position_readers(self):
         self.assertEqual({"G1": ("1", 44289, 49837), "Zm00001eb000010": ("10", 34617, 40204)},
@@ -905,6 +924,123 @@ class RegeneratingScriptTest(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 self.script.runTables(args)
         self.assertEqual([], os.listdir(args.out))
+
+    def writeMaizeSources(self):
+        """Every file buildMaize reads, in the shapes the sources give them, one id per case in maizeRows.
+
+        Returns the paths of those a test spoils. The v4 and v5 ids do not overlap, and
+        neither do the two MaizeGDB tables, so a source read as the other shows.
+        """
+        self.writeMapping()
+        mapping = os.path.join(self.workDir, "zma", "mapping")
+        genes = {"200": "2", "300": "3", "400": "9", "500": "8", "510": "5", "520": "1", "540": "4", "600": "6"}
+
+        def lines(name, rows):
+            with open(os.path.join(mapping, name), "w", encoding="utf-8") as handle:
+                handle.write("".join(row + "\n" for row in rows))
+
+        lines("ncbi-geneid2kegg.list", ["ncbi-geneid:%s\tzma:%s" % (gene, gene) for gene in genes])
+        lines("kegg2genesymbol.list", ["zma:%s\tCDS\t%s:1000..2000\tg%s; a gene" % (gene, chromosome, gene)
+                                       for gene, chromosome in genes.items()])
+        lines("ensembl_mapping.list", ["Zm00001eb000020\t300\tP20\tT20", "Zm00001eb000040\t510\tP40\tT40",
+                                       "Zm00001eb000050\t500\tP50\tT50", "Zm00001eb000050\t540\tP51\tT51",
+                                       "Zm00001eb000060\t600\tP60\tT60"])
+        with open(os.path.join(self.workDir, "zma", "gene2pathway.list"), "w", encoding="utf-8") as handle:
+            handle.write("zma:300\tpath:zma00010\n")
+
+        cache = os.path.join(self.workDir, "cache")
+        os.makedirs(cache, exist_ok=True)
+        with gzip.open(os.path.join(cache, "tax4577.gene_info.gz"), "wt", encoding="utf-8") as handle:
+            tagged = {"200": "Zm00001d000001", "400": "Zm00001d000003", "520": "Zm00001d000004", "500": "Zm00001d000005"}
+            for gene, chromosome in genes.items():
+                tag = "ZEAMMB73_" + tagged[gene] if gene in tagged else "-"
+                handle.write("4577\t%s\tS\t%s\t-\t-\t%s\t-\tdesc\tprotein-coding\n" % (gene, tag, chromosome))
+        pairs = {"Zm00001d000002": "Zm00001eb000020",   # MaizeGDB, its KEGG gene 300 at its v5 gene: a row
+                 "Zm00001d000004": "Zm00001eb000040",   # a skipped tag, and its pair reaches another gene there: a row
+                 "Zm00001d000005": "Zm00001eb000050",   # a skipped tag, and its pair reaches that gene as well: none
+                 "Zm00001d000006": "Zm00001eb000060"}   # MaizeGDB, its KEGG gene 600 elsewhere: none
+        with open(os.path.join(cache, "B73v4_to_B73v5.tsv"), "w", encoding="utf-8") as handle:
+            handle.write("".join("%s\t%s\n" % pair for pair in pairs.items()))
+        with open(os.path.join(cache, "B73v5_to_B73v4.tsv"), "w", encoding="utf-8") as handle:
+            handle.write("".join("%s\t%s\n" % (v5, v4) for v4, v5 in pairs.items()))
+
+        v4Gff = os.path.join(cache, self.script.MAIZE_V4_GFF_URL.rsplit("/", 1)[1])
+        v5Gff = os.path.join(cache, self.script.MAIZE_V5_GFF_URL.rsplit("/", 1)[1])
+        v4Places = {"Zm00001d000001": "2", "Zm00001d000002": "3", "Zm00001d000003": "1", "Zm00001d000004": "5",
+                    "Zm00001d000005": "4", "Zm00001d000006": "6"}
+        # Zm00001eb000060 is at 3000, past its KEGG gene: same chromosome, no base shared.
+        v5Places = {"Zm00001eb000020": ("3", 1500), "Zm00001eb000040": ("5", 1500), "Zm00001eb000050": ("4", 1500),
+                    "Zm00001eb000060": ("6", 3000)}
+        with gzip.open(v4Gff, "wt", encoding="utf-8") as handle:
+            handle.write("##gff-version 3\n")
+            for gene, chromosome in v4Places.items():
+                handle.write("Chr%s\tgramene\tgene\t1000\t2000\t.\t+\t.\tID=gene:%s;biotype=protein_coding\n" % (chromosome, gene))
+        with gzip.open(v5Gff, "wt", encoding="utf-8") as handle:
+            handle.write("##gff-version 3\n")
+            for gene, (chromosome, start) in v5Places.items():
+                handle.write("chr%s\tNAM\tgene\t%d\t%d\t.\t+\t.\tID=%s;biotype=protein_coding\n" % (chromosome, start, start + 200, gene))
+        return {"mapping": mapping, "v4Gff": v4Gff, "v5Gff": v5Gff, "geneInfo": os.path.join(cache, "tax4577.gene_info.gz"),
+                "v4ToV5": os.path.join(cache, "B73v4_to_B73v5.tsv")}
+
+    def runMaize(self):
+        """The real `tables --species zma`, on those files, with a download an error."""
+        args = self.tablesArguments()
+        with mock.patch.object(self.script, "check_call", side_effect=AssertionError("nothing is to be downloaded")):
+            self.script.runTables(args)
+        with gzip.open(os.path.join(args.out, "zma.tsv.gz"), "rt", encoding="utf-8") as handle:
+            return [line.rstrip("\n").split("\t") for line in handle][1:]
+
+    def test_the_maize_build_joins_its_sources(self):
+        """Each source decides a row, so a source read as another, or lost, changes the answer."""
+        self.writeMaizeSources()
+        self.assertEqual([["Zm00001d000001", "gene_alias", "ncbi_geneid", "200", "ncbi_locus_tag"],
+                          ["Zm00001d000002", "gene_alias", "ensembl_gene", "Zm00001eb000020", "maizegdb_1to1"],
+                          ["Zm00001d000004", "gene_alias", "ensembl_gene", "Zm00001eb000040", "maizegdb_1to1"]],
+                         self.runMaize())
+
+    def assertMaizeStops(self, expected):
+        with self.assertRaises(SystemExit) as stopped:
+            self.runMaize()
+        self.assertIn(expected, str(stopped.exception))
+        self.assertEqual([], os.listdir(os.path.join(self.workDir, "out")), "no table")
+
+    def rewrite(self, path, change):
+        opener = gzip.open if path.endswith(".gz") else open
+        with opener(path, "rt", encoding="utf-8") as handle:
+            lines = handle.read().splitlines(True)
+        with opener(path, "wt", encoding="utf-8") as handle:
+            handle.write("".join(change(lines)))
+
+    def test_the_maize_build_stops_on_a_position_source_that_places_too_little(self):
+        """Each of these runs to the end without the check, and writes a table missing rows or checks."""
+        def noGeneRows(lines):
+            return [line for line in lines if line.startswith("#")]
+
+        def onlyOneGene(lines):
+            return lines[:2]
+
+        def noPositionColumns(lines):
+            return ["%s\t%s" % (line.split("\t")[0], line.split("\t")[-1]) for line in lines]
+
+        def spelledChr(lines):
+            return [re.sub(r"\t(\d+):", r"\tchr\1:", line, count=1) for line in lines]
+
+        def geneInfoSpelledChr(lines):
+            return [re.sub(r"\t(\d+)\t-\tdesc", r"\tchr\1\t-\tdesc", line) for line in lines]
+
+        keggList = ("mapping", "kegg2genesymbol.list")
+        for source, spoil, expected in (("v4Gff", noGeneRows, "the v4 GFF"), ("v5Gff", noGeneRows, "the v5 GFF"),
+                                        ("v4Gff", onlyOneGene, "the v4 GFF"), ("v5Gff", onlyOneGene, "the v5 GFF"),
+                                        (keggList, noPositionColumns, "KEGG's gene list"),
+                                        (keggList, spelledChr, "KEGG's gene list"),
+                                        ("geneInfo", geneInfoSpelledChr, "gene_info"),
+                                        ("geneInfo", lambda lines: [], "gene_info"),
+                                        ("v4ToV5", lambda lines: ["<html>maintenance</html>\n"], "0 of 0 ids")):
+            with self.subTest(source=source, spoil=spoil.__name__):
+                paths = self.writeMaizeSources()
+                path = os.path.join(paths[source[0]], source[1]) if isinstance(source, tuple) else paths[source]
+                self.rewrite(path, spoil)
+                self.assertMaizeStops(expected)
 
     def test_drop_rbh_only_leaves_the_published_rows(self):
         rows = [("V2A", "gene_alias", "ensembl_gene", "P1", "published_table_rbh+coord+refseq_rbh"),
@@ -1045,6 +1181,20 @@ class OrganismHintTest(unittest.TestCase):
             match = od.matchPattern(list(identifiers))
             self.assertIsNotNone(match, identifiers[0])
             self.assertEqual(codes, match[0], identifiers[0])
+
+    def test_a_maize_transcript_file_run_as_the_wrong_organism_is_told_maize(self):
+        transcripts = ["Zm00001d027230_T001", "Zm00001d002345_T002", "Zm00001d045677_T001", "Zm00001d038291_T003",
+                       "Zm00001d001865_T001"]
+        result = od.detectOrganism(transcripts, selected="hsa", lookup=_Lookup({"hsa", "psat", "zma"}), names={})
+        self.assertEqual("pattern", result["method"])
+        self.assertEqual("zma", result["confident"]["code"])
+        pattern = re.compile(next(regex for regex, codes, _ in od._PATTERN_TABLE if regex.startswith("Zm00001")))
+        for identifier in ("Zm00001d027230", "Zm00001e000010", "Zm00001d027230_T1"):
+            self.assertTrue(pattern.fullmatch(identifier), identifier)
+        # A suffix of another shape, or letters where the number goes, is not a maize transcript.
+        for identifier in ("Zm00001d027230_P001", "Zm00001d027230_T", "Zm00001d027230_T001.1", "zm00001d027230_T001",
+                           "Zm00001d02723_T001", "Zm00002d027230_T001"):
+            self.assertIsNone(pattern.fullmatch(identifier), identifier)
 
     def test_a_cameor_file_run_as_the_wrong_organism_is_told_pea(self):
         result = od.detectOrganism(self.CAMEOR, selected="ath", lookup=_Lookup({"ath", "psat", "zma"}), names={})
