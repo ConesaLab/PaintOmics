@@ -42,66 +42,94 @@ added for one.
 ### `zma.tsv.gz`: maize B73 RefGen_v4 gene ids (`Zm00001d...`)
 
 KEGG's maize genes and the installed Ensembl genebuild are both on v5 (`Zm00001eb...`).
-27,767 rows: NCBI's locus tag where its GeneID is in KEGG, otherwise MaizeGDB, where the
+27,763 rows: NCBI's locus tag where its GeneID is in KEGG, otherwise MaizeGDB, where the
 v5 gene's link to KEGG comes from Ensembl.
 
 | `evidence` | Rows | Target | How |
 |---|---:|---|---|
-| `ncbi_locus_tag` | 27,163 | `ncbi_geneid` | NCBI's locus tag for the gene is `ZEAMMB73_<v4 id>`, KEGG has its GeneID, and the position check below passes |
+| `ncbi_locus_tag` | 27,159 | `ncbi_geneid` | NCBI's locus tag for the gene is `ZEAMMB73_<v4 id>`, KEGG has its GeneID, and the position check below passes |
 | `maizegdb_1to1` | 604 | `ensembl_gene` | MaizeGDB pairs the v4 gene with one v5 gene and that v5 gene with it alone, and the position check below passes |
 
 Each route has a position check, so that a source naming a gene elsewhere can cost the row
-instead of giving a wrong answer. 31 of the 27,798 ids the routes give without them leave
+instead of giving a wrong answer. 35 of the 27,798 ids the routes give without them leave
 the table.
 
-* **A locus tag on another chromosome.** A row is skipped when the GeneID's chromosome in
-  gene_info differs from the v4 id's in the v4 GFF, unless MaizeGDB pairs that v4 id with
-  a v5 gene on the GeneID's chromosome, where the two assemblies placed the gene
-  differently. 17 skipped. `Zm00001d033937` is on chromosome 1 and carries the locus tag of
-  waxy 1 (GeneID 541854, chromosome 9), whose v5 gene MaizeGDB pairs with `Zm00001d045462`,
-  which keeps it. An id skipped here loses its MaizeGDB row only when that pair's v5 gene
-  reaches the gene its tag was skipped for: `Zm00001d017669`'s pair reaches 5 KEGG genes and
-  `Zm00001d025539`'s reaches 2, that gene among them, so neither has a row, while
-  `Zm00001d052718`'s reaches only 110485089, and that row stays. 228 `ncbi_locus_tag` rows
-  have one side on a contig or nowhere, and are not checked.
+* **A locus tag naming a GeneID away from the gene.** The v5 genome places a v4 id two
+  ways: the v5 genes MaizeGDB pairs it with, and where MaizeGDB's 1:1 pairs around it on v4
+  sit on v5 (the collinearity test under "Where the gene is", below). A row is skipped
+  unless KEGG's place for the GeneID is within 1 Mb of such a v5 gene or passes that test.
+  21 skipped:
+  * 17 with the GeneID on another chromosome, where the v4 GFF, the id's neighbours and any
+    v5 gene MaizeGDB pairs it with all put it on its own. `Zm00001d033937` is on chromosome 1
+    and carries the locus tag of waxy 1 (GeneID 541854, chromosome 9), whose v5 gene
+    MaizeGDB pairs with `Zm00001d045462`, which keeps it.
+  * 4 on the id's own chromosome, far from both places: `Zm00001d034536` (103644213, 44 Mb
+    from its MaizeGDB v5 gene and from where its neighbours put it), `Zm00001d041103`
+    (103652087, 12 Mb from both), and, with no MaizeGDB v5 gene, `Zm00001d044362`
+    (103649614, 223 Mb from where its neighbours put it) and `Zm00001d012944` (103648360,
+    170 Mb). Before this check went by distance, only a different chromosome counted, and
+    these four had rows.
+
+  Where KEGG gives the GeneID no place (12 rows), gene_info's chromosome is compared with the
+  v4 GFF's, and a MaizeGDB v5 gene on it explains a difference. 228 rows have the v4 id on a
+  contig or nowhere, or a GeneID on no numbered chromosome, and are not checked. An id
+  skipped here loses its MaizeGDB row only when that pair's v5 gene reaches the gene its tag
+  was skipped for: `Zm00001d017669`'s pair reaches 5 KEGG genes and `Zm00001d025539`'s
+  reaches 2, that gene among them, so neither has a row, while `Zm00001d052718`'s reaches
+  only 110485089, and that row stays.
 * **A v5 gene linked elsewhere.** A MaizeGDB pair is skipped when no KEGG gene its v5 gene
   reaches overlaps that v5 gene, by the v5 GFF and the positions in KEGG's gene list. 15
   of the 618 rows this route gave are skipped. The link is Ensembl's, so the v5 id itself
   still gives that answer. `Zm00001d014241` goes because its only KEGG gene, 118475437, has
   no position.
 
-The locus-tag check compares chromosome names only, so a far row on the same chromosome
-stays. Measured against the GFF files, KEGG's positions and the proteins: `Zm00001d034536`
-(103644213, 44 Mb from its v5 gene) and `Zm00001d041103` (103652087, 12 Mb from its v5 gene)
-look wrong and stay; `Zm00001d044362` (103649614, 221 Mb from the v4 id) and `Zm00001d012944`
-(103648360, 170 Mb) stay and look like moved genes, because their proteins match.
+**Why both places.** 25,797 locus tags name a GeneID on the chromosome of a v5 gene
+MaizeGDB pairs their id with. 25,786 of those GeneIDs lie within 0.3 Mb of that v5 gene,
+none between 0.3 and 10.9 Mb, and 11 further. 9 of the 11 sit where the id's neighbours put
+it, `Zm00001d010350` among them (MaizeGDB's v5 gene 89 Mb away), so MaizeGDB's pair is the
+odd one there and the row stays. The other 2 are `Zm00001d034536` and `Zm00001d041103`.
 
-It goes by position only, so it also removes ids that may be the same gene. Of the 17 it
-skips, 9 have the old target as their only best-scoring GeneID at 95 % identity or more
-against RefSeq's maize proteins (`GCF_902167145.1`), and 5 of those are exact protein
-matches, `Zm00001d033937` among them. These ids map nothing instead of risking a wrong gene.
-Sequence does not prove the locus: a v4 copy missing from the v5 RefSeq set would look the
-same.
+**Which ids sequence would have kept.** None of the 35 has both a protein matching its
+target and a place that agrees, so none is kept. Measured with DIAMOND against RefSeq's maize
+proteins (`GCF_902167145.1`) and MaizeGDB's v4 proteins:
 
-The rows reach 27,740 of KEGG's 37,712 maize genes, 6,303 of its 9,704 pathway genes. 21
+* Of the 17 on another chromosome, 9 have the old target as their only best-scoring GeneID
+  at 95 % identity or more, and 5 of those are exact protein matches: `Zm00001d006805`,
+  `Zm00001d009372`, `Zm00001d018011`, `Zm00001d025539` and `Zm00001d033937`. The match
+  says the protein is the same, and the place says the gene is elsewhere. RefSeq has no
+  second waxy 1, so `Zm00001d033937` may be a v4 copy that v5 dropped, but that is not shown.
+* `Zm00001d044362` and `Zm00001d012944` match their GeneIDs' proteins at 100 % identity over
+  94 % and 97 % of RefSeq's protein, with no place to agree. `Zm00001d034536` is 92 %
+  identical over 57 %, and `Zm00001d041103`'s best match is another GeneID (103642691).
+* Of the 15 MaizeGDB pairs, 5 reach a KEGG gene 10 to 241 kb from the v5 gene, a
+  neighbouring gene on the same genome rather than the v5 gene itself: `Zm00001d003725`
+  (one of the 5 KEGG genes it reaches, all with the same protein), `Zm00001d004346`,
+  `Zm00001d005043` and `Zm00001d025598` (identical proteins, tied with another GeneID each),
+  and `Zm00001d007561` (54 % identity). 8 reach only genes on other chromosomes,
+  `Zm00001d020584` reaches 12 KEGG genes, the nearest 29 Mb away, and `Zm00001d014241`'s one
+  KEGG gene has no place.
+
+These ids map nothing instead of risking a wrong gene.
+
+The rows reach 27,736 of KEGG's 37,712 maize genes, 6,302 of its 9,704 pathway genes. 21
 aliases reach more than one KEGG gene, because their v5 target does; for 18 of them one of
 those genes overlaps the v5 gene and another does not. MaizeGDB lists
 about 44,100 v4 gene models. Of the 16,400 or so left out, about 9,800 have no v5 gene in
 MaizeGDB's table, about 3,700 have a 1:1 v5 gene that reaches no KEGG gene, about 1,600
 point at several v5 genes, about 1,300 share one v5 gene with another v4 id and are left
-out by the strict 1:1 rule (about 470 of those genes reach KEGG), and 31 failed a position
+out by the strict 1:1 rule (about 470 of those genes reach KEGG), and 35 failed a position
 check.
 
 ### `psat.tsv.gz`: pea Cameor v2 gene ids (`Psat.cameor.v2...`)
 
 KEGG's pea genes are NCBI GeneIDs from the RefSeq assembly of cultivar ZW6, and the
-installed Ensembl genebuild is Cameor v1a. 22,200 rows of the 49,667 v2 genes:
+installed Ensembl genebuild is Cameor v1a. 21,979 rows of the 49,667 v2 genes:
 
 | `evidence` | Rows | Target | How |
 |---|---:|---|---|
 | `published_table_rbh+coord+refseq_rbh` | 12,357 | `ensembl_gene` (v1a) | The published route below, confirmed by the sequence route naming a KEGG gene the v1a gene reaches |
 | `published_table_rbh+coord` | 887 | `ensembl_gene` (v1a) | The published route only |
-| `refseq_rbh_only` | 8,956 | `ncbi_geneid` | The sequence route only. **An inference, not a published correspondence** |
+| `refseq_rbh+collinear` | 8,735 | `ncbi_geneid` | The sequence route, and the genes of the first line around it put the GeneID where it is. **An inference, not a published correspondence** |
 
 * **Published route.** In the authors' `v1_genes_to_v2.xlsx`, the v1 and v2 proteins are
   each other's best hit (sheets `v1_vs_v2`, `v2_vs_v1`), the two genes overlap on the v2
@@ -111,20 +139,79 @@ installed Ensembl genebuild is Cameor v1a. 22,200 rows of the 49,667 v2 genes:
   the longest protein per GeneID: DIAMOND reciprocal best hits at gene level, at least
   95 % identity and 80 % coverage both ways, GeneID in KEGG. This compares two cultivars,
   so a match says the sequence is the same and not that anyone has shown the gene is.
-  417 of the 8,956 `refseq_rbh_only` rows tie at the top score on one side or both, and
-  the row names the hit DIAMOND lists first. In 210 of the 262 forward ties the candidates'
-  proteins are identical, so no sequence method could choose. One tied row has an
-  alternative on other pathways: `Psat.cameor.v2.6g110350` ties with 127095034, but covers
-  20 % of that protein, under the 80 % threshold, and 127095034 has its own full-length
-  partner, so the row stands. Of the other 261, 198 have no pathway on either side and 63
-  have the same pathways on both.
+* **Collinearity, for a match with no published pair.** The 12,357 genes both routes agree
+  on are the anchors: each has a place on the Cameor v2 genome (the dataset's
+  `CAMEOR_V2_ANNOTATION_1.gff3`) and its GeneID one on ZW6's (RefSeq's `feature_table`). A
+  match stays only if the anchors around the v2 gene put its GeneID where it is, by the test
+  under "Where the gene is". This is evidence the sequence route did not use: the protein
+  says which gene, the neighbours say where.
 
-12 genes where the routes name different KEGG genes are dropped. The rows reach 22,272 of
-KEGG's 51,484 pea genes, 5,235 of its 10,744 pathway genes. 96 aliases reach more than one
+8,735 of the 8,956 matches pass and 221 are dropped:
+
+| Why dropped | Matches |
+|---|---:|
+| None of the 4 nearest anchors agrees | 162 |
+| One of the 4 nearest agrees | 21 |
+| No anchor on the gene's v2 sequence (a scaffold) | 29 |
+| None of the fewer than 4 anchors on its scaffold agrees | 9 |
+
+Of the 221, 94 tie at the top score on one side or both, against 323 of the 8,735 kept: the
+test takes out mostly members of families whose proteins are alike, and 33 of the 162 name a
+GeneID on a ZW6 scaffold no chromosome holds. Examples dropped: `Psat.cameor.v2.4g224300`
+(127103701, on ZW6 chromosome 7 while its 4 nearest anchors put it on 4, 199 Mb along),
+`Psat.cameor.v2.3g68100` (127129346, on the right chromosome, 14 to 16 Mb from where each of
+its 4 nearest anchors puts it), and `Psat.cameor.v2.3g307300` (127112547, on an unplaced ZW6
+scaffold, tied with 11 other proteins). A gene in a stretch of one or two genes that moved,
+between the cultivars or in one assembly, fails the same way as a wrong match, and the test
+cannot tell them apart. Examples kept: `Psat.cameor.v2.3g49750` (127128146, 4 of 4 agree),
+and `Psat.cameor.v2.0s1040g10400` (127107715), on a scaffold with 2 anchors, the nearer of
+which, `Psat.cameor.v2.0s1040g10450`, names 127107716, the next gene along ZW6.
+
+The row names the hit DIAMOND lists first where several tie. In 159 of the 193 forward
+ties among the kept rows the candidates' proteins are identical, so no sequence method could
+choose. One tied row has an alternative on other pathways: `Psat.cameor.v2.6g110350` ties
+with 127095034, but covers 20 % of that protein, under the 80 % threshold, and 127095034 has
+its own full-length partner, so the row stands. Of the other 192, 146 have no pathway on
+either side and 46 have the same pathways on both.
+
+12 genes where the routes name different KEGG genes are dropped. The rows reach 22,051 of
+KEGG's 51,484 pea genes, 5,183 of its 10,744 pathway genes. 96 aliases reach more than one
 KEGG gene, because their v1a target does.
 
 The owner may want the inferred rows gone later: they are the ones marked
-`refseq_rbh_only`, and `tables --drop-rbh-only` writes the table without them.
+`refseq_rbh+collinear`, and `tables --drop-inferred` writes the table without them.
+
+### Where the gene is
+
+Both species use one test (`Collinearity` in the script), from pairs of genes already
+trusted, called anchors: maize's are MaizeGDB's 1:1 pairs, pea's the genes both routes
+agree on. A row pairs a gene on one genome with a gene on the other. The test takes the 4
+anchors nearest the gene on its own genome, and an anchor agrees when it sits on the
+partner's sequence and no further from the partner than it sits from the gene, plus 1 Mb.
+At least half of the anchors asked have to agree, and at least one. It compares distances,
+not order or strand, so a stretch the two assemblies orient differently still agrees. The
+two choices, 4 anchors and 1 Mb, come from these measurements:
+
+| | Maize | Pea |
+|---|---:|---:|
+| Anchors that pass with themselves left out | 99.53 % of 26,951 | 99.61 % of 12,357 |
+| The same, given a random gene of the other genome as partner | 0.21 % | 0.14 % |
+| The same, given a random gene on the true partner's sequence | 1.27 % | 0.80 % |
+| Rows the test removes | 4 | 221 |
+| With 0.5 Mb instead of 1 | the same | 30 more go |
+| With 2 Mb or 5 Mb | the same | 6 or 28 come back |
+| With 3 or 6 anchors asked | the same | 9 more go, or 9 go and 4 come back |
+
+Asking 10 anchors passes and fails random partners at the same rates, but drops genes beside
+a gap between the assemblies: `Psat.cameor.v2.7g72100`'s two nearest anchors put its GeneID
+within 0.1 Mb of where it is, and 7 of the next 8 sit beyond a stretch of about 4 Mb that
+ZW6 has and Cameor v2 does not.
+
+For maize, a row also passes when its GeneID is within 1 Mb of a v5 gene MaizeGDB pairs the
+v4 id with, which is how a maize row on another chromosome than its id can pass, and only
+rows with both places on numbered chromosomes are tested: the test only vetoes NCBI's
+published locus tag. For pea it is the only evidence beyond the sequence, so a match it
+cannot test is dropped.
 
 ### `sbi.tsv.gz`: sorghum Ensembl genes with no way to KEGG (`SORBI_3...`)
 
@@ -169,13 +256,13 @@ gene).
 
 | Source | Used for | Licence and attribution |
 |---|---|---|
-| Kreplak, Jonathan. Dataset from "A new genome assembly of the pea cultivar Cameor provides resources for functional genomics and genetics". Recherche Data Gouv, V1, 2025-04-01. [doi:10.57745/5MDE99](https://doi.org/10.57745/5MDE99): `v1_genes_to_v2.xlsx`, `CAMEOR_V2_ANNOTATION_1_prot.fasta`. Article: Kreplak J. et al., Sci Data 2026, [doi:10.1038/s41597-026-07347-4](https://doi.org/10.1038/s41597-026-07347-4) | pea, both routes | [Etalab Open Licence 2.0](https://spdx.org/licenses/etalab-2.0.html). **Attribution is required**: reuse must name the source and its date, as this row does. Rows were derived from the files, which are not redistributed here |
-| NCBI Gene, `GENE_INFO/Plants/All_Plants.gene_info.gz`, taxa 4577 and 4558 | maize and sorghum locus tags, and maize chromosomes for the position check | [NCBI policy](https://www.ncbi.nlm.nih.gov/home/about/policies/): NCBI places no restrictions on use or distribution of its molecular data; contributors may hold their own rights |
-| NCBI RefSeq, `GCF_024323335.1` (CAAS_Psat_ZW6_1.0), proteins and feature table | pea, sequence route | As above |
-| MaizeGDB, [`Pan-genes/B73_gene_xref`](https://download.maizegdb.org/Pan-genes/B73_gene_xref/): `B73v4_to_B73v5.tsv`, `B73v5_to_B73v4.tsv` | maize, the 604 `maizegdb_1to1` rows | The directory states no licence and MaizeGDB's terms page could not be read (it sits behind a browser check, 2026-11-06). Credited as MaizeGDB, RRID:SCR_006600. **Confirm the terms with MaizeGDB before relying on these rows being redistributable** |
+| Kreplak, Jonathan. Dataset from "A new genome assembly of the pea cultivar Cameor provides resources for functional genomics and genetics". Recherche Data Gouv, V1, 2025-04-01. [doi:10.57745/5MDE99](https://doi.org/10.57745/5MDE99): `v1_genes_to_v2.xlsx`, `CAMEOR_V2_ANNOTATION_1_prot.fasta`, `CAMEOR_V2_ANNOTATION_1.gff3`. Article: Kreplak J. et al., Sci Data 2026, [doi:10.1038/s41597-026-07347-4](https://doi.org/10.1038/s41597-026-07347-4) | pea, both routes and the collinearity test | [Etalab Open Licence 2.0](https://spdx.org/licenses/etalab-2.0.html). **Attribution is required**: reuse must name the source and its date, as this row does. Rows were derived from the files, which are not redistributed here |
+| NCBI Gene, `GENE_INFO/Plants/All_Plants.gene_info.gz`, taxa 4577 and 4558 | maize and sorghum locus tags, and maize chromosomes for the position check where KEGG gives a GeneID no place | [NCBI policy](https://www.ncbi.nlm.nih.gov/home/about/policies/): NCBI places no restrictions on use or distribution of its molecular data; contributors may hold their own rights |
+| NCBI RefSeq, `GCF_024323335.1` (CAAS_Psat_ZW6_1.0), proteins and `feature_table` | pea, the sequence route and the collinearity test | As above |
+| MaizeGDB, [`Pan-genes/B73_gene_xref`](https://download.maizegdb.org/Pan-genes/B73_gene_xref/): `B73v4_to_B73v5.tsv`, `B73v5_to_B73v4.tsv` | maize, the 604 `maizegdb_1to1` rows, and the anchors of the maize position check | **U.S. Public Domain.** MaizeGDB is a USDA Agricultural Research Service project, and USDA's catalogue record for it, published by USDA-ARS, gives its licence as "U.S. Public Domain" ([Ag Data Commons, MaizeGDB](https://agdatacommons.nal.usda.gov/articles/dataset/MaizeGDB/24660768), read 2026-11-07). MaizeGDB's own words, in its 2006 status report: "Data housed at MaizeGDB are in the public domain, hence they are freely available for use without a license" ([documents.maizegdb.org](https://documents.maizegdb.org/working_group/12ReportAugust2006.pdf), page 16). The directory states no licence, and www.maizegdb.org answers every request with a Cloudflare browser check (HTTP 403, also to headless Chromium on 2026-11-07), so no current terms page was read. Credited as MaizeGDB, RRID:SCR_006600; the citation the record asks for is Andorf C. M. et al., Nucleic Acids Res 2016, [doi:10.1093/nar/gkv1007](https://doi.org/10.1093/nar/gkv1007) |
 | MaizeGDB, gene models: [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz), [`Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz) | maize, the position checks | As above. Used to choose rows and not redistributed |
 | MaizeGDB, [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.full_gene_data.txt.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.full_gene_data.txt.gz) | the counts of v4 gene models and of those left out above, only: 44,146 models, where `B73v4_to_B73v5.tsv` lists 38,356. The script does not read it | As above. Nothing from it is in the tables |
-| KEGG and Ensembl, as the species' installed `mapping/` files, among them `kegg2genesymbol.list`, which is KEGG's gene list (`rest.kegg.jp/list/<code>`) with its positions | which targets exist and reach KEGG, and maize positions for the check on `maizegdb_1to1` rows | Used to choose rows and not redistributed: the tables hold GeneIDs, Ensembl ids and the aliases above, and no KEGG data |
+| KEGG and Ensembl, as the species' installed `mapping/` files, among them `kegg2genesymbol.list`, which is KEGG's gene list (`rest.kegg.jp/list/<code>`) with its positions | which targets exist and reach KEGG, and the maize GeneIDs' places for both position checks | Used to choose rows and not redistributed: the tables hold GeneIDs, Ensembl ids and the aliases above, and no KEGG data |
 
 ## Regenerating
 
@@ -185,22 +272,25 @@ It reads the species' `mapping/` files through the build's own processors, not t
 installed database, because a database that already holds the aliases would answer "this
 sorghum gene reaches KEGG" and the table would regenerate empty. It stops without writing
 that species' table when a source cannot be fetched or read, a source is skipped, a KEGG list
-is absent, no rows come out, or a maize position source puts too few of its ids on a numbered
-chromosome: each GFF under 95 % of the ids in MaizeGDB's table (measured 99.2 % and 100 %),
-KEGG's list or gene_info under 85 % of KEGG's genes (94.4 % each). Without that, a file that
-downloads and parses to nothing would turn a check off. A source of rows that parses short,
+is absent, no rows come out, or a position source places too few of its ids. For maize,
+on a numbered chromosome: each GFF under 95 % of the ids in MaizeGDB's table (measured
+99.2 % and 100 %), KEGG's list or gene_info under 85 % of KEGG's genes (94.4 % each). For
+pea, anywhere: the Cameor v2 GFF under 95 % of the v2 genes either route names, ZW6's
+feature table under 95 % of the GeneIDs the sequence route names (measured 100 % each).
+Without that, a file that downloads and parses to nothing would turn a check off, or for pea
+drop every sequence match. A source of rows that parses short,
 such as the locus-tag column or a MaizeGDB table missing lines, does not stop it: the run ends
 well with a smaller table, and only the MD5 and row-count pins in `test_identifier_aliases`
 catch that, once the table is committed.
 
 Run against the deployed `mapping/` files, with DIAMOND v2.2.8 and the sources downloaded
-afresh on 2026-11-06, the two GFF files on 2026-11-07, it gives these tables, byte for byte
+afresh on 2026-11-06, the three GFF files on 2026-11-07, it gives these tables, byte for byte
 from one run to the next:
 
 | Table | Rows | Bytes | MD5 |
 |---|---:|---:|---|
-| `zma.tsv.gz` | 27,767 | 167,049 | `4b0e1f13db7c9c674b1294e8b50ee196` |
-| `psat.tsv.gz` | 22,200 | 141,303 | `1bbcf94dcd5de933a2625f5145b6f17a` |
+| `zma.tsv.gz` | 27,763 | 167,025 | `8d1920059ebcea92d9c2adc1b6bea98f` |
+| `psat.tsv.gz` | 21,979 | 140,768 | `bcd3ed7272608db40d537125618dda87` |
 | `sbi.tsv.gz` | 3,192 | 20,854 | `902915412cb3bfc070c9c7f126aff035` |
 
 Expect differences on a later date: NCBI rewrites gene_info daily, and KEGG and Ensembl
