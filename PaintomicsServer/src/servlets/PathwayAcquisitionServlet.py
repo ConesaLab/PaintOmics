@@ -870,13 +870,22 @@ def matchedNoCompounds(compoundOmics):
     return isinstance(compoundOmics, list) and all(_storedNoMatch(omic) for omic in compoundOmics)
 
 
+def storedNoGeneOmics(geneOmics):
+    """Whether the job holds no gene omic at all: adaptBSON stores a None as "None"."""
+    return not geneOmics or geneOmics == "None"
+
+
 def hasGeneAnalysisToRun(geneOmics):
-    """Whether at least one gene omic stored a summary Step 2 can read and show."""
+    """Whether every gene omic stored a summary Step 2 can read and show.
+
+    Every one, because Step 2 draws them all: a summary it cannot read leaves the
+    page on "Loading job information..." with no Close.
+    """
     def readable(omic):
         summary = omic.get("omicSummary") if isinstance(omic, dict) else None
         return (isinstance(summary, list) and len(summary) >= 2
                 and (isinstance(summary[0], dict) or _isPlainCount(summary[0])))
-    return isinstance(geneOmics, list) and any(readable(omic) for omic in geneOmics)
+    return isinstance(geneOmics, list) and len(geneOmics) > 0 and all(readable(omic) for omic in geneOmics)
 
 
 def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
@@ -1019,15 +1028,20 @@ def pathwayAcquisitionRecoverJob(request, response, QUEUE_INSTANCE):
         # store. With gene data its job goes on to the normal Step 2 answer, as one
         # with a single match does: the gene analysis in it can still run. With
         # none that answer leads only to 0 pathways, and to a later message that
-        # blames the organism or the databases.
+        # blames the organism or the databases. Gene data Step 2 could not draw says
+        # nothing about the names, so the answer does not blame them.
         compoundOmics = jobInstance.getCompoundBasedInputOmics()
+        geneOmics = jobInstance.getGeneBasedInputOmics()
         noCompoundsStored = len( matchedCompoundsJSONList ) == 0 and jobInstance.getLastStep() == 2 and len( compoundOmics ) > 0
         if noCompoundsStored and not matchedNoCompounds(compoundOmics):
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS FOUND COMPOUNDS (STEP 2: OLD FORMAT?).")
             response.setContent(jobUnavailableAnswer("Job " + shownJobID + " does not contain saved information about the found compounds." + ANALYSE_AGAIN))
-        elif noCompoundsStored and not hasGeneAnalysisToRun(jobInstance.getGeneBasedInputOmics()):
+        elif noCompoundsStored and storedNoGeneOmics(geneOmics):
             logging.info("RECOVER_JOB - JOB " + jobID + " MATCHED NO COMPOUNDS AND HAS NO GENE DATA.")
             response.setContent(jobUnavailableAnswer("None of the metabolite names in job " + shownJobID + " matched a KEGG compound, so there is nothing to analyse.<br>Check the names in your file." + ANALYSE_AGAIN))
+        elif noCompoundsStored and not hasGeneAnalysisToRun(geneOmics):
+            logging.info("RECOVER_JOB - JOB " + jobID + " MATCHED NO COMPOUNDS AND A GENE SUMMARY CANNOT BE READ (STEP 2: OLD FORMAT?).")
+            response.setContent(jobUnavailableAnswer("Job " + shownJobID + " does not contain saved information about its gene data." + ANALYSE_AGAIN))
         elif len( matchedPathwaysJSONList ) == 0 and jobInstance.getLastStep() > 2:
             logging.info("RECOVER_JOB - JOB " + jobID + " DOES NOT CONTAINS PATHWAYS.")
             summary = jobInstance.summary

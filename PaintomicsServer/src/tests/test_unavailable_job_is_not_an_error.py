@@ -27,8 +27,9 @@ Each answer has to say what is true of that job:
     is intact and the "Keep this job" mail sends them to this very link;
   * a Step 2 job whose metabolomics names all failed to match goes on to Step 2,
     because the gene analysis in it can still run. That needs a summary that really
-    says zero, and gene data: a summary that cannot be read keeps the refusal, and
-    a job with only metabolites is told there is nothing to analyse;
+    says zero, and gene data Step 2 can draw: a compound summary that cannot be read
+    keeps the refusal, a gene summary that cannot be read says so and does not blame
+    the names, and a job with only metabolites is told there is nothing to analyse;
   * a job is "still running" only while its queue entry is queued or started: one
     that failed gets the answer it would get with no entry at all;
   * a job at Step 3 with no pathways either finished with none (a warning) or did
@@ -273,23 +274,47 @@ class AJobWithOnlyMetabolitesThatMatchedNothingTest(_AnswerCase):
                                "nothing to analyse", "Check the names", "start a new analysis")
         self.assertNotIn("found compounds", response.content["errorMessage"])
 
+    def assertGeneDataCannotBeRead(self, response):
+        """The names are not what is wrong here, and there is something to analyse."""
+        self.assertUnavailable(response, "Job " + JOB_ID + " does not contain saved information about its gene data.",
+                               "start a new analysis")
+        for blame in ("metabolite", "names", "nothing to analyse", "found compounds"):
+            self.assertNotIn(blame, response.content["errorMessage"])
+
+    def recoverWithGeneOmics(self, omics):
+        return _recover(_job(lastStep=2, compoundOmics=[_compoundOmic([0, 3])], geneOmics=omics))
+
     def test_no_gene_omics(self):
-        self.assertNothingToAnalyse(_recover(_job(lastStep=2, compoundOmics=[_compoundOmic([0, 3])])))
+        for omics in ((), [], None, "None"):
+            with self.subTest(omics=omics):
+                self.assertNothingToAnalyse(self.recoverWithGeneOmics(omics))
+                self.assertFalse(servlet.hasGeneAnalysisToRun(omics))
 
     def test_gene_omics_with_no_summary_to_read(self):
-        for omics in ("None", ["None"], [{"omicName": "G"}], [{"omicSummary": None}], [{"omicSummary": "None"}],
+        for omics in (["None"], [None], [{"omicName": "G"}], [{"omicSummary": None}], [{"omicSummary": "None"}],
                       [{"omicSummary": []}], [{"omicSummary": [{"KEGG": 5}]}], [{"omicSummary": ["5", 3]}],
-                      [{"omicSummary": [None, 3]}], [{"omicSummary": [True, 3]}], (GENE_OMIC,)):
+                      [{"omicSummary": [500.0, 0]}], [{"omicSummary": [None, 3]}], [{"omicSummary": [True, 3]}],
+                      (GENE_OMIC,), GENE_OMIC):
             with self.subTest(omics=omics):
-                self.assertNothingToAnalyse(_recover(_job(lastStep=2, compoundOmics=[_compoundOmic([0, 3])], geneOmics=omics)))
+                self.assertGeneDataCannotBeRead(self.recoverWithGeneOmics(omics))
 
-    def test_one_gene_omic_with_a_summary_is_enough(self):
-        for summary in ([{"KEGG": 5}, 3], [{}, 3], [5, 3]):
-            with self.subTest(summary=summary):
-                omics = [{"omicName": "G1"}, {"omicName": "G2", "omicSummary": summary}]
-                content = _recover(_job(lastStep=2, compoundOmics=[_compoundOmic([0, 3])], geneOmics=omics)).content
+    def test_every_gene_omic_has_to_be_readable(self):
+        """Step 2 draws them all: one it cannot read left "Loading job information..."
+        up with no Close, so it does not go on with the readable one beside it."""
+        unreadable = {"omicName": "G2", "omicSummary": None}
+        for omics in ([GENE_OMIC, unreadable], [unreadable, GENE_OMIC], [GENE_OMIC, {"omicName": "G2"}], [GENE_OMIC, "None"]):
+            with self.subTest(omics=omics):
+                self.assertGeneDataCannotBeRead(self.recoverWithGeneOmics(omics))
+
+    def test_several_readable_gene_omics_go_on(self):
+        for summaries in ([[{"KEGG": 5}, 3], [{"KEGG": 8}, 1]], [[{}, 3], [{}, 3]], [[5, 3], [8, 1]],
+                          [[{"KEGG": 5}, 3], [8, 1]], [[{"KEGG": 5}, 3]], [[{"KEGG": 5}, 3, "extra"], [8, 1, "extra"]]):
+            with self.subTest(summaries=summaries):
+                omics = [{"omicName": "G%d" % i, "omicSummary": summary} for i, summary in enumerate(summaries)]
+                content = self.recoverWithGeneOmics(omics).content
                 self.assertIs(content["success"], True)
                 self.assertEqual(content["stepNumber"], 2)
+                self.assertNotIn("jobUnavailable", content)
 
     def test_a_job_that_matched_keeps_its_own_refusal(self):
         self.assertUnavailable(_recover(_job(lastStep=2, compoundOmics=[_compoundOmic([5, 1])])), "found compounds")
@@ -414,6 +439,7 @@ class TheIdIsNotMarkupTest(unittest.TestCase):
         "another account": lambda jobID: _recover(_job(), jobID=jobID, cookies=_session(ANOTHER_ACCOUNT)),
         "no compounds stored": lambda jobID: _recover(_job(lastStep=2, compoundOmics=[_compoundOmic([5, 1])]), jobID=jobID),
         "only metabolites, none matched": lambda jobID: _recover(_job(lastStep=2, compoundOmics=[_compoundOmic([0, 3])]), jobID=jobID),
+        "gene summary cannot be read": lambda jobID: _recover(_job(lastStep=2, compoundOmics=[_compoundOmic([0, 3])], geneOmics=[{"omicName": "G"}]), jobID=jobID),
         "no pathways matched": lambda jobID: _recover(_job(lastStep=3, summary=[2, 0]), jobID=jobID),
         "store did not finish": lambda jobID: _recover(_job(lastStep=3, summary=[2, 2]), jobID=jobID),
     }

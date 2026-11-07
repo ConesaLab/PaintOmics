@@ -43,6 +43,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "../..")))
 
 from src import paintomicsserver as server
+from src.classes.JobInstances import MiRNA2GeneJob as MiRNA2GeneJob_module
 from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob, emptyResultError
 from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob, explainEmptyMapping
 from src.common.ServerErrorManager import InputFileError, handleException
@@ -297,9 +298,12 @@ HOSTILE_MIRNA = "<img src=x onerror=console.log(1)>"
 ROWS = {"values": [["#miRNA", "C1", "C2"], [HOSTILE_MIRNA, "0.1", "0.4"], ["<NA>", "0.2", "0.9"]],
         "targets": [["other-miR-1", "G1"]],
         "genes": [["#gene", "C1", "C2"], ["G1", "1.0", "2.0"]]}
+ONE_CONDITION = {"values": [["#miRNA", "C1"], ["hsa-miR-1", "0.1"], ["hsa-miR-2", "0.2"]],
+                 "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G2"]],
+                 "genes": [["#gene", "C1"], ["G1", "1.0"], ["G2", "2.0"]]}
 
 
-def _miRNAToolAnswer(rows, relevant=()):
+def _miRNAToolAnswer(rows, relevant=(), method="kendall"):
     """What the real tool answers, on the queue, for three files.
 
     The real job, its real validation and the real miRNA2Target script, reached
@@ -309,6 +313,7 @@ def _miRNAToolAnswer(rows, relevant=()):
     root = tempfile.mkdtemp(prefix="paintomics_mirna_") + "/"
     try:
         job = MiRNA2GeneJob("mirnajob", None, root)
+        job.score_method = method
         os.makedirs(job.getInputDir(), exist_ok=True)
         os.makedirs(job.getTemporalDir(), exist_ok=True)
         names = {"values": "values.tab", "targets": "targets.tab", "genes": "genes.tab", "relevant": "relevant.txt"}
@@ -351,6 +356,47 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
         message = _miRNAToolAnswer(ROWS).content["message"]
         self.assertIn("ERROR MESSAGE: No miRNA was matched", message)
 
+    def test_a_single_condition_is_a_refusal_whatever_the_method(self):
+        """pearson raises on it where kendall and spearman score nan, and all three read
+        the same sentence, so all three get the same dialog."""
+        for method in ("pearson", "kendall", "spearman"):
+            with self.subTest(method=method):
+                answer = _miRNAToolAnswer(ONE_CONDITION, method=method)
+                self.assertEqual(answer.status, 400)
+                self.assertIs(answer.content["extra"]["input_error"], True)
+                self.assertIn("Your data has 1 condition column", answer.content["message"])
+                self.assertNotIn("The scoring step stopped", answer.content["message"])
+
+    def test_pearson_does_abort_on_a_single_condition(self):
+        """What the test above is there for: stats["aborted"] alone would call it a crash."""
+        stats = {}
+        real = MiRNA2GeneJob_module.emptyResultError
+
+        def spy(matchStats):
+            stats.update(matchStats)
+            return real(matchStats)
+        with mock.patch.object(MiRNA2GeneJob_module, "emptyResultError", spy):
+            _miRNAToolAnswer(ONE_CONDITION, method="pearson")
+        self.assertIn("at least 2", stats.get("aborted", ""))
+        self.assertEqual(stats.get("tooFewConditions"), 1)
+
+    def test_the_error_goes_by_what_the_text_explains(self):
+        """An abort under a sentence about the files is a refusal; the crash text is not."""
+        aborted = {"aborted": "boom", "abortedAfterPairs": 2, "regulators": 2, "pairs": 2, "scored": 0}
+        for name, stats, sentence in (
+                ("no data rows", dict(aborted, regulators=0), "has no data rows"),
+                ("no pairs", dict(aborted, pairs=0), "none of them appears"),
+                ("no target found", dict(aborted, unmatchedTargets=2), "not one target gene was found"),
+                ("too few conditions", dict(aborted, tooFewConditions=1), "1 condition column")):
+            with self.subTest(name):
+                error = emptyResultError(stats)
+                self.assertIsInstance(error, InputFileError)
+                self.assertIn(sentence, str(error))
+                self.assertNotIn("boom", str(error))
+        crash = emptyResultError(aborted)
+        self.assertNotIsInstance(crash, InputFileError)
+        self.assertIn("stopped after 2 miRNA-target pairs with: boom", str(crash))
+
     def test_a_scoring_step_that_crashed_is_not_a_refusal(self):
         """It says it is not a problem with the identifiers, so it keeps Report error.
 
@@ -358,26 +404,30 @@ class TheMiRNAToolRefusesItsFilesTest(unittest.TestCase):
         that takes HTML, so the text is escaped here. The quotes are left: the Step 1
         dialog encodes this text again, and would show an entity.
         """
-        message = self._crashed().content["message"]
-        self.assertIn("The scoring step stopped", message)
-        self.assertIn("not a problem with your identifiers", message)
-        self.assertNotIn("<img", message)
-        self.assertIn("float: '&lt;img src=x onerror=console.log(1)&gt;'", message)
+        for method in ("pearson", "kendall", "spearman"):
+            with self.subTest(method=method):
+                message = self._crashed(method).content["message"]
+                self.assertIn("The scoring step stopped", message)
+                self.assertIn("not a problem with your identifiers", message)
+                self.assertNotIn("<img", message)
+                self.assertIn("float: '&lt;img src=x onerror=console.log(1)&gt;'", message)
 
     def test_that_crash_is_marked_as_ours(self):
-        answer = self._crashed()
-        self.assertEqual(answer.status, 400)
-        self.assertIs(answer.content["extra"]["input_error"], False)
+        for method in ("pearson", "kendall", "spearman"):
+            with self.subTest(method=method):
+                answer = self._crashed(method)
+                self.assertEqual(answer.status, 400)
+                self.assertIs(answer.content["extra"]["input_error"], False)
 
     def test_stats_that_are_not_there_are_still_a_refusal(self):
         self.assertIsInstance(emptyResultError(None), InputFileError)
 
-    def _crashed(self):
+    def _crashed(self, method="kendall"):
         """A target named as the gene file's header row is scored on its cell text."""
         return _miRNAToolAnswer({
             "values": [["#miRNA", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"]],
             "targets": [["mmu-miR-1", "#gene"]],
-            "genes": [["#gene", HOSTILE_MIRNA, "C2"], ["G1", "1.0", "2.0"]]})
+            "genes": [["#gene", HOSTILE_MIRNA, "C2"], ["G1", "1.0", "2.0"]]}, method=method)
 
 
 def _answerTo(exception, userID=None):
@@ -515,11 +565,16 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
 PREPARATION_HARNESS = r"""
 const shown = [];
 function showErrorMessage(title, data) { shown.push({title: title, data: data}); }
+/* What Ext 4.2 does; ext-all.js itself needs a DOM. The browser check runs the real one. */
+const entities = {"&": "&amp;", ">": "&gt;", "<": "&lt;", '"': "&quot;", "'": "&#39;"};
+const Ext = {String: {htmlEncode(text) { return String(text).replace(/[&<>"']/g, function (c) { return entities[c]; }); }}};
 %(client)s
+const nameField = {getValue() { return %(omicName)s; }};
+const itemsContainer = {queryById(id) { return id === "omicNameField" ? nameField : null; }};
 const jobView = {failedRequests: 1};
 const response = {responseText: JSON.stringify(%(answer)s)};
 if (step1FailureIsInputRefusal(response)) { jobView.step1InputRefusals = 1; }
-jobView.step1FailureReasons = ["<b>miRNA-seq</b>: " + step1FailureReason(response)];
+jobView.step1FailureReasons = ["<b>" + step1OmicLabelAsHtml(itemsContainer) + "</b>: " + step1FailureReason(response)];
 showStep1PreparationFailure(jobView);
 console.log(JSON.stringify(shown[0]));
 """
@@ -533,12 +588,13 @@ class ThePreparationDialogWordsItToo(unittest.TestCase):
         with io.open(JOB_CONTROLLER_JS, encoding="utf-8") as handle:
             self.source = handle.read()
 
-    @unittest.skipIf(shutil.which("node") is None, "node is not installed")
-    def test_a_refused_mirna_file_in_step_1(self):
+    def _dialogFor(self, omicName):
         script = PREPARATION_HARNESS % {
             "client": "\n".join(extract_function(self.source, name, "JobController.js") for name in
-                                ("step1FailureReason", "step1FailureIsInputRefusal", "showStep1PreparationFailure")),
+                                ("step1FailureReason", "step1FailureIsInputRefusal", "step1OmicLabelAsHtml",
+                                 "showStep1PreparationFailure")),
             "answer": json.dumps(_miRNAToolAnswer(ROWS).content),
+            "omicName": json.dumps(omicName),
         }
         directory = tempfile.mkdtemp(prefix="paintomics-preparation-")
         try:
@@ -549,13 +605,34 @@ class ThePreparationDialogWordsItToo(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
         self.assertEqual(done.returncode, 0, done.stderr)
-        dialog = json.loads(done.stdout)
+        return json.loads(done.stdout)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not installed")
+    def test_a_refused_mirna_file_in_step_1(self):
+        dialog = self._dialogFor("miRNA-seq")
         self.assertEqual(dialog["title"], "Please check your input files")
         self.assertIs(dialog["data"]["showReportButton"], False)
         self.assertIn("<b>miRNA-seq</b>: No miRNA was matched", dialog["data"]["message"])
         self.assertIn("&lt;NA&gt;", dialog["data"]["message"])
         self.assertNotIn("<NA>", dialog["data"]["message"])
         self.assertNotIn("<img", dialog["data"]["message"])
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not installed")
+    def test_the_omic_name_beside_a_refusal_is_text(self):
+        """The user types the name, and it sits beside the encoded text in .html()."""
+        message = self._dialogFor("<img src=x onerror=console.log('XSS-LABEL')>")["data"]["message"]
+        self.assertIn("<b>&lt;img src=x onerror=console.log(&#39;XSS-LABEL&#39;)&gt;</b>: No miRNA was matched", message)
+        self.assertNotIn("<img", message)
+
+    @unittest.skipIf(shutil.which("node") is None, "node is not installed")
+    def test_an_omic_with_no_name_is_still_called_input(self):
+        self.assertIn("<b>input</b>: No miRNA was matched", self._dialogFor("")["data"]["message"])
+
+    def test_every_use_of_the_name_is_the_encoded_one(self):
+        """All of them reach showMessage's .html(): the three titles, the title of the
+        running job's dialog through jobLabel, and the line above."""
+        self.assertEqual(re.findall(r"var omicLabel = ([^;]+);", self.source), ["step1OmicLabelAsHtml(itemsContainer)"])
+        self.assertIn('"<b>" + omicLabel + "</b>: " + parsedMessage', self.source)
 
     def test_a_refused_preparation_is_counted(self):
         self.assertRegex(self.source, r"function step1FailureIsInputRefusal\(response\)")

@@ -100,6 +100,14 @@ function step1FailureReason(response) {
 		.replace(/\n\s*-\s+/g, "<br/>");
 }
 
+/* The omic's name as the preparation dialogs show it. The user typed it, and all
+   of them reach showMessage's .html(): the name of the file being prepared in the
+   titles, and beside the server's encoded text in showStep1PreparationFailure. */
+function step1OmicLabelAsHtml(itemsContainer) {
+	var nameField = itemsContainer.queryById("omicNameField");
+	return Ext.String.htmlEncode((nameField && nameField.getValue()) || "input");
+}
+
 /* Whether a pre-processing job was refused for its input files.
  *
  * The server marks a refusal of the uploaded files -- its InputFileError, as
@@ -560,7 +568,7 @@ function JobController() {
 						// another. Said so in the dialog, because a line reading
 						// "Job X is waiting" followed by "Running job Y" reads as the
 						// job having changed id.
-						var omicLabel = (itemsContainer.queryById("omicNameField") && itemsContainer.queryById("omicNameField").getValue()) || "input";
+						var omicLabel = step1OmicLabelAsHtml(itemsContainer);
 						showInfoMessage("Preparing " + omicLabel + " (conversion job " + response.jobID + ") is waiting at job queue...", {logMessage: "Now Job is in the queue...", showSpin: true, append: true, itemId: response.jobID, icon: "clock-o"});
 
 						/* Restore elements used to create the temporal form */

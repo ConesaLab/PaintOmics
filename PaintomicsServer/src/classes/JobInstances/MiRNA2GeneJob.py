@@ -53,11 +53,22 @@ def explainEmptyResult(stats):
     estimated and nothing is invented; when a number is not known the sentence
     that would have used it is not written.
     """
+    return _emptyResultExplanation(stats)[0]
+
+
+def _emptyResultExplanation(stats):
+    """explainEmptyResult's text, and whether that text reports a crash.
+
+    Both come from the branch that writes the sentence, so they cannot disagree.
+    stats["aborted"] cannot say it alone: pearson on a single condition aborts too,
+    and what it is told is the too-few-conditions explanation.
+    """
     if not isinstance(stats, dict):
         return ("Your mirna2gene association process did not return any "
                 "result. Please, check the files (same identifiers, etc) and "
-                "parameters.")
+                "parameters."), False
 
+    reportsACrash = False
     dropped = stats.get("dropped") or {}
     lines = ["No miRNA was matched to a target gene, so there is nothing to analyse."]
 
@@ -122,6 +133,7 @@ def explainEmptyResult(stats):
             "associations file so the pairs are taken from it instead of being "
             "scored." % (conditions, stats.get("pairs", 0)))
     elif stats.get("aborted"):
+        reportsACrash = True
         lines.append(
             "The scoring step stopped after %d miRNA-target pairs with: %s. The "
             "result file was truncated there, so this is not a problem with "
@@ -159,20 +171,23 @@ def explainEmptyResult(stats):
         lines.append("Rows skipped because an identifier was blank: " +
                      "; ".join(blanks) + ".")
 
-    return " ".join(lines)
+    return " ".join(lines), reportsACrash
 
 
 def emptyResultError(stats):
-    """What a run with nothing to show raises.
+    """What a run with nothing to show raises, going by what its text explains.
 
     A refusal of the files, which the dialog encodes because the message quotes
-    their first columns. A scoring step that crashed is no refusal: it stays an
-    error that can be reported, and its dialog takes HTML while its text can quote
-    a cell of the file ("could not convert string to float: '...'"). Quotes stay as
-    they are, because the Step 1 dialog encodes this text once more.
+    their first columns. That holds for a single condition column under every
+    method: pearson raises on it and kendall and spearman score nan, and all three
+    read the same sentence. Only a text that reports a crash of the scoring step is
+    no refusal: it stays an error that can be reported, and its dialog takes HTML
+    while its text can quote a cell of the file ("could not convert string to
+    float: '...'"). Quotes stay as they are, because the Step 1 dialog encodes this
+    text once more.
     """
-    message = explainEmptyResult(stats)
-    if isinstance(stats, dict) and stats.get("aborted"):
+    message, reportsACrash = _emptyResultExplanation(stats)
+    if reportsACrash:
         return Exception(escape(message, quote=False))
     return InputFileError(message)
 
