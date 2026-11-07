@@ -193,7 +193,8 @@ docker exec -w /app/PaintomicsServer paintomics-app-1 \
 
 `status <address>` shows the switch, `list` shows every account that has it,
 and `enable <address>` turns mail back on. Nothing else about the account
-changes: the user can still sign in and their jobs are kept. Every message to a
+changes: the user can still sign in, and their jobs are still removed on the
+usual schedule, now with no warning mail before. Every message to a
 user goes through `src/common/UserMail.py`, which honours the switch. An
 address the SMTP server refuses while sending as one that does not exist (for
 example `550 5.1.1`) is switched off automatically; a full mailbox (`552`) or a

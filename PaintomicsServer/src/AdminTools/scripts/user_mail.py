@@ -19,7 +19,8 @@ On the docker deployment run the same inside the app container:
 
 The switch is three fields on the user's userCollection document
 (mailDisabled, mailDisabledReason, mailDisabledAt). Nothing else about the
-account changes: the user can still sign in and their jobs are kept. Exit
+account changes: the user can still sign in, and their jobs are still removed
+on the usual schedule, now with no warning mail before. Exit
 status is 1 when no account has the address, so a typo is not mistaken for
 success.
 """
