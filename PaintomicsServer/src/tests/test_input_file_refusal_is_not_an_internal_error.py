@@ -617,7 +617,7 @@ class TheBrowserWordsItAsARefusal(unittest.TestCase):
         self.assertIn("Oops..Internal error!", result["title"])
         self.assertEqual(result["report"], "inline-block")
         self.assertIn("The scoring step failed on our side", result["body"])
-        self.assertIn("no partial result was saved", result["body"])
+        self.assertIn("No result was saved.", result["body"])
         self.assertNotIn("<img", result["body"])
 
     def test_the_markup_a_refusal_is_written_in_still_works(self):

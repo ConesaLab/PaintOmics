@@ -18,12 +18,17 @@ What this file asserts
    and its account says where it stopped;
 2. the job then fails, says it failed on our side, offers Report (the answer is
    not an input refusal), and nothing it wrote reaches the user's files;
-3. the case above is refused as what it is: the header row of the gene file;
-4. a header that names more (or fewer) conditions than the rows hold is refused
-   under every method, with both counts; a header that ends in a tab is not;
+3. the case above is refused as what it is: the header row of the gene file,
+   also when that row holds no values or only numbers; a first row that is a gene
+   with one bad cell is named as that, not as a header;
+4. a header that does not fit its rows is refused under every method, with the
+   counts; a first cell starting with "#" is always the id label; a trailing empty
+   cell over no column names nothing, and one over a column keeps the names where
+   they are; the one shape that reads two ways is refused;
 5. counts of pairs read "1 ... pair was read" and "N ... pairs were read", and
    the count is the same under every method;
-6. the refusal of targets that carry no identifier is typed as a refusal.
+6. the refusal of targets that carry no identifier is typed as a refusal;
+7. refusals where pairs were read do not open by saying no miRNA matched a target.
 
 Usage:
     cd PaintomicsServer
@@ -41,6 +46,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from src.classes.JobInstances import MiRNA2GeneJob as MiRNA2GeneJob_module
 from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob
+from src.common.ServerErrorManager import InputFileError
 from src.common.bioscripts import miRNA2Target
 from src.servlets import MiRNA2GenesServlet
 
@@ -55,6 +61,7 @@ GENES = [["#gene", "C1", "C2", "C3"],
          ["G1", "1.0", "2.0", "0.5"],
          ["G2", "2.0", "1.0", "3.0"],
          ["G3", "0.4", "0.9", "0.1"]]
+FOUR_CONDITION_GENES = [["#gene", "C1", "C2", "C3", "C4"], ["G1", "1.0", "2.0", "0.5", "0.1"]]
 
 
 def write(path, rows):
@@ -195,7 +202,7 @@ class AStoppedRunLeavesNoOutputTest(_Case):
         values = [["#miRNA", "C1", "C2", "C3", "C4"]] + [row[:4] for row in THREE_MIRNAS[1:]]
         targets, values, genes = self.files(values=values)
         stats = miRNA2Target.run(targets, None, values, genes, self.out, "kendall")
-        self.assertEqual(stats["headerMismatch"], {"cells": 5, "values": 3})
+        self.assertEqual(stats["headerMismatch"], {"cells": 5, "values": 3, "label": "#miRNA"})
         self.assertEqual(stats["scored"], 0)
         self.assertFalse(os.path.exists(self.out))
 
@@ -216,7 +223,8 @@ class TheJobFailsAndSaysWhoseFaultItIsTest(_Case):
                 message = answer.content["message"]
                 self.assertIn("The scoring step failed on our side at miRNA-target pair 2 of 3 "
                               "(hsa-miR-2 with G2), with the error: scoring died.", message)
-                self.assertIn("no partial result was saved", message)
+                self.assertIn("The rows it had already written were discarded, so no partial "
+                              "result was saved.", message)
                 self.assertNotIn("No miRNA was matched", message)
                 self.assertNothingLeft(left)
 
@@ -235,12 +243,97 @@ class TheJobFailsAndSaysWhoseFaultItIsTest(_Case):
                     "no result was saved")
                 self.assertNotIn("not a problem with your identifiers", answer.content["message"])
 
+    def test_a_gene_header_with_no_values_or_only_numbers_is_named_too(self):
+        """A one-cell header reached scipy with no values and read as a failure of ours;
+        time labels passed float() and were scored as if they were a gene."""
+        targets = [["hsa-miR-1", "#gene"], ["hsa-miR-2", "G1"]]
+        for name, header in (("no values", ["#gene"]), ("time labels", ["#gene", "0", "12", "24"])):
+            for method in METHODS:
+                with self.subTest(name, method=method):
+                    answer, left = runTool({"values": THREE_MIRNAS, "targets": targets,
+                                            "genes": [header] + GENES[1:]}, method)
+                    self.assertRefused(answer, left, 'a target called "#gene", which is also the first '
+                                                     "cell of the header row",
+                                       "That row is a header, not the values of a gene, so the pair")
+
+    def test_a_first_gene_row_of_numbers_with_a_plain_id_is_a_gene(self):
+        """A gene file with no header: its first row is scored like any other."""
+        rows = {"values": THREE_MIRNAS, "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G2"]],
+                "genes": GENES[1:]}
+        for method in METHODS:
+            with self.subTest(method=method):
+                answer, _left = runTool(rows, method)
+                self.assertIs(answer.content["success"], True, answer.content)
+
+    def test_a_first_line_with_no_number_and_a_plain_id_is_a_header_too(self):
+        rows = {"values": THREE_MIRNAS, "targets": [["hsa-miR-1", "gene"]],
+                "genes": [["gene", "C1", "C2", "C3"]] + GENES[1:]}
+        answer, left = runTool(rows)
+        self.assertRefused(answer, left, 'a target called "gene", which is also the first cell of the header row',
+                           'its cell "C1" is not a number')
+
+    def test_a_first_gene_row_with_one_bad_cell_is_not_called_a_header(self):
+        """A gene file with no header whose first gene holds NA. The file check lets it
+        through, because it takes a first line with text in its second cell for a header.
+        Being told to rename a header the file does not have would not help."""
+        rows = {"values": THREE_MIRNAS, "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G2"]],
+                "genes": [["G1", "NA", "2.0", "0.5"]] + GENES[2:]}
+        for method in METHODS:
+            with self.subTest(method=method):
+                answer, left = runTool(rows, method)
+                self.assertRefused(answer, left,
+                                   'The row for "G1" in your gene expression file holds "NA", which is not '
+                                   "a number, so the pair hsa-miR-1 - G1 could not be scored")
+                self.assertNotIn("header", answer.content["message"])
+
+    def test_a_text_cell_in_a_miRNA_row_is_named(self):
+        """The file check refuses this before scoring on an upload, and example mode skips
+        that check, so it is driven here directly: it must not read as a failure of ours."""
+        values = THREE_MIRNAS[:1] + [["hsa-miR-1", "0.1", "x", "0.2"]] + THREE_MIRNAS[2:]
+        targets, valuesFile, genes = self.files(values=values)
+        stats = miRNA2Target.run(targets, None, valuesFile, genes, self.out, "kendall")
+        self.assertFalse(os.path.exists(self.out))
+        error = MiRNA2GeneJob_module.unfinishedRunError(stats)
+        self.assertIsInstance(error, InputFileError)
+        self.assertIn('The row for "hsa-miR-1" in your miRNA quantification file holds "x", which is '
+                      "not a number, so the pair hsa-miR-1 - G1 could not be scored", str(error))
+
     def test_the_same_files_without_that_pair_still_succeed(self):
         rows = {"values": THREE_MIRNAS, "genes": GENES,
                 "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G2"], ["hsa-miR-3", "G1"]]}
         answer, left = runTool(rows, "pearson")
         self.assertIs(answer.content["success"], True, answer.content)
         self.assertEqual(len([name for name in left["input"] if name not in INPUTS]), 4)
+
+    def test_an_exception_with_no_message_still_fails_the_job(self):
+        """str() of it is empty. stats["aborted"] was the empty string, which is false,
+        so the failure went unnoticed; the job has to name it by its type."""
+        rows = {"values": THREE_MIRNAS, "genes": GENES,
+                "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G2"], ["hsa-miR-3", "G1"]]}
+
+        def score(values_1, values_2, method):
+            raise RuntimeError()
+        with mock.patch.object(miRNA2Target, "getScore", score):
+            answer, left = runTool(rows)
+        self.assertIs(answer.content["extra"]["input_error"], False)
+        # Stopped on the first pair, so there were no rows to discard, and it does not say so.
+        self.assertIn("failed on our side at miRNA-target pair 1 of 3 (hsa-miR-1 with G1), "
+                      "with the error: RuntimeError. No result was saved.", answer.content["message"])
+        self.assertNotIn("already written", answer.content["message"])
+        self.assertNothingLeft(left)
+
+    def test_a_run_that_reports_success_and_wrote_nothing_fails_the_job(self):
+        """The job would have gone on with no output and returned None, and the next
+        step would have crashed on it. This one is ours, so it offers Report."""
+        def noFile(reference, relevant, data, genes, tmpFile, method):
+            return {"pairs": 1, "scored": 1, "nanScores": 0, "dropped": {}}
+        rows = {"values": THREE_MIRNAS, "genes": GENES, "targets": [["hsa-miR-1", "G1"]]}
+        with mock.patch.object(MiRNA2GeneJob_module, "run_miRNA2Target", noFile):
+            answer, left = runTool(rows)
+        self.assertEqual(answer.status, 400)
+        self.assertIs(answer.content["extra"]["input_error"], False)
+        self.assertIn("finished without writing its result file", answer.content["message"])
+        self.assertNothingLeft(left)
 
 
 class AHeaderThatDoesNotFitItsRowsTest(_Case):
@@ -256,40 +349,108 @@ class AHeaderThatDoesNotFitItsRowsTest(_Case):
                 answer, left = runTool(rows, method)
                 self.assertRefused(
                     answer, left,
-                    "The header row of your miRNA quantification file names 2 conditions, but "
-                    "its rows have 1 value after the miRNA id.",
-                    "so it should have 1 or 2 cells; it has 3.")
+                    'The header row of your miRNA quantification file names 2 conditions after its '
+                    'label "#miRNA", but its rows have 1 value after the miRNA id.',
+                    "so it should name 1.")
 
     def test_the_counts_are_the_files(self):
         values = [["#miRNA", "C1", "C2", "C3", "C4", "C5", "C6"],
                   ["hsa-miR-1", "0.1", "0.4", "0.2", "0.7"],
                   ["hsa-miR-2", "0.3", "0.1", "0.9", "0.2"]]
-        genes = [["#gene", "C1", "C2", "C3", "C4"], ["G1", "1.0", "2.0", "0.5", "0.1"]]
         for method in METHODS:
             with self.subTest(method=method):
-                answer, left = runTool({"values": values, "genes": genes,
+                answer, left = runTool({"values": values, "genes": FOUR_CONDITION_GENES,
                                         "targets": [["hsa-miR-1", "G1"], ["hsa-miR-2", "G1"]]}, method)
-                self.assertRefused(answer, left, "names 6 conditions, but its rows have 4 values",
-                                   "should have 4 or 5 cells; it has 7.")
+                self.assertRefused(answer, left, 'names 6 conditions after its label "#miRNA", but its '
+                                                 "rows have 4 values", "so it should name 4.")
+
+    def test_a_header_with_no_label_is_counted_in_cells(self):
+        """Without a "#" the first cell may be a name or a label, so six cells over three
+        values is not known to name five conditions, or six. Six cells it is."""
+        values = [["C1", "C2", "C3", "C4", "C5", "C6"]] + THREE_MIRNAS[1:]
+        for method in METHODS:
+            with self.subTest(method=method):
+                answer, left = runTool({"values": values, "genes": GENES,
+                                        "targets": [["hsa-miR-1", "G1"]]}, method)
+                self.assertRefused(answer, left, "The header row of your miRNA quantification file has "
+                                                 "6 cells, but its rows have 3 values after the miRNA id.",
+                                   "so it should have 3 or 4 cells.")
+                self.assertNotIn("names", answer.content["message"].split("The header needs")[0])
 
     def test_fewer_names_than_values_is_refused_too(self):
         """"C1 C2" over four values: the second name was taken for the first column."""
         values = [["C1", "C2"], ["hsa-miR-1", "0.1", "0.4", "0.2", "0.7"]]
-        genes = [["#gene", "C1", "C2", "C3", "C4"], ["G1", "1.0", "2.0", "0.5", "0.1"]]
-        answer, left = runTool({"values": values, "genes": genes, "targets": [["hsa-miR-1", "G1"]]})
+        answer, left = runTool({"values": values, "genes": FOUR_CONDITION_GENES,
+                                "targets": [["hsa-miR-1", "G1"]]})
         self.assertRefused(answer, left, "The header row of your miRNA quantification file has only "
                                          "2 cells, but its rows have 4 values after the miRNA id.")
 
-    def test_a_header_that_ends_in_a_tab_names_every_condition(self):
-        for header, label in ((["#miRNA", "C1", "C2", "C3", ""], "an id label"),
-                              (["C1", "C2", "C3", ""], "no id label")):
-            with self.subTest(label):
-                targets, values, genes = self.files(values=[header] + THREE_MIRNAS[1:])
-                stats = miRNA2Target.run(targets, None, values, genes, self.out, "kendall")
+    def test_a_label_and_too_few_names_is_refused_not_shifted(self):
+        """"#miRNA C1 C2 C3" over four values passed as four names, with "#miRNA" as the
+        first condition and every value one column off, and the job reported success."""
+        values = [["#miRNA", "C1", "C2", "C3"], ["hsa-miR-1", "0.1", "0.4", "0.2", "0.7"]]
+        for method in METHODS:
+            with self.subTest(method=method):
+                answer, left = runTool({"values": values, "genes": FOUR_CONDITION_GENES,
+                                        "targets": [["hsa-miR-1", "G1"]]}, method)
+                self.assertRefused(answer, left, 'names 3 conditions after its label "#miRNA", but its '
+                                                 "rows have 4 values", "so it should name 4.",
+                                   'If "#miRNA" is itself a condition name, remove the "#".')
+
+    def test_a_label_and_no_names_is_said_in_words(self):
+        values = [["#miRNA"]] + THREE_MIRNAS[1:]
+        answer, left = runTool({"values": values, "genes": GENES, "targets": [["hsa-miR-1", "G1"]]})
+        self.assertRefused(answer, left, 'names no conditions after its label "#miRNA"')
+
+    def test_an_empty_header_is_said_in_words(self):
+        values = [[]] + THREE_MIRNAS[1:]
+        answer, left = runTool({"values": values, "genes": GENES, "targets": [["hsa-miR-1", "G1"]]})
+        self.assertRefused(answer, left, "The header row of your miRNA quantification file is empty")
+
+    def conditionsWritten(self, header, valueRows=THREE_MIRNAS[1:]):
+        """What the output calls the columns, for a header over these rows."""
+        targets, values, genes = self.files(values=[header] + valueRows)
+        stats = miRNA2Target.run(targets, None, values, genes, self.out, "kendall")
+        self.assertNotIn("headerMismatch", stats)
+        with io.open(self.out, encoding="utf-8") as handle:
+            return handle.readline().rstrip("\n").split("\t")[4:]
+
+    def test_an_empty_cell_past_every_column_names_nothing(self):
+        """The csv reader returns a trailing tab as one more, empty, cell."""
+        for header in (["#miRNA", "C1", "C2", "C3", ""], ["#miRNA", "C1", "C2", "C3", "", ""]):
+            with self.subTest(header=header):
+                self.assertEqual(self.conditionsWritten(header), ["C1", "C2", "C3"])
+
+    def test_an_empty_cell_over_a_column_leaves_the_names_where_they_are(self):
+        """The last value column has no name. Dropping that cell would make the header
+        one cell shorter and shift every name, with no word: "#miRNA" over C1's values."""
+        fourValues = [["hsa-miR-1", "0.1", "0.4", "0.2", "0.7"], ["hsa-miR-2", "0.3", "0.1", "0.9", "0.2"],
+                      ["hsa-miR-3", "0.5", "0.2", "0.4", "0.1"]]
+        genes = FOUR_CONDITION_GENES + [["G2", "2.0", "1.0", "3.0", "0.3"], ["G3", "0.4", "0.9", "0.1", "0.6"]]
+        for header in (["#miRNA", "C1", "C2", "C3", ""], ["C1", "C2", "C3", ""], ["", "C1", "C2", "C3", ""]):
+            with self.subTest(header=header):
+                targets, values, genesFile = self.files(values=[header] + fourValues, genes=genes)
+                stats = miRNA2Target.run(targets, None, values, genesFile, self.out, "kendall")
                 self.assertNotIn("headerMismatch", stats)
                 with io.open(self.out, encoding="utf-8") as handle:
-                    self.assertEqual(handle.readline(),
-                                     "# miRNA_id\ttarget_id\tscore\tscore method\tC1\tC2\tC3\n")
+                    self.assertEqual(handle.readline().rstrip("\n").split("\t")[4:], ["C1", "C2", "C3", ""])
+
+    def test_the_shape_that_reads_two_ways_is_refused(self):
+        """"C1 C2 C3 <empty>" over three values is three names and a trailing tab, and
+        "miRNA C1 C2 <empty>" is a label and an unnamed column. Taken either way, the
+        other file gets every name one column off."""
+        for header in (["C1", "C2", "C3", ""], ["C1", "C2", "C3", "", ""]):
+            with self.subTest(header=header):
+                answer, left = runTool({"values": [header] + THREE_MIRNAS[1:], "genes": GENES,
+                                        "targets": [["hsa-miR-1", "G1"]]})
+                self.assertRefused(answer, left, "has 4 cells and the last one is empty",
+                                   'That can be read two ways: "C1" as a label',
+                                   "Remove the empty cell if every column has a name")
+
+    def test_a_plain_label_and_a_header_with_no_label_keep_their_reading(self):
+        self.assertEqual(self.conditionsWritten(["miRNA", "C1", "C2", "C3"]), ["C1", "C2", "C3"])
+        self.assertEqual(self.conditionsWritten(["C1", "C2", "C3"]), ["C1", "C2", "C3"])
+        self.assertEqual(self.conditionsWritten(["", "C1", "C2", "C3"]), ["C1", "C2", "C3"])
 
     def test_an_empty_line_after_the_header_is_not_a_row(self):
         targets, values, genes = self.files(values=THREE_MIRNAS[:1] + [[]] + THREE_MIRNAS[1:])
@@ -333,6 +494,39 @@ class PairsAreCountedInWordsTest(_Case):
                       explain({"regulators": 1, "pairs": 1, "scored": 0}))
         self.assertIn("after 0 of 1 miRNA-target pair,", explain({"regulators": 1, "pairs": 1,
                                                                   "aborted": "x", "abortedAfterPairs": 0}))
+
+
+class TheOpeningSentenceIsTrueTest(_Case):
+    """Pairs were read in these two, and the next sentence says so, so "No miRNA was
+    matched to a target gene" contradicted it on the same line."""
+
+    OPENING = "ERROR MESSAGE: No correlation could be computed, so there is nothing to analyse. "
+
+    def test_a_single_condition_column(self):
+        for method in METHODS:
+            with self.subTest(method=method):
+                answer, left = runTool(PairsAreCountedInWordsTest.ONE_CONDITION, method)
+                self.assertRefused(answer, left, self.OPENING + "Your data has 1 condition column",
+                                   "2 miRNA-target pairs were read.")
+                self.assertNotIn("No miRNA was matched", answer.content["message"])
+
+    def test_scores_that_are_all_undefined(self):
+        rows = {"values": [["#miRNA", "C1", "C2"], ["hsa-miR-1", "0.1", "0.1"]],
+                "genes": [["#gene", "C1", "C2"], ["G1", "1.0", "1.0"]], "targets": [["hsa-miR-1", "G1"]]}
+        for method in METHODS:
+            with self.subTest(method=method):
+                answer, left = runTool(rows, method)
+                self.assertRefused(answer, left, self.OPENING + "The one scored miRNA-target pair gave "
+                                                                "an undefined correlation (nan)")
+                self.assertNotIn("No miRNA was matched", answer.content["message"])
+
+    def test_the_refusals_where_no_pair_formed_keep_it(self):
+        explain = MiRNA2GeneJob_module.explainEmptyResult
+        opening = "No miRNA was matched to a target gene, so there is nothing to analyse. "
+        self.assertTrue(explain({"regulators": 0}).startswith(opening + "Your miRNA quantification file has no data"))
+        self.assertTrue(explain({"regulators": 2, "pairs": 0}).startswith(opening + "Your miRNA quantification"))
+        self.assertTrue(explain({"regulators": 1, "pairs": 2, "scored": 0, "unmatchedTargets": 2}).startswith(
+            opening + "2 miRNA-target pairs were read, but not one target gene was found"))
 
 
 class TargetsWithNoIdentifierAreARefusalTest(_Case):

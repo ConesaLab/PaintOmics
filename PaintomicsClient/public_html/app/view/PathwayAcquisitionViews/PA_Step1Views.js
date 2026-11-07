@@ -4245,8 +4245,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							"regulated by a certain miRNA at certain moment. Consequently, we need to discriminate the real targets for a miRNA."+
 							"If Gene expression (GE) data is available, then we calculate the correlation between each miRNA " +
 							"and each target gene and filter out all those miRNAs that has a lower correlation value than a given threadhold." +
-							"If no GE is available then we filter based on the fold-change for the expression of the miRNAs." +
-							"Default: 'Kendall correlation' if GE is available. 'Fold Change' in other case."
+							"Without GE no score can be computed, so provide a relevant associations file instead. " +
+							"Default: 'Kendall correlation'."
 						},
 						{
 							xtype: 'combo',
@@ -4271,7 +4271,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							"Determines how we select the potential features that are regulating a certain gene. " +
 							"For instance, usually miRNA act as inhibitors of gene expression so we should expect an opposite behavior " +
 							"to the regulated gene. A negative correlation will fit better to this expected profile. " +
-							"Default: If gene expression (GE) is available, select and order by 'negative correlation'. 'Max fold-change' in other case.",
+							"Default: select and order by 'negative correlation'.",
 							listeners:{
 								// Restores the helpTip's (?): see mapToSelector above.
 								boxready: Ext.form.field.Base.prototype.listeners.boxready,

@@ -229,7 +229,8 @@ def fromMiRNAtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE, formField
             "thirdOutputFileName":  fileNames[3],
             "fourthOutputFileName":  fileNames[4],
             "description": jobInstance.description,
-            "enrichment": jobInstance.enrichment
+            "enrichment": jobInstance.enrichment,
+            "notice": jobInstance.notice
         })
 
     except Exception as ex:
