@@ -64,6 +64,29 @@ class ZeroMatchedOmicSaysSoTest(unittest.TestCase):
         self.assertIn("Ensembl version suffix", message)
         self.assertIn(".2 in ENSMUSG00000102693.2", message)
 
+    def test_a_transcript_id_of_an_accepted_genome_version_is_told_to_lose_its_suffix(self):
+        """Gene ids of these two versions are in the alias tables, and their transcript ids never are."""
+        cases = {
+            ".1 in Psat.cameor.v2.1g306350.1":
+                ["Psat.cameor.v2.1g306350.1", "Psat.cameor.v2.3g10100.1", "Psat.cameor.v2.0s1040g10400.2"],
+            "_T001 in Zm00001d027230_T001":
+                ["Zm00001d027230_T001", "Zm00001d002345_T002", "Zm00001d045677_T001"],
+        }
+        for expected, samples in cases.items():
+            message = explainEmptyMapping("hsa", [omic("Gene expression", 0, 5000)], lambda name: samples)
+            self.assertIn(expected, message)
+            self.assertIn("remove the suffix and run again", message)
+            self.assertNotIn("Check the organism", message)
+
+    def test_the_transcript_advice_needs_every_sample_to_be_one(self):
+        for samples in (["Psat.cameor.v2.1g306350", "Psat.cameor.v2.3g10100", "Psat.cameor.v2.7g337900"],
+                        ["Zm00001d027230", "Zm00001d002345", "Zm00001d045677"],
+                        ["Zm00001d027230_T001", "ENSMUSG00000102693", "Zm00001d002345_T001"],
+                        ["Zm00001eb000010_T001", "Zm00001eb000020_T001", "Zm00001eb000050_T001"]):
+            message = explainEmptyMapping("hsa", [omic("Gene expression", 0, 5000)], lambda name: samples)
+            self.assertNotIn("remove the suffix", message, samples[0])
+            self.assertIn("Check the organism", message)
+
     def test_has_data_rows(self):
         directory = tempfile.mkdtemp(prefix="matched-")
         try:

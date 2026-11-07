@@ -156,8 +156,15 @@ def getConnectionByOrganismCode(organism):
 #: the same rule as the others here: an NCBI gene id names one gene.
 GENE_LEVEL_BRIDGE_DATABASES = ("entrezgene", "ncbi_geneid", "ensembl_gene", "kegg_id")
 
-#: One tiny query per species per process, and mapping runs in forked workers
-#: that each map tens of thousands of names in batches of a few hundred.
+#: One tiny query per species and target per process, and mapping runs in forked
+#: workers that each map tens of thousands of names in batches of a few hundred.
+#: Keyed on the target's dbname id as well as the database's name, because a
+#: species rebuild replaces every dbname id under the same name: callers resolve
+#: the target afresh on each mapping call, so a rebuild changes the key and the
+#: old ids are never read again. Keyed on the name alone, a worker that had filled
+#: this before the rebuild went on bridging through ids that no longer exist, and
+#: every name needing the second hop came back unmatched with no error until the
+#: worker restarted.
 _bridgeIDCache = {}
 
 
@@ -167,12 +174,13 @@ def resolveBridgeDatabaseIds(db, databaseConvertion_id=None):
     Returns [] when the species carries none of them, which turns the second
     hop off entirely rather than guessing a bridge.
     """
-    cached = _bridgeIDCache.get(db.name)
+    key = (db.name, databaseConvertion_id)
+    cached = _bridgeIDCache.get(key)
     if cached is None:
         cached = [row.get("_id") for row in
                   db.dbname.find({"dbname": {"$in": list(GENE_LEVEL_BRIDGE_DATABASES)}},
                                  {"_id": 1})]
-        _bridgeIDCache[db.name] = cached
+        _bridgeIDCache[key] = cached
     # Bridging through the target itself cannot add anything: a name reaching
     # it through a bridge document would have reached it on the first hop.
     return [identifier for identifier in cached if identifier != databaseConvertion_id]

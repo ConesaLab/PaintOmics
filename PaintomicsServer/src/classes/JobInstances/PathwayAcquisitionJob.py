@@ -171,6 +171,11 @@ def hasDataRows(path):
 
 
 _ENSEMBL_VERSIONED = re.compile(r"^ENS[A-Z]*[GTP]\d{5,}\.\d+$")
+# Transcript ids of the two genome versions PaintOmics accepts as gene ids only
+# (AdminTools/scripts/common_resources/identifier_aliases): pea Cameor v2 and
+# maize B73 v4. The organism hint names these files correctly and they still map
+# nothing on that organism until the suffix is gone.
+_ALIAS_TRANSCRIPT = re.compile(r"^(?:Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+(\.\d+)|Zm00001d\d{6}(_T\d+))$")
 
 
 def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor, detect=None):
@@ -206,6 +211,11 @@ def explainEmptyMapping(organism, geneOmics, sampleUnmatchedFor, detect=None):
         lines.append("These carry an Ensembl version suffix (the .%s in %s); KEGG "
                      "knows them without it, so strip the suffix and run again."
                      % (samples[0].rsplit(".", 1)[1], samples[0]))
+    elif samples and all(_ALIAS_TRANSCRIPT.match(x) for x in samples):
+        match = _ALIAS_TRANSCRIPT.match(samples[0])
+        lines.append("These are transcript ids (the %s in %s); only the gene ids of "
+                     "this genome version are accepted, so remove the suffix and "
+                     "run again." % (match.group(1) or match.group(2), samples[0]))
     else:
         lines.append("Check the organism you chose and the kind of identifier "
                      "in the first column: the mapping summary on this page "

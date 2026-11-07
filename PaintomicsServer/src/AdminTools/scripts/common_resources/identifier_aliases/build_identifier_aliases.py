@@ -18,7 +18,12 @@ DIR/psat_v2_refseq_rbh.tsv, which `tables` reads: about three minutes on 8 threa
 processors on them in memory. That, rather than an export of the installed
 database, is what it asks "does this id reach KEGG?" of: a database that already
 carries the aliases would answer yes for every sorghum gene this table exists to
-link, and regenerating from it would come out empty.
+link, and regenerating from it would come out empty. It also reads
+DATA/<code>/gene2pathway.list, for the pathway counts it reports, so copy that
+beside mapping/ when running it on another machine.
+
+It stops rather than write a short table: a source the processors skipped, or a
+missing KEGG list, or no rows at all, ends the run with a message and no file.
 
 Expect small differences on a later date. NCBI rewrites gene_info daily and KEGG
 and Ensembl move with each release, which is the point of being able to re-run it.
@@ -44,6 +49,10 @@ GENE_ALIAS = "gene_alias"
 
 GENE_INFO_URL = "https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Plants/All_Plants.gene_info.gz"
 MAIZEGDB_XREF_URL = "https://download.maizegdb.org/Pan-genes/B73_gene_xref/"
+MAIZE_V4_GFF_URL = ("https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/"
+                    "Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz")
+MAIZE_V5_GFF_URL = ("https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/"
+                    "Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz")
 PEA_DATASET_URL = ("https://entrepot.recherche.data.gouv.fr/api/datasets/:persistentId/"
                    "?persistentId=doi:10.57745/5MDE99")
 PEA_DATAFILE_URL = "https://entrepot.recherche.data.gouv.fr/api/access/datafile/%d"
@@ -64,6 +73,10 @@ RBH_MIN_COVERAGE = 80.0
 MIN_GENOME_OVERLAP = 0.5
 
 DIAMOND_FIELDS = ("qseqid", "sseqid", "pident", "length", "qlen", "slen", "qcovhsp", "scovhsp", "evalue", "bitscore")
+#: The lists the processors only warn about, on stderr, when one is absent. Without
+#: any of them a species still builds, with far fewer rows to choose from.
+REQUIRED_MAPPING_FILES = ("uniprot2kegg.list", "ncbi-geneid2kegg.list", "kegg2genesymbol.list")
+
 RBH_FILE = "psat_v2_refseq_rbh.tsv"
 RBH_HEADER = ("v2_gene", "geneid", "pident", "aln_len", "qlen", "slen", "qcov", "scov", "evalue", "bitscore",
               "top_ties_q", "top_ties_s")
@@ -76,13 +89,19 @@ _PACKAGE_RELATIONSHIP = "{http://schemas.openxmlformats.org/package/2006/relatio
 # --- Downloads --------------------------------------------------------------
 
 def fetch(url, target):
-    """Download `url` to `target` unless it is already there and non-empty."""
+    """Download `url` to `target` unless it is already there and non-empty.
+
+    Through a .part file, so an interrupted transfer never sits at `target` to be
+    taken for a whole one by the next run.
+    """
     if os.path.isfile(target) and os.path.getsize(target) > 0:
         sys.stderr.write("using cached " + target + "\n")
         return target
     sys.stderr.write("downloading " + url + "\n")
+    partial = target + ".part"
     # -f so an error page is never stored as data; -L for redirects.
-    check_call(["curl", "-f", "-L", "--connect-timeout", "120", "--max-time", "1800", url, "-o", target])
+    check_call(["curl", "-f", "-L", "--connect-timeout", "120", "--max-time", "1800", url, "-o", partial])
+    os.replace(partial, target)
     return target
 
 
@@ -129,6 +148,45 @@ def readLocusTags(lines, prefix=""):
         if len(fields) >= 4 and fields[3] != "-" and fields[3].startswith(prefix):
             tags[fields[3][len(prefix):]].add(fields[1])
     return tags
+
+
+def readGeneChromosomes(lines):
+    """{GeneID: chromosome} from gene_info rows. The value may be "-" or "Un"."""
+    chromosomes = {}
+    for line in lines:
+        fields = line.split("\t", 7)
+        if len(fields) >= 7:
+            chromosomes[fields[1]] = fields[6]
+    return chromosomes
+
+
+def readGffGenes(lines):
+    """{gene id: (chromosome, start, end)} for the gene rows of a MaizeGDB GFF3, without "chr" on the chromosome."""
+    genes = {}
+    for line in lines:
+        fields = line.rstrip("\n").split("\t")
+        if len(fields) == 9 and fields[2] == "gene":
+            match = re.search(r"(?:^|;)ID=(?:gene:)?([^;]+)", fields[8])
+            if match:
+                genes[match.group(1)] = (re.sub(r"^[Cc]hr", "", fields[0]), int(fields[3]), int(fields[4]))
+    return genes
+
+
+def readKeggPlaces(lines):
+    """{gene: (chromosome, start, end)} from KEGG's gene list, the species' mapping/kegg2genesymbol.list.
+
+    Rows read `zma:103644366<TAB>CDS<TAB>1:complement(41254..46100)<TAB>...`, also
+    with join(...) and <, >. A gene with no coordinates ("Unknown", a bare chromosome) has no entry.
+    """
+    places = {}
+    for line in lines:
+        fields = line.split("\t")
+        if len(fields) >= 3 and ":" in fields[2]:
+            chromosome, span = fields[2].split(":", 1)
+            numbers = [int(number) for number in re.findall(r"\d+", span)]
+            if numbers:
+                places[fields[0].split(":", 1)[-1]] = (chromosome, min(numbers), max(numbers))
+    return places
 
 
 def readGeneLists(lines):
@@ -202,6 +260,11 @@ class Species(object):
     """The xref tables a species' build makes before processIdentifierAliases runs."""
 
     def __init__(self, code, keggData):
+        mapping = os.path.join(keggData, code, "mapping")
+        absent = [name for name in REQUIRED_MAPPING_FILES if not os.path.isfile(os.path.join(mapping, name))]
+        if absent:
+            raise SystemExit("%s: %s absent from %s: not choosing rows from part of a species"
+                             % (code, ", ".join(absent), mapping))
         spec = importlib.util.spec_from_file_location("common_build_database_" + code, BUILDER)
         self.builder = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.builder)
@@ -212,6 +275,14 @@ class Species(object):
             self.builder.processEnsemblData()
         self.builder.processKEGGMappingData()
         self.builder.processEnsemblUniProtData()
+        if self.builder.SKIPPED_SOURCES:
+            raise SystemExit("%s: the build skipped %s: not choosing rows from part of a species"
+                             % (code, ", ".join(label for label, _, _ in self.builder.SKIPPED_SOURCES)))
+
+    def keggPlaces(self):
+        """Where KEGG puts each of this species' genes: see readKeggPlaces."""
+        with open(self.builder.DATA_DIR + "mapping/kegg2genesymbol.list", encoding="utf-8") as handle:
+            return readKeggPlaces(handle)
 
     def displayIds(self, table):
         """Every display id in a table."""
@@ -231,24 +302,71 @@ class Species(object):
 
 # --- Which rows, per species ------------------------------------------------
 
-def maizeRows(species, locusTags, v4ToV5, v5ToV4):
-    """B73 v4 gene ids. NCBI's locus tag where it reaches KEGG, else MaizeGDB's strict 1:1 pairs.
+#: Where the maize rules read positions from. v4 and v5: {gene: (chromosome, start,
+#: end)} from MaizeGDB's GFF files; kegg: from readKeggPlaces; chromosomes: {GeneID:
+#: chromosome} from gene_info.
+MaizePlaces = collections.namedtuple("MaizePlaces", "v4 v5 kegg chromosomes")
 
-    NCBI wins where the two disagree: its tag names one GeneID, the id KEGG's maize
-    genes are keyed on, whereas the MaizeGDB route goes through whatever the v5
-    Ensembl gene is linked to, and that is sometimes several genes.
+
+def overlaps(one, other):
+    """Whether two (chromosome, start, end) places share a base."""
+    return one[0] == other[0] and one[1] <= other[2] and other[1] <= one[2]
+
+
+def onAnotherChromosome(v4, geneId, v5s, places):
+    """Whether NCBI's tag files this v4 id under a gene on another chromosome, with nothing to explain it.
+
+    NCBI really carries these tags, and a handful are wrong: ZEAMMB73_Zm00001d033937
+    sits on waxy 1 (541854, chromosome 9), while the GFF puts Zm00001d033937 on
+    chromosome 1. MaizeGDB's v5 gene on the GeneID's chromosome is the explanation:
+    the two assemblies placed that gene differently. Only numbered chromosomes
+    count, so a contig or a GeneID filed as "Un" is not evidence of anything.
+    """
+    own = places.v4.get(v4)
+    chromosome = places.chromosomes.get(geneId, "")
+    if own is None or not own[0].isdigit() or not chromosome.isdigit() or own[0] == chromosome:
+        return False
+    return not any(v5 in places.v5 and places.v5[v5][0] == chromosome for v5 in v5s)
+
+
+def reachesTheLocus(species, v5, places):
+    """Whether a KEGG gene this v5 gene reaches overlaps it: Ensembl's link can name a gene elsewhere on the genome."""
+    place = places.v5.get(v5)
+    return place is not None and any(gene in places.kegg and overlaps(place, places.kegg[gene])
+                                     for gene in species.reach("ensembl_gene", v5))
+
+
+def maizeRows(species, locusTags, v4ToV5, v5ToV4, places):
+    """B73 v4 gene ids: returns (rows, ids NCBI's pass skipped, ids MaizeGDB's pass skipped).
+
+    NCBI's locus tag where its GeneID is in KEGG, unless the tag puts the id on
+    another chromosome. It names one GeneID, the id KEGG's maize genes are keyed on.
+    Otherwise MaizeGDB's strict 1:1 pair, whose route goes through whatever the v5
+    Ensembl gene is linked to, which is sometimes several genes and sometimes a gene
+    elsewhere: at least one of them has to overlap the v5 gene. An id whose tag was
+    skipped gets no pair either: where it has one, the v5 gene can reach the very
+    gene the tag was skipped for.
     """
     kegg = species.displayIds("kegg_id")
     rows = {}
+    skippedNcbi = []
+    skippedMaizeGdb = []
     for tag, geneIds in locusTags.items():
         if tag.startswith("Zm00001d"):
             known = sorted(gene for gene in geneIds if gene in kegg and species.has("ncbi_geneid", gene))
             if len(known) == 1:
-                rows[tag] = (tag, GENE_ALIAS, "ncbi_geneid", known[0], "ncbi_locus_tag")
+                if onAnotherChromosome(tag, known[0], v4ToV5.get(tag, ()), places):
+                    skippedNcbi.append(tag)
+                else:
+                    rows[tag] = (tag, GENE_ALIAS, "ncbi_geneid", known[0], "ncbi_locus_tag")
+    unusable = rows.keys() | set(skippedNcbi)
     for v4, v5s in v4ToV5.items():
-        if v4 not in rows and len(v5s) == 1 and v5ToV4.get(v5s[0]) == [v4] and species.reach("ensembl_gene", v5s[0]):
-            rows[v4] = (v4, GENE_ALIAS, "ensembl_gene", v5s[0], "maizegdb_1to1")
-    return list(rows.values())
+        if v4 not in unusable and len(v5s) == 1 and v5ToV4.get(v5s[0]) == [v4] and species.reach("ensembl_gene", v5s[0]):
+            if reachesTheLocus(species, v5s[0], places):
+                rows[v4] = (v4, GENE_ALIAS, "ensembl_gene", v5s[0], "maizegdb_1to1")
+            else:
+                skippedMaizeGdb.append(v4)
+    return list(rows.values()), sorted(skippedNcbi), sorted(skippedMaizeGdb)
 
 
 def transcriptGene(transcript):
@@ -300,6 +418,11 @@ def peaRows(species, published, refseq):
         else:
             rows.append((v2, GENE_ALIAS, "ncbi_geneid", sequence[v2], "refseq_rbh_only"))
     return rows, conflicts
+
+
+def dropRbhOnly(rows):
+    """The pea rows without those whose only evidence is the cross-cultivar sequence match."""
+    return [row for row in rows if row[4] != "refseq_rbh_only"]
 
 
 def sorghumRows(species, locusTags):
@@ -468,13 +591,25 @@ def runRbh(args):
 
 def buildMaize(args):
     species = Species("zma", args.kegg_data)
-    with gzip.open(geneInfoForTaxon(args.cache, MAIZE_TAXON), "rt", errors="replace") as handle:
+    geneInfo = geneInfoForTaxon(args.cache, MAIZE_TAXON)
+    with gzip.open(geneInfo, "rt", errors="replace") as handle:
         locusTags = readLocusTags(handle, MAIZE_LOCUS_TAG_PREFIX)
+    with gzip.open(geneInfo, "rt", errors="replace") as handle:
+        chromosomes = readGeneChromosomes(handle)
     tables = []
     for name in ("B73v4_to_B73v5.tsv", "B73v5_to_B73v4.tsv"):
         with open(fetch(MAIZEGDB_XREF_URL + name, os.path.join(args.cache, name)), encoding="utf-8") as handle:
             tables.append(readGeneLists(handle))
-    return species, maizeRows(species, locusTags, tables[0], tables[1])
+    genes = []
+    for url in (MAIZE_V4_GFF_URL, MAIZE_V5_GFF_URL):
+        with gzip.open(fetch(url, os.path.join(args.cache, url.rsplit("/", 1)[1])), "rt", encoding="utf-8") as handle:
+            genes.append(readGffGenes(handle))
+    places = MaizePlaces(genes[0], genes[1], species.keggPlaces(), chromosomes)
+    rows, skippedNcbi, skippedMaizeGdb = maizeRows(species, locusTags, tables[0], tables[1], places)
+    sys.stderr.write("zma: locus tag on another chromosome, %d skipped: %s\n" % (len(skippedNcbi), " ".join(skippedNcbi)))
+    sys.stderr.write("zma: v5 gene's KEGG genes elsewhere, %d skipped: %s\n"
+                     % (len(skippedMaizeGdb), " ".join(skippedMaizeGdb)))
+    return species, rows
 
 
 def buildPea(args):
@@ -491,7 +626,7 @@ def buildPea(args):
     sys.stderr.write("psat: %d genes dropped because the published table and the sequence match disagree\n"
                      % len(conflicts))
     if args.drop_rbh_only:
-        rows = [row for row in rows if row[4] != "refseq_rbh_only"]
+        rows = dropRbhOnly(rows)
     return species, rows
 
 
@@ -510,8 +645,11 @@ def runTables(args):
     os.makedirs(args.out, exist_ok=True)
     for code in args.species:
         species, rows = BUILDS[code](args)
-        writeTable(os.path.join(args.out, code + ".tsv.gz"), rows)
+        if not rows:
+            raise SystemExit(code + ": no rows chosen, so no table written")
+        # The report reads gene2pathway.list: fail on it before the table changes.
         reportTable(code, rows, species, args.kegg_data)
+        writeTable(os.path.join(args.out, code + ".tsv.gz"), rows)
 
 
 def main():
@@ -525,7 +663,8 @@ def main():
     rbh.set_defaults(run=runRbh)
 
     tables = steps.add_parser("tables", help="write the alias tables")
-    tables.add_argument("--kegg-data", required=True, help="directory holding <code>/mapping/ for each species")
+    tables.add_argument("--kegg-data", required=True,
+                        help="directory holding <code>/mapping/ and <code>/gene2pathway.list for each species")
     tables.add_argument("--cache", required=True, help="directory for downloads")
     tables.add_argument("--out", default=HERE, help="directory to write <code>.tsv.gz into")
     tables.add_argument("--species", nargs="+", choices=sorted(BUILDS), default=sorted(BUILDS))

@@ -819,16 +819,19 @@ def _planIdentifierAliases(rows):
     """Which rows can be applied: (plan, missing, refused, malformed); nothing is written.
 
     Decided on the tables as the earlier passes left them, so a row applied by this
-    pass cannot change the answer for a later one. The refusals are the warning in
-    processEnsemblUniProtData's docstring turned into a check: an id filed under a
-    bridge table is walked through by the mapper's second hop, so writing it into a
-    group that names several genes, or into the group of a gene another id also
-    claims, makes paralogues mates and each inherits the others' kegg_id. Measured
-    safe on what ships (no locus tag names two GeneIDs on sbi or zma, and each
-    ncbi_geneid document has exactly one kegg_id mate); the check is what keeps a
-    regenerated table or a future KEGG release honest. A gene_alias row never
-    carries a second hop, so it may reach several KEGG genes, as its target does: it
-    is refused only when the name already means something else, or names two targets.
+    pass cannot change the answer for a later one. An id filed under a bridge table
+    is walked through by the mapper's second hop, which is what the warning in
+    processEnsemblUniProtData's docstring is about, so such a row is refused when two
+    gene-level ids claim its target or when its target reaches more than one KEGG
+    gene. No check looks at the target's group as a whole: two rows naming different
+    targets in one group, or a row naming an Ensembl gene as its target, are not
+    refused. The regenerating script writes neither shape. A gene_alias row never
+    carries a second hop, so it may reach several KEGG genes, as its target does. Any
+    row is refused when its alias names two targets, or when a document already
+    spelling that alias, in any table, reaches a KEGG gene the target does not: the
+    mapper answers by name across all of a name's documents, so the check has to as
+    well. None of this fires on what ships; it is what keeps a regenerated table or a
+    future KEGG release honest.
     """
     plan = []
     missing = []
@@ -866,14 +869,15 @@ def _planIdentifierAliases(rows):
         if bridges and len(bridgeAliasesOfTarget[(targetDb, targetId)]) > 1:
             refused.append(("several gene-level ids claim this target and would become mates", row))
             continue
-        existing = findXREFByEntry(alias)
-        if bridges or existing is not None:
+        existing = [entry for entry in (findXREF(alias, table.getID()) for table in ALL_DBS.values())
+                    if entry is not None]
+        if bridges or existing:
             reached = keggGenesReachedBy(target.getID())
             if bridges and len(reached) > 1:
                 refused.append(("the target reaches " + str(len(reached)) + " KEGG genes, and an id filed under " +
                                 aliasDb + " would hand them all on", row))
                 continue
-            if existing is not None and keggGenesReachedBy(existing.getID()) - reached:
+            if any(keggGenesReachedBy(entry.getID()) - reached for entry in existing):
                 refused.append(("the name already reaches a KEGG gene its target does not", row))
                 continue
         plan.append((alias, aliasDb, tuple(groups), evidence))
@@ -899,7 +903,7 @@ def processIdentifierAliases():
     if not os.path.isfile(fileName):
         return 0
 
-    consequence = "gene ids from other assemblies will not map for this species"
+    consequence = "the ids in this species' alias table will not gain their link to KEGG"
     try:
         rows = readIdentifierAliases(fileName)
     except (OSError, EOFError, ValueError, zlib.error) as ex:
@@ -920,7 +924,7 @@ def processIdentifierAliases():
         ["IDENTIFIER ALIAS NOT APPLIED: " + reason] + row for reason, row in missing + refused + malformed]
     stderr.write("  * %d of %d rows linked, %d targets this build lacks, %d refused, %d malformed\n"
                  % (len(plan), len(rows), len(missing), len(refused), len(malformed)))
-    if rows and not plan:
+    if not plan:
         skipSource("IDENTIFIER-ALIASES", "none of the %d rows of %s could be applied" % (len(rows), fileName), consequence)
     return len(plan)
 

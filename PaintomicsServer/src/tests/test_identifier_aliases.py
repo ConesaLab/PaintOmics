@@ -23,21 +23,29 @@ What is pinned here
   gets a no-op, and a table that cannot be read costs the aliases and no more.
 * `gene_alias` is never a bridge, and a row that would make paralogues mates is
   refused: the warning in processEnsemblUniProtData's docstring, as a check.
-* The shipped tables' schema, order, uniqueness and the rows users asked for.
-* The regenerating script's selection rules, on tiny inputs.
+* The shipped tables' schema, order, uniqueness and the rows users asked for, each
+  evidence label's target table, and the counts and MD5s the README states.
+* The regenerating script's selection rules, on tiny inputs, and that it stops
+  rather than write a short table.
 * The organism hint recognises Cameor v2 and everything it recognised before.
 
 Needs no network and no database.
 """
+import argparse
+import collections
 import gzip
+import hashlib
 import importlib.util
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -56,12 +64,15 @@ REGISTRY = os.path.join(SCRIPTS, "common_resources", "ensembl_genebuilds.json")
 DEFAULT_BUILD = os.path.join(SCRIPTS, "default", "build_database.py")
 
 COLUMNS = ["alias", "alias_dbname", "target_dbname", "target_display_id", "evidence"]
-SHIPPED_ROWS = {"zma": 27798, "psat": 22200, "sbi": 3192}
+SHIPPED_ROWS = {"zma": 27766, "psat": 22200, "sbi": 3192}
 ALIAS_SHAPE = {"zma": r"Zm00001d\d{6}", "psat": r"Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+",
                "sbi": r"SORBI_3(?:\d{3}G|K)\d{6}"}
-EVIDENCE = {"zma": {"ncbi_locus_tag", "maizegdb_1to1"},
-            "psat": {"published_table_rbh+coord", "published_table_rbh+coord+refseq_rbh", "refseq_rbh_only"},
-            "sbi": {"ncbi_locus_tag"}}
+#: Per table, each evidence label and the table its rows target. A published pea
+#: row names the v1a gene the authors paired it with, a sequence match the GeneID.
+EVIDENCE = {"zma": {"ncbi_locus_tag": "ncbi_geneid", "maizegdb_1to1": "ensembl_gene"},
+            "psat": {"published_table_rbh+coord": "ensembl_gene", "published_table_rbh+coord+refseq_rbh": "ensembl_gene",
+                     "refseq_rbh_only": "ncbi_geneid"},
+            "sbi": {"ncbi_locus_tag": "ncbi_geneid"}}
 
 
 def loadModule(path, name):
@@ -75,6 +86,17 @@ def loadModule(path, name):
 def readShipped(code):
     with gzip.open(os.path.join(ALIASES, code + ".tsv.gz"), "rt", encoding="utf-8") as handle:
         return [line.rstrip("\n").split("\t") for line in handle]
+
+
+def readReadme():
+    with open(os.path.join(ALIASES, "README.md"), encoding="utf-8") as handle:
+        return handle.read()
+
+
+def readmeSection(code):
+    """The README's section on one table."""
+    match = re.search(r"^### `%s\.tsv\.gz`.*?(?=^#)" % code, readReadme(), re.M | re.S)
+    return match.group(0)
 
 
 # --- The mapper, on what the builder holds --------------------------------------
@@ -130,16 +152,11 @@ class BuilderCase(unittest.TestCase):
     """Drive the real processors on tiny mapping files, with tables in a temporary directory."""
 
     def setUp(self):
-        self.builder = loadModule(COMMON_BUILDER, "common_build_database_under_test")
         self.dataDir = tempfile.mkdtemp(prefix="identifier-aliases-")
         os.makedirs(os.path.join(self.dataDir, "mapping"))
         self.tablesDir = os.path.join(self.dataDir, "tables")
         os.makedirs(self.tablesDir)
-        self.builder.DATA_DIR = self.dataDir + "/"
-        self.builder.SPECIE = "zma"
-        self.builder.VERBOSE = False
-        self.builder.IDENTIFIER_ALIASES_DIR = self.tablesDir
-        self.builder.EXTERNAL_RESOURCES = {"ensembl": [{"output": "ensembl_mapping.list", "description": "t"}]}
+        self.startBuild()
 
         mapper._bridgeIDCache.clear()
         self._realManager = mapper.KeggInformationManager
@@ -149,6 +166,15 @@ class BuilderCase(unittest.TestCase):
         mapper.KeggInformationManager = self._realManager
         mapper._bridgeIDCache.clear()
         shutil.rmtree(self.dataDir, ignore_errors=True)
+
+    def startBuild(self):
+        """A builder with empty tables: it keeps them in module globals, so a fresh copy of the module."""
+        self.builder = loadModule(COMMON_BUILDER, "common_build_database_under_test")
+        self.builder.DATA_DIR = self.dataDir + "/"
+        self.builder.SPECIE = "zma"
+        self.builder.VERBOSE = False
+        self.builder.IDENTIFIER_ALIASES_DIR = self.tablesDir
+        self.builder.EXTERNAL_RESOURCES = {"ensembl": [{"output": "ensembl_mapping.list", "description": "t"}]}
 
     def buildSpecies(self, ensembl=(), kegg=()):
         """The passes that run before the aliases: ensembl rows, then (GeneID, KEGG id) pairs."""
@@ -177,10 +203,19 @@ class BuilderCase(unittest.TestCase):
         return set(self.builder.xref2transcript["global"].get(item.getID(), ()))
 
     def mapped(self, names):
-        """What the real mapper answers for these names, translated to kegg_id."""
+        """What the real mapper answers for these names, translated to kegg_id, on both of its paths.
+
+        mapFeatureIdentifiers, which is what an upload goes through, calls
+        findIDsByFeaturesNameForDatabases, whose second hop is separate code.
+        """
         keggId = self.builder.ALL_DBS["kegg_id"].getID()
-        answer = mapper.findIDsByFeaturesName("job", list(names), _FakeDB(self.builder), keggId)
-        return {name: sorted(answer.get(name, [])) for name in names}
+        database = _FakeDB(self.builder)
+        answer = mapper.findIDsByFeaturesName("job", list(names), database, keggId)
+        upload = mapper.findIDsByFeaturesNameForDatabases("job", list(names), database, [keggId])[keggId]
+        answers = {name: sorted(answer.get(name, [])) for name in names}
+        self.assertEqual(answers, {name: sorted(upload.get(name, [])) for name in names},
+                         "the two paths through the mapper disagree")
+        return answers
 
 
 class AliasesJoinTheirTargetsGroupsTest(BuilderCase):
@@ -297,6 +332,22 @@ class FailSoftTest(BuilderCase):
         self.assertEqual(["IDENTIFIER-ALIASES"], [label for label, _, _ in self.builder.SKIPPED_SOURCES])
         self.assertNotIn("gene_alias", self.builder.ALL_DBS, "an empty table must not be registered")
 
+    def test_a_table_with_no_rows_is_reported_as_a_lost_source(self):
+        self.buildSpecies(kegg=[("2002", "2002")])
+        self.writeTable([])
+
+        self.assertEqual(0, self.builder.processIdentifierAliases())
+
+        self.assertEqual(["IDENTIFIER-ALIASES"], [label for label, _, _ in self.builder.SKIPPED_SOURCES])
+
+    def test_the_cost_of_a_lost_table_is_stated_for_every_species(self):
+        """All of sorghum's aliases are ids of the installed genome, so "from other assemblies" would be wrong."""
+        self.buildSpecies(kegg=[("2002", "2002")])
+        self.writeTable([("SORBI_3001G262200", "ensembl_gene", "ncbi_geneid", "404", "ncbi_locus_tag")])
+        self.assertEqual(0, self.builder.processIdentifierAliases())
+        self.assertEqual("the ids in this species' alias table will not gain their link to KEGG",
+                         self.builder.SKIPPED_SOURCES[0][2])
+
     def test_a_table_that_cannot_be_read_costs_the_aliases_and_nothing_else(self):
         self.buildSpecies(kegg=[("2002", "2002")])
         path = os.path.join(self.tablesDir, "zma.tsv.gz")
@@ -319,14 +370,48 @@ class FailSoftTest(BuilderCase):
         self.assertEqual(3, len(self.builder.SKIPPED_SOURCES))
         self.assertNotIn("gene_alias", self.builder.ALL_DBS)
 
+    def test_a_table_cut_half_way_applies_none_of_its_rows(self):
+        """Real rows decode before the stream fails, and a reader keeping them would apply half a table."""
+        self.buildSpecies(kegg=[("2002", "2002")])
+        self.writeTable([("Zm00001d%06d" % number, "gene_alias", "ncbi_geneid", "2002", "ncbi_locus_tag")
+                         for number in range(5000)])
+        path = os.path.join(self.tablesDir, "zma.tsv.gz")
+        with open(path, "rb") as handle:
+            whole = handle.read()
+        with open(path, "wb") as handle:
+            handle.write(whole[:len(whole) // 2])
+
+        decoded = 0
+        with self.assertRaises(EOFError):
+            with gzip.open(path, "rt", encoding="utf-8") as handle:
+                for _ in handle:
+                    decoded += 1
+        self.assertGreater(decoded, 1000, "this table is not cut half way")
+
+        self.assertEqual(0, self.builder.processIdentifierAliases())
+        self.assertNotIn("gene_alias", self.builder.ALL_DBS)
+        self.assertEqual(["IDENTIFIER-ALIASES"], [label for label, _, _ in self.builder.SKIPPED_SOURCES])
+
+    def test_damage_zlib_reports_costs_the_aliases_and_nothing_else(self):
+        """About one in a hundred flipped bytes reaches zlib as its own error rather than as BadGzipFile."""
+        self.buildSpecies(kegg=[("2002", "2002")])
+        self.writeTable([("Zm00001d000001", "gene_alias", "ncbi_geneid", "2002", "ncbi_locus_tag")])
+        with mock.patch.object(self.builder.gzip, "open", side_effect=zlib.error("invalid distance too far back")):
+            self.assertEqual(0, self.builder.processIdentifierAliases())
+        self.assertNotIn("gene_alias", self.builder.ALL_DBS)
+        self.assertEqual(["IDENTIFIER-ALIASES"], [label for label, _, _ in self.builder.SKIPPED_SOURCES])
+
     def test_a_malformed_row_is_dropped_and_the_rest_apply(self):
         self.buildSpecies(kegg=[("2002", "2002")])
         self.writeTable([("Zm00001d000001", "gene_alias", "ncbi_geneid", "2002", "ncbi_locus_tag"),
                          ("Zm00001d000002", "gene_alias", "ncbi_geneid"),
                          ("Zm00001d000003", "gene_alias", "ncbi_geneid", "", "ncbi_locus_tag"),
-                         ("Zm00001d000004", "kegg_id", "ncbi_geneid", "2002", "ncbi_locus_tag")])
+                         ("Zm00001d000004", "kegg_id", "ncbi_geneid", "2002", "ncbi_locus_tag"),
+                         ("", "gene_alias", "ncbi_geneid", "2002", "ncbi_locus_tag")])
         self.assertEqual(1, self.builder.processIdentifierAliases())
-        self.assertEqual(3, len(self.builder.FAILED_LINES["IDENTIFIER-ALIASES"]))
+        self.assertEqual(4, len(self.builder.FAILED_LINES["IDENTIFIER-ALIASES"]))
+        self.assertNotIn("", {entry.display_id for entry in self.builder.xref["global"].values()},
+                         "an empty alias would be a document anyone's blank cell could find")
 
 
 class ParaloguesAreNotMergedTest(BuilderCase):
@@ -391,14 +476,38 @@ class ParaloguesAreNotMergedTest(BuilderCase):
         self.assertEqual({"Zm00001d000001": ["3003"], "Zm00001d000002": ["3003"]},
                          self.mapped(["Zm00001d000001", "Zm00001d000002"]))
 
+    def test_a_name_is_judged_on_every_document_that_spells_it(self):
+        """The gene reaches 1001. A later peptide of the same spelling reaches nothing, and is the last one inserted."""
+        self.buildSpecies(ensembl=[("NAME_A", "1001", "PEP_A", "TR_A")], kegg=[("1001", "1001"), ("3003", "3003")])
+        peptide = self.builder.insertXREF(self.builder.XREF_Entry("NAME_A", self.builder.ALL_DBS["ensembl_peptide"].getID(), "t"))
+        self.builder.insertTR_XREF(peptide, "TR_OTHER")
+        self.assertEqual(["1001"], self.mapped(["NAME_A"])["NAME_A"])
+
+        self.writeTable([("NAME_A", "gene_alias", "ncbi_geneid", "3003", "ncbi_locus_tag")])
+
+        self.assertEqual(0, self.builder.processIdentifierAliases())
+        self.assertNotIn("gene_alias", self.builder.ALL_DBS)
+        self.assertEqual(["1001"], self.mapped(["NAME_A"])["NAME_A"], "the name must keep its answer")
+        self.assertIn("already reaches", self.builder.FAILED_LINES["IDENTIFIER-ALIASES"][0][0])
+
     def test_the_decision_does_not_depend_on_the_rows_order(self):
-        """Decided on the tables as the earlier passes left them, before any row is applied."""
-        self.buildSpecies(ensembl=[("GENE_A", "", "PEP_A", "TR_A"), ("GENE_B", "", "PEP_B", "TR_B")],
-                          kegg=[("3003", "3003"), ("4004", "4004")])
-        self.writeTable([("GENE_B", "ensembl_gene", "ncbi_geneid", "4004", "ncbi_locus_tag"),
-                         ("GENE_A", "ensembl_gene", "ncbi_geneid", "3003", "ncbi_locus_tag")])
-        self.assertEqual(2, self.builder.processIdentifierAliases())
-        self.assertEqual({"GENE_A": ["3003"], "GENE_B": ["4004"]}, self.mapped(["GENE_A", "GENE_B"]))
+        """Decided on the tables as the earlier passes left them, before any row is applied.
+
+        The rows interact: the first links T1 to 2002, which X1 already reaches, so
+        applied while planning it would let the second row through.
+        """
+        rows = [("T1", "ensembl_gene", "ncbi_geneid", "2002", "ncbi_locus_tag"),
+                ("X1", "gene_alias", "ensembl_gene", "T1", "x")]
+        decided = []
+        for order in (rows, rows[::-1]):
+            self.startBuild()
+            self.buildSpecies(ensembl=[("T1", "", "PEP_T", "TR_T"), ("X1", "2002", "PEP_X", "TR_X")],
+                              kegg=[("2002", "2002")])
+            self.writeTable(order)
+            linked = self.builder.processIdentifierAliases()
+            decided.append((linked, sorted(line[1] for line in self.builder.FAILED_LINES["IDENTIFIER-ALIASES"])))
+        self.assertEqual((1, ["X1"]), decided[0])
+        self.assertEqual(decided[0], decided[1])
 
 
 class BridgesTest(BuilderCase):
@@ -420,11 +529,17 @@ class BridgesTest(BuilderCase):
     def test_the_reach_the_refusals_use_is_the_mappers(self):
         """keggGenesReachedBy answers what findIDsByFeaturesName answers, on both hops."""
         self.buildSpecies(
-            ensembl=[("GENE_HOP2", "1001", "PEP_1", "TR_1"), ("GENE_NONE", "", "PEP_2", "TR_2")],
-            kegg=[("1001", "1001"), ("3003", "A3"), ("3003", "B3")])
-        for name, table in (("GENE_HOP2", "ensembl_gene"), ("GENE_NONE", "ensembl_gene"), ("3003", "ncbi_geneid")):
+            ensembl=[("GENE_HOP2", "1001", "PEP_1", "TR_1"), ("GENE_NONE", "", "PEP_2", "TR_2"),
+                     ("GENE_BOTH", "2002", "PEP_3", "TR_3")],
+            kegg=[("1001", "1001"), ("3003", "A3"), ("3003", "B3"), ("2002", "K2"), ("5005", "K1")])
+        # Its group holds K1, and its entrezgene 2002 would reach K2: the first hop answers, and the second never runs.
+        for group in self.groupsOf("GENE_BOTH", "ensembl_gene"):
+            self.builder.insertTR_XREF(self.entry("K1", "kegg_id").getID(), group)
+        for name, table in (("GENE_HOP2", "ensembl_gene"), ("GENE_NONE", "ensembl_gene"), ("3003", "ncbi_geneid"),
+                            ("GENE_BOTH", "ensembl_gene")):
             reached = self.builder.keggGenesReachedBy(self.entry(name, table).getID())
             self.assertEqual(self.mapped([name])[name], sorted(reached), name)
+        self.assertEqual(["K1"], self.mapped(["GENE_BOTH"])["GENE_BOTH"])
 
 
 class BuildScriptTest(unittest.TestCase):
@@ -476,12 +591,46 @@ class ShippedTablesTest(unittest.TestCase):
         allowed = loadModule(COMMON_BUILDER, "common_build_database_tables").IDENTIFIER_ALIAS_DATABASES
         targets = {"ncbi_geneid", "ensembl_gene"}
         for code in SHIPPED_ROWS:
-            for _, aliasDb, targetDb, targetId, evidence in readShipped(code)[1:]:
+            for alias, aliasDb, targetDb, targetId, evidence in readShipped(code)[1:]:
                 self.assertIn(aliasDb, allowed)
                 self.assertIn(targetDb, targets)
-                self.assertIn(evidence, EVIDENCE[code])
+                self.assertEqual(EVIDENCE[code].get(evidence), targetDb, alias)
                 if targetDb == "ncbi_geneid":
                     self.assertTrue(targetId.isdigit(), targetId)
+
+    def test_the_evidence_counts_are_the_readmes(self):
+        for code in SHIPPED_ROWS:
+            stated = {label: int(count.replace(",", ""))
+                      for label, count in re.findall(r"^\| `([^`]+)` \| ([\d,]+) \|", readmeSection(code), re.M)}
+            self.assertEqual(stated, dict(collections.Counter(row[4] for row in readShipped(code)[1:])), code)
+
+    def test_the_files_are_the_ones_the_readme_records(self):
+        stated = {name: (rows, size, md5) for name, rows, size, md5 in
+                  re.findall(r"^\| `(\w+\.tsv\.gz)` \| ([\d,]+) \| ([\d,]+) \| `([0-9a-f]{32})` \|$", readReadme(), re.M)}
+        self.assertEqual(sorted(code + ".tsv.gz" for code in SHIPPED_ROWS), sorted(stated))
+        for code, expected in SHIPPED_ROWS.items():
+            with open(os.path.join(ALIASES, code + ".tsv.gz"), "rb") as handle:
+                content = handle.read()
+            self.assertEqual(("{:,}".format(expected), "{:,}".format(len(content)), hashlib.md5(content).hexdigest()),
+                             stated[code + ".tsv.gz"], code)
+
+    def test_maize_rows_shown_wrong_stay_out_and_their_neighbours_stay_in(self):
+        """What the position rules removed from the table, and what they must not have."""
+        rows = {row[0]: row for row in readShipped("zma")[1:]}
+        # A locus tag on another chromosome: the v4 id is on 1, waxy 1 is on 9.
+        self.assertNotIn("Zm00001d033937", rows)
+        self.assertEqual("Zm00001eb378140", rows["Zm00001d045462"][3], "MaizeGDB's pair for waxy 1's v5 gene")
+        # The same, but MaizeGDB's v5 gene is on the GeneID's chromosome: the assemblies placed it differently.
+        for kept in ("Zm00001d010381", "Zm00001d031670"):
+            self.assertEqual("ncbi_locus_tag", rows[kept][4], kept)
+        # A v5 gene linked to a KEGG gene elsewhere, with an NCBI cross-reference to test (the first) and without.
+        for wrong in ("Zm00001d025106", "Zm00001d031839", "Zm00001d014241"):
+            self.assertNotIn(wrong, rows)
+        # A skipped tag whose MaizeGDB pair reaches the same gene and others: no row at all.
+        self.assertNotIn("Zm00001d017669", rows)
+        # Their KEGG genes overlap the v5 gene, though each id's NCBI tag names a GeneID KEGG does not have.
+        for kept in ("Zm00001d002318", "Zm00001d007959", "Zm00001d051239"):
+            self.assertEqual("maizegdb_1to1", rows[kept][4], kept)
 
     def test_the_rows_users_asked_for_are_there(self):
         wanted = {
@@ -508,10 +657,9 @@ class ShippedTablesTest(unittest.TestCase):
             self.assertEqual(b"\x00\x00\x00\x00", head[4:8], code + " embeds a timestamp")
 
     def test_the_readme_records_sources_and_attribution(self):
-        with open(os.path.join(ALIASES, "README.md"), encoding="utf-8") as handle:
-            readme = handle.read()
+        readme = readReadme()
         for needed in ("10.57745/5MDE99", "Kreplak", "Etalab", "MaizeGDB", "All_Plants.gene_info", "GCF_024323335.1",
-                       "refseq_rbh_only", "DIAMOND"):
+                       "refseq_rbh_only", "DIAMOND", "Zm00001d.2.gff3.gz", "Zm00001eb.1.gff3.gz"):
             self.assertIn(needed, readme)
 
     def test_the_tables_apply_to_a_build_that_has_their_targets(self):
@@ -571,12 +719,18 @@ class RegeneratingScriptTest(unittest.TestCase):
         with gzip.open(first, "rt") as handle:
             self.assertEqual(["alias", "a", "b"], [line.split("\t")[0] for line in handle])
 
+    def places(self, v4=None, v5=None, kegg=None, chromosomes=None):
+        return self.script.MaizePlaces(v4 or {}, v5 or {}, kegg or {}, chromosomes or {})
+
     def test_maize_ncbi_wins_and_maizegdb_only_counts_when_strictly_one_to_one(self):
         species = _StubSpecies(kegg={"100", "200"},
                                tables={"ncbi_geneid": {"100", "200"}},
                                reach={("ensembl_gene", "V5A"): {"900"}, ("ensembl_gene", "V5B"): {"901"},
                                       ("ensembl_gene", "V5C"): {"902"}, ("ensembl_gene", "V5E"): {"903"},
                                       ("ensembl_gene", "V5F"): {"904"}})
+        here = ("1", 100, 200)
+        places = self.places(v5={"V5A": here, "V5B": here, "V5C": here, "V5E": here, "V5F": here},
+                             kegg={"900": here, "901": here, "902": here, "903": here, "904": here})
         tags = self.script.readLocusTags(
             ["4577\t100\tLOC100\tZEAMMB73_Zm00001d000001\t-\n",     # NCBI, in KEGG
              "4577\t300\tLOC300\tZEAMMB73_Zm00001d000002\t-\n",     # NCBI, not in KEGG
@@ -591,10 +745,182 @@ class RegeneratingScriptTest(unittest.TestCase):
         v5ToV4 = {"V5A": ["Zm00001d000002"], "V5D": ["Zm00001d000001"], "V5B": ["Zm00001d000003"],
                   "V5C": ["Zm00001d000003"], "V5E": ["Zm00001d000004", "Zm00001d000005"], "V5G": ["Zm00001d000006"]}
 
-        rows = sorted(self.script.maizeRows(species, tags, v4ToV5, v5ToV4))
+        rows, skippedNcbi, skippedMaizeGdb = self.script.maizeRows(species, tags, v4ToV5, v5ToV4, places)
 
         self.assertEqual([("Zm00001d000001", "gene_alias", "ncbi_geneid", "100", "ncbi_locus_tag"),
-                          ("Zm00001d000002", "gene_alias", "ensembl_gene", "V5A", "maizegdb_1to1")], rows)
+                          ("Zm00001d000002", "gene_alias", "ensembl_gene", "V5A", "maizegdb_1to1")], sorted(rows))
+        self.assertEqual(([], []), (skippedNcbi, skippedMaizeGdb))
+
+    def test_a_maizegdb_pair_needs_a_kegg_gene_at_the_v5_gene(self):
+        """The v5 gene's link to KEGG comes from Ensembl, and can name a gene elsewhere on the genome."""
+        place = ("10", 1000, 2000)
+        species = _StubSpecies(kegg=set(), tables={},
+                               reach={("ensembl_gene", v5): set(genes) for v5, genes in {
+                                   "V5_INSIDE": ["K_INSIDE"], "V5_TOUCHES": ["K_TOUCHES"], "V5_ONE_OF_TWO": ["K_FAR", "K_INSIDE"],
+                                   "V5_ELSEWHERE": ["K_OTHER"], "V5_FAR": ["K_FAR"], "V5_UNPLACED": ["K_UNPLACED"],
+                                   "V5_NO_GFF": ["K_INSIDE"]}.items()})
+        v5s = ["V5_INSIDE", "V5_TOUCHES", "V5_ONE_OF_TWO", "V5_ELSEWHERE", "V5_FAR", "V5_UNPLACED", "V5_NO_GFF"]
+        v4ToV5 = {"V4_" + v5: [v5] for v5 in v5s}
+        v5ToV4 = {v5: ["V4_" + v5] for v5 in v5s}
+        places = self.places(v5={v5: place for v5 in v5s if v5 != "V5_NO_GFF"},
+                             kegg={"K_INSIDE": ("10", 1500, 1600), "K_TOUCHES": ("10", 2000, 3000),
+                                   "K_OTHER": ("5", 1000, 2000), "K_FAR": ("10", 2001, 3000)})
+
+        rows, skippedNcbi, skippedMaizeGdb = self.script.maizeRows(species, {}, v4ToV5, v5ToV4, places)
+
+        self.assertEqual(["V4_V5_INSIDE", "V4_V5_ONE_OF_TWO", "V4_V5_TOUCHES"], sorted(row[0] for row in rows))
+        self.assertEqual([], skippedNcbi)
+        self.assertEqual(["V4_V5_ELSEWHERE", "V4_V5_FAR", "V4_V5_NO_GFF", "V4_V5_UNPLACED"], skippedMaizeGdb)
+
+    def test_a_locus_tag_on_another_chromosome_is_skipped(self):
+        genes = {"100", "200", "300", "400", "500", "600"}
+        species = _StubSpecies(kegg=genes, tables={"ncbi_geneid": genes}, reach={})
+        tags = {"V4_WRONG": {"100"}, "V4_SAME": {"200"}, "V4_REPLACED": {"300"}, "V4_CONTIG": {"400"},
+                "V4_UN": {"500"}, "V4_NO_GFF": {"600"}, "V4_V5_ELSEWHERE": {"100"}}
+        tags = {"Zm00001d" + tag: geneIds for tag, geneIds in tags.items()}
+        places = self.places(
+            v4={"Zm00001dV4_WRONG": ("1", 1, 2), "Zm00001dV4_SAME": ("9", 1, 2), "Zm00001dV4_REPLACED": ("8", 1, 2),
+                "Zm00001dV4_CONTIG": ("B73V4_ctg182", 1, 2), "Zm00001dV4_UN": ("3", 1, 2),
+                "Zm00001dV4_V5_ELSEWHERE": ("1", 1, 2)},
+            v5={"V5_ON_ONE": ("1", 1, 2), "V5_ON_ONE_TOO": ("1", 5, 6)},
+            chromosomes={"100": "9", "200": "9", "300": "1", "400": "2", "500": "Un", "600": "4"})
+        v4ToV5 = {"Zm00001dV4_REPLACED": ["V5_ON_ONE", "V5_ON_ONE_TOO"], "Zm00001dV4_V5_ELSEWHERE": ["V5_ON_ONE"]}
+
+        rows, skippedNcbi, _ = self.script.maizeRows(species, tags, v4ToV5, {}, places)
+
+        self.assertEqual(["Zm00001dV4_V5_ELSEWHERE", "Zm00001dV4_WRONG"], skippedNcbi)
+        self.assertEqual(["Zm00001dV4_CONTIG", "Zm00001dV4_NO_GFF", "Zm00001dV4_REPLACED", "Zm00001dV4_SAME", "Zm00001dV4_UN"],
+                         sorted(row[0] for row in rows))
+
+    def test_a_skipped_locus_tag_gets_no_maizegdb_pair_either(self):
+        """Measured: Zm00001d017669's pair reaches 5 KEGG genes, one at its place and the one its tag was skipped for."""
+        species = _StubSpecies(kegg={"100"}, tables={"ncbi_geneid": {"100"}},
+                               reach={("ensembl_gene", "V5"): {"100", "900"}})
+        places = self.places(v4={"Zm00001d000001": ("5", 1, 2)}, v5={"V5": ("5", 1, 2)},
+                             kegg={"100": ("4", 1, 2), "900": ("5", 1, 2)}, chromosomes={"100": "4"})
+        rows, skippedNcbi, skippedMaizeGdb = self.script.maizeRows(
+            species, {"Zm00001d000001": {"100"}}, {"Zm00001d000001": ["V5"]}, {"V5": ["Zm00001d000001"]}, places)
+        self.assertEqual(["Zm00001d000001"], skippedNcbi)
+        self.assertEqual([], skippedMaizeGdb)
+        self.assertEqual([], rows)
+
+    def test_the_position_readers(self):
+        self.assertEqual({"G1": ("1", 44289, 49837), "Zm00001eb000010": ("10", 34617, 40204)},
+                         self.script.readGffGenes(
+                             ["##gff-version 3\n",
+                              "Chr1\tgramene\tgene\t44289\t49837\t.\t+\t.\tID=gene:G1;biotype=protein_coding\n",
+                              "chr10\tNAM\tgene\t34617\t40204\t.\t+\t.\tID=Zm00001eb000010;biotype=protein_coding\n",
+                              "Chr1\tgramene\tmRNA\t44289\t49837\t.\t+\t.\tID=transcript:T1;Parent=gene:G1\n"]))
+        self.assertEqual({"1": ("1", 34607, 40208), "2": ("1", 41254, 46100), "3": ("10", 5, 40), "4": ("Pltd", 7, 9),
+                          "5": ("2", 1, 3)},
+                         self.script.readKeggPlaces(
+                             ["zma:1\tCDS\t1:34607..40208\tone\n", "zma:2\tCDS\t1:complement(41254..46100)\ttwo\n",
+                              "zma:3\tCDS\t10:join(5..10,20..40)\tthree\n", "zma:4\tCDS\tPltd:7..9\tfour\n",
+                              "zma:5\tCDS\t2:complement(<1..>3)\tfive\n", "zma:6\tCDS\tUnknown\tsix\n", "zma:7\tCDS\t3\tseven\n"]))
+        self.assertEqual({"100": "9", "200": "Un"},
+                         self.script.readGeneChromosomes(
+                             ["#tax_id\tGeneID\n",
+                              "4577\t100\tS\tTAG\t-\t-\t9\t9q\tdesc\tprotein-coding\n",
+                              "4577\t200\tS\tTAG\t-\t-\tUn\t-\tdesc\tprotein-coding\n"]))
+        self.assertTrue(self.script.overlaps(("1", 1, 5), ("1", 5, 9)))
+        self.assertFalse(self.script.overlaps(("1", 1, 5), ("1", 6, 9)))
+        self.assertFalse(self.script.overlaps(("1", 1, 5), ("2", 1, 5)))
+
+    def test_an_interrupted_download_is_not_taken_for_a_whole_one(self):
+        target = os.path.join(self.workDir, "source.txt")
+
+        def interrupted(command):
+            with open(command[command.index("-o") + 1], "wb") as handle:
+                handle.write(b"half")
+            raise subprocess.CalledProcessError(18, command)
+
+        def whole(command):
+            with open(command[command.index("-o") + 1], "wb") as handle:
+                handle.write(b"whole")
+
+        with mock.patch.object(self.script, "check_call", interrupted):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.script.fetch("https://example.org/source.txt", target)
+        self.assertFalse(os.path.exists(target), "the next run would say 'using cached'")
+
+        with mock.patch.object(self.script, "check_call", whole):
+            self.assertEqual(target, self.script.fetch("https://example.org/source.txt", target))
+        with open(target, "rb") as handle:
+            self.assertEqual(b"whole", handle.read())
+        self.assertEqual(["source.txt"], os.listdir(self.workDir))
+
+    def writeMapping(self, code="zma", without=()):
+        """A species' mapping files, in the one row each that the build's processors read."""
+        files = {"uniprot2kegg.list": "up:A0A000\tzma:100\n",
+                 "ncbi-geneid2kegg.list": "ncbi-geneid:100\tzma:100\n",
+                 "kegg2genesymbol.list": "zma:100\tCDS\t1:1..2\tabc1; a gene\n",
+                 "ensembl_mapping.list": "Zm00001eb000010\t100\tPEP\tTR\n",
+                 "ensembl_uniprot.list": "Zm00001eb000010\tA0A000\tPEP\tTR\n"}
+        mapping = os.path.join(self.workDir, code, "mapping")
+        os.makedirs(mapping, exist_ok=True)
+        for name, content in files.items():
+            path = os.path.join(mapping, name)
+            if name in without:
+                if os.path.exists(path):
+                    os.remove(path)
+            else:
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(content)
+
+    def test_a_species_is_not_read_when_part_of_it_is_missing(self):
+        self.writeMapping()
+        species = self.script.Species("zma", self.workDir)
+        self.assertEqual({"100"}, species.displayIds("ncbi_geneid"))
+        self.assertEqual({"100": ("1", 1, 2)}, species.keggPlaces())
+
+        for name in ("uniprot2kegg.list", "ncbi-geneid2kegg.list", "kegg2genesymbol.list"):
+            self.writeMapping(without=(name,))
+            with self.assertRaises(SystemExit) as stopped:
+                self.script.Species("zma", self.workDir)
+            self.assertIn(name, str(stopped.exception))
+
+        self.writeMapping(without=("ensembl_uniprot.list",))
+        with self.assertRaises(SystemExit) as stopped:
+            self.script.Species("zma", self.workDir)
+        self.assertIn("ENSEMBL-UNIPROT", str(stopped.exception), "a source the processors skipped")
+
+    def tablesArguments(self, kegg_data=None):
+        return argparse.Namespace(cache=os.path.join(self.workDir, "cache"), out=os.path.join(self.workDir, "out"),
+                                  kegg_data=kegg_data or self.workDir, species=["zma"])
+
+    def test_no_rows_writes_no_table(self):
+        args = self.tablesArguments()
+        with mock.patch.dict(self.script.BUILDS, {"zma": lambda arguments: (None, [])}):
+            with self.assertRaises(SystemExit) as stopped:
+                self.script.runTables(args)
+        self.assertIn("zma", str(stopped.exception))
+        self.assertEqual([], os.listdir(args.out))
+
+    def test_a_report_that_cannot_run_leaves_the_table_as_it_was(self):
+        """The report reads gene2pathway.list, which someone copying mapping/ elsewhere may not have."""
+        args = self.tablesArguments()
+        species = _StubSpecies(kegg={"100"}, tables={}, reach={})
+        rows = [("a", "gene_alias", "ncbi_geneid", "100", "x")]
+        with mock.patch.dict(self.script.BUILDS, {"zma": lambda arguments: (species, rows)}):
+            with self.assertRaises(FileNotFoundError):
+                self.script.runTables(args)
+        self.assertEqual([], os.listdir(args.out))
+
+    def test_drop_rbh_only_leaves_the_published_rows(self):
+        rows = [("V2A", "gene_alias", "ensembl_gene", "P1", "published_table_rbh+coord+refseq_rbh"),
+                ("V2B", "gene_alias", "ensembl_gene", "P2", "published_table_rbh+coord"),
+                ("V2D", "gene_alias", "ncbi_geneid", "400", "refseq_rbh_only")]
+        self.assertEqual(rows[:2], self.script.dropRbhOnly(rows))
+
+        with open(os.path.join(self.workDir, self.script.RBH_FILE), "w", encoding="utf-8") as handle:
+            handle.write("\t".join(self.script.RBH_HEADER) + "\n")
+        workbook = {"v1_vs_v2": [], "v2_vs_v1": [], "intersection_v1_v2": []}
+        for flag, expected in ((True, rows[:2]), (False, rows)):
+            args = argparse.Namespace(kegg_data=self.workDir, cache=self.workDir, drop_rbh_only=flag)
+            with mock.patch.multiple(self.script, Species=lambda *arguments: None,
+                                     fetchPeaDatasetFile=lambda *arguments: "unused",
+                                     readWorkbook=lambda *arguments: workbook, peaRows=lambda *arguments: (rows, [])):
+                self.assertEqual(expected, self.script.buildPea(args)[1], "--drop-rbh-only %s" % flag)
 
     def test_pea_published_pairs_need_best_hits_both_ways_and_a_genome_overlap(self):
         v1OnV2 = [["P1.1", "V2A.1"], ["P2.1", "V2B.1"], ["P3.1", "V2Z.1"], ["P4.1", "V2D.1"]]
@@ -706,6 +1032,8 @@ class OrganismHintTest(unittest.TestCase):
     def test_cameor_v2_is_recognised_and_nothing_else_stopped_being(self):
         cases = {
             tuple(self.CAMEOR): ("psat",),
+            ("Psat.cameor.v2.1g306350.1", "Psat.cameor.v2.3g10100.1", "Psat.cameor.v2.0s1040g10400.1",
+             "Psat.cameor.v2.7g337900.2", "Psat.cameor.v2.1g00050.1"): ("psat",),
             ("Zm00001d027230", "Zm00001d002345", "Zm00001d045677", "Zm00001d038291", "Zm00001d001865"): ("zma",),
             ("Sobic.001G215100", "Sobic.001G262200", "Sobic.007G085966", "Sobic.007G070300",
              "Sobic.009G242200"): ("sbi",),
