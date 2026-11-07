@@ -276,3 +276,9 @@ test_step3_says_what_is_true_without_a_network	0.4
 # test_uniprot_two_hop_mapping, which fakes the same xref lookups: on the VM the
 # two took 2.8 and 1.0 s, and that one is recorded here at 0.3 s.
 test_identifier_aliases	0.8
+# Added with fix/installer-small-species-checks (2026-11-07), charged like
+# test_build_warnings_handoff, which imports the same DBManager and runs on
+# fakes too: on the VM the two took 2.0 and 1.0 s, and that one is recorded
+# here at 0.3 s. Without it 25 suites were unrecorded, and
+# test_shard_split_is_balanced allows fewer than 25.
+test_installer_small_and_unfinished_species	0.6

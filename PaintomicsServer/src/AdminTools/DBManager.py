@@ -18,13 +18,22 @@ from conf.serverconf import KEGG_DATA_DIR, DOWNLOAD_DELAY_1, DOWNLOAD_DELAY_2, M
 # directory is on sys.path; imported as AdminTools.DBManager (the tests) src/ is.
 # The sibling module is reached the same way in both.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from AdminTools.species_json import species_json_rows, write_species_json
+from AdminTools.species_json import (species_json_rows, write_species_json, build_records,
+                                     missing_build_records, unfinished_build_fact)
 
 VERSION = 0.12
 
 # Degradations that did not stop an install, collected so the run ends with one
 # readable list instead of leaving them scattered through a multi-hour log.
 INSTALL_WARNINGS = []
+
+# Species databases that getCurrentInstalledSpecies left out because their
+# build never finished, as (code, database, missing records, kind) with kind
+# "custom", "kegg" or None (in neither organisms list). They are not turned
+# into warnings there: the right words depend on whether this run then builds
+# the species again, so install_command writes them at the end
+# (unfinishedBuildWarnings).
+UNFINISHED_BUILDS = []
 
 
 # ------------------------------------------------------------------------------------------
@@ -718,18 +727,10 @@ def install_command(inputfile=None, specie=None, species=None, common=0, reinsta
     # Assembled first, then emitted in one loop. log() derives its indentation from the
     # source line's own indentation, so emitting these from inside an if/for staircases
     # the output; building the lines up front keeps the block aligned.
-    summaryLines = ["", "=" * 62, "INSTALL SUMMARY", "=" * 62,
-                    "  installed : %d  %s" % (len(INSTALLED_SPECIES), " ".join(INSTALLED_SPECIES) or "-"),
-                    "  failed    : %d  %s" % (len(ERRONEOUS_SPECIES), " ".join(ERRONEOUS_SPECIES) or "-"),
-                    "  skipped   : %d  %s" % (len(SKIPPED_SPECIES), " ".join(SKIPPED_SPECIES) or "-")]
-
-    if INSTALL_WARNINGS:
-        summaryLines.append("  warnings  : %d (installed anyway)" % len(INSTALL_WARNINGS))
-        summaryLines.extend("      %s: %s" % (subject, detail) for subject, detail in INSTALL_WARNINGS)
-    else:
-        summaryLines.append("  warnings  : none")
-
-    summaryLines.append("=" * 62)
+    # The unfinished builds found at step 1 go first, worded now that the run knows
+    # whether it built each of them again.
+    INSTALL_WARNINGS[:0] = unfinishedBuildWarnings(INSTALLED_SPECIES)
+    summaryLines = installSummaryLines(INSTALLED_SPECIES, ERRONEOUS_SPECIES, SKIPPED_SPECIES, INSTALL_WARNINGS)
 
     for summaryLine in summaryLines:
         log(summaryLine)
@@ -749,6 +750,64 @@ def install_command(inputfile=None, specie=None, species=None, common=0, reinsta
     version.write("\n\n")
     version.write("----------------------------------------------------------------------\n\n")
     version.close()
+
+
+def installSummaryLines(installed, failed, skipped, warnings):
+    """The INSTALL SUMMARY block install_command logs, one string per line.
+
+    deploy/species/allspecies_runner.py reads the installed/failed/skipped lines
+    to decide each species' fate, so their shape is fixed. The warnings header
+    used to add "(installed anyway)", which was true of the build warnings only:
+    a species skipped for missing data, or a database whose build never
+    finished, is listed there too and was not installed. Each warning line says
+    what happened to its subject, and the three lists above say each fate.
+    """
+    lines = ["", "=" * 62, "INSTALL SUMMARY", "=" * 62,
+             "  installed : %d  %s" % (len(installed), " ".join(installed) or "-"),
+             "  failed    : %d  %s" % (len(failed), " ".join(failed) or "-"),
+             "  skipped   : %d  %s" % (len(skipped), " ".join(skipped) or "-")]
+    if warnings:
+        lines.append("  warnings  : %d" % len(warnings))
+        lines.extend("      %s: %s" % (subject, detail) for subject, detail in warnings)
+    else:
+        lines.append("  warnings  : none")
+    lines.append("=" * 62)
+    return lines
+
+
+def unfinishedBuildWarnings(installedNow):
+    """One (code, message) warning per species database that
+    getCurrentInstalledSpecies found unfinished (UNFINISHED_BUILDS).
+
+    A species this run then built again (in ``installedNow``) gets a statement
+    of what happened, not advice to do it again. Any other one is told how to
+    repair it, and the way depends on who built it: a KEGG organism through
+    download and install, a custom one (organisms_custom.list) through
+    customSpeciesInstaller.py, because DBManager download cannot fetch an
+    organism KEGG does not have. Only a re-run of the custom installer gets that
+    wording: its main() registers a new organism after write_mongo, so a first
+    custom install stopped in write_mongo is in neither list yet, and is told
+    both ways.
+    """
+    warnings = []
+    for code, database, missing, kind in UNFINISHED_BUILDS:
+        records = " and ".join(missing)
+        if code in installedNow:
+            warnings.append((code, database + " had no " + records + " record in its versions collection "
+                             "when this run started, so an earlier build never finished; this run built " +
+                             code + " again and species.json lists it"))
+            continue
+        if kind == "custom":
+            repair = "run customSpeciesInstaller.py for " + code + " again"
+        elif kind == "kegg":
+            repair = "run download and install for " + code + " again"
+        else:
+            repair = ("run download and install for " + code + " again if it is a KEGG organism, or "
+                      "customSpeciesInstaller.py if it is a custom one (" + code + " is in neither "
+                      "organisms_all.list nor organisms_custom.list)")
+        warnings.append((code, unfinished_build_fact(database, missing) + "; species.json leaves " + code +
+                         " out. To repair it, " + repair))
+    return warnings
 
 
 def hubdoctor_command(species=None):
@@ -1310,6 +1369,28 @@ def downloadKEGGFile(message, logFile, URL, dirName, fileName, delay, maxTries):
     raise Exception('Unable to retrieve ' + fileName + " from " + URL + ": " + str(lastError))
 
 
+def kgmlFailuresAllowed(total):
+    """How many pathway diagrams (KGML files) may fail to download before
+    getSpecieKeggData stops fetching the rest: 5% of the species' pathways,
+    rounded down, and never fewer than one.
+
+    The species is failed either way (download_command fails any species with
+    a non-empty error list), so this only decides how much is worth fetching
+    after a failure: within the allowance the download carries on, the tree
+    moved to error/ is complete except for the named pathways, and an operator
+    can install it by hand; past it, the failures are more than a stray
+    pathway, and each further one would cost MAX_TRIES_1 retries for nothing.
+
+    It used to be int(total * 0.05), checked with "== 0" after the decrement:
+    under 20 pathways that started at 0 and went negative, so the check never
+    fired and every pathway could fail; from 20 to 39 it stopped at the first
+    failure; and above that it stopped one short of the 5% it promised (100
+    pathways: 4, not 5). Integer arithmetic, so the boundaries do not depend
+    on how 0.05 rounds in binary.
+    """
+    return max(1, int(total) * 5 // 100)
+
+
 def getSpecieKeggData(specie, downloadLog, dirName, step):
     start_time = time()
     kegg_errors = ""
@@ -1339,7 +1420,8 @@ def getSpecieKeggData(specie, downloadLog, dirName, step):
         log("                DETECTED " + str(total) + " PATHWAYS FOR " + specie + " " + calculateAproxTime(total,
                                                                                                             DOWNLOAD_DELAY_2 + 3))
 
-        error_tolerance = int(total * 0.05)  # we tolerate that a 5% of the pathways fail on download
+        failuresAllowed = kgmlFailuresAllowed(total)
+        failures = 0
         i = 1
         for pathway in pathways.keys():
             try:
@@ -1348,11 +1430,13 @@ def getSpecieKeggData(specie, downloadLog, dirName, step):
                                  downloadLog, "https://rest.kegg.jp/get/" + pathway + "/kgml", dirName + "kgml/",
                                  pathway + ".kgml", DOWNLOAD_DELAY_2, MAX_TRIES_1)
             except Exception:
-                error_tolerance -= 1;
+                failures += 1
                 kegg_errors += " " + pathway
-                if error_tolerance == 0:
+                if failures > failuresAllowed:
                     raise Exception(
-                        "Too many errors while downloading the KGML files for organism " + specie + ": " + kegg_errors)
+                        "Too many errors while downloading the KGML files for organism " + specie + ": " +
+                        str(failures) + " of " + str(total) + " pathways failed, and the download stops "
+                        "after more than " + str(failuresAllowed) + ":" + kegg_errors)
                 log("                       Failed!! The download process will continue...")
             i += 1
 
@@ -1593,6 +1677,19 @@ def getCurrentInstalledSpecies():
         log("            NOTE: no organisms_all.list yet (no common download); "
             "species names will show as their codes")
 
+    # Custom species (customSpeciesInstaller.py) keep their rows here, and only
+    # here once a common refresh has replaced organisms_all.list. Read only to
+    # tell an unfinished custom build from a KEGG one: they are repaired
+    # differently (unfinishedBuildWarnings). A row here means an earlier custom
+    # install got past write_mongo; a first one stopped inside it has no row.
+    customCodes = set()
+    customFilePath = KEGG_DATA_DIR + 'current/common/organisms_custom.list'
+    if os.path.isfile(customFilePath):
+        with open(customFilePath) as organisms_custom:
+            customCodes = {row[1] for row in csv.reader(organisms_custom, delimiter='\t',
+                                                        quoting=csv.QUOTE_NONE) if len(row) >= 2}
+    del UNFINISHED_BUILDS[:]
+
     from pymongo import MongoClient
 
     client = MongoClient(MONGODB_HOST, MONGODB_PORT)
@@ -1627,9 +1724,30 @@ def getCurrentInstalledSpecies():
             organism_name = organisms_names.get(organism_code, "Unknown specie")
 
             # Step 2.3 GET THE SPECIE VERSIONS
+            # find(...)[0] raised IndexError on a database without these
+            # records, and that one database stopped every install at step 1,
+            # before any species was touched. Both installers write `versions`
+            # last (species_json.FINISHED_BUILD_RECORDS), so a database
+            # without them is a build that did not finish: a first install
+            # killed part-way, standard or custom, or a custom re-run killed
+            # between dropping `versions` and writing it again. It is not
+            # counted as installed, so species.json does not offer a
+            # half-built organism, and the run names it instead of crashing
+            # on it. The summary's
+            # warning is written at the end (unfinishedBuildWarnings), when
+            # the run knows whether it built this species again.
             db = client[database]
-            kegg_date = db.versions.find({"name": "KEGG"})[0].get("date")
-            mapping_date = db.versions.find({"name": "MAPPING"})[0].get("date")
+            records = build_records(db)
+            missing = missing_build_records(records)
+            if missing:
+                log("            WARNING: " + unfinished_build_fact(database, missing) +
+                    "; it is not counted as installed until a build of it finishes")
+                kind = ("custom" if organism_code in customCodes
+                        else "kegg" if organism_code in organisms_names else None)
+                UNFINISHED_BUILDS.append((organism_code, database, missing, kind))
+                continue
+            kegg_date = records["KEGG"].get("date")
+            mapping_date = records["MAPPING"].get("date")
             # count_documents replaces Cursor.count(), removed in pymongo 4.
             try:
                 acceptedIDsDoc = db.versions.find_one({"name": "ACCEPTED_IDS"})

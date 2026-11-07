@@ -547,11 +547,30 @@ def register_in_organisms_list(kegg_data_dir, code, name, lineage):
 
 def regenerate_species_json(kegg_data_dir, mongo_host, mongo_port):
     """Rewrite current/species.json from installed *-paintomics DBs, the same
-    source of truth DBManager uses (dropdown format verified live)."""
+    source of truth DBManager uses (dropdown format verified live).
+
+    Installed means a finished build, as DBManager.getCurrentInstalledSpecies
+    counts it: a database without its KEGG and MAPPING version records
+    (species_json.FINISHED_BUILD_RECORDS) is left out and named. Listing every
+    database put a half-built organism back in the dropdown after DBManager had
+    left it out."""
+    src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if src not in sys.path:
+        sys.path.insert(0, src)
+    from AdminTools.species_json import (species_json_rows, write_species_json, build_records,
+                                         missing_build_records, unfinished_build_fact)
     from pymongo import MongoClient
     client = MongoClient(mongo_host, mongo_port)
-    codes = sorted(n[:-len("-paintomics")] for n in client.list_database_names()
-                   if n.endswith("-paintomics") and n != "global-paintomics")
+    codes = []
+    for database in sorted(n for n in client.list_database_names()
+                           if n.endswith("-paintomics") and n != "global-paintomics"):
+        code = database[:-len("-paintomics")]
+        absent = missing_build_records(build_records(client[database]))
+        if absent:
+            log("  WARNING: %s; species.json leaves %s out until a build of it finishes"
+                % (unfinished_build_fact(database, absent), code))
+            continue
+        codes.append(code)
     client.close()
     names = {}
     common_dir = os.path.join(kegg_data_dir, "current", "common")
@@ -572,10 +591,6 @@ def regenerate_species_json(kegg_data_dir, mongo_host, mongo_port):
                          "organisms_all.list: %s" % ", ".join(missing))
     # The same writer and the same order as DBManager's, so the file does
     # not change shape depending on which installer ran last.
-    src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if src not in sys.path:
-        sys.path.insert(0, src)
-    from AdminTools.species_json import species_json_rows, write_species_json
     target = write_species_json(os.path.join(kegg_data_dir, "current", "species.json"),
                                 species_json_rows(codes, names))
     return target, len(codes)
