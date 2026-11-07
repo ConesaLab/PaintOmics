@@ -152,7 +152,7 @@ PUBLISHED = {
     # (connectionFailed), and holds watchUploadFrame. Not 3.6: #226 published
     # that number with other content.
     "app/view/common/Util.js": (
-        "3.7", "bc9bbdd89ac6773b782f578cfc8368c61b3fb5f63fc470e7f47c159f108e5d15"),
+        "3.7", "31b23226c49cd193ae70ddde412f7faa20309fb6f294f5bfc8cf7c39f6f0c51b"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
