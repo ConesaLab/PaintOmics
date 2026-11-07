@@ -24,7 +24,6 @@
 #**************************************************************
 
 import logging
-from html import escape
 
 from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
@@ -328,13 +327,14 @@ def emptyResultError(stats):
     whichever row comes first. It holds for a header that does not fit its rows
     and for a row with a cell that is not a number, whatever the method. Only a
     scoring step that failed on our side is no refusal: it stays an error that can
-    be reported, and its dialog takes HTML while its text can quote the files (the
-    pair it failed on, and the error). Quotes stay as they are, because the Step 1
-    dialog encodes this text once more.
+    be reported. Its text can quote the files (the pair it failed on, and the
+    error), and it is returned as it is: the page encodes it once where it shows
+    it. Escaping it here as well showed "&lt;" in the Step 1 dialog, which encodes
+    it too.
     """
     message, reportsACrash = _emptyResultExplanation(stats)
     if reportsACrash:
-        return Exception(escape(message, quote=False))
+        return Exception(message)
     return InputFileError(message)
 
 

@@ -228,8 +228,15 @@ function PA_Step2JobView() {
 			if (!isCompoundBased) {
 				numberOfClusters.push({
 					xtype: 'combo',
-					fieldLabel: omicName,
+					/* The user typed the omic's name at Step 1, and ExtJS 4.2 writes
+					   both the label and the input's name attribute into the page as
+					   HTML without encoding them. subTplData overrides only what the
+					   template writes: the browser decodes the attribute back to the
+					   same text, and getName(), which getValues() posts, keeps the
+					   name the server reads. */
+					fieldLabel: Ext.String.htmlEncode(omicName),
 					name: 'clusterNumber:' + omicName,
+					subTplData: {name: Ext.String.htmlEncode('clusterNumber:' + omicName)},
 					value: 'dynamic',
 					displayField: 'name', valueField: 'value',
 					editable: false,
@@ -1738,9 +1745,12 @@ function PA_Step2ReplicateDetectionView() {
 		var autoChecked   = (det.status === "complete") ? "checked" : "";
 		var offChecked    = (det.status === "complete") ? "" : "checked";
 
+		// The omic's name as the user typed it: the attribute is read back with
+		// .attr(), which decodes it, so the handlers below get the same text.
+		var shownName = Ext.String.htmlEncode(omic.omicName);
 		return '' +
-			'<div class="repDetectionCard" data-omic="' + omic.omicName + '" data-omicid="' + omicId + '">' +
-			'  <h3>' + omic.omicName + '</h3>' +
+			'<div class="repDetectionCard" data-omic="' + shownName + '" data-omicid="' + omicId + '">' +
+			'  <h3>' + shownName + '</h3>' +
 			'  <p class="repDetectionSummary">' +
 			       nSamples + ' sample(s) detected across ' + nReplicates + ' replicate column(s).' +
 			'  </p>' +

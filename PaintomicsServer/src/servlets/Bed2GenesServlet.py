@@ -19,6 +19,7 @@
 #**************************************************************
 import logging
 import logging.config
+from html import escape
 
 from src.classes.JobInstances.Bed2GeneJob import Bed2GeneJob
 from src.common.UserSessionManager import UserSessionManager
@@ -110,11 +111,14 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
             # `raise NotImplementedError` on its own has an empty str(), and
             # handleException formats the reply as "ERROR MESSAGE: " + str(ex),
             # so the user was shown a dialog with nothing after the colon.
+            # The mode is the URL's own text and extJSErrorHandler inserts this
+            # answer as HTML, so it is escaped, and so is the "<dataset-id>"
+            # the sentence itself writes.
             raise NotImplementedError(
-                "Unrecognised example mode %r for Regions2Genes: expected no "
+                "Unrecognised example mode %s for Regions2Genes: expected no "
                 "value for an upload, 'example' for the default dataset, or "
-                "'example/<dataset-id>' for a specific one."
-                % (exampleMode,))
+                "'example/&lt;dataset-id&gt;' for a specific one."
+                % (escape(repr(exampleMode)),))
 
         #****************************************************************
         # Step 4. READ PARAMS
@@ -249,7 +253,10 @@ def fromBEDtoGenes_STEP2(jobInstance, userID, exampleMode, RESPONSE):
         #****************************************************************
         jobInstance.cleanDirectories(remove_output=True)
 
-        handleException(RESPONSE, ex, __file__ , "fromBEDtoGenes_STEP2")
+        # Text, not HTML: Step 1 encodes a conversion job's answer where it shows
+        # it, and the tool page does too because of this flag. It can quote the
+        # form's own fields and the user's file, so it is escaped once, there.
+        handleException(RESPONSE, ex, __file__ , "fromBEDtoGenes_STEP2", plainText=True)
 
     finally:
         return RESPONSE

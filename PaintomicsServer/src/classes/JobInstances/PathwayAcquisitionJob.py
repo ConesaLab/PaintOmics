@@ -23,6 +23,7 @@ import math
 import os
 import numpy as np
 import re
+from html import escape
 
 from os import path as os_path, makedirs as os_makedirs
 from csv import reader as csv_reader
@@ -2341,11 +2342,13 @@ class PathwayAcquisitionJob(Job):
 
         # Pathways were requested and not one of them belongs to this job:
         # answering with an empty result would look like a successful paint of
-        # nothing, so say what happened instead.
+        # nothing, so say what happened instead. The ids are pa_step3's
+        # selectedPathways, off the request, and ajaxErrorHandler inserts the
+        # answer as HTML, so they are escaped.
         if unknownPathways and not selectedPathwayInstances:
             raise UserWarning(
                 "None of the requested pathways belong to this job: " +
-                ", ".join(str(pathway) for pathway in unknownPathways[:10]) + ".")
+                ", ".join(escape(str(pathway)) for pathway in unknownPathways[:10]) + ".")
 
         return [selectedPathwayInstances, graphicalOptionsInstancesBSON, omicsValuesSubset]
 

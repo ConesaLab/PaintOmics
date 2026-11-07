@@ -81,6 +81,7 @@ test_design_matrix_grouping	0.0
 test_dm_upload_encoding	1.9
 test_duplicate_identifiers_are_refused	2.8
 test_duplicate_user_ids	0.2
+test_echoed_request_values_are_text	7.5
 test_email_case_insensitivity	0.8
 test_email_templates	0.2
 test_enrichment_counting_unit	1.4

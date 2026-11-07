@@ -24,6 +24,7 @@
 #**************************************************************
 
 import logging
+from html import escape
 from threading import RLock as threading_lock
 from src.common.Util import Singleton
 from collections import deque
@@ -286,8 +287,10 @@ class JobInformationManager(metaclass=Singleton):
         """
         origin = formFields.get(fieldName)
         if origin is None:
+            # fieldName is made from the name of an uploaded part, which the
+            # request chooses; the dialogs insert this answer as HTML.
             raise UserWarning(
-                "Malformed submission: the form field '" + fieldName +
+                "Malformed submission: the form field '" + escape(fieldName) +
                 "' is missing, so PaintOmics cannot tell where the " + fileLabel +
                 " was uploaded from.")
         return origin
@@ -304,7 +307,7 @@ class JobInformationManager(metaclass=Singleton):
         location = formFields.get(fieldName)
         if location is None or str(location).strip() == "":
             raise UserWarning(
-                "Malformed submission: the form field '" + fieldName +
+                "Malformed submission: the form field '" + escape(fieldName) +
                 "' is missing or empty, so PaintOmics cannot locate the " +
                 fileLabel + " it refers to.")
         return str(location)
@@ -354,11 +357,13 @@ class JobInformationManager(metaclass=Singleton):
                 if omicType is None:
                     # Concatenated into paths and log lines below; None used to
                     # surface as an opaque TypeError instead of naming the field.
+                    # The part's name is the request's own, and the answer is
+                    # inserted as HTML.
                     raise UserWarning(
                         "Malformed submission: the form field '" +
-                        uploadedFileName.replace("file", "omic_name") +
+                        escape(uploadedFileName.replace("file", "omic_name")) +
                         "' is missing, so PaintOmics cannot tell which omic the "
-                        "file '" + uploadedFileName + "' belongs to.")
+                        "file '" + escape(uploadedFileName) + "' belongs to.")
 
                 fields["omicType"] = omicType
                 fields["dataType"] =  formFields.get(uploadedFileName.replace("file","file_type")) ##GET THE FILE TYPE: GENE EXPRESSION, ETC.

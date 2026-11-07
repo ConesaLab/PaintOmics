@@ -24,9 +24,29 @@
 #**************************************************************
 
 import logging
+import re
 from os import path
 
-def handleException(responseInstance, exceptionInstance, filename, function, responseStatus=400, userID = ""):
+# What job ids, example dataset ids and pathway ids are made of.
+_QUOTABLE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+
+
+def quotable(value):
+    """`value` as text when a message may repeat it on any page, else None.
+
+    Some answers are read two ways. The Step 4 walk panel and the experiment design
+    note set a message as text, while ajaxErrorHandler and the dialogs insert the same
+    kind of message as HTML. Escaping a value suits only the second: the first then
+    shows "&lt;". So a value off the request is repeated only when it is letters,
+    digits, '.', '_' and '-', which reads the same both ways (every real job id and
+    dataset id is). The caller words the message without it otherwise.
+    """
+    text = "" if value is None else str(value)
+    return text if _QUOTABLE.fullmatch(text) else None
+
+
+def handleException(responseInstance, exceptionInstance, filename, function, responseStatus=400, userID = "",
+                    plainText=False):
     """Given an exception object, register a new error message for current job.
 
     Keyword arguments:
@@ -34,6 +54,10 @@ def handleException(responseInstance, exceptionInstance, filename, function, res
     exceptionInstance -- the handled exception
     location -- location where the exception was thrown
     responseStatus -- the response status (default 400)
+    plainText -- the message is text, not HTML. The browser reads extra.plain_text
+                 and encodes the message where it shows it, so a value quoted in it
+                 (a cell of the user's file, a form field) is not escaped here.
+                 InputFileError messages are always text.
     """
     #if isinstance(exceptionInstance, CredentialException):
     #    responseStatus=200
@@ -63,7 +87,10 @@ def handleException(responseInstance, exceptionInstance, filename, function, res
         "exc_type": str(exc_type), "file_name": str(file_name), "exc_line": str(exc_tb.tb_lineno),
         # Tells the client a refusal of the user's files from a fault of ours
         # (see InputFileError); ajaxErrorHandler words the two differently.
-        "input_error": isinstance(exceptionInstance, InputFileError)}})
+        "input_error": isinstance(exceptionInstance, InputFileError),
+        # Whether the message is text that the page encodes where it shows it,
+        # or HTML whose request values were escaped here (see plainText).
+        "plain_text": bool(plainText) or isinstance(exceptionInstance, InputFileError)}})
 
 class CredentialException(Exception):
     pass

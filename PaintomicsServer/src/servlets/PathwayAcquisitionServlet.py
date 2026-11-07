@@ -1607,7 +1607,12 @@ def pathwayAcquisitionMetagenes_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
                 raise Exception("Invalid user for the job generating metagenes.")
 
             omicName = REQUEST.form.get("omic")
-            clusterNumber = int(REQUEST.form.get("number"))
+            try:
+                clusterNumber = int(REQUEST.form.get("number"))
+            except (TypeError, ValueError):
+                # int()'s own message quotes the value, and this answer is
+                # shown as HTML.
+                raise UserWarning("The number of clusters must be a whole number.")
             database = REQUEST.form.get("database")
 
             # Make sure the number of clusters is inside [1, 20]
@@ -1771,6 +1776,16 @@ def _hubOwnedJob(jobID, userID, tag):
     return jobInstance, None
 
 
+def _hubFailureText(ex):
+    """A hub route's failure as the panel shows it, which is as HTML (innerHTML).
+
+    The exception can quote the request: int() on a level of "<b>" says
+    "invalid literal for int() with base 10: '<b>'", and a compound id the graph
+    does not hold can come back the same way.
+    """
+    return escape(str(ex))
+
+
 _KEGG_COMPOUND_NAMES = None
 
 
@@ -1890,7 +1905,7 @@ def pathwayAcquisitionHubNames(request, response, QUEUE_INSTANCE):
                              "hubSchema": HUB_SCHEMA_VERSION})
     except Exception as ex:
         logging.error("HUB_NAMES - %s", str(ex))
-        response.setContent({"success": False, "errorMessage": str(ex)})
+        response.setContent({"success": False, "errorMessage": _hubFailureText(ex)})
     return response
 
 
@@ -1974,7 +1989,7 @@ def pathwayAcquisitionHubSubgraph(request, response, QUEUE_INSTANCE):
         response.setContent(payload)
     except Exception as ex:
         logging.error("HUB_SUBGRAPH - %s", str(ex))
-        response.setContent({"success": False, "errorMessage": str(ex)})
+        response.setContent({"success": False, "errorMessage": _hubFailureText(ex)})
     return response
 
 
@@ -2042,5 +2057,5 @@ def pathwayAcquisitionHubFeature(request, response, QUEUE_INSTANCE):
                              "omics": omics})
     except Exception as ex:
         logging.error("HUB_FEATURE - %s", str(ex))
-        response.setContent({"success": False, "errorMessage": str(ex)})
+        response.setContent({"success": False, "errorMessage": _hubFailureText(ex)})
     return response

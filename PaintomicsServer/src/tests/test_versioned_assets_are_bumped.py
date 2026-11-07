@@ -142,8 +142,11 @@ PUBLISHED = {
     # v=3.5 encodes the text of that refusal, which quotes the user's identifiers
     # (Ext.String.htmlEncode, so [b] and the like still work), and moves the
     # ". User ID: N" a server message ends with into the half a report sends.
+    # v=3.6 encodes, in both "Oops..Internal error!" dialogs, a server message
+    # marked extra.plain_text (a converter's answer), which the server stopped
+    # escaping so that Step 1 shows it as the file had it.
     "app/view/common/Util.js": (
-        "3.5", "ee1c5eed4336d8cc88051d5a6294d81c6712bf7fb5fa6751514cec68df095635"),
+        "3.6", "5afc42d43b4c5f571187f4f34f504d50c8c968d76dbcac97bd445c0160993433"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.

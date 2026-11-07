@@ -986,13 +986,29 @@ function ajaxErrorHandler(responseObj) {
     }
 
     showErrorMessage("Oops..Internal error!", {
-        message: halves.readable + "</br>" + (serverSide
+        message: serverTextAsHtml(err, halves.readable) + "</br>" + (serverSide
             ? "This happened on the server, so retrying in the browser will not help. " + adminLink
             : "Try running it in private mode or clear your web cache in your browser.</br>" + adminLink),
         extra: err.extra,
         hidden: halves.technical,
         showButton: true
     });
+}
+
+/*
+ * A server message's readable half, as HTML for a dialog.
+ *
+ * The server marks a message that is text with extra.plain_text (handleException's
+ * plainText; every InputFileError). A conversion job's answer is one: it can quote a
+ * cell of the user's file or a field of the form, and Step 1 already encodes it where
+ * it shows it. It is encoded here, once, for the same reason. The server escaped
+ * those values too until this flag existed, so Step 1 showed "&lt;" where the file
+ * had "<". Any other server message is HTML, with the request values in it escaped
+ * by the server. [b], [br], [ul] and [li] still work: showMessage converts them
+ * after this.
+ */
+function serverTextAsHtml(err, text) {
+    return (err && err.extra && err.extra.plain_text === true) ? Ext.String.htmlEncode(text) : text;
 }
 
 /*
@@ -1159,7 +1175,7 @@ function extJSErrorHandler(form, responseObj) {
 
     var halves = splitServerError(err.message);
     showErrorMessage("Oops..Internal error!", {
-        message: halves.readable + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
+        message: serverTextAsHtml(err, halves.readable) + "</br>Please try again later.</br>If the error persists, please contact your web <a href='mailto:paintomicsai@gmail.com' target='_blank'> administrator</a>.",
         hidden: halves.technical,
         showButton: true
     });
