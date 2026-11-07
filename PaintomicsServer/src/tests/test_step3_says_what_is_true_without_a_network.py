@@ -327,7 +327,9 @@ function El() {
 const chain = {
     show() { this.shown = true; return this; }, hide() { this.shown = false; return this; },
     fadeIn() { return this; }, on() { return this; }, off() { return this; }, last() { return this; },
-    empty() { this.content = ""; return this; }, append() { return this; }, appendTo() { return this; },
+    empty() { this.content = ""; return this; }, appendTo() { return this; },
+    // Markup appended after .text() (the error branch's Retry button) joins the content.
+    append(value) { if (typeof value === "string") { this.content += value; } return this; },
     addClass(names) { names.split(" ").forEach((n) => this.classes.add(n)); return this; },
     removeClass(names) { names.split(" ").forEach((n) => this.classes.delete(n)); return this; },
     css(name, value) { this.styles[name] = value; return this; },
