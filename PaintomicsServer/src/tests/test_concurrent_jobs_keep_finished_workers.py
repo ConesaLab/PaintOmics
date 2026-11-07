@@ -67,6 +67,11 @@ from src.classes.Feature import Gene
 from src.common import FeatureNamesToKeggIDsMapper as mapper
 from src.common.KeggInformationManager import KeggInformationManager
 
+# The server's workers are forked, on Linux. CI's unit tests run on macOS, where
+# multiprocessing spawns by default, and a spawned child runs no fork hook and
+# sees none of the patches below.
+multiprocessing.set_start_method("fork", force=True)
+
 TOO_LONG = "took too long"
 
 
@@ -213,20 +218,20 @@ class PipeHeldElsewhereTest(unittest.TestCase):
         self.holder = _HolderOfThePipe()
         self.addCleanup(self.holder.release)
 
-    def _exitedWorker(self):
+    def _workerLeavingAHolder(self):
         worker = multiprocessing.Process(target=self.holder.leaveOne)
         worker.start()
-        # Waits for the exit and leaves the status for the code under test.
-        os.waitid(os.P_PID, worker.pid, os.WEXITED | os.WNOWAIT)
-        self.assertEqual(mapper._readySentinels([worker.sentinel], 0), [])   # the pipe says "running"
         return worker
 
     def test_a_worker_that_has_gone_is_not_running(self):
-        worker = self._exitedWorker()
+        worker = self._workerLeavingAHolder()
+        while worker.exitcode is None:
+            time.sleep(0.01)
+        self.assertEqual(mapper._readySentinels([worker.sentinel], 0), [])   # the pipe says "running"
         self.assertEqual(mapper._stillRunning([worker]), [])
 
     def test_the_wait_does_not_last_as_long_as_the_holder(self):
-        worker = self._exitedWorker()
+        worker = self._workerLeavingAHolder()
         began = time.monotonic()
         mapper._joinAllWithinDeadline([worker], 10)
         self.assertLess(time.monotonic() - began, 5)
