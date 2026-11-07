@@ -1,11 +1,39 @@
 import logging.handlers
 import logging
+import os
 
 from collections import deque, defaultdict
 from threading import RLock as threading_lock
 from src.common.Util import Singleton
 
 from src.conf.serverconf import KEGG_CACHE_MAX_SIZE
+
+def _newLocksInForkChild():
+    """
+    Jobs run on threads of one server process and fork their workers from it.
+    A fork that lands while another job's thread holds one of these locks hands
+    the worker a copy that is locked for good, because the thread that would
+    release it does not exist in the worker. The worker froze at its first
+    getPathwaySourceByID and its job failed 15 minutes later with "Your data
+    took too long to process", though the data was small (staging server, Step 2,
+    2026-11-07; 1 job in about 160 at four at once).
+
+    Rebinding is safe for the same reason as _resetSharedClientStateInForkChild
+    in DBmanager: a fork child starts single-threaded. What these locks guard is
+    fine to read straight away: the translation cache is keyed by job, and a job
+    forks from its own thread, never in the middle of its own update; an organism
+    joins lastOrganisms only once loaded, and a worker that misses one loads its own.
+    getAllFeatureIDsByPathwayID stores its lists whole for this reason.
+    """
+    instance = Singleton._instances.get(KeggInformationManager)
+    if instance is not None:
+        instance.lock = threading_lock()
+        instance.organismLock = threading_lock()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_newLocksInForkChild)
+
 
 class KeggInformationManager(metaclass=Singleton):
 
@@ -208,14 +236,12 @@ class KeggInformationManager(metaclass=Singleton):
             self.lock.acquire() #LOCK CACHE
             pathway = self.getKeggData(organism).get("pathways").get(pathwayID, None)
             if pathway != None:
+                # Built first and stored whole: a worker forked in the middle of
+                # this must not find half a list (see _newLocksInForkChild).
                 if not "geneIDList" in pathway:
-                    pathway["geneIDList"]=set([])
-                    for feature in pathway.get("genes", []):
-                        pathway["geneIDList"].add(feature.get("id"))
+                    pathway["geneIDList"] = {feature.get("id") for feature in pathway.get("genes", [])}
                 if not "compoundIDList" in pathway:
-                    pathway["compoundIDList"]=set([])
-                    for feature in pathway.get("compounds", []):
-                        pathway["compoundIDList"].add(feature.get("id"))
+                    pathway["compoundIDList"] = {feature.get("id") for feature in pathway.get("compounds", [])}
 
                 return pathway["geneIDList"], pathway["compoundIDList"]
             else:

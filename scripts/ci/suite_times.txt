@@ -62,6 +62,7 @@ test_compound_name_lookup_is_bounded	0.3
 test_compound_name_table_matches_mongo	216.3
 test_compound_selection_parsing	1.5
 test_compound_suggestion_authorisation	2.8
+test_concurrent_jobs_keep_finished_workers	5.0
 test_conditions_file_is_held_to_r_rules	0.2
 test_configured_identifier_tables_are_built	0.2
 test_converted_file_goes_back_to_its_slot	0.2

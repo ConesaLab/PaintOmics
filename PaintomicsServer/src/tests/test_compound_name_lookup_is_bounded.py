@@ -38,11 +38,13 @@ Usage:
     python -m src.tests.test_compound_name_lookup_is_bounded
 """
 import logging
+import multiprocessing
 import os
 import re
 import signal
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -164,28 +166,31 @@ class BoundedMatchesTest(unittest.TestCase):
         self.assertEqual(len(db.kegg_compounds.calls), 1)
 
 
-class _FakeProcess:
-    def __init__(self, log):
-        self.log = log
-
-    def join(self, timeout=None):
-        self.log.append(timeout)
-
-
 class SharedDeadlineJoinTest(unittest.TestCase):
 
     def test_the_budget_is_shared_not_per_process(self):
-        log = []
-        procs = [_FakeProcess(log) for _ in range(6)]
-        clock = iter([100.0, 100.0, 400.0, 900.0, 1500.0, 1500.0, 1500.0])
-        original = mapper.time.monotonic
-        mapper.time.monotonic = lambda: next(clock)
+        procs = [multiprocessing.Process(target=time.sleep, args=(60,)) for _ in range(4)]
+        for proc in procs:
+            proc.start()
         try:
-            mapper._joinAllWithinDeadline(procs, 900)
+            began = time.monotonic()
+            mapper._joinAllWithinDeadline(procs, 1)
+            # One second in all; one per process would be four.
+            self.assertLess(time.monotonic() - began, 3)
+            self.assertEqual(mapper._stillRunning(procs), procs)
         finally:
-            mapper.time.monotonic = original
-        # First waits the full budget, later ones only what is left, never < 0.
-        self.assertEqual(log, [900.0, 600.0, 100.0, 0.0, 0.0, 0.0])
+            for proc in procs:
+                proc.kill()
+                proc.join(5)
+
+    def test_it_ends_when_the_last_process_ends_and_collects_them_all(self):
+        procs = [multiprocessing.Process(target=time.sleep, args=(seconds,)) for seconds in (0.4, 0, 0.2)]
+        for proc in procs:
+            proc.start()
+        began = time.monotonic()
+        mapper._joinAllWithinDeadline(procs, 30)
+        self.assertLess(time.monotonic() - began, 15)
+        self.assertEqual([proc._popen.returncode for proc in procs], [0, 0, 0])
 
 
 class _NeverFlushStream:
