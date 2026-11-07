@@ -17,11 +17,17 @@ The walk's refusal reached the page with a status its Walk column did not know
 and a poll chain that went on asking. The server side of that is pinned in
 test_walk_service_and_routes; this file holds the page's half.
 
-The rule pinned here: a 404 is an organism with no network, on any database,
-stated in the card. Any other failed answer (a 500, a dropped connection, a body
-that is not JSON) says the network could not be loaded and to reload. Nothing
-waits on a graph that never came, a failed answer stores nothing, and the row
-IndexedDB may hold for the organism decides nothing.
+The rule pinned here: a 404 says no network is available for the organism, on any
+database, stated in the card, in words that also hold for a normal species whose
+file is away during a reinstall. Any other failed answer (a 500, a dropped
+connection, a body that is not JSON) says the network could not be loaded and to
+reload, and over a graph already drawn every failed answer says that. A failed
+answer ends the wait and stores nothing, and the row IndexedDB may hold for the
+organism decides nothing.
+
+One wait is left as it was. A 200 whose body generateNetwork cannot read throws
+inside the success callback, no failure handler runs, and the card goes on saying
+"Building network...". No installer writes such a file.
 
 The real view and the real handler run under node against a stand-in for the
 page: no DOM library, which this repository does not have.
@@ -71,7 +77,9 @@ def extract_block(source, header):
 # A record per element the code names, holding what a reader of the page would
 # read: its markup and whether it shows. Any jQuery call the record has no use
 # for chains on and does nothing. A selector the code has not named before starts
-# out visible, as every control in the card does.
+# out visible, as every control in the card does. `inline` is the element's
+# style.display and `sheetHides` a stylesheet rule that hides it, with show() doing
+# what jQuery's does: it writes a display of its own over such a rule.
 PAGE = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -79,7 +87,14 @@ const vm = require("vm");
 function makePage(db) {
     const records = {};
     const record = (selector) => records[selector] ||
-        (records[selector] = {selector: selector, html: "", visible: true});
+        (records[selector] = {
+            selector: selector, html: "", inline: "", sheetHides: false,
+            get visible() { return this.inline === "none" ? false : (this.inline !== "" || !this.sheetHides); },
+        });
+    const showOne = (r) => {
+        if (r.inline === "none") { r.inline = ""; }
+        if (r.inline === "" && r.sheetHides) { r.inline = "inline"; }
+    };
     const SPINNER = '<i class="fa fa-cog fa-spin"></i> Building network...';
     record("#pathwayNetworkWaitBox_" + db).html = SPINNER;
     record("#step3-network-subtitle_" + db).html = "Building network&hellip;";
@@ -89,11 +104,15 @@ function makePage(db) {
             0: list[0],
             length: list.length,
             stop() { return wrapped; },
-            hide() { list.forEach((r) => { r.visible = false; }); return wrapped; },
-            show() { list.forEach((r) => { r.visible = true; }); return wrapped; },
+            hide() { list.forEach((r) => { r.inline = "none"; }); return wrapped; },
+            show() { list.forEach(showOne); return wrapped; },
             fadeIn() { return api.show(); },
             fadeOut() { return api.hide(); },
-            toggle(on) { list.forEach((r) => { r.visible = on; }); return wrapped; },
+            toggle(on) { return on ? api.show() : api.hide(); },
+            css(name, value) {
+                if (name === "display" && value !== undefined) { list.forEach((r) => { r.inline = value; }); }
+                return wrapped;
+            },
             text(value) {
                 if (value === undefined) { return list[0] ? list[0].html : ""; }
                 list.forEach((r) => { r.html = String(value); });
@@ -123,6 +142,10 @@ function makePage(db) {
     return {$: $, records: records, record: record, spinner: SPINNER};
 }
 
+function separatorOf(page, db) {
+    return page.record("#step3-network-toolbar_" + db + " .pa-net-toolbar-sep");
+}
+
 function say(page, db) {
     const wait = page.record("#pathwayNetworkWaitBox_" + db);
     const subtitle = page.record("#step3-network-subtitle_" + db);
@@ -130,6 +153,7 @@ function say(page, db) {
         waitBox: wait.html, waitBoxVisible: wait.visible,
         subtitle: subtitle.html, subtitleVisible: subtitle.visible,
         details: page.record("#networkview_" + db + " .paNetRailTab[data-pane=details]").visible,
+        separator: separatorOf(page, db).visible, separatorInline: separatorOf(page, db).inline,
         configure: page.record("#showNetworkSettingsPanelButton_" + db).visible,
         tools: TOOLS.reduce((all, id) => { all[id] = page.record("#" + id + "_" + db).visible; return all; }, {}),
     };
@@ -191,8 +215,10 @@ function visit(db, answers, options) {
     view.generateNetwork = function (data, forceStop) {
         drawn += 1;
         try { realGenerate.call(view, data, forceStop); } catch (error) { if (error !== STOP) { throw error; } }
+        if (options.draws) { view.network = {drawn: true}; }
     };
     if (options.drawn) { view.network = {drawn: true}; }
+    if (options.narrowWindow) { separatorOf(page, db).sheetHides = true; }
     (options.before || (() => {}))(view, page);
     const turns = [];
     for (let i = 0; i < answers.length; i++) {
@@ -214,6 +240,15 @@ results.cachedThenNotFound = visit("KEGG", [{status: 404}],
     {cachedRow: {id: "vsub", timestamp: 1, nodes: [{data: {id: "stale"}}], edges: []}});
 results.refreshOverDrawn = visit("KEGG", [{status: 500}], {drawn: true});
 results.failedThenGood = visit("KEGG", [{status: 500}, {body: {nodes: [], edges: []}}]);
+results.goodThenFailed = {};
+[404, 500, 0].forEach((status) => {
+    results.goodThenFailed[status] = visit("KEGG", [{body: {nodes: [], edges: []}}, {status: status}], {draws: true});
+});
+results.narrowWindow = {
+    good: visit("KEGG", [{body: {nodes: [], edges: []}}], {narrowWindow: true}),
+    failedThenGood: visit("KEGG", [{status: 404}, {body: {nodes: [], edges: []}}], {narrowWindow: true}),
+};
+results.wideWindow = visit("KEGG", [{status: 404}, {body: {nodes: [], edges: []}}]);
 
 /* Apply with "Save node positions" ticked goes through updateNodePositions. */
 (function () {
@@ -312,14 +347,17 @@ class NetworkCardTest(unittest.TestCase):
                              "the card still says it is building a network nothing will deliver")
         self.assertNotIn("fa-spin", shown["waitBox"], "the spinner is still turning")
 
-    def test_a_404_says_the_organism_has_no_network_on_every_database(self):
+    def test_a_404_says_no_network_is_available_on_every_database(self):
+        """The same 404 answers a species that never has a network and a normal
+        species whose file is away during a reinstall, so the words hold for both:
+        none is available, not that the organism has none."""
         for database in DATABASES:
             with self.subTest(database=database):
                 shown = self.results["notFound"][database]
                 self.assertNoSpinner(shown)
                 self.assertTrue(shown["waitBoxVisible"], "the message is not on screen")
-                self.assertIn("This organism has no %s pathway network." % database, shown["waitBox"])
-                self.assertNotIn("Reload", shown["waitBox"], "a reload cannot bring a network that does not exist")
+                self.assertEqual(shown["waitBox"], "No %s pathway network is available for this organism. "
+                                                   "The pathway table and maps work as usual." % database)
                 self.assertEqual(shown["urls"], ["/net/%s/vsub" % database])
 
     def test_any_other_failed_answer_says_it_could_not_be_loaded_and_to_reload(self):
@@ -330,7 +368,7 @@ class NetworkCardTest(unittest.TestCase):
                     self.assertTrue(shown["waitBoxVisible"], "the message is not on screen")
                     self.assertIn("The %s pathway network could not be loaded." % database, shown["waitBox"])
                     self.assertIn("Reload the page", shown["waitBox"])
-                    self.assertNotIn("has no", shown["waitBox"],
+                    self.assertNotIn("is available", shown["waitBox"],
                                      "a server fault was reported as an organism with no network")
 
     def test_a_failed_answer_draws_nothing_and_stores_nothing(self):
@@ -346,7 +384,7 @@ class NetworkCardTest(unittest.TestCase):
         shown = self.results["cachedThenNotFound"]
         self.assertEqual(shown["reads"], ["networks:vsub"])
         self.assertEqual(shown["drawn"], 0, "a network the server does not have was drawn from the browser's copy")
-        self.assertIn("This organism has no KEGG pathway network.", shown["waitBox"])
+        self.assertIn("No KEGG pathway network is available for this organism.", shown["waitBox"])
 
     def test_no_control_is_left_that_needs_a_graph(self):
         """Resume layout threw on this.network.renderers, Save positions on
@@ -373,6 +411,33 @@ class NetworkCardTest(unittest.TestCase):
         self.assertIn("could not be loaded", shown["subtitle"])
         self.assertIn("pa-net-warn", shown["subtitle"], "the status line's own warning style")
         self.assertTrue(all(shown["tools"].values()), "the tools work on the graph that is still there")
+
+    def test_a_failed_refresh_over_a_drawn_graph_never_says_there_is_no_network(self):
+        """A 200 draws the graph, then Apply asks again while a reinstall has the
+        file away. A 404 there must not write "no network is available" directly
+        above the network, so every status gets the could-not-load wording."""
+        for status, shown in self.results["goodThenFailed"].items():
+            with self.subTest(status=status):
+                self.assertEqual(shown["drawn"], 1, "the first answer drew the graph")
+                self.assertTrue(shown["hasNetwork"], "the graph already drawn was taken away")
+                self.assertFalse(shown["waitBoxVisible"], "the wait box covers a graph that is there")
+                self.assertIn("The KEGG pathway network could not be loaded. Reload the page to try again.",
+                              shown["subtitle"])
+                self.assertNotIn("is available", shown["subtitle"], "the line denies the network under it")
+                self.assertTrue(all(shown["tools"].values()), "the tools work on the graph that is still there")
+
+    def test_showing_the_tools_leaves_the_stylesheet_in_charge(self):
+        """network-views.css hides the toolbar separator at 900 px or narrower, and
+        .toggle(true) wrote a display of its own over that on every draw."""
+        for label, shown in self.results["narrowWindow"].items():
+            with self.subTest(label):
+                self.assertEqual(shown["separatorInline"], "", "showing wrote an inline display")
+                self.assertFalse(shown["separator"], "the rule that hides the separator was overridden")
+                self.assertTrue(all(shown["tools"].values()))
+        wide = self.results["wideWindow"]
+        self.assertFalse(wide["turns"][0]["separator"], "no graph, so nothing for the separator to group")
+        self.assertTrue(wide["separator"], "at full width the separator comes back with the tools")
+        self.assertEqual(wide["separatorInline"], "")
 
     def test_a_good_answer_after_a_failed_one_brings_everything_back(self):
         shown = self.results["failedThenGood"]

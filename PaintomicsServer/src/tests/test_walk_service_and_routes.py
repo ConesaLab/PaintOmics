@@ -201,10 +201,35 @@ class ServiceTest(unittest.TestCase):
                 said = str(raised.exception)
                 self.assertNotIn("did not map", said)
                 self.assertNotIn("draws no interactions", said)
-                self.assertIn("Your mapped genes are fine", said)
-                self.assertIn("pathway enrichment and the pathway maps work", said)
-                self.assertIn("gene annotation", said)
+                self.assertIn("no pathway interaction graph installed", said)
                 self.assertIn("AI walk is not available", said)
+                self.assertIn("comes from the organism, not from your identifiers", said)
+                self.assertIn("Pathway enrichment and the pathway maps are not affected", said)
+
+    def test_the_message_claims_nothing_the_check_did_not_look_at(self):
+        """It is decided from the organism's files, with the job unread, and the
+        files do not say how the species was added. So the same words go to a job
+        whose genes mapped nothing, to a job with no genes, and to a species built
+        from KEGG whose kgml directory came up empty, and they have to be true of
+        each: "your mapped genes are fine" and "added from a gene annotation" were
+        not."""
+        annotation = self._no_graph_dir()
+        kegg_built = self._no_graph_dir()
+        org_dir = os.path.join(kegg_built, "current", "tst")
+        os.makedirs(os.path.join(org_dir, "kgml"))
+        for name in ("pathways.list", "pathways_network.json"):
+            open(os.path.join(org_dir, name), "w").close()
+        mapped_nothing = fx.FakeJob({"NOPE_1": fx.FakeFeature("NOPE_1", [fx.FakeOmicValue(
+            "Gene expression", "Nope", [True], [1.0, 2.0, 3.0])])})
+        for label, job, data_dir in (("genes that mapped nothing", mapped_nothing, annotation),
+                                     ("no genes", fx.FakeJob({}), annotation),
+                                     ("empty kgml on a KEGG-built species", _job_with_id(), kegg_built)):
+            with self.subTest(label):
+                with self.assertRaises(service.WalkError) as raised:
+                    service.run(job, "J1", "network", policy="greedy", data_dir=data_dir, use_mongo=False)
+                self.assertEqual(str(raised.exception), service.NO_GRAPH_MESSAGE)
+        for claim in ("mapped genes", "are fine", "gene annotation", "added from"):
+            self.assertNotIn(claim, service.NO_GRAPH_MESSAGE)
 
     def test_a_species_with_a_graph_keeps_its_message_word_for_word(self):
         outside = fx.FakeJob({"NOPE_1": fx.FakeFeature("NOPE_1", [fx.FakeOmicValue(
@@ -848,7 +873,7 @@ class RouteTest(unittest.TestCase):
 
     def test_only_an_organism_with_no_graph_source_at_all_is_told_so(self):
         """Any one source is a graph, and a fault is not a verdict: the message
-        says the organism was added from an annotation, so it has to be true."""
+        says the organism has no graph installed, so it has to be true."""
         self._on_an_organism_with_no_graph()
         service_mod = self.servlet.walk_service
         org_dir = os.path.join(service_mod.KEGG_DATA_DIR, "current", "tst")

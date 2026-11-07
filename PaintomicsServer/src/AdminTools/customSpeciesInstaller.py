@@ -48,8 +48,8 @@ Deliberately NOT produced, and what each absence does to the species:
     and /ai_walk_status answer ``unavailable``, and the AI panel and Step 4's
     Walk column say why (walker/service.py NO_GRAPH_MESSAGE).
   * ``pathways_network.json``: GET /kegg_data/pathway_network/<code> answers
-    404, and the Step 3 network card says this organism has no KEGG pathway
-    network. The Tools rail beside it and the pathway table keep working.
+    404, and the Step 3 network card says no KEGG pathway network is available
+    for this organism. The Tools rail beside it and the pathway table keep working.
   * Reactome/MapMan/OmniPath collections: Step 1 lists those sources as "not
     installed" and they cannot be ticked.
 

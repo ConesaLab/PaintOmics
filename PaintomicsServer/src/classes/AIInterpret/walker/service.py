@@ -119,14 +119,16 @@ GATES = ("artifact", "title", "direction", "context", "anchor")
 # water, NAD; artifact_gate's currency_legs) is a definite artifact, not a
 # low-power statistic, and hides a pathway walk's text as it always did.
 ADVISORY_ON_PATHWAY = ("artifact",)
-# AdminTools/customSpeciesInstaller.py builds a species from a gene-to-KO table:
-# enrichment and the maps work on KEGG's reference pathways, and no per-organism
-# KGML exists to draw a graph from. All five such species on paintomics.org
-# (nben, thaz, tobl, paxi, vsub; 2026-11-06) were told their identifiers "did not
-# map" although they had; no other installed species lacks a kgml directory.
-NO_GRAPH_MESSAGE = ("Your mapped genes are fine, and pathway enrichment and the pathway maps work as usual, but "
-                    "this organism was added from a gene annotation with no pathway interaction graph, so the "
-                    "AI walk is not available for it.")
+# Told to a job on an organism with nothing to draw a graph from. All five species
+# AdminTools/customSpeciesInstaller.py has put on paintomics.org (nben, thaz, tobl,
+# paxi, vsub; 2026-11-06) are like that for good, and were told their identifiers
+# "did not map". The check reads the organism's files and never the job, and a
+# KEGG-built species whose kgml directory came up empty reads the same as those
+# five, so these words may not say how the species was added, nor that this job's
+# genes mapped: a job whose genes mapped nothing, or that has none, reads them too.
+NO_GRAPH_MESSAGE = ("This organism has no pathway interaction graph installed, so the AI walk is not available "
+                    "for it. That comes from the organism, not from your identifiers. Pathway enrichment and "
+                    "the pathway maps are not affected.")
 
 
 def narrate_reserve(n_statements):

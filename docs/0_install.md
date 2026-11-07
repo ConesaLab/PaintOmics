@@ -316,9 +316,10 @@ Reactome/MapMan/OmniPath are deliberately not produced. On such a species:
 
 - Step 1 lists MapMan, Reactome and OmniPath as *not installed*, and they cannot
   be ticked.
-- The **Pathways network** card at Step 3 is not available. It says the organism
-  has no KEGG pathway network (`/kegg_data/pathway_network/<code>` answers 404);
-  the Tools panel beside it and the pathway table keep working.
+- The **Pathways network** card at Step 3 is not available. It says no KEGG
+  pathway network is available for the organism
+  (`/kegg_data/pathway_network/<code>` answers 404); the Tools panel beside it and
+  the pathway table keep working.
 - The AI walk is not available, and with it the AI interpretation and its chat.
   They need a pathway interaction graph, and an annotation does not give one. No
   walk is queued and nothing is sent to the AI service; the AI panel and the Walk

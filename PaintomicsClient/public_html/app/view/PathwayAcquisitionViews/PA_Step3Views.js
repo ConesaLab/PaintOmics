@@ -3016,14 +3016,18 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	/**
 	* The card when the network did not arrive: what is true, and no spinner.
 	*
-	* A 404 means the organism has no network file. Every species installed by
-	* customSpeciesInstaller.py is like that, for good, so reloading cannot help
-	* and the card says so plainly. Anything else (a 500, a dropped connection,
-	* a body that is not JSON) is the server or the wire, on a species that may
-	* well have a network, and reloading is the advice.
+	* A 404 means no network file is there now. A species installed by
+	* customSpeciesInstaller.py never has one, and a normal species has none while
+	* a reinstall has it away (DBManager builds it after promotion), so the card
+	* says none is available, which holds in both, and not that none exists.
+	* Anything else (a 500, a dropped connection, a body that is not JSON) is the
+	* server or the wire, on a species that may well have a network, and reloading
+	* is the advice.
 	*
 	* A refresh that fails over a graph already drawn leaves that graph in place:
-	* it is still this job's, and only the status line changes.
+	* it is still this job's, and only the status line changes. There every failed
+	* answer, a 404 too, reads "could not be loaded", because "no network is
+	* available" written directly above one would be false.
 	*
 	* @chainable
 	* @param {Number} httpStatus the answer's status; 0 for a dropped connection
@@ -3032,17 +3036,17 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	this.showNetworkFailure = function(httpStatus) {
 		var waitBox = $("#pathwayNetworkWaitBox_" + this.dbid).stop(true, true);
 		var subtitle = $("#step3-network-subtitle_" + this.dbid);
-		var message = (httpStatus === 404)
-			? "This organism has no " + this.database + " pathway network. The pathway table and maps work as usual."
-			: "The " + this.database + " pathway network could not be loaded. Reload the page to try again.";
+		var couldNotLoad = "The " + this.database + " pathway network could not be loaded. Reload the page to try again.";
 
 		if (this.network !== null) {
 			waitBox.hide();
-			subtitle.html('<span class="pa-net-warn">' + message + '</span>');
+			subtitle.html('<span class="pa-net-warn">' + couldNotLoad + '</span>');
 			return this;
 		}
 
-		waitBox.text(message).show();
+		waitBox.text((httpStatus === 404)
+			? "No " + this.database + " pathway network is available for this organism. The pathway table and maps work as usual."
+			: couldNotLoad).show();
 		/* Said once, where the spinner was. The line above it said "Building
 		   network..." too: emptied, and hidden so no empty strip is left. */
 		subtitle.empty().hide();
@@ -3064,12 +3068,17 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 	*/
 	this.showNetworkTools = function(visible) {
 		var dbid = this.dbid;
+		/* Showing clears the inline display rather than setting one, so the
+		   stylesheet still decides. .toggle(true) writes a display of its own over
+		   any rule that hides the element, and the separator has such a rule at
+		   900 px or narrower (network-views.css). */
+		var display = visible ? "" : "none";
 		$(["#fullscreenSettingsPanelButton_", "#resumeLayoutButton_", "#saveNodePositionsButton_",
 		   "#toggleTooltipsButton_", "#downloadNetworkTool_", "#downloadNetworkToolSVG_"].map(function(id) {
 			return id + dbid;
-		}).join(", ")).toggle(visible);
-		$("#step3-network-toolbar_" + dbid + " .pa-net-toolbar-sep").toggle(visible);
-		$("#networkview_" + dbid + " .paNetRailTab[data-pane=details]").toggle(visible);
+		}).join(", ")).css("display", display);
+		$("#step3-network-toolbar_" + dbid + " .pa-net-toolbar-sep").css("display", display);
+		$("#networkview_" + dbid + " .paNetRailTab[data-pane=details]").css("display", display);
 		return this;
 	};
 
