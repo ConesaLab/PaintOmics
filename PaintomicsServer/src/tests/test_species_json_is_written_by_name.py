@@ -215,6 +215,14 @@ class CustomInstallerWriter(KeggDataDir):
             return ["admin", "PaintomicsDB", "global-paintomics", "mmu-paintomics",
                     "cust-paintomics", "hsa-paintomics"]
 
+        def __getitem__(self, name):
+            # Every species here is a finished build: both version records
+            # present (an unfinished one is left out, which
+            # test_installer_small_and_unfinished_species covers).
+            versions = mock.Mock()
+            versions.find_one.side_effect = lambda query: {"name": query["name"], "date": "20261101 1200"}
+            return mock.Mock(versions=versions)
+
         def close(self):
             pass
 

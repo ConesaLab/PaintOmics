@@ -10,7 +10,7 @@ inside the app container:
                       are never run concurrently)
 
 Everything is durable and restartable: one JSON file per species under
---state-dir records where it got to, a species already carrying its pathways
+--state-dir records where it got to, a species whose finished build is already
 in MongoDB is skipped, and an interrupted download or install is simply
 redone. The installer is taken from --installer-src on the host and copied
 into the container whenever the container's copy differs (another deploy may
@@ -26,6 +26,7 @@ for --breaker-pause seconds, instead of hammering a server that is refusing us.
     allspecies_runner.py run     [--workers 6] [--batch 25] [--kinds Eukaryota,Archaea,Bacteria]
     allspecies_runner.py status  one line per state, plus rates and an ETA
     allspecies_runner.py census  {code: pathway count} for every species database, as JSON
+                                 (0 for a database whose build never finished)
 
 Control files in --state-dir:  STOP  (finish the species in flight, then exit)
                                PAUSE (start nothing new until it is removed)
@@ -56,6 +57,12 @@ DEFAULTS = {
 DBMANAGER = "python /app/PaintomicsServer/src/AdminTools/DBManager.py"
 
 RUNNABLE = ("install", "refresh", "rebuild")
+#: The version records a species build writes last. A database without both is
+#: a build that never finished. The same rule as FINISHED_BUILD_RECORDS in
+#: PaintomicsServer/src/AdminTools/species_json.py, repeated because this script
+#: runs alone on the host; test_installer_small_and_unfinished_species keeps the
+#: two equal.
+FINISHED_BUILD_RECORDS = ("KEGG", "MAPPING")
 #: What a refused or unreachable KEGG looks like in a download log. The status
 #: codes are matched as requests spells them ("403 Client Error"), never as bare
 #: digit runs: pathway ids such as hsa04030 or hsa05030 contain them.
@@ -138,10 +145,20 @@ class Runner(object):
         return result.stdout.strip()
 
     def census(self):
-        """{code: n_kegg_pathway_documents} for every <code>-paintomics database."""
-        js = ('const out={}; db.adminCommand({listDatabases:1,nameOnly:true}).databases.forEach(d=>{'
+        """{code: n_kegg_pathway_documents} for every <code>-paintomics database,
+        and 0 for one whose build never finished, whatever its kegg collection holds.
+
+        The build imports kegg before versions, so a first install killed in
+        between holds pathways and is not installed: DBManager leaves it out of
+        species.json. Counted by its pathways alone, a restart recorded it as
+        "found installed before this run" and never built it again.
+        """
+        js = ('const need=%s; const out={}; db.adminCommand({listDatabases:1,nameOnly:true}).databases.forEach(d=>{'
               'if(d.name.endsWith("-paintomics") && d.name!="global-paintomics"){'
-              'out[d.name.slice(0,-11)]=db.getSiblingDB(d.name).kegg.countDocuments({});}}); print(JSON.stringify(out));')
+              'const s=db.getSiblingDB(d.name);'
+              'const finished=s.versions.distinct("name",{name:{$in:need}}).length==need.length;'
+              'out[d.name.slice(0,-11)]=finished?s.kegg.countDocuments({}):0;}}); print(JSON.stringify(out));'
+              % json.dumps(FINISHED_BUILD_RECORDS))
         return json.loads(self.mongoEval(js))
 
     def hostPath(self, *parts):
@@ -601,7 +618,7 @@ class Runner(object):
         self.loadStates()
         self.log("manifest: %d runnable species (kinds %s)" % (len(rows), self.args.kinds))
         census = self.census()
-        self.log("census: %d species databases with pathways" % sum(1 for n in census.values() if n > 0))
+        self.log("census: %d species databases with a finished build and pathways" % sum(1 for n in census.values() if n > 0))
         rowsByCode = {r["code"]: r for r in rows}
         self.orderedCodes = [r["code"] for r in rows]
         self.orderedCodeSet = set(self.orderedCodes)

@@ -1,4 +1,5 @@
-"""What ``current/species.json`` holds, in what order, written once.
+"""What ``current/species.json`` holds, in what order, written once, and which
+species databases count as installed for it.
 
 Two installers write the file -- DBManager.generateAvailableSpeciesFile after
 a standard install, customSpeciesInstaller.regenerate_species_json after a
@@ -17,6 +18,39 @@ the picker's own order for everything after the model organisms.
 import json
 import os
 import shutil
+
+#: The version records every species build writes last: the standard build
+#: imports `versions` after xref, dbname and kegg
+#: (common_build_database.createDatabase), and the custom installer inserts
+#: them after its three data collections (customSpeciesInstaller.write_mongo).
+#: A species database without both is a build that never finished, and
+#: neither installer lists it in species.json, so the organism picker never
+#: offers a half-built organism whichever installer ran last.
+FINISHED_BUILD_RECORDS = ("KEGG", "MAPPING")
+
+
+def build_records(db):
+    """``{name: version document or None}`` for each of FINISHED_BUILD_RECORDS
+    in the species database ``db`` (a pymongo Database).
+
+    find_one, not find(...)[0]: the cursor's [0] raises IndexError when the
+    record is absent, and that one database used to stop a whole listing.
+    """
+    return {name: db.versions.find_one({"name": name}) for name in FINISHED_BUILD_RECORDS}
+
+
+def missing_build_records(records):
+    """The names in FINISHED_BUILD_RECORDS that ``records`` (from
+    build_records) has no document for, in order. Empty for a finished build."""
+    return [name for name in FINISHED_BUILD_RECORDS if records.get(name) is None]
+
+
+def unfinished_build_fact(database, missing):
+    """The sentence both installers use for a species database whose build
+    never finished, e.g. "half-paintomics has no KEGG and MAPPING record in
+    its versions collection, so its build never finished"."""
+    return "%s has no %s record in its versions collection, so its build never finished" % (
+        database, " and ".join(missing))
 
 
 def species_json_rows(codes, names):
