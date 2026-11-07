@@ -68,10 +68,12 @@ Bacterial invasion of epithelial cells. A map is kept only when
      cannot read keeps every class;
   3. at least ``--min-kos`` (MIN_KOS, 2) of the species' KOs are drawn on it.
 
-Every map dropped is logged with its reason. ``--rebuild-maps`` applies the
-rule, and writes the KGML, for a species this tool installed before either
-existed, reading its KOs from the installed database: the identifier graph is
-not touched, so no annotation file is needed.
+Every map dropped is logged with its reason, and the KEGG version document
+records the scope organism and ``--min-kos`` (map_rule). ``--rebuild-maps``
+applies the rule, and writes the KGML, for a species this tool installed before
+either existed, reading its KOs from the installed database: the identifier
+graph is not touched, so no annotation file is needed. It reuses the recorded
+scope organism when none is given; installs before 2026-11-07 recorded none.
 
 Deliberately NOT produced, and what each absence does to the species:
 
@@ -711,7 +713,13 @@ def replace_collection(db, name, docs, indexes=()):
     incoming.rename(name, dropTarget=True)
 
 
-def write_mongo(code, dbname_docs, xref_docs, kegg_docs, mongo_host, mongo_port):
+def map_rule(scope_organism, min_kos):
+    """What the KEGG version document records of how the maps were chosen, so
+    --rebuild-maps can repeat the scope organism without being told it."""
+    return {"scope_organism": scope_organism, "min_kos": min_kos}
+
+
+def write_mongo(code, dbname_docs, xref_docs, kegg_docs, mongo_host, mongo_port, rule=None):
     from pymongo import MongoClient, ASCENDING
     client = MongoClient(mongo_host, mongo_port)
     db = client[code + "-paintomics"]
@@ -721,7 +729,7 @@ def write_mongo(code, dbname_docs, xref_docs, kegg_docs, mongo_host, mongo_port)
         replace_collection(db, collection, docs, indexes)
     stamp = datetime.now().strftime("%Y%m%d %H%M")
     db["versions"].drop()
-    db["versions"].insert_many([{"name": "KEGG", "date": stamp},
+    db["versions"].insert_many([dict({"name": "KEGG", "date": stamp}, **(rule or {})),
                                 {"name": "MAPPING", "date": stamp}])
     # Same indexes the standard build creates (common_build_database.createDatabase):
     # the two xref lookups, and the pathway `source` index that keeps
@@ -753,18 +761,31 @@ def installed_kos(code, mongo_host, mongo_port):
         client.close()
 
 
-def write_pathways(code, kegg_docs, mongo_host, mongo_port):
-    """--rebuild-maps: replace the pathway documents and date the KEGG version.
-    The identifier graph and the MAPPING version are left as they are."""
+def write_pathways(code, kegg_docs, mongo_host, mongo_port, rule=None):
+    """--rebuild-maps: replace the pathway documents, and date the KEGG version
+    with the rule that chose them. The identifier graph and the MAPPING version
+    are left as they are."""
     from pymongo import MongoClient, ASCENDING
     client = MongoClient(mongo_host, mongo_port)
     db = client[code + "-paintomics"]
     replace_collection(db, "kegg", kegg_docs, ([("source", ASCENDING)],))
     db.kegg.create_index([("source", ASCENDING)])
     db["versions"].update_one({"name": "KEGG"},
-                              {"$set": {"date": datetime.now().strftime("%Y%m%d %H%M")}},
+                              {"$set": dict({"date": datetime.now().strftime("%Y%m%d %H%M")}, **(rule or {}))},
                               upsert=True)
     client.close()
+
+
+def recorded_scope(code, mongo_host, mongo_port):
+    """The scope organism the KEGG version document records (map_rule), or
+    None: installs before 2026-11-07 recorded none."""
+    from pymongo import MongoClient
+    client = MongoClient(mongo_host, mongo_port)
+    try:
+        doc = client[code + "-paintomics"]["versions"].find_one({"name": "KEGG"}) or {}
+        return doc.get("scope_organism") or None
+    finally:
+        client.close()
 
 
 def write_species_graph(kegg_data_dir, code, kegg_docs, kgml, ko_names, annotated_kos):
@@ -802,6 +823,22 @@ def write_species_graph(kegg_data_dir, code, kegg_docs, kgml, ko_names, annotate
                 ["%s:%s\tCDS\t-\t%s" % (code, ko, ko_names[ko][1])
                  for ko in sorted(annotated_kos) if ko in ko_names and ";" in ko_names[ko][1]])
     return len(kegg_docs)
+
+
+def check_species_dir_writable(kegg_data_dir, code):
+    """Refuse before the database is touched when the species files cannot be
+    written: a rebuild that replaced the pathway documents and then stopped on
+    a file it may not open (a directory owned by the server's user, the tool
+    run as another) left the documents and the files describing two installs."""
+    specie_dir = os.path.join(kegg_data_dir, "current", code)
+    os.makedirs(specie_dir, exist_ok=True)
+    paths = [specie_dir] + [os.path.join(specie_dir, name) for name in
+                            ("gene2pathway.list", "pathways.list", "kgml", "mapping",
+                             os.path.join("mapping", "kegg2genesymbol.list"))]
+    denied = [path for path in paths if os.path.exists(path) and not os.access(path, os.W_OK)]
+    if denied:
+        raise SystemExit("Cannot write %s as this user (uid %d); run the tool as the owner of the "
+                         "data directory. Nothing was changed." % (", ".join(denied), os.getuid()))
 
 
 def write_gene2pathway(kegg_data_dir, code, kegg_docs):
@@ -1025,7 +1062,9 @@ def main():
                         help="gene→KO table (eggNOG-mapper output or TSV)")
     parser.add_argument("--scope-organism", default=None,
                         help="KEGG code of a relative; restricts pathways to "
-                             "the maps KEGG assigns that organism (recommended)")
+                             "the maps KEGG assigns that organism (recommended). "
+                             "--rebuild-maps reads the one recorded at install "
+                             "when this is not given")
     parser.add_argument("--min-kos", type=int, default=MIN_KOS,
                         help="fewest of the species' KOs a map must draw to be "
                              "kept (default %d)" % MIN_KOS)
@@ -1095,9 +1134,10 @@ def main():
         log("DRY RUN — nothing written.")
         return
 
+    check_species_dir_writable(kegg_data_dir, args.code)
     log("STEP 5. Writing MongoDB %s-paintomics" % args.code)
     write_mongo(args.code, dbname_docs, xref_docs, kegg_docs,
-                mongo_host, mongo_port)
+                mongo_host, mongo_port, map_rule(args.scope_organism, args.min_kos))
 
     log("STEP 6. Writing species files")
     g2p_path, g2p_lines = write_gene2pathway(kegg_data_dir, args.code, kegg_docs)
@@ -1160,9 +1200,16 @@ def rebuild_maps(args, kegg_data_dir, mongo_host, mongo_port, cache, cache_dir):
         raise SystemExit("%s-paintomics holds no KO identifiers — nothing to rebuild." % args.code)
     log("  %d distinct KOs" % len(annotated_kos))
 
+    scope = args.scope_organism or recorded_scope(args.code, mongo_host, mongo_port)
+    if not scope:
+        # Without one every map outside the excluded classes is on offer, and
+        # the species would gain maps its install never had.
+        raise SystemExit("Pass --scope-organism, the KEGG code %s was installed with: its "
+                         "database does not record one." % args.code)
+
     log("STEP 2. Loading KEGG reference tables (cache: %s)" % cache_dir)
-    taxon = species_taxon(args.lineage or registered, kegg_data_dir, args.scope_organism)
-    kegg_docs, kgml, ko_names = plan_maps(args.code, cache, annotated_kos, args.scope_organism,
+    taxon = species_taxon(args.lineage or registered, kegg_data_dir, scope)
+    kegg_docs, kgml, ko_names = plan_maps(args.code, cache, annotated_kos, scope,
                                           taxon, args.min_kos)
     if not kegg_docs:
         raise SystemExit("Refusing to leave %s with no pathway." % args.code)
@@ -1170,8 +1217,9 @@ def rebuild_maps(args, kegg_data_dir, mongo_host, mongo_port, cache, cache_dir):
         log("DRY RUN — nothing written.")
         return
 
+    check_species_dir_writable(kegg_data_dir, args.code)
     log("STEP 4. Writing the pathway documents of %s-paintomics" % args.code)
-    write_pathways(args.code, kegg_docs, mongo_host, mongo_port)
+    write_pathways(args.code, kegg_docs, mongo_host, mongo_port, map_rule(scope, args.min_kos))
 
     log("STEP 5. Writing species files")
     g2p_path, g2p_lines = write_gene2pathway(kegg_data_dir, args.code, kegg_docs)

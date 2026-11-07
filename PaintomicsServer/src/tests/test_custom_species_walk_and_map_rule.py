@@ -471,6 +471,8 @@ class AnInstallIsWalkedTest(InstallerTestCase):
         self.assertEqual({m.replace("map", CODE) for m in NON_ANIMAL_KEPT}, ids, self.log)
         self.assertIn("verify: 5/5 sample genes resolve to KOs", self.log)
         self.assertIn("SUCCESS", self.log)
+        kegg_version = FakeClient()["%s-paintomics" % CODE]["versions"].find_one({"name": "KEGG"})
+        self.assertEqual((SCOPE, 2), (kegg_version["scope_organism"], kegg_version["min_kos"]))
         self.assertEqual({i + ".kgml" for i in ids}, set(os.listdir(os.path.join(self.org_dir, "kgml"))))
         with open(os.path.join(self.org_dir, "pathways.list")) as handle:
             self.assertIn("path:%s00010\tGlycolysis / Gluconeogenesis\n" % CODE, handle.read())
@@ -533,9 +535,10 @@ class RebuildMapsTest(InstallerTestCase):
         kept = {m.replace("map", CODE) for m in NON_ANIMAL_KEPT}
         self.assertEqual(kept, {doc["ID"] for doc in self.db.data["kegg"]}, log)
         self.assertEqual(self.xref_before, self.db.data["xref"], "the identifier graph changed")
-        versions = {doc["name"]: doc["date"] for doc in self.db.data["versions"]}
-        self.assertEqual("20261106 2027", versions["MAPPING"])
-        self.assertNotEqual("20261106 2027", versions["KEGG"])
+        versions = {doc["name"]: doc for doc in self.db.data["versions"]}
+        self.assertEqual({"name": "MAPPING", "date": "20261106 2027"}, versions["MAPPING"])
+        self.assertNotEqual("20261106 2027", versions["KEGG"]["date"])
+        self.assertEqual((SCOPE, 2), (versions["KEGG"]["scope_organism"], versions["KEGG"]["min_kos"]))
         self.assertIn([("source", 1)], self.db.indexes["kegg"])
         self.assertNotIn("kegg_incoming", self.db.data)
         self.assertEqual({i + ".kgml" for i in kept}, set(os.listdir(os.path.join(self.org_dir, "kgml"))))
@@ -556,6 +559,27 @@ class RebuildMapsTest(InstallerTestCase):
         self.assertNotIn("%s00232" % CODE, {doc["ID"] for doc in self.db.data["kegg"]})
         self.assertFalse(os.path.exists(os.path.join(self.org_dir, "kgml.incoming")))
         self.assertFalse(os.path.exists(os.path.join(self.org_dir, "kgml.outgoing")))
+
+    def test_the_scope_organism_is_needed_once_then_read_back(self):
+        """An install before the rule recorded no scope organism, and without
+        one every map outside the excluded classes would be offered."""
+        with self.assertRaises(AssertionError) as caught:
+            self.run_main("--rebuild-maps")
+        self.assertIn("Pass --scope-organism", str(caught.exception))
+        self.run_main("--scope-organism=%s" % SCOPE, "--rebuild-maps")
+        log = self.run_main("--rebuild-maps", "--min-kos=3")
+        self.assertIn("pathway maps in %s's list" % SCOPE, log)
+        self.assertNotIn("map00999".replace("map", CODE), {doc["ID"] for doc in self.db.data["kegg"]})
+
+    @unittest.skipIf(hasattr(os, "getuid") and os.getuid() == 0, "root writes a read-only directory")
+    def test_files_it_may_not_write_stop_it_before_the_database_changes(self):
+        before = [dict(doc) for doc in self.db.data["kegg"]]
+        os.chmod(self.org_dir, 0o555)
+        self.addCleanup(os.chmod, self.org_dir, 0o755)
+        with self.assertRaises(AssertionError) as caught:
+            self.run_main("--scope-organism=%s" % SCOPE, "--rebuild-maps")
+        self.assertIn("Nothing was changed", str(caught.exception))
+        self.assertEqual(before, self.db.data["kegg"])
 
     def test_a_dry_run_writes_nothing(self):
         before = [dict(doc) for doc in self.db.data["kegg"]]
