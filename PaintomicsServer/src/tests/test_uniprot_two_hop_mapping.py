@@ -198,6 +198,37 @@ class TwoHopMappingTest(unittest.TestCase):
         self.assertEqual(len(db.dbname.queries), before,
                          "resolveBridgeDatabaseIds re-queried dbname instead of caching")
 
+    def test_a_rebuilt_species_is_not_bridged_through_its_old_ids(self):
+        """A rebuild replaces every dbname _id and keeps the database's name.
+
+        The ids used to be cached on that name alone, so a worker that had mapped
+        this species once went on bridging through ids the rebuild had removed.
+        Names needing the second hop came back unmatched, with no error, until the
+        worker restarted: 666 of 3,001 sorghum genes, on real MongoDB. The target
+        id is resolved afresh per mapping call, which is what moves the key.
+        """
+        before = _FakeDB()
+        self.assertEqual(mapper.findIDsByFeaturesName("job", ["ENSMUSG00000000037"], before, "DB_UNIPROT")
+                         .get("ENSMUSG00000000037"), ["Q8BYC8"])
+
+        rebuilt = _FakeDB()
+        for table in (rebuilt.dbname, rebuilt.xref):
+            for document in table._documents:
+                document["_id"] = "NEW_" + document["_id"]
+                if "dbname_id" in document:
+                    document["dbname_id"] = "NEW_" + document["dbname_id"]
+                if "mates" in document:
+                    document["mates"] = ["NEW_" + mate for mate in document["mates"]]
+
+        self.assertEqual(sorted(mapper.resolveBridgeDatabaseIds(rebuilt, "NEW_DB_UNIPROT")),
+                         ["NEW_DB_ENSG", "NEW_DB_ENTREZ"])
+        self.assertEqual(mapper.findIDsByFeaturesName("job", ["ENSMUSG00000000037"], rebuilt, "NEW_DB_UNIPROT")
+                         .get("ENSMUSG00000000037"), ["Q8BYC8"],
+                         "the second hop looked in the tables of the old build")
+        self.assertEqual(mapper.findIDsByFeaturesNameForDatabases(
+            "job", ["ENSMUSG00000000037"], rebuilt, ["NEW_DB_UNIPROT"])["NEW_DB_UNIPROT"].get("ENSMUSG00000000037"),
+            ["Q8BYC8"])
+
     def testNoAggregationIsUsed(self):
         """mongod 4.4 on production cannot index a $lookup sub-pipeline."""
         self.assertFalse(hasattr(_FakeDB().xref, "aggregate"),

@@ -26,10 +26,39 @@ os.environ.setdefault("PAINTOMICS_CLIENT_TMP", tempfile.mkdtemp(prefix="client-"
 
 from src.classes.JobInstances.PathwayAcquisitionJob import (  # noqa: E402
     explainEmptyMapping, hasDataRows, mappedTotal)
+from src.common import OrganismDetector  # noqa: E402
+
+MAIZE_TRANSCRIPTS = ["Zm00001d027230_T001", "Zm00001d002345_T002", "Zm00001d045677_T001",
+                     "Zm00001d038291_T003", "Zm00001d001865_T001"]
+PEA_TRANSCRIPTS = ["Psat.cameor.v2.1g306350.1", "Psat.cameor.v2.3g10100.1", "Psat.cameor.v2.0s1040g10400.2",
+                   "Psat.cameor.v2.7g337900.1", "Psat.cameor.v2.1g00050.1"]
 
 
 def omic(name, mapped, unmapped):
     return {"omicName": name, "omicSummary": [{"KEGG": mapped, "Total": mapped}, unmapped]}
+
+
+class _Lookup(object):
+    """An installation with these organisms, whose index recognises none of the ids: they are transcripts."""
+
+    def installed(self):
+        return {"hsa", "psat", "zma"}
+
+    def hits(self, code, identifiers):
+        return 0
+
+
+def hint(identifiers, organism):
+    """What organismHint says, with the real detector on a server with no database behind it."""
+    return OrganismDetector.describeHint(
+        OrganismDetector.detectOrganism(identifiers, selected=organism, lookup=_Lookup(),
+                                        names={"zma": "Zea mays", "psat": "Lathyrus oleraceus"}))
+
+
+def emptyMappingAdvice(organism, samples):
+    def sampler(name, limit=3):
+        return samples[:limit]
+    return explainEmptyMapping(organism, [omic("Gene expression", 0, 5000)], sampler, detect=hint)
 
 
 class ZeroMatchedOmicSaysSoTest(unittest.TestCase):
@@ -63,6 +92,46 @@ class ZeroMatchedOmicSaysSoTest(unittest.TestCase):
             lambda name: ["ENSMUSG00000102693.2", "ENSMUSG00000064842.3", "ENSMUSG00000051951.6"])
         self.assertIn("Ensembl version suffix", message)
         self.assertIn(".2 in ENSMUSG00000102693.2", message)
+
+    def test_a_transcript_id_on_its_own_organism_is_told_to_lose_its_suffix(self):
+        """That organism's alias table holds the gene id, and never the transcript id."""
+        for organism, samples, suffix in (("zma", MAIZE_TRANSCRIPTS, "_T001"), ("zma", MAIZE_TRANSCRIPTS[1:], "_T002"),
+                                          ("psat", PEA_TRANSCRIPTS, ".1"), ("psat", PEA_TRANSCRIPTS[2:], ".2")):
+            message = emptyMappingAdvice(organism, samples)
+            self.assertIn("These are transcript ids (the %s in %s);" % (suffix, samples[0]), message, organism)
+            self.assertIn("remove the suffix and run again", message, organism)
+            self.assertNotIn("Check the organism", message, organism)
+            self.assertNotIn("go back to step 1", message, "the file fits the organism chosen")
+
+    def test_a_transcript_id_on_another_organism_is_told_to_check_it(self):
+        """Without the suffix it matches nothing there either, so removing it is the wrong advice."""
+        for organism, samples, named in (("hsa", MAIZE_TRANSCRIPTS, "Zea mays"), ("psat", MAIZE_TRANSCRIPTS, "Zea mays"),
+                                         ("hsa", PEA_TRANSCRIPTS, "Lathyrus oleraceus"),
+                                         ("zma", PEA_TRANSCRIPTS, "Lathyrus oleraceus")):
+            message = emptyMappingAdvice(organism, samples)
+            self.assertNotIn("remove the suffix", message, (organism, samples[0]))
+            self.assertIn("Check the organism", message, (organism, samples[0]))
+            self.assertIn("They look like %s identifiers" % named, message, (organism, samples[0]))
+            self.assertIn("go back to step 1 and choose that organism", message, (organism, samples[0]))
+
+    def test_the_transcript_advice_needs_every_sample_to_be_one(self):
+        for organism, samples in (("psat", ["Psat.cameor.v2.1g306350", "Psat.cameor.v2.3g10100", "Psat.cameor.v2.7g337900"]),
+                                  ("zma", ["Zm00001d027230", "Zm00001d002345", "Zm00001d045677"]),
+                                  ("zma", ["Zm00001d027230_T001", "ENSMUSG00000102693", "Zm00001d002345_T001"]),
+                                  ("zma", ["Zm00001eb000010_T001", "Zm00001eb000020_T001", "Zm00001eb000050_T001"]),
+                                  ("zma", ["Zm00001d027230_T001_extra", "Zm00001d002345_T001_extra"]),
+                                  ("psat", ["Psat.cameor.v2.1g306350.1.extra", "Psat.cameor.v2.3g10100.1.extra"])):
+            message = explainEmptyMapping(organism, [omic("Gene expression", 0, 5000)], lambda name: samples)
+            self.assertNotIn("remove the suffix", message, samples[0])
+            self.assertIn("Check the organism", message, samples[0])
+
+    def test_an_empty_sample_gets_the_generic_advice(self):
+        """sampleUnmatched gives [] when an omic has no unmatched file: all() of nothing is true, and the sentence reads samples[0]."""
+        for organism in ("zma", "psat"):
+            message = emptyMappingAdvice(organism, [])
+            self.assertIn("Check the organism", message, organism)
+            self.assertNotIn("transcript ids", message, organism)
+            self.assertNotIn("remove the suffix", message, organism)
 
     def test_has_data_rows(self):
         directory = tempfile.mkdtemp(prefix="matched-")
