@@ -53,6 +53,7 @@ SIGN_BY_SUBTYPE = {
 }
 _UNIPROT_RE = re.compile(r"^[A-NR-Z][0-9][A-Z0-9]{3}[0-9]$|^[OPQ][0-9][A-Z0-9]{3}[0-9]$"
                          r"|^[A-Z][0-9][A-Z0-9]{3}[0-9][A-Z][A-Z0-9]{2}[0-9]$")
+_KO_RE = re.compile(r"^K\d{5}$")
 
 
 class Network(object):
@@ -210,6 +211,10 @@ def _read_symbol_map(kegg_symbol_path, ncbi_reactome_path):
     a ``;`` carry only a description and are skipped. ``NCBI2Reactome.txt``'s
     third column is a Reactome ENTITY name (``phospho-Cd247``), used only as a
     fallback for ids KEGG has no symbol for.
+
+    A gene id is an Entrez number, or a KO (``K00844``) on a species installed
+    by AdminTools/customSpeciesInstaller.py, whose genes are its KOs; that
+    installer writes this file with the KO's symbol (``HK; hexokinase``).
     """
     k2sym = {}
     if os.path.isfile(kegg_symbol_path):
@@ -220,7 +225,7 @@ def _read_symbol_map(kegg_symbol_path, ncbi_reactome_path):
                     continue
                 kegg = parts[0].split(":", 1)[-1]
                 symbol = parts[3].split(";")[0].split(",")[0].strip()
-                if kegg.isdigit() and symbol and " " not in symbol:
+                if (kegg.isdigit() or _KO_RE.match(kegg)) and symbol and " " not in symbol:
                     k2sym.setdefault(kegg, symbol)
     if os.path.isfile(ncbi_reactome_path):
         with open(ncbi_reactome_path, encoding="utf-8", errors="replace") as handle:

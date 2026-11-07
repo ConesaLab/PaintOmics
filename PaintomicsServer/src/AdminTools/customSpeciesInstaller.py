@@ -38,29 +38,72 @@ The runtime contract this satisfies (verified against the live code 2026-08-14):
   * Pathway diagram PNGs are species-independent (current/common/png/map*.png);
     only maps newer than the local common snapshot are fetched, with 300px
     thumbnails to match the installed ones.
+  * ``current/<code>/kgml/<code><number>.kgml``  one per installed pathway: the
+    reference KO map with every box carrying one of the species' KOs turned into
+    a ``gene`` entry named ``<code>:K00001``, the way a KEGG organism's own KGML
+    names its genes (species_kgml). Boxes for KOs the species lacks stay
+    ``ortholog`` entries with no relation or reaction on them, as in a KEGG
+    organism's KGML; the rest of KEGG's relations and reactions are kept as
+    drawn. Three readers use it: the AI walk's graph
+    (walker/network.py keys a gene node by the id the pathway documents carry,
+    so ``g:K00001``), the metabolite hub's compound neighbourhoods
+    (common/KeggGraph/store.py) and the evidence relations of the pathway view
+    (PathwayEvidence._keggRelationGraph).
+  * ``current/<code>/pathways.list`` and ``mapping/kegg2genesymbol.list``: the
+    pathway names and the KO symbols the walk labels its nodes with.
+
+Which maps a species gets (select_maps, build_pathway_docs). KEGG lists a map
+for an organism as soon as one of its genes has a KO on it, so a scope
+organism's list carries maps the species cannot run: on 2026-11-06 the plants,
+the alga and the fungus installed on paintomics.org each got Toll-like receptor
+signalling, Neuroactive ligand signalling, Cornified envelope formation and
+Bacterial invasion of epithelial cells. A map is kept only when
+
+  1. the scope organism's list has it (or, with no scope organism, its class is
+     not one of DEFAULT_EXCLUDED_CLASSES);
+  2. for a plant, fungus or protist (taxon_of: the species' own lineage, else
+     the scope organism's KEGG lineage), its class is not one that describes
+     animal organs, animal cells, viruses or human disease
+     (NON_ANIMAL_EXCLUDED_CLASSES), and it is not a map of something such an
+     organism does not have or make (NON_ANIMAL_EXCLUDED_MAPS); an animal, a
+     prokaryote or a lineage the tool cannot read keeps every class;
+  3. at least ``--min-kos`` (MIN_KOS, 2) of the species' KOs are drawn on it.
+
+Every map dropped is logged with its reason, and the KEGG version document
+records the scope organism and ``--min-kos`` (map_rule). ``--rebuild-maps``
+applies the rule, and writes the KGML, for a species this tool installed before
+either existed, reading its KOs from the installed database: the identifier
+graph is not touched, so no annotation file is needed. It reuses the recorded
+scope organism when none is given; installs before 2026-11-07 recorded none. The
+server must be restarted afterwards: until then a running process keeps the
+species' old pathway list in memory (KeggInformationManager.getKeggData), and a
+new job there still lists the maps just dropped (a run on thaz: 149 in the table,
+129 after a restart).
 
 Deliberately NOT produced, and what each absence does to the species:
 
-  * ``hubData/`` and per-organism ``kgml/``: no compound neighbours for the
-    metabolite hub (PathwayAcquisitionJob.compundsClassification), and no drawn
-    pathway graph. The AI walk needs that graph and no other source supplies
-    one here, so it is not available: nothing is queued, /ai_interpret_status
-    and /ai_walk_status answer ``unavailable``, and the AI panel and Step 4's
-    Walk column say why (walker/service.py NO_GRAPH_MESSAGE).
+  * ``hubData/``: nothing reads it where ``kgml/`` is present (store.get_graph).
   * ``pathways_network.json``: GET /kegg_data/pathway_network/<code> answers
     404, and the Step 3 network card says no KEGG pathway network is available
     for this organism. The Tools rail beside it and the pathway table keep working.
   * Reactome/MapMan/OmniPath collections: Step 1 lists those sources as "not
     installed" and they cannot be ticked.
 
-Mapping, enrichment and the pathway maps work as for any other organism.
+Mapping, enrichment, the pathway maps and the AI walk work as for any other
+organism. A species installed before ``kgml/`` was written has no graph until
+``--rebuild-maps`` runs: the walk routes answer ``unavailable`` and the AI panel
+and Step 4's Walk column say why (walker/service.py NO_GRAPH_MESSAGE).
 
 Usage:
   python customSpeciesInstaller.py \
       --code=nben --name="Nicotiana benthamiana" \
       --lineage="Eukaryotes;Plants;Eudicots;Nightshade family" \
       --annotation=/path/to/annotation.tsv \
-      --scope-organism=nta [--dry-run] [--verify-only]
+      --scope-organism=nta [--min-kos=2] [--dry-run] [--verify-only]
+
+  # a species installed earlier: apply the map rule and write its KGML
+  python customSpeciesInstaller.py --code=nben --scope-organism=nta \
+      --rebuild-maps [--min-kos=2] [--dry-run]
 
 Annotation format (auto-detected):
   * eggNOG-mapper ``.emapper.annotations`` (TSV, ``#query`` header line), or
@@ -76,6 +119,7 @@ import json
 import os
 import random
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -90,6 +134,66 @@ TRANSCRIPT_SUFFIX_RE = re.compile(r"\.\d+$")
 # Pathway classes whose reference maps make no sense outside their taxon when
 # no --scope-organism narrows the map set for us.
 DEFAULT_EXCLUDED_CLASSES = ("Human Diseases", "Drug Development")
+# Fewest of the species' KOs a map must draw to be kept. A map drawing one is
+# one painted box, an enzyme other maps share: on the five species installed on
+# paintomics.org by 2026-11-06 that was Staurosporine and Exopolysaccharide
+# biosynthesis, Diterpenoid biosynthesis. Two is kept on purpose. At three,
+# Anthocyanin biosynthesis left both Petunias and N. benthamiana (KEGG's own
+# tobacco genome draws one KO on it) and Nitrogen cycle, the nitrate assimilation
+# they all have, left five of the six; what three would also remove, Caffeine
+# metabolism in most of them, costs a sparse row in the table. --min-kos 3 is
+# that stricter cut.
+MIN_KOS = 2
+# KEGG BRITE br08901 classes ("A" or "A;B", the classification the pathway
+# documents carry) whose maps describe animal organs and tissues, animal
+# cell-to-cell signalling, viruses, or human disease and drugs. Not applied to a
+# plant, fungus or protist's own Environmental adaptation or Aging maps (Circadian
+# rhythm - plant, Plant-pathogen interaction, Longevity regulating pathway -
+# multiple species), which KEGG already narrows by taxon.
+NON_ANIMAL_EXCLUDED_CLASSES = (
+    "Human Diseases",
+    "Drug Development",
+    "Organismal Systems;Immune system",
+    "Organismal Systems;Endocrine system",
+    "Organismal Systems;Circulatory system",
+    "Organismal Systems;Digestive system",
+    "Organismal Systems;Excretory system",
+    "Organismal Systems;Nervous system",
+    "Organismal Systems;Sensory system",
+    "Organismal Systems;Development and regeneration",
+    # neuroactive ligands, hormones, cytokines, ECM receptors, cell adhesion
+    "Environmental Information Processing;Signaling molecules and interaction",
+    # focal adhesion, adherens, tight and gap junctions, stem-cell pluripotency
+    "Cellular Processes;Cellular community - eukaryotes",
+    # Viral life cycle - HIV-1, Virion - Hepatitis viruses: listed because the host
+    # proteins a virus uses (ESCRT, Ran) share KOs with any eukaryote
+    "Genetic Information Processing;Information processing in viruses",
+)
+_ANIMAL_GLYCOLIPIDS = "only animals make these glycolipids"
+_BACTERIAL_ANTIBIOTIC = "only bacteria make this antibiotic"
+# Maps of an otherwise shared class that such an organism has no use for: one
+# defined by an animal cell type, or the route to a product it does not make.
+# KEGG lists the second kind wherever shared proteins land on them (a hexosaminidase
+# and an alpha-galactosidase on the globo series, aspartate-pathway enzymes on
+# Monobactam, hexokinase on Neomycin), and two KOs pass the count. Metabolism is
+# otherwise left alone: an enzyme map is chemistry a species may well carry, so the
+# count decides.
+NON_ANIMAL_EXCLUDED_MAPS = {
+    "map04820": "it is about muscle cells, which a plant, fungus or protist does not have",
+    "map04148": "it is the clearance of dead cells by animal phagocytes, "
+                "which a plant, fungus or protist does not have",
+    "map00601": _ANIMAL_GLYCOLIPIDS,
+    "map00603": _ANIMAL_GLYCOLIPIDS,
+    "map00604": _ANIMAL_GLYCOLIPIDS,
+    "map00261": _BACTERIAL_ANTIBIOTIC,
+    "map00332": _BACTERIAL_ANTIBIOTIC,
+    "map00524": _BACTERIAL_ANTIBIOTIC,
+}
+# The second field of a KEGG lineage (organisms_all.list) for eukaryotes that
+# are not animals, plus the words a person writes in --lineage for them.
+NON_ANIMAL_KINGDOMS = ("viridiplantae", "plants", "fungi", "protists", "sar", "discoba",
+                       "amoebozoa", "rhodophyta", "metamonada", "haptista", "cryptophyceae")
+ANIMAL_KINGDOMS = ("metazoa", "animals")
 _ID_ALPHABET = "0123456789abcdefABCDEF"  # same alphabet the standard build mints
 
 
@@ -301,23 +405,74 @@ def load_reference(cache, scope_organism):
     return map_names, ko2maps, ko_names, classes, scope_maps
 
 
-def select_maps(gene2ko, ko2maps, classes, scope_maps):
-    annotated_kos = set().union(*gene2ko.values()) if gene2ko else set()
+def taxon_of(lineage):
+    """"animal", "non-animal" (a eukaryote that is not an animal) or None.
+
+    Reads a KEGG lineage ("Eukaryotes;Fungi;Dikarya;Ascomycota") or what a
+    person passed as --lineage ("Eukaryotes;Plants;Eudicots"). None for a
+    prokaryote and for anything it cannot place ("Eukaryotes;Custom",
+    choanoflagellates): the class rule is applied only where it is sure.
+    """
+    parts = [p.strip().lower() for p in (lineage or "").split(";") if p.strip()]
+    if any(p in ANIMAL_KINGDOMS for p in parts):
+        return "animal"
+    if len(parts) >= 2 and parts[0] == "eukaryotes" and parts[1] in NON_ANIMAL_KINGDOMS:
+        return "non-animal"
+    return None
+
+
+def lineage_of(kegg_data_dir, code):
+    """The lineage column of ``code``'s row in organisms_custom.list, else in
+    organisms_all.list (KEGG's own list, so a scope organism is found there).
+    None when neither lists it."""
+    if not code:
+        return None
+    common_dir = os.path.join(kegg_data_dir, "current", "common")
+    for basename in ("organisms_custom.list", "organisms_all.list"):
+        path = os.path.join(common_dir, basename)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                row = line.rstrip("\n").split("\t")
+                if len(row) >= 4 and row[1] == code:
+                    return row[3]
+    return None
+
+
+def excluded_for_taxon(map_id, classification, taxon):
+    """Why the class rule drops a map for this taxon, or None to keep it."""
+    if taxon != "non-animal":
+        return None
+    for cls in NON_ANIMAL_EXCLUDED_CLASSES:
+        if classification == cls or classification.startswith(cls + ";"):
+            return "class %s does not apply to a plant, fungus or protist" % classification
+    return NON_ANIMAL_EXCLUDED_MAPS.get(map_id)
+
+
+def select_maps(annotated_kos, ko2maps, classes, scope_maps, taxon=None):
+    """The maps the species' KOs reach that rules 1 and 2 keep (module
+    docstring), as {map: KOs on it by the link table}, and [(map, reason)] for
+    the ones rule 2 drops. Maps outside the scope list are not reported: KEGG
+    never offered them for the scope organism."""
     hit = defaultdict(set)
     for ko in annotated_kos:
         for m in ko2maps.get(ko, ()):
             hit[m].add(ko)
-    selected = {}
-    for m, kos in hit.items():
+    selected, dropped = {}, []
+    for m, kos in sorted(hit.items()):
+        cls = classes.get(m, "")
         if scope_maps is not None:
             if m not in scope_maps:
                 continue
-        else:
-            cls = classes.get(m, "")
-            if cls.split(";")[0] in DEFAULT_EXCLUDED_CLASSES:
-                continue
+        elif cls.split(";")[0] in DEFAULT_EXCLUDED_CLASSES:
+            continue
+        why = excluded_for_taxon(m, cls, taxon)
+        if why:
+            dropped.append((m, why))
+            continue
         selected[m] = kos
-    return annotated_kos, selected
+    return selected, dropped
 
 
 def parse_ko_kgml(xml_bytes, annotated_kos):
@@ -366,26 +521,93 @@ def parse_ko_kgml(xml_bytes, annotated_kos):
     return genes, compounds, related
 
 
+def species_kgml(xml_bytes, code, annotated_kos):
+    """The reference KO map as this species' own KGML, as bytes.
+
+    The KGML of a KEGG organism names its genes ``mmu:12345`` in ``gene``
+    entries and keeps the boxes it has no gene for as ``ortholog`` entries
+    (``ko:K00129``), with no relation or reaction on them: on paintomics.org's
+    tatv and nta installs every reaction's enzyme is a gene entry and no
+    relation touches an ortholog entry. Here a species' gene id is its KO, the
+    id its pathway documents carry (parse_ko_kgml), so an ortholog box holding
+    any of the species' KOs becomes a ``gene`` entry naming those KOs,
+    ``<code>:K00001``, and the KOs it lacks leave that box; a box with none of
+    them stays an ortholog entry, and the relations and reactions drawn on it
+    are dropped, as are a group's ortholog members and a group left with none.
+    Kept, the reference map's 8,611 reactions on ortholog boxes (thaz,
+    2026-11-07) put 3,220 compounds with no edge into the walk's graph and the
+    KOs the species lacks into the metabolite hub's. Every reader strips the
+    prefix (KeggGraph.parser._names, PathwayEvidence), so the graph's gene ids
+    are the documents' gene ids. The pathway is renamed ``path:<code><number>``:
+    the walk tags an edge with it, and a pathway walk finds its map by the
+    job's pathway id.
+    """
+    root = XMLParser.fromstring(xml_bytes)
+    number = re.sub(r"\D", "", root.get("name") or "")
+    root.set("name", "path:%s%s" % (code, number))
+    root.set("org", code)
+    absent = set()                     # entry ids the species has nothing in
+    for entry in root.findall("entry"):
+        if entry.get("type") != "ortholog":
+            continue
+        own = [ko for ko in (t.replace("ko:", "").strip()
+                             for t in (entry.get("name") or "").split())
+               if ko in annotated_kos]
+        if own:
+            entry.set("type", "gene")
+            entry.set("name", " ".join("%s:%s" % (code, ko) for ko in own))
+        else:
+            absent.add(entry.get("id"))
+    for group in root.findall("entry"):
+        if group.get("type") != "group":
+            continue
+        for component in group.findall("component"):
+            if component.get("id") in absent:
+                group.remove(component)
+        if group.find("component") is None:
+            absent.add(group.get("id"))
+            root.remove(group)
+    for relation in root.findall("relation"):
+        if relation.get("entry1") in absent or relation.get("entry2") in absent:
+            root.remove(relation)
+    for reaction in root.findall("reaction"):
+        if reaction.get("id") in absent:
+            root.remove(reaction)
+    return XMLParser.tostring(root, encoding="utf-8")
+
+
 # --------------------------------------------------------------------------- #
 #  Assembly                                                                   #
 # --------------------------------------------------------------------------- #
 
-def build_pathway_docs(code, cache, selected, map_names, classes, annotated_kos):
+def build_pathway_docs(code, cache, selected, map_names, classes, annotated_kos,
+                       min_kos=MIN_KOS):
+    """(docs, kgml, skipped): a pathway document per kept map, the species'
+    KGML for each by document ID, and [(map, reason)] for the maps dropped
+    here. Rule 3 counts the distinct KOs the diagram draws, which is what the
+    map paints and the enrichment counts, not the link table's count."""
     docs = []
+    kgml = {}
     skipped = []
     for m in sorted(selected):
         number = m.replace("map", "")
         raw = cache.fetch("/get/ko%s/kgml" % number, "ko%s.xml" % number,
                           binary=True, optional=True)
         if raw is None:
-            skipped.append(m + " (no reference KGML)")
+            skipped.append((m, "KEGG has no reference KGML for it"))
             continue
         genes, compounds, related = parse_ko_kgml(raw, annotated_kos)
-        if not genes:
+        drawn = len({g["id"] for g in genes})
+        if not drawn:
             # The link table said the map is hit but the diagram carries none of
             # our KOs (global overview maps can differ); nothing would paint.
-            skipped.append(m + " (no annotated KO on the diagram)")
+            skipped.append((m, "none of the species' KOs is drawn on it"))
             continue
+        if drawn < min_kos:
+            skipped.append((m, "only %d of the species' KOs %s drawn on it (fewer than %d)"
+                            % (drawn, "is" if drawn == 1 else "are", min_kos)))
+            continue
+        kgml[code + number] = species_kgml(raw, code, annotated_kos)
         docs.append({
             "ID": code + number,
             "name": map_names.get(m, m),
@@ -396,7 +618,29 @@ def build_pathway_docs(code, cache, selected, map_names, classes, annotated_kos)
             "compounds": compounds,
             "relatedPathways": related,
         })
-    return docs, skipped
+    return docs, kgml, skipped
+
+
+def plan_maps(code, cache, annotated_kos, scope_organism, taxon, min_kos):
+    """Steps 2-3 of both modes: the reference tables, the map rule, the pathway
+    documents and their KGML. Logs every map dropped and why. Returns
+    (kegg_docs, kgml, ko_names)."""
+    map_names, ko2maps, ko_names, classes, scope_maps = load_reference(cache, scope_organism)
+    selected, dropped = select_maps(annotated_kos, ko2maps, classes, scope_maps, taxon)
+    log("  %d annotated KOs: %d pathway maps %s, %s"
+        % (len(annotated_kos), len(selected) + len(dropped),
+           "in %s's list" % scope_organism if scope_maps else "outside the excluded classes",
+           "taxon %s" % taxon if taxon else "taxon not recognised, so no class is dropped for it"))
+
+    log("STEP 3. Building pathway documents from reference KGML (at least %d KOs a map)" % min_kos)
+    kegg_docs, kgml, skipped = build_pathway_docs(code, cache, selected, map_names, classes,
+                                                  annotated_kos, min_kos)
+    for m, why in sorted(dropped + skipped):
+        log("  dropped %s %s: %s" % (m, map_names.get(m, m), why))
+    kos_in_pathways = {g["id"] for doc in kegg_docs for g in doc["genes"]}
+    log("  %d pathways kept, %d dropped; %d distinct KOs placed on diagrams"
+        % (len(kegg_docs), len(dropped) + len(skipped), len(kos_in_pathways)))
+    return kegg_docs, kgml, ko_names
 
 
 def build_identifier_graph(gene2ko, transcript2gene, gene_meta, ko_names,
@@ -477,27 +721,145 @@ def build_identifier_graph(gene2ko, transcript2gene, gene_meta, ko_names,
 #  Writers                                                                    #
 # --------------------------------------------------------------------------- #
 
-def write_mongo(code, dbname_docs, xref_docs, kegg_docs, mongo_host, mongo_port):
+def replace_collection(db, name, docs, indexes=()):
+    """Write ``docs`` to ``<name>_incoming`` with its indexes, then rename it
+    over ``name``. The server keeps answering from the old collection until the
+    rename, instead of from an empty one while the documents go in."""
+    incoming = db[name + "_incoming"]
+    incoming.drop()
+    for i in range(0, len(docs), 5000):
+        incoming.insert_many(docs[i:i + 5000])
+    for keys in indexes:
+        incoming.create_index(keys)
+    incoming.rename(name, dropTarget=True)
+
+
+def map_rule(scope_organism, min_kos):
+    """What the KEGG version document records of how the maps were chosen, so
+    --rebuild-maps can repeat the scope organism without being told it."""
+    return {"scope_organism": scope_organism, "min_kos": min_kos}
+
+
+def write_mongo(code, dbname_docs, xref_docs, kegg_docs, mongo_host, mongo_port, rule=None):
     from pymongo import MongoClient, ASCENDING
     client = MongoClient(mongo_host, mongo_port)
     db = client[code + "-paintomics"]
-    for collection, docs in (("dbname", dbname_docs), ("xref", xref_docs),
-                             ("kegg", kegg_docs)):
-        db[collection].drop()
-        for i in range(0, len(docs), 5000):
-            db[collection].insert_many(docs[i:i + 5000])
+    xref_indexes = ([("dbname_id", ASCENDING), ("_id", ASCENDING)], [("display_id", ASCENDING)])
+    for collection, docs, indexes in (("dbname", dbname_docs, ()), ("xref", xref_docs, xref_indexes),
+                                      ("kegg", kegg_docs, ([("source", ASCENDING)],))):
+        replace_collection(db, collection, docs, indexes)
     stamp = datetime.now().strftime("%Y%m%d %H%M")
     db["versions"].drop()
-    db["versions"].insert_many([{"name": "KEGG", "date": stamp},
+    db["versions"].insert_many([dict({"name": "KEGG", "date": stamp}, **(rule or {})),
                                 {"name": "MAPPING", "date": stamp}])
     # Same indexes the standard build creates (common_build_database.createDatabase):
     # the two xref lookups, and the pathway `source` index that keeps
     # /organism_databases from scanning every pathway document
-    # (DatabaseAvailability.PATHWAY_SOURCE_INDEX).
+    # (DatabaseAvailability.PATHWAY_SOURCE_INDEX). Built on the incoming
+    # collections above already, so these find them in place.
     db.xref.create_index([("dbname_id", ASCENDING), ("_id", ASCENDING)])
     db.xref.create_index([("display_id", ASCENDING)])
     db.kegg.create_index([("source", ASCENDING)])
     client.close()
+
+
+def installed_kos(code, mongo_host, mongo_port):
+    """Every KO an installed custom species carries, read from its identifier
+    graph: build_identifier_graph wrote a ``kegg_id`` row for each annotated
+    KO, placed on a diagram or not, so this is the annotation's KO set."""
+    from pymongo import MongoClient
+    client = MongoClient(mongo_host, mongo_port)
+    try:
+        db = client[code + "-paintomics"]
+        target = db.dbname.find_one({"dbname": "kegg_id"})
+        if target is None:
+            raise SystemExit("%s-paintomics has no kegg_id identifiers: is %s installed here?"
+                             % (code, code))
+        return {doc["display_id"] for doc in db.xref.find({"dbname_id": target["_id"]},
+                                                           {"display_id": 1, "_id": 0})
+                if KO_RE.match(str(doc.get("display_id") or ""))}
+    finally:
+        client.close()
+
+
+def write_pathways(code, kegg_docs, mongo_host, mongo_port, rule=None):
+    """--rebuild-maps: replace the pathway documents, and date the KEGG version
+    with the rule that chose them. The identifier graph and the MAPPING version
+    are left as they are."""
+    from pymongo import MongoClient, ASCENDING
+    client = MongoClient(mongo_host, mongo_port)
+    db = client[code + "-paintomics"]
+    replace_collection(db, "kegg", kegg_docs, ([("source", ASCENDING)],))
+    db.kegg.create_index([("source", ASCENDING)])
+    db["versions"].update_one({"name": "KEGG"},
+                              {"$set": dict({"date": datetime.now().strftime("%Y%m%d %H%M")}, **(rule or {}))},
+                              upsert=True)
+    client.close()
+
+
+def recorded_scope(code, mongo_host, mongo_port):
+    """The scope organism the KEGG version document records (map_rule), or
+    None: installs before 2026-11-07 recorded none."""
+    from pymongo import MongoClient
+    client = MongoClient(mongo_host, mongo_port)
+    try:
+        doc = client[code + "-paintomics"]["versions"].find_one({"name": "KEGG"}) or {}
+        return doc.get("scope_organism") or None
+    finally:
+        client.close()
+
+
+def write_species_graph(kegg_data_dir, code, kegg_docs, kgml, ko_names, annotated_kos):
+    """``kgml/``, ``pathways.list`` and ``mapping/kegg2genesymbol.list`` (module
+    docstring). ``kgml/`` is replaced whole, so a map the rule no longer keeps
+    loses its file with its document. Returns the number of KGML files."""
+    specie_dir = os.path.join(kegg_data_dir, "current", code)
+    kgml_dir = os.path.join(specie_dir, "kgml")
+    incoming, outgoing = kgml_dir + ".incoming", kgml_dir + ".outgoing"
+    for stale in (incoming, outgoing):
+        shutil.rmtree(stale, ignore_errors=True)
+    os.makedirs(incoming)
+    for doc in kegg_docs:
+        with open(os.path.join(incoming, doc["ID"] + ".kgml"), "wb") as fh:
+            fh.write(kgml[doc["ID"]])
+    if os.path.isdir(kgml_dir):
+        os.replace(kgml_dir, outgoing)
+    os.replace(incoming, kgml_dir)
+    shutil.rmtree(outgoing, ignore_errors=True)
+
+    def write_lines(path, lines):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.writelines(line + "\n" for line in lines)
+        os.replace(tmp, path)
+
+    # The walk names a pathway from this file (network._read_pathway_names).
+    write_lines(os.path.join(specie_dir, "pathways.list"),
+                ["path:%s\t%s" % (doc["ID"], doc["name"]) for doc in kegg_docs])
+    # The row shape of a KEGG organism's file, ``mmu:12345<TAB>CDS<TAB>locus<TAB>
+    # Sym1, Sym2; description``, with the KO for the gene: the walk labels a node
+    # by its symbol and reads a gene named in the design by it.
+    write_lines(os.path.join(specie_dir, "mapping", "kegg2genesymbol.list"),
+                ["%s:%s\tCDS\t-\t%s" % (code, ko, ko_names[ko][1])
+                 for ko in sorted(annotated_kos) if ko in ko_names and ";" in ko_names[ko][1]])
+    return len(kegg_docs)
+
+
+def check_species_dir_writable(kegg_data_dir, code):
+    """Refuse before the database is touched when the species files cannot be
+    written: a rebuild that replaced the pathway documents and then stopped on
+    a file it may not open (a directory owned by the server's user, the tool
+    run as another) left the documents and the files describing two installs."""
+    specie_dir = os.path.join(kegg_data_dir, "current", code)
+    os.makedirs(specie_dir, exist_ok=True)
+    paths = [specie_dir] + [os.path.join(specie_dir, name) for name in
+                            ("gene2pathway.list", "pathways.list", "kgml", "mapping",
+                             os.path.join("mapping", "kegg2genesymbol.list"))]
+    denied = [path for path in paths if os.path.exists(path) and not os.access(path, os.W_OK)]
+    if denied:
+        raise SystemExit("Cannot write %s as this user (uid %d); run the tool as the owner of the "
+                         "data directory. Nothing was changed." % (", ".join(denied), os.getuid()))
 
 
 def write_gene2pathway(kegg_data_dir, code, kegg_docs):
@@ -508,11 +870,13 @@ def write_gene2pathway(kegg_data_dir, code, kegg_docs):
     os.makedirs(specie_dir, exist_ok=True)
     path = os.path.join(specie_dir, "gene2pathway.list")
     lines = 0
-    with open(path, "w") as fh:
+    # Renamed into place: --rebuild-maps runs beside a server whose jobs read it.
+    with open(path + ".tmp", "w") as fh:
         for doc in kegg_docs:
             for ko in sorted({g["id"] for g in doc["genes"]}):
                 fh.write("%s:%s\tpath:%s\n" % (code, ko, doc["ID"]))
                 lines += 1
+    os.replace(path + ".tmp", path)
     return path, lines
 
 
@@ -682,6 +1046,14 @@ def verify(code, kegg_data_dir, mongo_host, mongo_port, sample_genes):
     if not os.path.isfile(g2p) or os.path.getsize(g2p) == 0:
         problems.append("gene2pathway.list missing/empty (metagenes would fail "
                         "step 2)")
+    kgml_dir = os.path.join(kegg_data_dir, "current", code, "kgml")
+    pathway_ids = [doc.get("ID") for doc in db.kegg.find({}, {"ID": 1})]
+    no_kgml = [pid for pid in pathway_ids
+               if not os.path.isfile(os.path.join(kgml_dir, "%s.kgml" % pid))]
+    if no_kgml:
+        problems.append("%d of %d pathways have no kgml/<ID>.kgml (%s...), so the AI walk "
+                        "has no graph for them; run --rebuild-maps"
+                        % (len(no_kgml), len(pathway_ids), ", ".join(map(str, no_kgml[:3]))))
     species_json = os.path.join(kegg_data_dir, "current", "species.json")
     try:
         with open(species_json) as fh:
@@ -703,14 +1075,26 @@ def main():
     parser.add_argument("--code", required=True,
                         help="organism code (letters only, must not collide "
                              "with a KEGG code — check rest.kegg.jp/list/genome)")
-    parser.add_argument("--name", required=True)
-    parser.add_argument("--lineage", default="Eukaryotes;Custom",
-                        help="semicolon lineage shown in admin tools")
+    parser.add_argument("--name", help="display name (required for an install)")
+    parser.add_argument("--lineage", default=None,
+                        help="semicolon lineage shown in admin tools and read to "
+                             "tell a plant, fungus or protist (default "
+                             "Eukaryotes;Custom; --rebuild-maps reads the "
+                             "installed row)")
     parser.add_argument("--annotation",
                         help="gene→KO table (eggNOG-mapper output or TSV)")
     parser.add_argument("--scope-organism", default=None,
                         help="KEGG code of a relative; restricts pathways to "
-                             "the maps KEGG assigns that organism (recommended)")
+                             "the maps KEGG assigns that organism (recommended). "
+                             "--rebuild-maps reads the one recorded at install "
+                             "when this is not given")
+    parser.add_argument("--min-kos", type=int, default=MIN_KOS,
+                        help="fewest of the species' KOs a map must draw to be "
+                             "kept (default %d)" % MIN_KOS)
+    parser.add_argument("--rebuild-maps", action="store_true",
+                        help="for a species this tool installed: apply the map "
+                             "rule and write its KGML, reading its KOs from the "
+                             "installed database; identifiers are not touched")
     parser.add_argument("--kegg-data-dir", default=None)
     parser.add_argument("--mongo-host", default=None)
     parser.add_argument("--mongo-port", default=None, type=int)
@@ -722,6 +1106,8 @@ def main():
     if not re.match(r"^[a-z]{3,6}$", args.code):
         raise SystemExit("--code must be 3-6 lowercase letters (a digit-free "
                          "code keeps pathwayID.replace(organism,'map') safe)")
+    if args.min_kos < 1:
+        raise SystemExit("--min-kos must be 1 or more")
 
     sc = serverconf()
     kegg_data_dir = args.kegg_data_dir or (sc and sc.KEGG_DATA_DIR)
@@ -738,38 +1124,26 @@ def main():
         for p in problems:
             log("PROBLEM: " + p)
         raise SystemExit(1 if problems else 0)
+    if args.rebuild_maps:
+        return rebuild_maps(args, kegg_data_dir, mongo_host, mongo_port, cache, cache_dir)
 
-    if not args.annotation:
-        raise SystemExit("--annotation is required for an install")
+    if not args.annotation or not args.name:
+        raise SystemExit("--annotation and --name are required for an install")
+    lineage = args.lineage or "Eukaryotes;Custom"
 
     log("STEP 1. Parsing annotation %s" % args.annotation)
     gene2ko, transcript2gene, gene_meta = parse_annotation(args.annotation)
     if not gene2ko:
         raise SystemExit("No gene→KO assignments found — nothing to install.")
+    annotated_kos = set().union(*gene2ko.values())
     log("  %d genes with KO, %d transcript ids, %d distinct KOs"
-        % (len(gene2ko), len(transcript2gene),
-           len(set().union(*gene2ko.values()))))
+        % (len(gene2ko), len(transcript2gene), len(annotated_kos)))
 
     log("STEP 2. Loading KEGG reference tables (cache: %s)" % cache_dir)
-    map_names, ko2maps, ko_names, classes, scope_maps = load_reference(
-        cache, args.scope_organism)
-    annotated_kos, selected = select_maps(gene2ko, ko2maps, classes, scope_maps)
-    log("  %d annotated KOs hit %d pathway maps%s"
-        % (len(annotated_kos), len(selected),
-           " (scoped to %s)" % args.scope_organism if scope_maps else
-           " (class-filtered)"))
-    if not selected:
-        raise SystemExit("No pathway maps selected — check the annotation and "
-                         "the scope organism.")
-
-    log("STEP 3. Building pathway documents from reference KGML")
-    kegg_docs, skipped = build_pathway_docs(args.code, cache, selected,
-                                            map_names, classes, annotated_kos)
-    for s in skipped:
-        log("  skipped %s" % s)
+    taxon = species_taxon(lineage, kegg_data_dir, args.scope_organism)
+    kegg_docs, kgml, ko_names = plan_maps(args.code, cache, annotated_kos, args.scope_organism,
+                                          taxon, args.min_kos)
     kos_in_pathways = {g["id"] for doc in kegg_docs for g in doc["genes"]}
-    log("  %d pathways, %d distinct KOs placed on diagrams"
-        % (len(kegg_docs), len(kos_in_pathways)))
 
     log("STEP 4. Building identifier graph")
     dbname_docs, xref_docs, n_genes, n_transcripts = build_identifier_graph(
@@ -783,14 +1157,17 @@ def main():
         log("DRY RUN — nothing written.")
         return
 
+    check_species_dir_writable(kegg_data_dir, args.code)
     log("STEP 5. Writing MongoDB %s-paintomics" % args.code)
     write_mongo(args.code, dbname_docs, xref_docs, kegg_docs,
-                mongo_host, mongo_port)
+                mongo_host, mongo_port, map_rule(args.scope_organism, args.min_kos))
 
     log("STEP 6. Writing species files")
     g2p_path, g2p_lines = write_gene2pathway(kegg_data_dir, args.code, kegg_docs)
     log("  %s (%d lines)" % (g2p_path, g2p_lines))
-    register_in_organisms_list(kegg_data_dir, args.code, args.name, args.lineage)
+    n_kgml = write_species_graph(kegg_data_dir, args.code, kegg_docs, kgml, ko_names, annotated_kos)
+    log("  %d KGML maps, pathways.list and mapping/kegg2genesymbol.list" % n_kgml)
+    register_in_organisms_list(kegg_data_dir, args.code, args.name, lineage)
     fetched = ensure_diagrams(kegg_data_dir, cache, kegg_docs, args.code)
     if fetched:
         log("  fetched %d missing diagrams: %s" % (len(fetched), ", ".join(fetched)))
@@ -808,6 +1185,84 @@ def main():
         raise SystemExit(1)
     log("SUCCESS: %s installed. New jobs can use it immediately; the organism "
         "dropdown reads species.json per page load." % args.code)
+
+
+def species_taxon(lineage, kegg_data_dir, scope_organism):
+    """taxon_of the species' own lineage, else of the scope organism's KEGG
+    lineage (organisms_all.list), logged with where it came from."""
+    taxon = taxon_of(lineage)
+    source = "lineage %s" % lineage
+    if taxon is None and scope_organism:
+        scope_lineage = lineage_of(kegg_data_dir, scope_organism)
+        taxon = taxon_of(scope_lineage)
+        source = "%s's KEGG lineage %s" % (scope_organism, scope_lineage)
+    log("  taxon: %s (from %s)" % (taxon or "not recognised", source))
+    return taxon
+
+
+def rebuild_maps(args, kegg_data_dir, mongo_host, mongo_port, cache, cache_dir):
+    """--rebuild-maps: the map rule and the KGML for a species installed
+    earlier, from the KOs its database holds. Writes the pathway documents, the
+    KEGG version date and the species files; the identifier graph, the MAPPING
+    version, organisms_*.list and species.json are left as they are."""
+    custom_codes = set()
+    custom_list = os.path.join(kegg_data_dir, "current", "common", "organisms_custom.list")
+    if os.path.isfile(custom_list):
+        with open(custom_list, encoding="utf-8", errors="replace") as fh:
+            custom_codes = {line.split("\t")[1] for line in fh if line.count("\t") >= 1}
+    if args.code not in custom_codes:
+        # A KEGG-built species keeps its own KGML and gene ids; rebuilding it
+        # from reference KO maps would replace both.
+        raise SystemExit("%s is not in organisms_custom.list, so this tool did not install it; "
+                         "--rebuild-maps only rebuilds species it installed." % args.code)
+    registered = lineage_of(kegg_data_dir, args.code)  # its organisms_custom.list row
+
+    log("STEP 1. Reading the KOs %s-paintomics holds" % args.code)
+    annotated_kos = installed_kos(args.code, mongo_host, mongo_port)
+    if not annotated_kos:
+        raise SystemExit("%s-paintomics holds no KO identifiers — nothing to rebuild." % args.code)
+    log("  %d distinct KOs" % len(annotated_kos))
+
+    scope = args.scope_organism or recorded_scope(args.code, mongo_host, mongo_port)
+    if not scope:
+        # Without one every map outside the excluded classes is on offer, and
+        # the species would gain maps its install never had.
+        raise SystemExit("Pass --scope-organism, the KEGG code %s was installed with: its "
+                         "database does not record one." % args.code)
+
+    log("STEP 2. Loading KEGG reference tables (cache: %s)" % cache_dir)
+    taxon = species_taxon(args.lineage or registered, kegg_data_dir, scope)
+    kegg_docs, kgml, ko_names = plan_maps(args.code, cache, annotated_kos, scope,
+                                          taxon, args.min_kos)
+    if not kegg_docs:
+        raise SystemExit("Refusing to leave %s with no pathway." % args.code)
+    if args.dry_run:
+        log("DRY RUN — nothing written.")
+        return
+
+    check_species_dir_writable(kegg_data_dir, args.code)
+    log("STEP 4. Writing the pathway documents of %s-paintomics" % args.code)
+    write_pathways(args.code, kegg_docs, mongo_host, mongo_port, map_rule(scope, args.min_kos))
+
+    log("STEP 5. Writing species files")
+    g2p_path, g2p_lines = write_gene2pathway(kegg_data_dir, args.code, kegg_docs)
+    log("  %s (%d lines)" % (g2p_path, g2p_lines))
+    n_kgml = write_species_graph(kegg_data_dir, args.code, kegg_docs, kgml, ko_names, annotated_kos)
+    log("  %d KGML maps, pathways.list and mapping/kegg2genesymbol.list" % n_kgml)
+    fetched = ensure_diagrams(kegg_data_dir, cache, kegg_docs, args.code)
+    if fetched:
+        log("  fetched %d missing diagrams: %s" % (len(fetched), ", ".join(fetched)))
+
+    log("STEP 6. Verifying against the runtime contract")
+    sample = sorted({g["id"] for doc in kegg_docs for g in doc["genes"]})[:5]
+    problems = verify(args.code, kegg_data_dir, mongo_host, mongo_port, sample)
+    if problems:
+        for p in problems:
+            log("PROBLEM: " + p)
+        raise SystemExit(1)
+    log("SUCCESS: %s rebuilt: %d pathways, each with its KGML. Restart the server: until then a "
+        "running process keeps the old pathway list in memory, and new jobs still list the maps "
+        "dropped here." % (args.code, len(kegg_docs)))
 
 
 if __name__ == "__main__":

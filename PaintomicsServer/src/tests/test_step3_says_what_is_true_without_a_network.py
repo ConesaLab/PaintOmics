@@ -29,6 +29,10 @@ One wait is left as it was. A 200 whose body generateNetwork cannot read throws
 inside the success callback, no failure handler runs, and the card goes on saying
 "Building network...". No installer writes such a file.
 
+The AI panel said the same refusal with a red "!" on a collapsed launcher, the look
+of a failed job, and kept the sentence behind a click. It now opens by itself on
+that sentence and nothing else, in no red. A real failure keeps its "!" and Retry.
+
 The real view and the real handler run under node against a stand-in for the
 page: no DOM library, which this repository does not have.
 
@@ -50,6 +54,8 @@ JOB_CONTROLLER = os.path.join(CLIENT_ROOT, "app", "controller", "JobController.j
 VIEWS = os.path.join(CLIENT_ROOT, "app", "view", "PathwayAcquisitionViews")
 STEP3_VIEWS = os.path.join(VIEWS, "PA_Step3Views.js")
 STEP4_WALK = os.path.join(VIEWS, "PA_Step4WalkView.js")
+AI_PANEL = os.path.join(VIEWS, "PA_AIInterpretView.js")
+AI_PANEL_CSS = os.path.join(CLIENT_ROOT, "resources", "css", "ai-interpret.css")
 
 HANDLER = "this.step3GetPathwaysNetworkDataHandler = function (jobView)"
 DATABASES = ("KEGG", "Reactome", "MapMan", "OmniPath")
@@ -309,6 +315,82 @@ const classes = [];
 console.log(JSON.stringify({text: root.textContent, classes: classes, scheduled: scheduled.length}));
 """
 
+# PA_AIInterpretView against one stand-in element per selector it asks for.
+PANEL_HARNESS = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function El() {
+    this.classes = new Set(); this.attrs = {}; this.props = {}; this.styles = {}; this.content = ""; this.shown = true;
+    this.children = {}; this.length = 1;
+}
+const chain = {
+    show() { this.shown = true; return this; }, hide() { this.shown = false; return this; },
+    fadeIn() { return this; }, on() { return this; }, off() { return this; }, last() { return this; },
+    empty() { this.content = ""; return this; }, appendTo() { return this; },
+    // Markup appended after .text() (the error branch's Retry button) joins the content.
+    append(value) { if (typeof value === "string") { this.content += value; } return this; },
+    addClass(names) { names.split(" ").forEach((n) => this.classes.add(n)); return this; },
+    removeClass(names) { names.split(" ").forEach((n) => this.classes.delete(n)); return this; },
+    css(name, value) { this.styles[name] = value; return this; },
+    text(value) { this.content = String(value); return this; }, html(value) { this.content = String(value); return this; },
+    attr(name, value) { this.attrs[name] = value; return this; }, prop(name, value) { this.props[name] = value; return this; },
+    find(selector) { return this.children[selector] || (this.children[selector] = new El()); },
+};
+Object.assign(El.prototype, chain);
+
+const root = new El();
+const context = vm.createContext({console: console, getAIMark: () => "", setTimeout: () => 0});
+context.$ = (what) => (typeof what === "string" && what.indexOf("<div") === 0 ? root : new El());
+vm.runInContext(fs.readFileSync(__PANEL__, "utf8"), context, {filename: "PA_AIInterpretView.js"});
+
+function panel() {
+    const view = vm.runInContext("new PA_AIInterpretView()", context);
+    root.children = {};
+    view.init("J1");
+    return view;
+}
+function shown(view) {
+    const find = (selector) => view.$root.find(selector);
+    const badge = find(".ai-widget-fab-badge");
+    return {
+        expanded: view.isExpanded, ariaExpanded: find(".ai-widget-fab").attrs["aria-expanded"],
+        panel: Array.from(find(".ai-widget-panel").classes), progress: Array.from(find(".ai-widget-progress").classes),
+        progressShown: find(".ai-widget-progress").shown, detail: find(".ai-progress-detail").content,
+        badgeShown: badge.shown, badge: badge.content, badgeFill: badge.styles.background,
+        launcherTitle: find(".ai-widget-fab").attrs.title,
+    };
+}
+
+const SENTENCE = "This organism has no pathway interaction graph installed.";
+const results = {};
+
+let view = panel();
+view.updateProgress("unavailable", 100, SENTENCE);
+results.noGraph = shown(view);
+view.collapse();
+results.minimised = shown(view);
+view.updateProgress("unavailable", 100, SENTENCE);
+results.askedAgain = shown(view);
+
+view = panel();
+let leftFullScreen = 0;
+view.isFullscreen = true;
+view.toggleFullscreen = function () { leftFullScreen += 1; this.isFullscreen = false; };
+view.updateProgress("unavailable", 100, SENTENCE);
+results.fromFullScreen = {left: leftFullScreen, fullscreen: view.isFullscreen};
+
+view = panel();
+view.updateProgress("error", 100, "The AI service failed before the walk took a step.");
+results.failed = shown(view);
+
+view = panel();
+view.updateProgress("running", 15, "Scanning the graph for seeds");
+results.running = shown(view);
+
+console.log(JSON.stringify(results));
+"""
+
 
 def read(path):
     with open(path, "r", encoding="utf-8") as handle:
@@ -477,6 +559,61 @@ class WalkColumnTest(unittest.TestCase):
 
     def test_it_does_not_ask_again(self):
         self.assertEqual(self.shown["scheduled"], 0, "no later answer differs, so there is nothing to poll for")
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class AIPanelTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.results = run_node(PANEL_HARNESS.replace("__PANEL__", json.dumps(AI_PANEL)))
+
+    def test_no_walk_here_is_a_sentence_on_an_open_panel_not_a_red_mark(self):
+        shown = self.results["noGraph"]
+        self.assertTrue(shown["expanded"], "the reader has to click on the launcher to learn why")
+        self.assertEqual(shown["ariaExpanded"], "true")
+        self.assertIn("is-expanded", shown["panel"])
+        self.assertEqual(shown["detail"], "This organism has no pathway interaction graph installed.")
+        self.assertTrue(shown["progressShown"], "the sentence is not on screen")
+        self.assertFalse(shown["badgeShown"], "the launcher still marks it as a failure")
+        self.assertNotEqual(shown["badge"], "!")
+        self.assertNotIn("is-error", shown["progress"], "the sentence still sits on the error's red")
+
+    def test_the_panel_shows_that_sentence_and_nothing_else(self):
+        self.assertIn("is-note", self.results["noGraph"]["panel"])
+        self.assertIn("is-idle", self.results["noGraph"]["progress"], "a full bar over a walk that never ran")
+        css = read(AI_PANEL_CSS)
+        self.assertRegex(css, r"\.ai-widget-panel\.is-note\s*\{\s*height:\s*auto;")
+        for inside in (".ai-widget-messages", ".ai-widget-input-area", ".ai-fullscreen-btn"):
+            self.assertIn(".ai-widget-panel.is-note %s" % inside, css)
+
+    def test_minimised_it_stays_minimised_and_keeps_the_sentence_on_the_launcher(self):
+        for state in ("minimised", "askedAgain"):
+            with self.subTest(state):
+                shown = self.results[state]
+                self.assertFalse(shown["expanded"], "the panel reopened after the reader closed it")
+                self.assertFalse(shown["badgeShown"])
+                self.assertEqual(shown["launcherTitle"], "This organism has no pathway interaction graph installed.")
+
+    def test_it_leaves_full_screen_where_there_is_nothing_to_read_full_screen(self):
+        self.assertEqual(self.results["fromFullScreen"], {"left": 1, "fullscreen": False})
+
+    def test_a_real_failure_keeps_its_red_mark_and_stays_closed(self):
+        """The control: an error can be retried, and the mark is how it is noticed."""
+        shown = self.results["failed"]
+        self.assertTrue(shown["badgeShown"])
+        self.assertEqual((shown["badge"], shown["badgeFill"]), ("!", "#c62828"))
+        self.assertIn("is-error", shown["progress"])
+        self.assertFalse(shown["expanded"])
+        self.assertNotIn("is-note", shown["panel"])
+        self.assertIn("ai-retry-btn", shown["detail"])
+
+    def test_a_walk_in_progress_is_left_alone(self):
+        shown = self.results["running"]
+        self.assertFalse(shown["expanded"])
+        self.assertFalse(shown["badgeShown"])
+        self.assertEqual(shown["detail"], "Scanning the graph for seeds")
+        self.assertNotIn("is-note", shown["panel"])
 
 
 if __name__ == "__main__":
