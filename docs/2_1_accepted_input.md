@@ -549,7 +549,15 @@ so the point of the tool is to discriminate:
   the correlation between the two profiles — Kendall by default, Spearman or
   Pearson on request — and filtered on it. A miRNA usually represses its target,
   so the default selection keeps pairs whose correlation is more negative than
-  -0.5.
+  -0.5. The selection can also keep correlations above the cutoff (positive) or
+  whose size is above it, whatever their sign (absolute).
+
+The form used to offer a fourth selection, "by max. fold-change of feature
+expression". It computed no fold change: it kept a pair when its correlation was
+above the cutoff, which is the positive selection. A request that still sends it
+(`fc`) is run that way, its results name it `positive_correlation`, and the
+answer's `notice` field and the first line of `genesToMiRNAFile.tab` in the
+results archive say so. Any other selection method is refused.
 
 A correlation needs at least two conditions. With a single column every pair is a
 tie and nothing can be scored; the tool says so rather than returning an empty

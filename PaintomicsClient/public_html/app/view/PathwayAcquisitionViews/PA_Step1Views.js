@@ -4234,19 +4234,22 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['label', 'value'],
 								data: [
-									// ["Fold Change of miRNA expression", "fc"],
 									["Correlation with gene expression (Spearman)", "spearman"],
 									["Correlation with gene expression (Kendall)", "kendall"],
 									["Correlation with gene expression (Pearson)", "pearson"]
 								]
 							}),
+							// It said each miRNA "that has a lower correlation value than a given
+							// threadhold" is filtered out: pairs are what is kept or dropped, and
+							// under the default negative selection it is the higher correlations
+							// that are dropped.
 							helpTip:
-							"As en example in miRNA, usually a single miRNA has multiple potential target genes, but not all targets are being " +
-							"regulated by a certain miRNA at certain moment. Consequently, we need to discriminate the real targets for a miRNA."+
-							"If Gene expression (GE) data is available, then we calculate the correlation between each miRNA " +
-							"and each target gene and filter out all those miRNAs that has a lower correlation value than a given threadhold." +
-							"Without GE no score can be computed, so provide a relevant associations file instead. " +
-							"Default: 'Kendall correlation'."
+							"A miRNA usually has many predicted target genes, and only some of them are regulated by it. " +
+							"Each miRNA-target pair is scored by the correlation between the miRNA's values and the target gene's " +
+							"values across the conditions, by Spearman, Kendall or Pearson. The selection method and cutoff below " +
+							"then decide which pairs are kept as relevant. " +
+							"Without gene expression no score can be computed, so provide a relevant associations file instead. " +
+							"Default: Kendall."
 						},
 						{
 							xtype: 'combo',
@@ -4260,18 +4263,24 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							valueField: 'value',
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['label', 'value'],
+								/* "by max. fold-change of feature expression" (value "fc") is
+								   gone: it computed no fold change and selected exactly as
+								   positive correlation does. The server still runs a request
+								   that sends it, as positive correlation, and says so; see
+								   RETIRED_SELECTION_METHODS in MiRNA2GeneJob.py. */
 								data: [
-									["by max. fold-change of feature expression", "fc"],
 									["by absolute correlation with gene expression", "abs_correlation"],
 									["by positive correlation with gene expression", "positive_correlation"],
 									["by negative correlation with gene expression", "negative_correlation"]
 								]
 							}),
 							helpTip:
-							"Determines how we select the potential features that are regulating a certain gene. " +
-							"For instance, usually miRNA act as inhibitors of gene expression so we should expect an opposite behavior " +
-							"to the regulated gene. A negative correlation will fit better to this expected profile. " +
-							"Default: select and order by 'negative correlation'.",
+							"Which correlation between a miRNA and its target gene marks the pair as relevant. " +
+							"Negative: the correlation must be below the cutoff. A miRNA usually represses its target, so when one " +
+							"goes up the other goes down and their correlation is negative. " +
+							"Positive: above the cutoff. Absolute: its size, whatever its sign, above the cutoff. " +
+							"In the results, each gene's miRNAs are listed from the strongest in this direction. " +
+							"Default: negative correlation.",
 							listeners:{
 								// Restores the helpTip's (?): see mapToSelector above.
 								boxready: Ext.form.field.Base.prototype.listeners.boxready,
@@ -4297,13 +4306,13 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							allowDecimals: true,
 							allowBlank: false,
 							// Deliberately not "features below the cutoff are removed".
-							// MiRNA2GeneJob inverts both the cutoff and the score when the
-							// selection method is negative correlation (lines 385-386 and
-							// 429), so at the -0.5 default an association is kept when its
-							// correlation is *more negative* than -0.5. Stating a numeric
-							// direction here gets it backwards for the default method; the
-							// direction belongs to the method, so that is what is named.
-							helpTip: "Threshold for the correlation or fold change, applied in the direction of the selection method above. At the default -0.5 with negative correlation, an association is kept when its correlation is more negative than -0.5."
+							// MiRNA2GeneJob.fromMiRNA2Genes inverts both the cutoff and the
+							// score when the selection method is negative correlation, so at
+							// the -0.5 default an association is kept when its correlation is
+							// *more negative* than -0.5. The direction belongs to the method,
+							// so each method's is named. It also said "or fold change", which
+							// nothing computes.
+							helpTip: "Threshold for the correlation, applied in the direction of the selection method above. With negative correlation a pair is kept when its correlation is below the cutoff, so at the default -0.5 it must be more negative than -0.5. With positive correlation it must be above the cutoff, and with absolute correlation its size must be above the cutoff."
 						}
 					]
 				}
