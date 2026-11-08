@@ -403,6 +403,133 @@ def _lostWorkersMessage(lostWorkers, totalWorkers, untested):
             % (lostWorkers, totalWorkers, what))
 
 
+def isGlobalMap(pathwayID, organism):
+    """Whether ``pathwayID`` is KEGG's global map, Metabolic pathways, of the
+    job's organism: the organism code followed by 01100 (mmu01100, dosa01100).
+
+    The same rule as paStep3IsGlobalMap in PA_Step3Views.js, which is what
+    keeps the map out of the Step 3 table, the network and the counts; the two
+    must agree, and test_adjusted_pvalues_stay_put checks that they do.
+    Another organism's map (hsa01100 in a mouse job) is an ordinary pathway.
+    """
+    return bool(organism) and pathwayID == organism + "01100"
+
+
+def _adjustFamily(pathways):
+    """Corrects the p-values of ``pathways`` ({pathwayID: Pathway}) as one
+    family per omic and one per combined method and condition, and stores the
+    adjusted values on each pathway. Raw p-values are read, never written.
+
+    The omic family takes the omic's global p-value where the job has one,
+    else its first condition's: the value the table's omic column shows.
+    """
+    pvalues_list = defaultdict(dict)
+    combined_pvalues_list = defaultdict(dict)
+
+    for pathway_id, pathway in pathways.items():
+        for omic, pvalue in pathway.getSignificanceValues().items():
+            # Multi-condition support: use global p-value if available, else first condition
+            globalP = pathway.getGlobalOmicPvalues().get(omic)
+            if globalP is not None:
+                pvalues_list[omic][pathway_id] = globalP
+            elif len(pvalue) > 0:
+                pvalues_list[omic][pathway_id] = pvalue[0][2]
+            else:
+                pvalues_list[omic][pathway_id] = 1.0
+
+        for method, combined_pvalue in pathway.getCombinedSignificancePvalues().items():
+            if not isinstance(combined_pvalue, list):
+                combined_pvalue = [combined_pvalue]
+            nCond = len(combined_pvalue)
+            for c in range(nCond):
+                combined_pvalues_list[method + "_c" + str(c)][pathway_id] = combined_pvalue[c]
+
+    adjusted_pvalues = {omic: adjustPvalues(omicPvalues) for omic, omicPvalues in pvalues_list.items()}
+
+    adjusted_combined_pvalues = {}
+    for method_cond, methodPvalues in combined_pvalues_list.items():
+        adjusted_combined_pvalues[method_cond] = adjustPvalues(methodPvalues)
+
+    # Set the adjusted p-value on a pathway basis
+    for pathway_id, pathway in pathways.items():
+        # Update omic adjusted p-values (using global/first condition as before)
+        for omic, pvalue in pathway.getSignificanceValues().items():
+            pathway.setOmicAdjustedSignificanceValues(omic,
+                                                      {adjust_method: pvalues[pathway_id] for adjust_method, pvalues
+                                                       in adjusted_pvalues[omic].items()})
+
+        # Update combined adjusted p-values per condition.
+        # Storage shape: pathway.adjustedCombinedSignificanceValues[method][adjMethod]
+        #   - scalar (single-condition jobs) — preserved for back-compat with old jobs.
+        #   - list[float] (multi-condition jobs) — one entry per condition, ordered by
+        #     condition index. Frontend (PA_Step3Views.js, the table's row builder)
+        #     accepts both shapes and emits per-condition keys when a list is detected.
+        for method, combined_pvalue in pathway.getCombinedSignificancePvalues().items():
+            if not isinstance(combined_pvalue, list):
+                combined_pvalue = [combined_pvalue]
+            nCond = len(combined_pvalue)
+
+            first_cond_key = method + "_c0"
+            if first_cond_key not in adjusted_combined_pvalues:
+                continue
+            adj_methods = adjusted_combined_pvalues[first_cond_key].keys()
+            if nCond == 1:
+                # Single-condition: keep scalars (back-compat).
+                pathway.setMethodAdjustedCombinedSignificanceValues(method, {
+                    adj: adjusted_combined_pvalues[first_cond_key][adj][pathway_id]
+                    for adj in adj_methods
+                })
+            else:
+                # Multi-condition: per-condition list, padded with 1.0 if a condition
+                # had no entry in adjusted_combined_pvalues.
+                pathway.setMethodAdjustedCombinedSignificanceValues(method, {
+                    adj: [
+                        adjusted_combined_pvalues.get(method + "_c" + str(c), {})
+                                                .get(adj, {})
+                                                .get(pathway_id, 1.0)
+                        for c in range(nCond)
+                    ]
+                    for adj in adj_methods
+                })
+
+
+def adjustPathwayPvalues(matchedPathways, organism):
+    """Sets the adjusted p-values (FDR BH, FDR BY) of every matched pathway.
+
+    The family is the pathways the Step 3 table lists: every matched pathway
+    of every database except KEGG's global map (isGlobalMap). The table never
+    shows the map, and when a category filter hides rows the browser asks
+    /pa_adjust_pvalues to correct the rows the table still shows, so the map
+    was never in that family either. With the map in this one, a job's FDR
+    columns moved as soon as anything was filtered, even when the only thing
+    hidden was the map, which no row shows. Now filtering nothing changes
+    nothing, and a filter corrects over the visible rows by the same rule:
+    every database in one family, here and in that route
+    (_adjustAcrossDatabases in PathwayAcquisitionServlet.py).
+
+    One column is outside that rule: the adjusted combined column of a job
+    with more than one condition. The value stored here corrects each
+    condition's combined p-value and the table shows the first condition's,
+    while the raw combined column beside it, which is what a filter sends
+    back, combines each omic's Global p-value (4_1_pathway_enrichment.md,
+    "Reading the table"). A filter therefore changes what that column
+    corrects.
+
+    The map is still given adjusted values, corrected as a family of its own
+    (for one test, BH and BY both equal the raw p-value), so that every pathway
+    carries the same keys: the browser reads the list of FDR methods off the
+    first pathway it holds (getMultiplePvaluesMethods), which can be the map.
+    Nothing shows the map's adjusted value.
+    """
+    listed = {pathwayID: pathway for pathwayID, pathway in matchedPathways.items()
+              if not isGlobalMap(pathwayID, organism)}
+    outside = {pathwayID: pathway for pathwayID, pathway in matchedPathways.items()
+               if isGlobalMap(pathwayID, organism)}
+    for family in (listed, outside):
+        if family:
+            _adjustFamily(family)
+
+
 class PathwayAcquisitionJob(Job):
     # ******************************************************************************************************************
     # CONSTRUCTORS
@@ -1831,74 +1958,8 @@ class PathwayAcquisitionJob(Job):
         # matched pathway; release it now instead of when the GC gets round to it.
         manager.shutdown()
 
-        pvalues_list = defaultdict(dict)
-        combined_pvalues_list = defaultdict(dict)
-
-        for pathway_id, pathway in self.getMatchedPathways().items():
-            for omic, pvalue in pathway.getSignificanceValues().items():
-                # Multi-condition support: use global p-value if available, else first condition
-                globalP = pathway.getGlobalOmicPvalues().get(omic)
-                if globalP is not None:
-                    pvalues_list[omic][pathway_id] = globalP
-                elif len(pvalue) > 0:
-                    pvalues_list[omic][pathway_id] = pvalue[0][2]
-                else:
-                    pvalues_list[omic][pathway_id] = 1.0
-
-            for method, combined_pvalue in pathway.getCombinedSignificancePvalues().items():
-                if not isinstance(combined_pvalue, list):
-                    combined_pvalue = [combined_pvalue]
-                nCond = len(combined_pvalue)
-                for c in range(nCond):
-                    combined_pvalues_list[method + "_c" + str(c)][pathway_id] = combined_pvalue[c]
-
-        adjusted_pvalues = {omic: adjustPvalues(omicPvalues) for omic, omicPvalues in pvalues_list.items()}
-        
-        adjusted_combined_pvalues = {}
-        for method_cond, methodPvalues in combined_pvalues_list.items():
-            adjusted_combined_pvalues[method_cond] = adjustPvalues(methodPvalues)
-
-        # Set the adjusted p-value on a pathway basis
-        for pathway_id, pathway in self.getMatchedPathways().items():
-            # Update omic adjusted p-values (using global/first condition as before)
-            for omic, pvalue in pathway.getSignificanceValues().items():
-                pathway.setOmicAdjustedSignificanceValues(omic,
-                                                          {adjust_method: pvalues[pathway_id] for adjust_method, pvalues
-                                                           in adjusted_pvalues[omic].items()})
-
-            # Update combined adjusted p-values per condition.
-            # Storage shape: pathway.adjustedCombinedSignificanceValues[method][adjMethod]
-            #   - scalar (single-condition jobs) — preserved for back-compat with old jobs.
-            #   - list[float] (multi-condition jobs) — one entry per condition, ordered by
-            #     condition index. Frontend (PA_Step3Views.js:3515-3520) accepts both shapes
-            #     and emits per-condition keys when a list is detected.
-            for method, combined_pvalue in pathway.getCombinedSignificancePvalues().items():
-                if not isinstance(combined_pvalue, list):
-                    combined_pvalue = [combined_pvalue]
-                nCond = len(combined_pvalue)
-
-                first_cond_key = method + "_c0"
-                if first_cond_key not in adjusted_combined_pvalues:
-                    continue
-                adj_methods = adjusted_combined_pvalues[first_cond_key].keys()
-                if nCond == 1:
-                    # Single-condition: keep scalars (back-compat).
-                    pathway.setMethodAdjustedCombinedSignificanceValues(method, {
-                        adj: adjusted_combined_pvalues[first_cond_key][adj][pathway_id]
-                        for adj in adj_methods
-                    })
-                else:
-                    # Multi-condition: per-condition list, padded with 1.0 if a condition
-                    # had no entry in adjusted_combined_pvalues.
-                    pathway.setMethodAdjustedCombinedSignificanceValues(method, {
-                        adj: [
-                            adjusted_combined_pvalues.get(method + "_c" + str(c), {})
-                                                    .get(adj, {})
-                                                    .get(pathway_id, 1.0)
-                            for c in range(nCond)
-                        ]
-                        for adj in adj_methods
-                    })
+        # Over the pathways the Step 3 table lists, the global map left out.
+        adjustPathwayPvalues(self.getMatchedPathways(), self.getOrganism())
 
         _markStage("pvalue_adjustment")
 

@@ -219,16 +219,20 @@ adjusted column beside each omic column and beside the combined column.
   always the more conservative of the two.
 
 The correction is applied per omic, and separately per combined method. When
-the job is first computed, each family covers every matched pathway of every
-database at once.
+the job is first computed, each family covers every matched pathway the table
+lists, of every database at once. KEGG's global map, Metabolic pathways
+(01100), is not in it, because the table does not list it; hiding only that
+map on the classification filter therefore changes no FDR value. Jobs computed
+before the November 2026 update counted the map as one more test, and keep the
+values they were stored with until a filter recomputes them.
 
 !!! warning "An FDR value is not a property of a pathway"
     It depends on how many tests are in the family. Hide a category on the
     [classification filter](4_2_kegg_categories.md) and PaintOmics asks the
-    server for a fresh correction over only the pathways that remain, database
-    by database — so the same pathway's FDR column will read differently
-    before and after you filter. Quote an FDR value together with the filter
-    that was in force when you read it.
+    server for a fresh correction over only the pathways that remain, every
+    database together, as when the job was computed — so the same pathway's
+    FDR column will read differently before and after you filter. Quote an FDR
+    value together with the filter that was in force when you read it.
 
 !!! note "Re-pick the FDR method after reopening a job"
     Your choice is remembered with the job, but the adjusted *combined*
@@ -248,7 +252,7 @@ database at once.
 | One column per omic | That omic's p-value (its **Global** value where the job has per-condition relevance). Expandable to per-condition sub-columns. |
 | *omic* **(FDR BH)** / **(FDR BY)** | The adjusted value for that omic, shown when **Show FDR** is set. |
 | **Combined pValue (Fisher)** or **(Stouffer)** | The selected combination across your omics. Present on one-omic jobs as well, where it repeats that omic's p-value. |
-| **Combined pValue (…) [FDR …]** | The adjusted combined value. The method is in round brackets, the correction in square brackets. On a **multi-condition** job this is not the correction of the raw column beside it: the raw column shows the combination of each omic's *Global* p-value, while the adjusted column corrects the per-condition combined values. Compare it with the per-condition sub-columns, not with the raw combined figure. |
+| **Combined pValue (…) [FDR …]** | The adjusted combined value. The method is in round brackets, the correction in square brackets. On a **multi-condition** job this is not the correction of the raw column beside it: the raw column shows the combination of each omic's *Global* p-value, while the adjusted column corrects the per-condition combined values. Compare it with the per-condition sub-columns, not with the raw combined figure. A category filter recomputes it from the raw combined column, so on these jobs it changes meaning when you filter. |
 | **Reactome Class pValue (…)** | Only on jobs including Reactome — see below. |
 | **External links** | Two actions: open this pathway in its own source database, and search PubMed for its name. OmniPath is the exception — its pathway ids are minted by the PaintOmics installer, so the link opens that pathway's source resource instead. |
 
@@ -274,7 +278,8 @@ out of the table deliberately. It is a drawing of most of metabolism at once,
 so it is enriched in almost every metabolomics job and tells you nothing. The
 pathway network does not draw it either, and the **Pathways found** and
 **Significant** counts above the table do not count it, so **Pathways found**
-counts the pathways the table lists.
+counts the pathways the table lists. The FDR correction leaves it out too (see
+[FDR correction](#fdr-correction)).
 
 On a job with more than five omics, and in mobile layout, the per-omic columns
 start hidden so that the pathway name and the combined value stay readable.

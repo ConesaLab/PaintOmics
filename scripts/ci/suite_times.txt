@@ -315,3 +315,8 @@ test_custom_species_walk_and_map_rule	1.2
 # 42521430399 (shard 1/2), where it ran the real R script. Without it 27 suites
 # were unrecorded, and test_shard_split_is_balanced allows fewer than 27.
 test_omic_name_with_percent	13.4
+# Added with fix/adjusted-p-values-stay-put (2026-11-08), charged like
+# test_concurrent_jobs_keep_finished_workers, which also runs the real Step 2
+# with forked workers on an organism held in the cache: on the VM, in the same
+# parallel run, the new suite took 89.9 s against that suite's 81.4 s.
+test_adjusted_pvalues_stay_put	5.0
