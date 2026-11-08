@@ -323,11 +323,12 @@ def isClusterThumbnail(fileName, omicName, database):
     return re.fullmatch(r"[0-9]+", fileName[len(prefix):-len(suffix)]) is not None
 
 
-def replaceMetagenePictures(outputDir, temporalDir, regenerated, jobDatabases):
+def replaceMetagenePictures(outputDir, temporalDir, regenerated, elbowsOf=()):
     """
     Move the pictures generateMetaGenes.R drew into `temporalDir` to the job's
     `outputDir`, after removing from it the old pictures of the (omic,
-    database) pairs in `regenerated`, and no other file.
+    database) pairs in `regenerated` and the elbow plots of the omics in
+    `elbowsOf`, and no other file.
 
     This used to remove every *.png in the output folder first. The Step 3
     slider recomputes ONE omic over ONE database, so moving it for one omic
@@ -341,18 +342,15 @@ def replaceMetagenePictures(outputDir, temporalDir, regenerated, jobDatabases):
     ef2a2237, 2022). A Step 2 run regenerates every pair whose script finished,
     so it still clears all of them, e.g. after "Go back" and a new Step 2.
 
-    The elbow plot, "<omic>_elbow.png", has no database in its name: it goes
-    only when the call regenerated that omic for every database of the job
-    (a Step 2 run), and a newly drawn one replaces it either way. Nothing shows
-    it today.
+    The elbow plot, "<omic>_elbow.png", has no database in its name, and the
+    caller decides whose goes (`elbowsOf`, see generateMetagenesList: only a
+    Step 2 run removes one, never the slider). Nothing shows it today.
 
     A pair whose script stopped on data too small to cluster is not in
     `regenerated`: its pathways keep the metagenes they had, so its thumbnails
     stay with them.
     """
-    regeneratedOmics = {omicName for omicName, _ in regenerated}
-    oldElbows = {omicName + "_elbow.png" for omicName in regeneratedOmics
-                 if all((omicName, dbname) in regenerated for dbname in jobDatabases)}
+    oldElbows = {omicName + "_elbow.png" for omicName in elbowsOf}
     try:
         present = os.listdir(outputDir)
     except OSError:
@@ -2794,8 +2792,18 @@ class PathwayAcquisitionJob(Job):
         # The metagene thumbnails move from the temporal dir into the output
         # dir, replacing last time's for the pairs recomputed here and only
         # those: the Step 3 slider recomputes one omic over one database.
+        # The elbow plot "<omic>_elbow.png" names no database. A Step 2 run (no
+        # omic or database picked) removes it for each omic it recomputed. The
+        # slider never removes one, even in a job with a single database, where
+        # its one database is all of them: it always passes a cluster count,
+        # and with a count the script draws no elbow plot, so a removed one
+        # would not come back.
+        if omicList or database:
+            elbowsOf = set()
+        else:
+            elbowsOf = {omicName for omicName, _ in regenerated}
         replaceMetagenePictures(self.getOutputDir(), self.getTemporalDir(),
-                                regenerated, self.getDatabases())
+                                regenerated, elbowsOf)
         return self
 
     # JSON <-> BSON FUNCTIONS ------------------------------------------------------------------------------------------------------

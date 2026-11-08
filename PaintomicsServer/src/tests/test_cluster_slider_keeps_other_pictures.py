@@ -35,8 +35,9 @@ What this file pins
   R needed) to pin the naming rules: omics named "RNA [1]" and "RNA 1" (as a
   glob, the first name matches the second's files), "A" and "A_cluster_1"; a
   database whose script stopped on data too small to cluster keeps its
-  pictures; the elbow plot, which has no database in its name, goes only when
-  the call recomputes the omic for every database of the job.
+  pictures; the elbow plot, which has no database in its name, goes only with
+  a Step 2 run that recomputes the omic, never with the slider, even in a job
+  with a single database.
 * IsClusterThumbnailTest checks the name rule on its own.
 
 On master 11 of the 12 tests fail; the check that Step 2 draws every
@@ -385,21 +386,27 @@ class FakeScriptTest(unittest.TestCase):
         self.assertIn("A_elbow.png", run.pictures())
         run.slider("A", "KEGG", 2)
         run.slider("A", "Reactome", 2)
-        self.assertIn("A_elbow.png", run.pictures(), "a slider recomputes one database, not the omic")
+        self.assertIn("A_elbow.png", run.pictures(), "the slider never removes the elbow plot")
         run.metagenes({"A": "3"})
         pictures = run.pictures()
         self.assertNotIn("A_elbow.png", pictures, "Step 2 with a count for A draws no elbow plot")
         self.assertIn("B_elbow.png", pictures, "Step 2 left B's count to the script, which drew a new one")
 
     def test_a_job_with_one_database(self):
-        """The slider then recomputes the omic for every database the job has."""
+        """The slider then recomputes the omic for every database the job has,
+        and still keeps its elbow plot: with a cluster count the script draws
+        none, so a removed one would not come back. Step 2 still removes it."""
         run, _ = self.make(["A", "B"], databases=("KEGG",))
         run.metagenes({})
         run.export()
+        before = run.pictures()
         run.slider("A", "KEGG", 2)
-        pictures = set(run.pictures())
-        self.assertEqual(pictures - run.asked_for(), {EXPORT, "B_elbow.png"})
-        self.assertEqual(sorted(run.asked_for() - pictures), [])
+        pictures = run.pictures()
+        self.assertEqual(set(pictures) - run.asked_for(), {EXPORT, "A_elbow.png", "B_elbow.png"})
+        self.assertEqual(pictures["A_elbow.png"], before["A_elbow.png"])
+        self.assertEqual(sorted(run.asked_for() - set(pictures)), [])
+        run.metagenes({"A": "3", "B": "2"})
+        self.assertEqual(sorted(set(run.pictures()) - run.asked_for()), [EXPORT])
 
     def test_step2_again_clears_stale_clusters(self):
         run, _ = self.make(["A", "B"])
