@@ -175,9 +175,11 @@ _PATTERN_TABLE = [
     #   NCBI locus tags                  VIT_00032725001
     #   UniProt gene names, taxon 29760  VitviT2T_000244, Vv19s0014g04930,
     #                                    GSVIVT00014047001, VITISV_008354
-    # vvi's Ensembl build is PN_T2T, so only the first form is in its identifier
-    # index; the others are grape all the same, and describeHint says how many it
-    # found in the index rather than promising a match.
+    # vvi's Ensembl build is PN_T2T, so its identifier index holds the first form
+    # and, where common_resources/identifier_aliases/vvi.tsv.gz has been applied,
+    # the 12X and v4 gene ids and NCBI's locus tags it lists; the others are grape
+    # all the same, and describeHint says how many it found in the index rather
+    # than promising a match.
     (r"Vitis\d{2}g\d{5}(?:\.t\d+(?:\.CDS)?)?|VitviT2T_\d{6}|Vitvi\d{2}g\d{5}(?:_[tP]\d+)?"
      r"|VIT_\d{2}s\d{4}g\d{5}(?:\.t\d+)?|VIT_2\d{2}s\d{4}g\d{5}(?:\.\d+)?|VIT_\d{11}"
      r"|Vv\d{2}s\d{4}g\d{5}|GSVIVT\d{11}|VITISV_\d{6}", ("vvi",), "Vitis vinifera"),
@@ -560,7 +562,7 @@ def describeHint(result):
             # Choosing the organism would get these ids no further on its own.
             # Some have a way in from there: a suffix to remove, which the step 2
             # message on that organism explains (Zm00001d027230_T001). Others have
-            # none: grape's VIT_00s0125g00090, a genome version vvi does not hold.
+            # none: grape's 12X.v2 VIT_201s0011g00010, which no table of vvi lists.
             # Nothing here can tell them apart, so this says what is true of both.
             return ("They look like %s identifiers (%s, but none is in its identifier index). "
                     "Choosing that organism in step 1 may not be enough: PaintOmics may hold "
