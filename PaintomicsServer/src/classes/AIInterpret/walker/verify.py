@@ -31,8 +31,14 @@ BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 # the 42-48 value refusals in each of rounds heat2, heat4 and heat5
 # (2026-10-31) were such a heat. A hyphen after the word never signs the
 # number: NUMBER_RE takes no sign after a letter, so "heat-1.32" quotes 1.32.
-# One fragment for both patterns, so they read the same words.
-_HEAT_WORDS = r"\bheats?(?:\s+scores?)?(?:\s+(?:of|is|was|are|were|at))?\s*[:=≈(\-–−]?\s*"
+# One fragment for both patterns, so they read the same words. Heat as
+# biology is not the score: "heat shock", "heat-stressed", "heat treatment",
+# "heat tolerance", "heat exposure" never are the word (HEAT_WORD), and a heat
+# is never signed, so no heat word binds a signed number (data_values). The
+# round heat7 review found "Ccc rises under heat (+9.99)" quoting no value at
+# all, and "Log2FC of 2.43 heat-shock induction" read as a heat.
+HEAT_WORD = r"\bheats?\b(?![\s\-–]*(?:shock|stress|treat|toleran|expos))"
+_HEAT_WORDS = HEAT_WORD + r"(?:\s+scores?)?(?:\s+(?:of|is|was|are|were|at))?\s*[:=≈(\-–−]?\s*"
 HEAT_BEFORE_RE = re.compile(_HEAT_WORDS + r"$", re.I)
 
 
@@ -47,12 +53,21 @@ def quoted_values(text):
     return [m.group(0) for m in NUMBER_RE.finditer(text) if not _is_bound(text, m.start())]
 
 
+def _may_be_heat(token):
+    """Whether a number can be a heat: unsigned, or a zero. The walker prints
+    a heat of zero as "-0.00" (−log10 of p = 1), 4,751 times in the records
+    of rounds heat6 and heat7, and walkers copy it: "ppid (heat -0.00, r=1)"."""
+    return token[:1] not in "+-−" or not token.lstrip("+-−").strip("0.")
+
+
 def data_values(text):
     """(value, position) for every value a text quotes as data: quoted_values
-    less the numbers written as a heat (HEAT_BEFORE_RE)."""
+    less the numbers written as a heat (HEAT_BEFORE_RE); a signed number other
+    than zero is data whatever comes before it (_may_be_heat)."""
     text = str(text or "")
     return [(m.group(0), m.start()) for m in NUMBER_RE.finditer(text)
-            if not _is_bound(text, m.start()) and not HEAT_BEFORE_RE.search(text[max(0, m.start() - 24):m.start()])]
+            if not _is_bound(text, m.start())
+            and not (_may_be_heat(m.group(0)) and HEAT_BEFORE_RE.search(text[max(0, m.start() - 24):m.start()]))]
 LEG_LIST_RE = re.compile(r"\[(e\d+(?:\s*,\s*e?\d+)*)\]")
 
 
@@ -177,13 +192,14 @@ def _names_re(name):
     return r"(?<![A-Za-z0-9-])(?:[a-z]{2,4}-)?%s(?![A-Za-z0-9])" % re.escape(name)
 
 
-@lru_cache(maxsize=1 << 16)
+@lru_cache(maxsize=8192)
 def _name_pattern(name):
     """_names_re(name) compiled case-insensitive, once per name. A network
     walk's catalog runs to ~950 nodes and several names each, past re's own
     512-pattern cache: on vRmKBo4E60 (round heat4, 2026-10-31) every scripted
     step recompiled every name, 70,228 compiles in one 91-leg walk, and the
-    structure null took 335 s and left the Writers none."""
+    structure null took 335 s and left the Writers none. 8192 names hold such
+    a catalog; the worker process lives long, so the cache stays bounded."""
     return re.compile(_names_re(name), re.I)
 
 
@@ -523,7 +539,8 @@ def _invented_problems(stmt, walker, papers):
         for value in quoted_values(blob):
             size = _norm(value).lstrip("+−")      # a paper's figure, with either sign
             stated.update((size, "+" + size, "−" + size))
-    found = invented_values(text, _record_numbers(walker, read), heats, stated)
+    found = invented_values(text, _record_numbers(walker, read), heats, stated,
+                            measure_labels(walker.overlay), values)
     # A value some read node holds, given to a node whose printed heat it is
     # (heats_given_as_values): any node the walk printed a heat for.
     mentions = _mentions(text, name_catalog(walker, named))
@@ -1045,7 +1062,7 @@ def heat_owners(value, heats):
     return heats.get(_norm(value).lstrip("+−"), [])
 
 
-def invented_values(text, numbers, heats, also=()):
+def invented_values(text, numbers, heats, also=(), labels=None, values=None):
     """(value, position) for every value ``text`` quotes as data (data_values)
     that is in neither ``numbers``, the layers' value tokens, nor ``also``,
     and that reads as a measurement: signed, as a layer prints every reading,
@@ -1065,13 +1082,13 @@ def invented_values(text, numbers, heats, also=()):
     word (heat_phrased)."""
     text = str(text or "")
     out = []
-    values = data_values(text)
+    values = data_values(text) if values is None else values
     for value, at in values:
         if _in_record(value, numbers) or _in_record(value, also):
             continue
         if _norm(value)[:1] in ("+", "−"):
             out.append((value, at))
-        elif heat_owners(value, heats) and heat_misread(text, at, at + len(value), values):
+        elif heat_owners(value, heats) and heat_misread(text, at, at + len(value), values, labels):
             out.append((value, at))
     return out
 
@@ -1102,22 +1119,78 @@ MEASURE_BEFORE_RE = re.compile(
     r"|(?:value|level)s?\s+of)\b", re.I)
 # A heat word right after the number: "the 0.83-heat tier", "same 2.19-heat
 # proteins", "the 0.96 heat".
-HEAT_AFTER_RE = re.compile(r"^[\s\-–]*heats?\b", re.I)
+HEAT_AFTER_RE = re.compile(r"^[\s\-–]*" + HEAT_WORD, re.I)
 
 
-def measured(text, start, end, values):
+# A relevance flag right after a number reads it as a layer's: "Ccc (2.43,
+# relevant)". And a heat word or "hot" between two values ends a measurement
+# list ("Log2FC of 0.10 and 2.43" continues; "... 0.10, the hottest at 2.43"
+# does not).
+RELEVANCE_AFTER_RE = re.compile(r"^\s*[,;]?\s*\(?(?:not\s+)?relevant\b", re.I)
+HEAT_OR_HOT_RE = re.compile(HEAT_WORD + "|" + HOT_RE.pattern, re.I)
+
+
+def measure_labels(overlay):
+    """A pattern for the words a layer prints before its values: every omic
+    name and every column label with a letter in it ("Gene expression",
+    "Proteomics", "Control", "6h"), and c1..c99 when an omic has no labels;
+    None when there are none. Built once and kept on the overlay
+    (``measure_label_re``). Left out: a label without a letter ("0", "2"),
+    which would match the counts and step numbers walkers write, and a
+    one-character label ("A"), which would match the article; c1..c99 stops
+    short of a KEGG compound id ("C00236 3.87")."""
+    cached = getattr(overlay, "measure_label_re", False)
+    if cached is not False:
+        return cached
+    words, unlabeled = set(), False
+    for layers in (getattr(overlay, "layers", None) or {}).values():
+        for layer in layers or ():
+            if isinstance(layer, dict) and layer.get("omic"):
+                words.add(str(layer["omic"]).strip())
+    for omic, labels in (getattr(overlay, "labels", None) or {}).items():
+        words.add(str(omic).strip())
+        unlabeled = unlabeled or not labels
+        words.update(str(label).strip() for label in labels or () if re.search(r"[^\W\d_]", str(label)))
+    parts = [re.escape(w) for w in sorted(words, key=len, reverse=True) if len(w) > 1]
+    if unlabeled:
+        parts.append(r"c\d{1,2}")
+    pattern = re.compile(r"(?<![\w.])(?:%s)(?!\w)" % "|".join(parts), re.I) if parts else None
+    try:
+        overlay.measure_label_re = pattern
+    except AttributeError:                  # an object that takes no attributes: rebuilt each call
+        pass
+    return pattern
+
+
+def measured(text, start, end, values, labels=None):
     """Whether the number at text[start:end] is written as a measurement: a
-    unit right after it (MEASURE_AFTER_RE), or a verb of change or a value
-    label (MEASURE_BEFORE_RE) since the later of its clause's start and the
-    end of the value before it (``values``, data_values)."""
-    if MEASURE_AFTER_RE.match(text[end:]):
+    unit or a relevance flag right after it (MEASURE_AFTER_RE,
+    RELEVANCE_AFTER_RE), or a verb of change, a value label
+    (MEASURE_BEFORE_RE) or one of the layers' own words (``labels``,
+    measure_labels) since the later of its clause's start and the end of
+    the value before it (``values``, data_values); or it continues a list
+    whose value before it, in the clause, is signed or measured, with no heat
+    word between: "Log2FC of 0.10 and 2.43", "(+0.10 at 2h, 2.43 at 6h)".
+    Round heat7's review found "Ccc Gene expression 2.43" and "Ccc (2.43,
+    relevant)" passing as heat references."""
+    if MEASURE_AFTER_RE.match(text[end:]) or RELEVANCE_AFTER_RE.match(text[end:]):
         return True
     opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, start)]
-    since = max([opened[-1] if opened else 0] + [at + len(v) for v, at in values if at + len(v) <= start])
-    return bool(MEASURE_BEFORE_RE.search(text[since:start]))
+    clause = opened[-1] if opened else 0
+    earlier = [(v, at) for v, at in values if clause <= at and at + len(v) <= start]
+    since = max([clause] + [at + len(v) for v, at in earlier])
+    span = text[since:start]
+    if MEASURE_BEFORE_RE.search(span) or (labels is not None and labels.search(span)):
+        return True
+    if earlier:
+        value, at = earlier[-1]
+        if not HEAT_OR_HOT_RE.search(span) and (
+                value[:1] in "+-−" or measured(text, at, at + len(value), values, labels)):
+            return True
+    return False
 
 
-def heat_misread(text, start, end, values):
+def heat_misread(text, start, end, values, labels=None):
     """Whether an unsigned number the size of a heat is quoted as the
     node's value: written as a measurement (measured) and not as a heat
     (heat_phrased). Anything else is a reference to the heat. Round heat6
@@ -1126,7 +1199,7 @@ def heat_misread(text, start, end, values):
     cluster", "(... at 2.56; ... at 2.19)", "same 2.19-heat proteins" were
     refused too. Every true misread of that walk had a measurement word:
     "a relevant Log2FC of 0.58", "Log2FC of 0.83", "Log2FC of 0.99"."""
-    return measured(text, start, end, values) and not heat_phrased(text, start, end)
+    return measured(text, start, end, values, labels) and not heat_phrased(text, start, end)
 
 
 def heat_phrased(text, start, end):
@@ -1168,10 +1241,10 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
     Pkm reads +0.04 with heat 0.52; Ranbp9 holds +0.52, so the value was in
     the walk's record and passed. "Gli1 (+1.77) ... Gli2 (+1.75)" with
     Gli2's heat 1.77 is not one: +1.77 sits after Gli1. Nor is a value after
-    a group of names, "Ranbp9 and Pkm both rise (+0.52, +0.04)": another
-    node named since the clause opened or the last value before the nearest
-    name means the values may go to the names in order, and the nearest name
-    is not the owner. A value ``also`` holds (a cited paper's) is left alone.
+    a list of names, "Ranbp9 and Pkm both rise (+0.52, +0.04)" (name_group):
+    the values may go to the names in order, and the nearest name is not the
+    owner. A name standing alone after another, "From Bbb, Ccc ... +1.50",
+    is no list. A value ``also`` holds (a cited paper's) is left alone.
 
     ``values`` (data_values) and ``mentions`` (_mentions over ``catalog``):
     for a caller that has them."""
@@ -1181,6 +1254,7 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
         return []
     heat_of = {node_id: token for token, nodes in heats.items() for node_id in nodes}
     mentions = _mentions(text, catalog) if mentions is None else mentions
+    labels = measure_labels(overlay)
     out = []
     for value, at in values:
         opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, at)]
@@ -1192,13 +1266,34 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
         if heat_of.get(node_id) != token.lstrip("+−") or _in_record(value, node_tokens(overlay, node_id)) \
                 or _in_record(value, also):
             continue
-        since = max([v_at + len(v) for v, v_at in values if v_at + len(v) <= nearest[0]] + [0])
-        if any(m[2] != node_id for m in before if m[0] >= since):
+        if any(m[2] != node_id for m in name_group(text, before)):
             continue                                   # a name group: "Ranbp9 and Pkm (+0.52, ...)"
-        if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values):
+        if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values, labels):
             continue
         out.append((value, at, node_id))
     return out
+
+
+# Names joined as a list: only separators between them, and at least one
+# "and", "or", "&" or "/". "From Bbb, Ccc ... +1.50" is no list: Ccc stands
+# alone and the value is Ccc's (round heat7 review: counting any earlier name
+# as a group let the Pkm misread through again).
+LIST_GAP_RE = re.compile(r"^(?:\s|,|&|/|\band\b|\bor\b)*$", re.I)
+LIST_JOIN_RE = re.compile(r"&|/|\band\b|\bor\b", re.I)
+
+
+def name_group(text, mentions):
+    """The mentions (from _mentions, left to right) joined to the last one
+    as a list (LIST_GAP_RE, LIST_JOIN_RE), the last one included; the last
+    one alone when they are not a list."""
+    group, joined = [mentions[-1]], False
+    for mention in reversed(mentions[:-1]):
+        gap = text[mention[1]:group[0][0]]
+        if not LIST_GAP_RE.match(gap):
+            break
+        joined = joined or bool(LIST_JOIN_RE.search(gap))
+        group.insert(0, mention)
+    return group if joined else group[-1:]
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789−")

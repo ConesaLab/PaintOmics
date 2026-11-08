@@ -2,6 +2,8 @@
 """The Verifier's rules on hand-built statements and Results text, and the
 planted-module evaluation on the synthetic organism. Offline."""
 import os
+import random
+import re
 import shutil
 import sys
 import unittest
@@ -11,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from src.classes.AIInterpret.walker import card as card_mod      # noqa: E402
 from src.classes.AIInterpret.walker import evaluate               # noqa: E402
 from src.classes.AIInterpret.walker import network as net_mod     # noqa: E402
+from src.classes.AIInterpret.walker import null as null_mod       # noqa: E402
 from src.classes.AIInterpret.walker import overlay as ov_mod      # noqa: E402
 from src.classes.AIInterpret.walker import policies               # noqa: E402
 from src.classes.AIInterpret.walker import verify                 # noqa: E402
@@ -935,6 +938,116 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.assertEqual(self.problems("Aaa and Ccc both move (+1.50, −0.10), Ccc not relevant."), [])
         self.assertEqual(self.problems("Gene expression of Aaa and Ccc (+1.50); Ccc is not relevant."), [])
         self.assertEqual(len(self.problems("Ccc is not relevant and shows +1.50, up like Aaa (+1.50).")), 1)
+
+    def test_a_name_standing_alone_after_another_still_owns_its_heat(self):
+        """F1 (round heat7 review): any node named earlier in the clause made
+        a group, so "From Bbb, Ccc shows +1.50" reached the Writer's check as
+        the Pkm misread of round heat2 and passed. Only names joined as a list
+        ("Aaa/Ccc", "Aaa and Ccc") share the values after them."""
+        self.with_heats({"g:3": 1.50, "g:1": 0.77})
+        for prose in ("From Bbb, Ccc shows +1.50, not relevant.", "Like Aaa, Ccc shows +1.50, not relevant."):
+            found = self.problems(prose)
+            self.assertEqual(len(found), 1, (prose, found))
+            self.assertTrue(found[0].startswith('quotes +1.50 for Ccc ("'), found)
+            self.assertIn("1.50 is Ccc's heat, not a measured value", found[0])
+        for prose in ("Aaa/Ccc at +1.50; Ccc is not relevant.", "Aaa & Ccc (+1.50, −0.10), Ccc not relevant."):
+            self.assertEqual(self.problems(prose), [], prose)
+
+    def test_name_groups_are_names_joined_as_a_list(self):
+        """name_group, on spans as _mentions gives them: the names before a
+        value that share it, when the text between them is only list words."""
+        text = "Bbb rises, Ccc and Ddd fall; M0ZV97/M1B8D5/M1CDE0 at 2.56; Like Aaa, Ccc"
+        spans = [(m.start(), m.end(), m.group(0))
+                 for m in re.finditer(r"\b(?:Aaa|Bbb|Ccc|Ddd|M0ZV97|M1B8D5|M1CDE0)\b", text)]
+        self.assertEqual([m[2] for m in verify.name_group(text, spans[:3])], ["Ccc", "Ddd"])
+        self.assertEqual([m[2] for m in verify.name_group(text, spans[:6])], ["M0ZV97", "M1B8D5", "M1CDE0"])
+        self.assertEqual([m[2] for m in verify.name_group(text, spans)], ["Ccc"])
+        self.assertEqual([m[2] for m in verify.name_group(text, spans[:2])], ["Ccc"])
+
+    def test_a_heat_copied_bare_beside_a_layer_word_objects(self):
+        """F2 (round heat7 review): "Ccc Gene expression 2.43" and "Ccc (2.43,
+        relevant)", Ccc's heat and no layer's value, passed as references to
+        the heat. A layer's own words (an omic name, a column label) or its
+        relevance flag beside the number make it a reading."""
+        for prose in ("Ccc Gene expression 2.43 follows Bbb; Ccc is not relevant.",
+                      "Ccc (2.43, relevant) follows Bbb; Ccc is not relevant."):
+            found = self.problems(prose)
+            self.assertEqual(len(found), 1, (prose, found))
+            self.assertIn("2.43 is Ccc's heat, not a measured value", found[0])
+        for prose in ("Ccc is not relevant; Bbb is the other 2.43 neighbour.",
+                      "Ccc is not relevant; the 2.43 group around Bbb follows."):
+            self.assertEqual(self.problems(prose), [], prose)
+
+    def test_a_heat_continuing_a_measured_list_objects(self):
+        """F3 (round heat7 review): "Ccc has Log2FC of 0.10 and 2.43" and "Ccc
+        rises (+0.10 at 2h, 2.43 at 6h)" passed: a list's later values had no
+        measurement word of their own."""
+        found = self.problems("Ccc has Log2FC of 0.10 and 2.43 here; Ccc is not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("2.43 is Ccc's heat, not a measured value", found[0])
+        heats = {"2.43": ["Ccc"]}
+        for text in ("Ccc has Log2FC of 0.10 and 2.43", "Ccc rises (+0.10 at 2h, 2.43 at 6h)"):
+            self.assertEqual([v for v, _at in verify.invented_values(text, {"+0.10"}, heats)], ["2.43"], text)
+        for text in ("Ccc has Log2FC of 0.10, the hottest at 2.43", "Ccc has Log2FC of 0.10; Bbb heat 2.43",
+                     "sits on the hottest branch (cysC/cysQ at 0.10, cysA/P/U/W at 2.43)"):
+            self.assertEqual(verify.invented_values(text, {"+0.10"}, heats), [], text)
+
+    def test_heat_as_biology_is_not_the_score(self):
+        """F4 (round heat7 review): "under heat (+9.99)" put an invented signed
+        value past every check, and "heat-shock" after a Log2FC made it a
+        heat. A heat is never signed, and heat shock, stress, treatment,
+        tolerance and exposure are biology."""
+        found = self.problems("Ccc rises under heat (+9.99), not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith('quotes +9.99 ("'), found)
+        found = self.problems("Ccc shows Log2FC of 2.43 heat-shock induction; Ccc is not relevant.")
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("2.43 is Ccc's heat", found[0])
+        heats = {"2.43": ["Ccc"]}
+        for text in ("Ccc Log2FC of 2.43 heat-stressed", "Ccc Log2FC of 2.43 after heat treatment",
+                     "Ccc Log2FC of 2.43 heat tolerance", "Ccc Log2FC of 2.43 heat exposure"):
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), heats)], ["2.43"], text)
+        self.assertEqual(verify.data_values("Ccc rises under heat (+9.99)"), [("+9.99", 22)])
+        # but the walker prints a heat of zero as -0.00, and walkers copy it (heat7 replay)
+        for text in ("slc25a4 is the only relevant neighbour of ppid (heat -0.00, r=1) and its +2.55 leads",
+                     "none of its 12 neighbours is relevant (heat −0.00, 0 of 12), +2.55"):
+            self.assertEqual([v for v, _at in verify.data_values(text)], ["+2.55"], text)
+        for text in ("the 2.43 heat of Ccc", "Ccc, heat 2.43", "a heat–2.43 node", "heat – 2.43"):
+            self.assertEqual(verify.invented_values(text, set(), heats), [], text)
+
+    def test_the_layer_words_read_a_measurement_and_nothing_else(self):
+        """measure_labels: the omic names and lettered column labels, c1..c99
+        for an unlabeled omic; never a one-letter label, a bare number, a
+        longer label it is part of, or a KEGG compound id."""
+        labels = verify.measure_labels(self.ov)
+        for word in ("Gene expression", "proteomics", "6h", "miRNA-seq", "c2"):
+            self.assertTrue(labels.search("x %s y" % word), word)
+        for text in ("C00236 3.87", "16h", "step 2", "6hpf"):
+            self.assertIsNone(labels.search(text), text)
+        ov = ov_mod.Overlay()
+        ov.labels = {"Arrays": ["A", "B", "Late"]}
+        lettered = verify.measure_labels(ov)
+        self.assertIsNone(lettered.search("Ccc is a 2.43 node, b"))
+        self.assertTrue(lettered.search("Ccc Late 2.43") and lettered.search("arrays"))
+        self.assertIsNone(verify.measure_labels(ov_mod.Overlay()))
+        # the heat references the heat6 and heat7 rounds kept, with a real overlay's words
+        heats = {"0.96": ["M1D1P2"], "0.99": ["M1C9Y2"], "1.28": ["M1D9Q1"], "2.56": ["M0ZV97"], "2.19": ["M1AJ68"]}
+        for text in ("the 0.99 cluster around M1C9Y2", "M1D1P2 is the other 0.96 neighbour",
+                     "M1D9Q1 is the third 1.28-heat neighbour",
+                     "(M0ZV97/M1B8D5/M1CDE0 at 2.56; M1AJ68/M1ALZ1/M1CGS8 at 2.19)"):
+            self.assertEqual(verify.invented_values(text, set(), heats, labels=labels), [], text)
+
+    def test_a_permuted_overlay_builds_its_own_label_pattern(self):
+        """null.permute_flags makes a shallow copy; sharing the real job's
+        built pattern, the copy would read words its own labels never print."""
+        pattern = verify.measure_labels(self.ov)
+        self.assertIs(verify.measure_labels(self.ov), pattern)               # built once, then kept
+        ov = null_mod.permute_flags(self.walker.network, self.ov, random.Random(3))
+        self.assertIs(ov.measure_label_re, False)
+        ov.labels = dict(self.ov.labels, **{"Gene expression": ["Basal", "Peak", "Late"]})
+        self.assertTrue(verify.measure_labels(ov).search("Ccc Peak 2.43"))
+        self.assertIsNone(pattern.search("Ccc Peak 2.43"))
+        self.assertIs(verify.measure_labels(self.ov), pattern)               # the real one untouched
 
     def test_a_cited_papers_figure_exempts_a_heat_given_to_its_node(self):
         self.with_heats({"g:3": 1.50, "g:1": 0.77})

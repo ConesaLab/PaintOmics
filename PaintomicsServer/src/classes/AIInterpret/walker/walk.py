@@ -90,9 +90,10 @@ class Walker:
     # and both scans). _invented reads values from the first, heats from both.
     layers_shown: set = field(default_factory=set)
     heats_shown: set = field(default_factory=set)
-    # False for a scripted policy (policies.py), whose readings are layer
-    # lines it copied: nothing for _invented to catch, and on a network walk's
-    # catalog the check is what made the structure null take 335 s (heat4).
+    # False while a scripted policy runs (policies._scripted), whose readings
+    # are layer lines it copied: nothing for _invented to catch, and on a
+    # network walk's catalog the check is what made the structure null take
+    # 335 s (heat4). The policy puts it back when it returns.
     guard_values: bool = True
 
     # ------------------------------------------------------------ helpers
@@ -370,7 +371,12 @@ class Walker:
         and the reading stepping onto it wrote "Gene expression on rrm1 shows
         log2FC +2.43 (relevant)": 2.43 was rrm1's heat, its layer reads +0.12,
         not relevant. Two kept statements quoted it on."""
-        if not self.guard_values or not any(verify.data_values(text) for text in texts.values()):
+        if not self.guard_values:
+            return None
+        # each text's values, found once; its name mentions only when needed
+        texts = OrderedDict((name, str(text or "")) for name, text in texts.items())
+        values = {name: verify.data_values(text) for name, text in texts.items()}
+        if not any(values.values()):
             return None
         nodes = self._readable(target)
         # A heat any answer printed, the scans' included, is a number the
@@ -380,8 +386,9 @@ class Walker:
         numbers = verify.node_numbers(self.overlay, nodes)
         # value -> the texts quoting it; ``quoted``: its first place, for the snippet
         found, given, quoted = OrderedDict(), OrderedDict(), {}
+        labels = verify.measure_labels(self.overlay)
         for name, text in texts.items():
-            for value, at in verify.invented_values(text, numbers, heats):
+            for value, at in verify.invented_values(text, numbers, heats, labels=labels, values=values[name]):
                 found.setdefault(value, []).append(name)
                 quoted.setdefault(value, verify.snippet(text, at, at + len(value)))
         # Then, over every text, a value another node holds given to the node
@@ -390,7 +397,11 @@ class Walker:
         unheld = {verify._norm(value) for value in found}
         catalog = verify.name_catalog(self, named)
         for name, text in texts.items():
-            for value, at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay):
+            if not values[name]:
+                continue
+            mentions = verify._mentions(text, catalog)
+            for value, at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay,
+                                                                   values=values[name], mentions=mentions):
                 if verify._norm(value) not in unheld:
                     given.setdefault((value, node_id), []).append(name)
                     quoted.setdefault((value, node_id), verify.snippet(text, at, at + len(value)))

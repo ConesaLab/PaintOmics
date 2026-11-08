@@ -6,7 +6,25 @@ unvisited neighbour, ``steps // seeds`` moves per seed, then the next seed.
 """
 from __future__ import annotations
 
+import functools
 import random
+
+
+def _scripted(policy):
+    """Run a policy with the walker's value guard off (Walker.guard_values),
+    then put the guard back as it was, so a walker used again after a
+    scripted walk keeps its own. A policy's readings are the layer lines it
+    copies; the guard has nothing to catch there, and on a network walk it
+    made the structure null take 335 s (vRmKBo4E60, round heat4)."""
+    @functools.wraps(policy)
+    def run(walker, *args, **kwargs):
+        saved = walker.guard_values
+        walker.guard_values = False
+        try:
+            return policy(walker, *args, **kwargs)
+        finally:
+            walker.guard_values = saved
+    return run
 
 
 def _pick_greedy(rows, exclude=()):
@@ -20,10 +38,7 @@ def _scan_and_plan(walker, seeds, steps, reason):
     """The opening every scripted policy shares: scan the graph, default the
     seeds to every candidate (up to max_seeds) and the steps to five per seed
     within the ceiling, stop when there is nothing to seed, else plan.
-    Returns (seeds, steps), or None when the walk stopped. A policy's
-    readings are layer lines, so the walker's value guard is off
-    (Walker.guard_values)."""
-    walker.guard_values = False
+    Returns (seeds, steps), or None when the walk stopped."""
     walker.scan("graph")
     candidates = [r["id"] for r in walker.ranked if r["candidate"]]
     seeds = list(seeds or candidates[:walker.params["max_seeds"]])
@@ -35,6 +50,7 @@ def _scan_and_plan(walker, seeds, steps, reason):
     return seeds, steps
 
 
+@_scripted
 def greedy(walker, seeds=None, steps=None, per_seed=None):
     """Run a whole walk. ``seeds`` and ``steps`` default to every candidate
     (up to max_seeds) and to 5 steps per seed within the ceiling."""
@@ -66,11 +82,11 @@ def greedy(walker, seeds=None, steps=None, per_seed=None):
     return walker
 
 
+@_scripted
 def greedy_from(walker, node_id, steps):
     """A short greedy walk from one named node, for the chat: the hottest
     relevant unvisited neighbour each turn, then back along the chain to the
     last node that still has one; stops when none is left or steps are spent."""
-    walker.guard_values = False              # its readings are layer lines (_scan_and_plan)
     walker.start_at(node_id, steps, "chat: walk from a gene the user named")
     while not walker.done:
         pick = _pick_greedy(walker.neighbour_rows()) if walker.budget["steps"] > 0 else None
@@ -83,6 +99,7 @@ def greedy_from(walker, node_id, steps):
     return walker
 
 
+@_scripted
 def random_walk(walker, seeds=None, steps=None, rng=None):
     """A random legal step each turn, the same plan as greedy would take."""
     rng = rng or random.Random(0)

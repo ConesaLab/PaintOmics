@@ -322,14 +322,40 @@ class WalkerEngineTest(unittest.TestCase):
             for policy in (policies.greedy, policies.random_walk):
                 graph, ov = self.fresh()
                 w = policy(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")))
-                self.assertTrue(w.chain and w.done and not w.guard_values)
+                self.assertTrue(w.chain and w.done)
             graph, ov = self.fresh()
             w = policies.greedy_from(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")), "g:1", 3)
-            self.assertTrue(w.chain and not w.guard_values)
+            self.assertTrue(w.chain)
         invented.assert_not_called()
         given.assert_not_called()
         graph, ov = self.fresh()
         self.assertTrue(Walker(graph, ov, "KEGG:tst00001", params_for("pathway")).guard_values)   # a model's
+
+    def test_a_scripted_walk_gives_the_walker_its_guard_back(self):
+        """The policies turned the guard off for the walker's whole life, so a
+        walker used again after a scripted walk ran unguarded (round heat7
+        review)."""
+        for policy, args in ((policies.greedy, ()), (policies.random_walk, ()), (policies.greedy_from, ("g:1", 3))):
+            graph, ov = self.fresh()
+            w = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
+            seen = []
+            real = Walker._invented
+
+            def spy(walker, *a, **k):
+                seen.append(walker.guard_values)
+                return real(walker, *a, **k)
+            with mock.patch.object(Walker, "_invented", spy):
+                policy(w, *args)
+            self.assertTrue(seen and not any(seen), policy.__name__)      # off during the walk
+            self.assertTrue(w.guard_values, policy.__name__)                # and back after it
+            graph, ov = self.fresh()
+            w = Walker(graph, ov, "KEGG:tst00001", params_for("pathway"))
+            w.guard_values = False                                          # an owner's own setting stays
+            policy(w, *args)
+            self.assertFalse(w.guard_values, policy.__name__)
+
+    def test_the_name_pattern_cache_is_bounded(self):
+        self.assertEqual(verify._name_pattern.cache_info().maxsize, 8192)
 
     def test_a_name_is_compiled_once_and_only_when_the_text_holds_it(self):
         verify._name_pattern.cache_clear()
@@ -634,6 +660,78 @@ class HeatIsNotAValueTest(unittest.TestCase):
         self.assertTrue(answer.startswith("REFUSED"), answer)
         self.assertIn("0.52 is the heat of Ccc", answer)
         self.assertNotIn("5.2e-1 is the heat", answer)
+
+    def test_a_name_standing_alone_after_another_still_owns_its_heat(self):
+        """F1 (round heat7 review): any earlier name counted as a group, so
+        the Pkm misread passed again after "From Bbb," or "Like Aaa,". Ccc is
+        Pkm (heat 1.50), Aaa Ranbp9 (2h +1.50)."""
+        for reading in ("From Bbb, Ccc Gene expression shows +1.50",
+                        "Like Aaa, Ccc Gene expression shows +1.50"):
+            w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+            answer = w.step("Ccc", reading, "on")
+            self.assertTrue(answer.startswith("REFUSED"), (reading, answer))
+            self.assertIn("gives Ccc +1.50", answer)
+        for reading in ("Aaa/Ccc in Gene expression at +1.50", "Aaa & Ccc Gene expression (+1.50)"):
+            w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+            self.assertTrue(w.step("Ccc", reading, "on").startswith("e1"), reading)   # a list: no owner
+
+    def test_a_heat_copied_bare_beside_a_layer_word_is_refused(self):
+        """F2: "Ccc (2.43, relevant)" and "Ccc Gene expression 2.43" (Ccc's
+        heat, no layer holds 2.43) passed as heat references."""
+        for reading, reason in (("Ccc Gene expression 2.43", "on"),
+                                ("Ccc Gene expression is next", "Ccc (2.43, relevant) next")):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", reading, reason)
+            self.assertTrue(answer.startswith("REFUSED"), (reading, reason, answer))
+            self.assertIn("2.43 is the heat of Ccc", answer)
+        w, _opening = self.walker()
+        self.assertTrue(w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant",
+                               "the other 2.43 neighbour is Ccc").startswith("e1"))
+
+    def test_a_heat_continuing_a_measured_list_is_refused(self):
+        """F3 (round heat7 review): only a list's first value was read as
+        measured, so in "Log2FC of 0.10 and 2.43" Ccc's heat 2.43 passed. A
+        heat word or "hottest" between the two ends the list."""
+        for reading in ("Ccc Gene expression has Log2FC of 0.10 and 2.43",
+                        "Ccc Gene expression rises (+0.05 at first, 2.43 later)"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", reading, "on")
+            self.assertTrue(answer.startswith("REFUSED"), (reading, answer))
+            self.assertIn("2.43 is the heat of Ccc", answer)
+        for reason in ("Bbb falls to −1.20, and Ccc is the hottest neighbour at 2.43",
+                       "Ccc sits on the hottest branch (Bbb at 1.11, Ccc at 2.43)"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+            self.assertTrue(answer.startswith("e1"), (reason, answer))
+
+    def test_heat_as_biology_is_not_the_score(self):
+        """F4: "under heat (+9.99)" hid an invented signed value, and "Log2FC
+        of 2.43 heat-shock induction" read 2.43 as a heat."""
+        for reading in ("Ccc Gene expression rises under heat (+9.99)",
+                        "Ccc Gene expression Log2FC of 2.43 heat-shock induction",
+                        "Ccc Gene expression shows Log2FC 2.43 heat stress response"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", reading, "on")
+            self.assertTrue(answer.startswith("REFUSED"), (reading, answer))
+        for reason in ("Ccc, the remaining heat-2.43 sibling, is next",
+                       "Ccc is a neighbour of Bbb (heat -0.00, r=0): its own heat is printed"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+            self.assertTrue(answer.startswith("e1"), (reason, answer))
+
+    def test_the_guard_reads_each_texts_values_and_names_once(self):
+        """F9: _invented ran data_values and _mentions again inside
+        heats_given_as_values for every text."""
+        w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+        with mock.patch.object(verify, "_mentions", wraps=verify._mentions) as mentions, \
+                mock.patch.object(verify, "data_values", wraps=verify.data_values) as values, \
+                mock.patch.object(verify, "heats_given_as_values", wraps=verify.heats_given_as_values) as given:
+            w.step("Ccc", "Ccc Gene expression shows 2h +1.50", "like Aaa (+1.50)")
+        self.assertEqual(values.call_count, 2)                    # reading and reason, once each
+        self.assertEqual(mentions.call_count, 2)
+        for call in given.call_args_list:
+            self.assertIsNotNone(call.kwargs.get("values"))
+            self.assertIsNotNone(call.kwargs.get("mentions"))
 
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()
