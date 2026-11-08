@@ -412,8 +412,10 @@ class StillRunningTest(unittest.TestCase):
         self.assertEqual(mapper._stillRunning([finished, running]), [])
 
     def test_every_time_limit_check_uses_it(self):
-        # Step 2's enrichment workers have the same check; it cannot be driven
-        # without a MongoDB, so at least nothing may go back to is_alive().
+        # Step 2's enrichment workers have the same check.
+        # test_a_lost_enrichment_worker_fails_the_job runs them without a
+        # MongoDB but never reaches the time limit, so here at least nothing
+        # may go back to is_alive().
         from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
         for function in (mapper.mapFeatureNamesToKeggIDs, mapper.mapFeatureNamesToCompoundsIDs,
                          PathwayAcquisitionJob.generatePathwaysList):
