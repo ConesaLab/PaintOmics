@@ -57,11 +57,28 @@ if("--help" %in% args) {
 
 ## Parse arguments (we expect the form --arg=value)
 cat("generateMetaGenes.R - STEP 1. Parse arguments, ")
-parseArgs <- function(x) strsplit(sub("^--", "", gsub("\"", "", x)), "=")
-argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors=F)
-argsL <- as.list(as.character(argsDF$V2))
-names(argsL) <- argsDF$V1
-args <- as.data.frame(argsL, stringsAsFactors=F)
+# Each argument is cut at its FIRST "=" only: the name is what comes before it,
+# the value everything after it, character for character. --input_file and
+# --output_prefix carry the omic's name, and a name may hold "=" or '"'. For an
+# omic named "RNA=seq (x=2)" the job passes
+#   --input_file=<job tmp dir>/RNA=seq (x=2)_matched.txt
+# Splitting on every "=" kept only "<job tmp dir>/RNA", and removing every '"'
+# changed a name like 'Prot "A"'; either way the file was not found and Step 2
+# failed with an internal error. No quotes need removing: PathwayAcquisitionJob
+# passes each argument as it is, without a shell, and a shell removes its own.
+# The job passes "" for an option it leaves out (--kclusters, --database). An
+# argument with no "=" is skipped, which drops those blanks as before.
+# Base R only; checked under R 4.1.2, the R of the older servers.
+# processReactomeData.R holds the same function; keep the two identical
+# (test_r_arguments_keep_equals checks it).
+parseArgs <- function(x) {
+  x <- sub("^--", "", x[grepl("=", x, fixed = TRUE)])
+  at <- regexpr("=", x, fixed = TRUE)
+  values <- substring(x, at + 1L)
+  names(values) <- substr(x, 1L, at - 1L)
+  as.list(values)
+}
+args <- as.data.frame(parseArgs(args), stringsAsFactors=F)
 
 #args <- data.frame(specie="ath",
 #                   input_file="Gene expression_matched.txt",

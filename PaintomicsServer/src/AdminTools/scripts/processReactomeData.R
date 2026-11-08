@@ -8,12 +8,20 @@
 # Usage: processReactomeData.R --specie=hsa --root=/path/to/KEGG_DATA/current/common/
 
 args <- commandArgs(TRUE)
-parseArgs <- function(x) strsplit(sub("^--", "", gsub("\"", "", x)), "=")
+# Each argument is cut at its FIRST "=" only, so a --root whose path holds "="
+# (/data/KEGG=2026/current/common/) is read whole instead of being cut at it.
+# Argument values are kept as given: the caller's shell has already removed its
+# quotes. The same function as generateMetaGenes.R's; keep the two identical
+# (test_r_arguments_keep_equals checks it). Base R only; checked under R 4.1.2.
+parseArgs <- function(x) {
+  x <- sub("^--", "", x[grepl("=", x, fixed = TRUE)])
+  at <- regexpr("=", x, fixed = TRUE)
+  values <- substring(x, at + 1L)
+  names(values) <- substr(x, 1L, at - 1L)
+  as.list(values)
+}
 
-argsDF <- as.data.frame(do.call("rbind", parseArgs(args)), stringsAsFactors = FALSE)
-argsL <- as.list(as.character(argsDF$V2))
-names(argsL) <- argsDF$V1
-args <- as.data.frame(argsL, stringsAsFactors = FALSE)
+args <- as.data.frame(parseArgs(args), stringsAsFactors = FALSE)
 
 specie <- args$specie
 ROOT <- args$root
