@@ -295,6 +295,88 @@ def _runMetagenesScripts(omicNames, databases, commands):
     return results
 
 
+def isClusterThumbnail(fileName, omicName, database):
+    """
+    Is `fileName` one of the cluster thumbnails generateMetaGenes.R draws for
+    this omic and database? The script names them
+
+        <omic>_cluster_<k>.png               for KEGG
+        <omic>_cluster_<k>_<database>.png    otherwise, the database in lower case
+
+    (the job passes --database only when it is not KEGG, and the script puts
+    "_" before it and lower-cases it), and PA_Step3Views.js asks
+    /get_cluster_image for exactly those names. <k> is the cluster number.
+
+    The omic's name is compared as text, never turned into a glob or a regular
+    expression: a name may hold "%", "*", "?", "[", "=", spaces and the like,
+    and as a pattern "RNA [1]" would match "RNA 1_cluster_2.png".
+    """
+    prefix = omicName + "_cluster_"
+    suffix = ("_" + str(database).lower() if database != "KEGG" else "") + ".png"
+    if len(fileName) <= len(prefix) + len(suffix):
+        return False
+    if not (fileName.startswith(prefix) and fileName.endswith(suffix)):
+        return False
+    # Only the cluster number may sit between the two. That keeps omic "A"
+    # off the pictures of an omic named "A_cluster_1", and KEGG's off
+    # Reactome's: "A_cluster_2_reactome.png" leaves "2_reactome" for KEGG.
+    return re.fullmatch(r"[0-9]+", fileName[len(prefix):-len(suffix)]) is not None
+
+
+def replaceMetagenePictures(outputDir, temporalDir, regenerated, jobDatabases):
+    """
+    Move the pictures generateMetaGenes.R drew into `temporalDir` to the job's
+    `outputDir`, after removing from it the old pictures of the (omic,
+    database) pairs in `regenerated`, and no other file.
+
+    This used to remove every *.png in the output folder first. The Step 3
+    slider recomputes ONE omic over ONE database, so moving it for one omic
+    deleted the cluster thumbnails of every other omic and database in the job,
+    which Step 3 then showed as broken images, and any pathway picture exported
+    into that folder (paintomics_<name>_<job>.png, written by /pa_save_image).
+
+    What goes, for each regenerated pair: its cluster thumbnails, whatever the
+    cluster number, so a run that now makes 3 clusters leaves no cluster_4 or
+    cluster_5 from the run before (the reason the removal was added, in
+    ef2a2237, 2022). A Step 2 run regenerates every pair whose script finished,
+    so it still clears all of them, e.g. after "Go back" and a new Step 2.
+
+    The elbow plot, "<omic>_elbow.png", has no database in its name: it goes
+    only when the call regenerated that omic for every database of the job
+    (a Step 2 run), and a newly drawn one replaces it either way. Nothing shows
+    it today.
+
+    A pair whose script stopped on data too small to cluster is not in
+    `regenerated`: its pathways keep the metagenes they had, so its thumbnails
+    stay with them.
+    """
+    regeneratedOmics = {omicName for omicName, _ in regenerated}
+    oldElbows = {omicName + "_elbow.png" for omicName in regeneratedOmics
+                 if all((omicName, dbname) in regenerated for dbname in jobDatabases)}
+    try:
+        present = os.listdir(outputDir)
+    except OSError:
+        present = []
+    for fileName in present:
+        if fileName in oldElbows or any(isClusterThumbnail(fileName, omicName, dbname)
+                                        for omicName, dbname in regenerated):
+            try:
+                os.remove(os_path.join(outputDir, fileName))
+            except OSError:
+                pass
+    # os.listdir rather than a glob, so nothing in the folder's path is read
+    # as a pattern either.
+    try:
+        drawn = [fileName for fileName in os.listdir(temporalDir) if fileName.endswith(".png")]
+    except OSError:
+        drawn = []
+    for fileName in drawn:
+        try:
+            os.replace(os_path.join(temporalDir, fileName), os_path.join(outputDir, fileName))
+        except OSError as ex:
+            logging.warning("METAGENES - could not move %s: %s", fileName, ex)
+
+
 def _inputFeatureLookups(inputGenes, inputCompounds):
     """The per-job lookups every enrichment worker needs: features indexed by
     lower-cased ID, and whether the job carries more than one condition.
@@ -2622,6 +2704,10 @@ class PathwayAcquisitionJob(Job):
             [inputOmic.get("omicName") for inputOmic in filtered_omics],
             list(filtered_databases), commands)
 
+        # The (omic, database) pairs whose metagenes this call replaces; only
+        # their old pictures are removed below (see replaceMetagenePictures).
+        regenerated = set()
+
         for inputOmic in filtered_omics:
             # STEP 2.1 EXECUTE THE R SCRIPT FOR EACH DATABASE
             for dbname in filtered_databases:
@@ -2671,6 +2757,7 @@ class PathwayAcquisitionJob(Job):
                         # Only reset metagenes for current DB
                         if pathway.getSource().lower() == str(dbname).lower():
                             pathway.resetMetagenes(inputOmic.get("omicName"))
+                    regenerated.add((inputOmic.get("omicName"), dbname))
 
                     metagenesFileName: object = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_metagenes" + \
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
@@ -2705,18 +2792,10 @@ class PathwayAcquisitionJob(Job):
                                   detail="%d of %d" % (metagenesDone, metageneUnits))
 
         # The metagene thumbnails move from the temporal dir into the output
-        # dir, replacing last time's; os calls instead of `rm`/`mv` through a
-        # shell (two process spawns and a shell glob per call).
-        for oldPNG in glob.glob(os_path.join(self.getOutputDir(), "*.png")):
-            try:
-                os.remove(oldPNG)
-            except OSError:
-                pass
-        for newPNG in glob.glob(os_path.join(self.getTemporalDir(), "*.png")):
-            try:
-                os.replace(newPNG, os_path.join(self.getOutputDir(), os_path.basename(newPNG)))
-            except OSError as ex:
-                logging.warning("METAGENES - could not move %s: %s", newPNG, ex)
+        # dir, replacing last time's for the pairs recomputed here and only
+        # those: the Step 3 slider recomputes one omic over one database.
+        replaceMetagenePictures(self.getOutputDir(), self.getTemporalDir(),
+                                regenerated, self.getDatabases())
         return self
 
     # JSON <-> BSON FUNCTIONS ------------------------------------------------------------------------------------------------------

@@ -320,3 +320,9 @@ test_omic_name_with_percent	13.4
 # with forked workers on an organism held in the cache: on the VM, in the same
 # parallel run, the new suite took 89.9 s against that suite's 81.4 s.
 test_adjusted_pvalues_stay_put	5.0
+# Added with fix/cluster-slider-keeps-other-pictures (2026-11-08), charged like
+# test_omic_name_with_percent, which runs the same R script on the same kind of
+# fixture: on the VM the two took 13.2 and 23.2 s, and that one is recorded here
+# at 13.4 s. Without it 27 suites were unrecorded, and
+# test_shard_split_is_balanced allows fewer than 27.
+test_cluster_slider_keeps_other_pictures	7.6
