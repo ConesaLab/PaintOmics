@@ -32,7 +32,8 @@ What this file asserts
 2. blank never joins to blank -- the reproduction above yields nothing;
 3. the message names the two identifier spaces, with examples from the files;
 4. the numbers in it are counted, never estimated -- an unknown is omitted;
-5. the shipped example is unchanged, byte for byte.
+5. the shipped example is unchanged, byte for byte;
+6. each count agrees with its noun: "1 row", "1 miRNA", "the one unmatched target".
 
 Usage:
     cd PaintomicsServer
@@ -146,8 +147,19 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"]])
         stats = run(targets, None, values, genes, self.out, "pearson")
         message = explainEmptyResult(stats)
-        self.assertIn("none of them appears in the first column", message)
-        self.assertIn("ENSMUSG00000065402", message)
+        # One miRNA: it read "holds 1 miRNAs (e.g. ENSMUSG00000065402), but none
+        # of them appears".
+        self.assertIn("Your miRNA quantification file holds 1 miRNA (ENSMUSG00000065402), "
+                      "but it does not appear in the first column", message)
+
+    def test_several_miRNAs_that_never_join_are_counted_as_several(self):
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.4"],
+                                           ["mmu-miR-2", "0.2", "0.5"]])
+        targets = write(self.dir, "t.tab", [["other-miR", "G1"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["G1", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        self.assertIn("holds 2 miRNAs (e.g. mmu-miR-1, mmu-miR-2), but none of them appears "
+                      "in the first column", explainEmptyResult(stats))
 
     def test_the_message_reports_the_blank_rows(self):
         targets, values, genes = self.theirFiles()
@@ -155,7 +167,23 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         message = explainEmptyResult(stats)
         self.assertIn("2 rows of the associations file had an empty second column",
                       message)
-        self.assertIn("1 rows of the gene expression file had no gene id", message)
+        self.assertIn("1 row of the gene expression file had no gene id", message)
+
+    def test_one_blank_row_is_one_row(self):
+        """It read "1 rows of the quantification file had no miRNA id"."""
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["", "0.1", "0.3"],
+                                           ["mmu-miR-1", "0.2", "0.5"]])
+        targets = write(self.dir, "t.tab", [["", "G1"], ["mmu-miR-1", ""], ["other-miR", "G1"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["", "1.0", "2.0"],
+                                          ["G1", "1.0", "2.0"]])
+        stats = run(targets, None, values, genes, self.out, "pearson")
+        message = explainEmptyResult(stats)
+        self.assertIn("Rows skipped because an identifier was blank: "
+                      "1 row of the quantification file had no miRNA id; "
+                      "1 row of the associations file had an empty first column; "
+                      "1 row of the associations file had an empty second column; "
+                      "1 row of the gene expression file had no gene id.", message)
+        self.assertNotIn("1 rows", message)
 
     def test_it_invents_no_numbers(self):
         """Every count in the message has to come from a file that was read.
@@ -261,8 +289,23 @@ class EmptyIdIsNotAJoinKeyTest(unittest.TestCase):
         stats = run(targets, None, values, genes, self.out, "pearson")
         self.assertEqual(stats["nearMisses"], 2)
         message = explainEmptyResult(stats)
-        self.assertIn("only in case or in a version suffix", message)
+        self.assertIn("2 of the first 2 unmatched targets differ from a gene id only in case "
+                      "or in a version suffix (e.g. ENSMUSG00000062006.2 in the targets file, "
+                      "ENSMUSG00000062006 in the expression file)", message)
         self.assertNotIn("two different identifier spaces", message)
+
+    def test_one_near_miss_is_counted_as_one(self):
+        """It read "1 of the first 1 unmatched targets differ"."""
+        values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.2"]])
+        genes = write(self.dir, "g.tab", [["gene", "C1", "C2"], ["Fxyd4", "1.0", "2.0"]])
+        for pairs, opening in (
+                ([["mmu-miR-1", "fxyd4"]], "The one unmatched target differs"),
+                ([["mmu-miR-1", "fxyd4"], ["mmu-miR-1", "Nope"]], "1 of the first 2 unmatched targets differs")):
+            with self.subTest(opening=opening):
+                targets = write(self.dir, "t.tab", pairs)
+                message = explainEmptyResult(run(targets, None, values, genes, self.out, "pearson"))
+                self.assertIn(opening + " from a gene id only in case or in a version suffix "
+                              "(fxyd4 in the targets file, Fxyd4 in the expression file)", message)
 
     def test_a_trailing_blank_line_is_not_a_blank_identifier(self):
         values = write(self.dir, "v.tab", [["#gene", "C1", "C2"], ["mmu-miR-1", "0.1", "0.2"], []])

@@ -29,7 +29,7 @@ from src.classes.Job import Job
 from src.classes.Feature import OmicValue, Gene
 from src.servlets.DataManagementServlet import copyFile
 from src.common.Util import ensure_utf8
-from src.common.ServerErrorManager import InputFileError
+from src.common.ServerErrorManager import InputFileError, quotable
 from src.common.bioscripts.miRNA2Target import NO_SCORE_METHOD, run as run_miRNA2Target
 
 from os import path as os_path, mkdir as os_mkdir
@@ -38,6 +38,52 @@ from random import randint
 from collections import defaultdict
 import shutil
 from src.conf.serverconf import MAX_NUMBER_FEATURES
+
+
+# How a scored pair is selected, by its correlation with the target gene against the
+# cutoff (see fromMiRNA2Genes): negative keeps a correlation below the cutoff, positive
+# one above it, and abs one whose size is above it.
+SELECTION_METHODS = ("negative_correlation", "positive_correlation", "abs_correlation")
+
+# "fc" was on the form from the first commit (54ff9dc3) as "by max. fold-change of
+# feature expression", and computed no fold change. The plan, in comments this replaces
+# ("max_fc OR similar_fc", "TODO: SIMILAR FC SELECTION") and in the first help text
+# ("'Max fold-change' in other case", that is, without gene expression), was to rank a
+# gene's miRNAs by how much each miRNA's own expression changed, beside the score method
+# "fc", whose score was random.uniform(-1, 1) (see miRNA2Target.run). Beside a
+# correlation, "fc" matched neither branch of the selection, so a pair was kept when its
+# correlation was above the cutoff, which the form had just made positive: selection by
+# positive correlation, under another name. A sound fold change cannot be had from these
+# files: nothing says which condition is the reference, the values are often log ratios
+# already, a miRNA's fold change is one number for all of its targets when the point is
+# to choose among them, and the cutoff is on a correlation's -1 to 1 scale. So the form
+# no longer offers it, and a request that still sends it (a page opened before the
+# change and not reloaded, a script) is run as it always was, under the name of what
+# that is, and told so in its answer's notice and at the top of genesToMiRNAFile.tab.
+RETIRED_SELECTION_METHODS = {"fc": "positive_correlation"}
+
+
+def unknownSelectionText(method):
+    """The refusal of a selection method this tool does not have.
+
+    Any other value fell through the selection as "fc" did: pairs were kept on a
+    positive correlation, under the name the value came with. Repeated only when it
+    is plain text (see quotable).
+    """
+    named = quotable(method)
+    return ("The selection method %s is not one this tool has. Use negative_correlation, "
+            "positive_correlation or abs_correlation."
+            % ("\"%s\"" % named if named else "sent"))
+
+
+def retiredSelectionNotice(sent, method):
+    """What a run that was sent a retired selection method says it did, in its answer
+    and at the top of its results file."""
+    return ("The selection method \"%s\", offered as \"by max. fold-change of feature "
+            "expression\", computed no fold change: it kept a pair when its correlation "
+            "with the target gene was above the cutoff, which is selection by positive "
+            "correlation. This run selected that way, and its results name it %s."
+            % (sent, method))
 
 
 def _plural(count, noun):
@@ -236,11 +282,17 @@ def _emptyResultExplanation(stats):
     # 1. Nothing to join with: the regulators named in the associations file are
     #    not the regulators in the quantification file.
     elif stats.get("pairs", 0) == 0:
+        # One miRNA is its own example, and "none of them" of one reads wrong; it
+        # said "holds 1 miRNAs (e.g. ...), but none of them appears".
+        regulators = stats.get("regulators", 0)
         lines.append(
-            "Your miRNA quantification file holds %d miRNAs (e.g. %s), but none "
-            "of them appears in the first column of your targets/associations "
-            "file. The two files have to use the same miRNA identifiers."
-            % (stats.get("regulators", 0), sample(stats.get("sampleRegulators"))))
+            "Your miRNA quantification file holds %s, but %s in the first column "
+            "of your targets/associations file. The two files have to use the "
+            "same miRNA identifiers."
+            % (("1 miRNA (%s)" % sample(stats.get("sampleRegulators")), "it does not appear")
+               if regulators == 1 else
+               ("%d miRNAs (e.g. %s)" % (regulators, sample(stats.get("sampleRegulators"))),
+                "none of them appears")))
     # 2. They joined, but not one target id exists in the expression file. Scoring
     #    only ever aborts on a target it found, before counting it as scored, so
     #    after an abort a target missing earlier in the file is not the cause.
@@ -251,13 +303,19 @@ def _emptyResultExplanation(stats):
             "so no correlation could be computed." % _pairsWereRead(stats.get("pairs", 0)))
         nearMiss = stats.get("sampleNearMiss")
         if stats.get("nearMisses") and nearMiss:
+            # Counted in agreement: it read "1 of the first 1 unmatched targets
+            # differ" for a single unmatched target.
+            nearMisses, of = stats["nearMisses"], stats.get("nearMissesOf", 0)
+            if of == 1:
+                who = "The one unmatched target differs"
+            else:
+                who = "%d of the first %d unmatched targets %s" % (
+                    nearMisses, of, "differs" if nearMisses == 1 else "differ")
             lines.append(
-                "%d of the first %d unmatched targets differ from a gene id only "
-                "in case or in a version suffix (e.g. %s in the targets file, %s "
-                "in the expression file) -- the identifiers are the same kind, "
-                "written differently."
-                % (stats["nearMisses"], stats.get("nearMissesOf", 0),
-                   nearMiss[0], nearMiss[1]))
+                "%s from a gene id only in case or in a version suffix (%s%s in "
+                "the targets file, %s in the expression file) -- the identifiers "
+                "are the same kind, written differently."
+                % (who, "" if nearMisses == 1 else "e.g. ", nearMiss[0], nearMiss[1]))
         else:
             lines.append(
                 "Targets in the associations file look like: %s. Identifiers in "
@@ -297,19 +355,20 @@ def _emptyResultExplanation(stats):
 
     # 4. Blank cells, reported whenever there were any -- they are usually the
     #    reason a file "looks fine" and matches nothing.
+    # "1 row of ...", where it read "1 rows of ...".
     blanks = []
     if dropped.get("regulators"):
-        blanks.append("%d rows of the quantification file had no miRNA id"
-                      % dropped["regulators"])
+        blanks.append("%s of the quantification file had no miRNA id"
+                      % _plural(dropped["regulators"], "row"))
     if dropped.get("associationRegulators"):
-        blanks.append("%d rows of the associations file had an empty first column"
-                      % dropped["associationRegulators"])
+        blanks.append("%s of the associations file had an empty first column"
+                      % _plural(dropped["associationRegulators"], "row"))
     if dropped.get("associationTargets"):
-        blanks.append("%d rows of the associations file had an empty second column"
-                      % dropped["associationTargets"])
+        blanks.append("%s of the associations file had an empty second column"
+                      % _plural(dropped["associationTargets"], "row"))
     if dropped.get("genes"):
-        blanks.append("%d rows of the gene expression file had no gene id"
-                      % dropped["genes"])
+        blanks.append("%s of the gene expression file had no gene id"
+                      % _plural(dropped["genes"], "row"))
     if blanks:
         lines.append("Rows skipped because an identifier was blank: " +
                      "; ".join(blanks) + ".")
@@ -347,7 +406,7 @@ class MiRNA2GeneJob(Job):
         self.omicName = None
         self.report               = "all" #all or DE
         self.score_method         = "kendall" #kendall OR spearman OR pearson; none when nothing could be scored
-        self.selection_method     = "negative_correlation" #max_fc OR similar_fc OR abs_correlation OR positive_correlation OR negative_correlation
+        self.selection_method     = "negative_correlation" #one of SELECTION_METHODS; none when nothing could be scored
         self.cutoff               = -0.6
         self.enrichment           = "genes"
         self.notice               = None #what a run that succeeded could not do, for the response
@@ -385,7 +444,11 @@ class MiRNA2GeneJob(Job):
         @returns True if not error
         """
         error = ""
-        #TODO: CHECK VALID SCORE AND SELECTION METHODS
+        #TODO: CHECK VALID SCORE METHODS
+        # On its own, not under "Errors detected in input files": no file is at fault.
+        if (self.selection_method not in SELECTION_METHODS
+                and self.selection_method not in RETIRED_SELECTION_METHODS):
+            raise InputFileError(unknownSelectionText(self.selection_method))
         try:
             self.cutoff = float(self.cutoff)
         except:
@@ -661,6 +724,12 @@ class MiRNA2GeneJob(Job):
 
         tmpFile = self.getTemporalDir() +"/miRNAMatch_output.txt"
 
+        # A retired selection method runs as what it always did, under that name, so
+        # the stored options, the description and the Selection column say what was
+        # done (see RETIRED_SELECTION_METHODS).
+        sentSelection = self.selection_method
+        self.selection_method = RETIRED_SELECTION_METHODS.get(sentSelection, sentSelection)
+
         #STEP 2. CALL TO miRNA2Target SCRIPT AND GENERATE ASSOCIATION BETWEEN miRNAS AND TARGET GENES
         logging.info("STARTING miRNA2Target PROCESS.")
         matchStats = run_miRNA2Target(referenceFile, relevantReferenceFile, dataFile, geneExpressionFile, tmpFile, self.score_method)
@@ -689,6 +758,11 @@ class MiRNA2GeneJob(Job):
         if self.notice:
             logging.info("MIRNA2GENES - %s", self.notice)
             self.score_method = self.selection_method = NO_SCORE_METHOD
+        elif sentSelection != self.selection_method and not relevantReferenceFile:
+            # Only where a correlation selected the pairs: with a relevant
+            # associations file the selection method is not used.
+            self.notice = retiredSelectionNotice(sentSelection, self.selection_method)
+            logging.info("MIRNA2GENES - %s", self.notice)
 
         #STEP 3. PARSE RELEVANT FILE
         logging.info("PROCESSING RELEVANT FEATURES FILE...")
@@ -763,7 +837,7 @@ class MiRNA2GeneJob(Job):
                             score *= -1  #INVERT VALUES
                         elif self.selection_method == "abs_correlation":
                             score = abs(score)
-                        #TODO: SIMILAR FC SELECTION
+                        # positive_correlation, and none, compare the score as it is.
 
                         # Only those correlation with a score higher than the specified cutoff
                         # are considered relevant.
@@ -810,7 +884,7 @@ class MiRNA2GeneJob(Job):
                     logging.info("MIRNA2GENES - NO RESULTS")
                     raise emptyResultError(matchStats)
 
-                #STEP 6. FOR EACH GENE, ORDER THE MIRNAS BY THE HIGHER CORRELATION OR FC
+                #STEP 6. FOR EACH GENE, ORDER THE MIRNAS BY THEIR SCORE IN THE DIRECTION OF THE SELECTION
                 filePrefix = '' if self.getUserID() is not None else self.getJobID() + '_'
                 randomSeed = str(randint(0, 1000))
                 genesToMiRNAFile = open(self.getTemporalDir() + '/' + filePrefix + 'genesToMiRNAFile.tab', 'w')
@@ -829,7 +903,7 @@ class MiRNA2GeneJob(Job):
                 regulator2genesOutput.write("# Gene name\t"+ header + "\n")
                 regulator2genesRelevant.write("# Gene name\tmiRNA ID\n")
 
-                logging.info("ORDERING miRNAS BY CORRELATION / FC...")
+                logging.info("ORDERING miRNAS BY CORRELATION...")
                 # An identifier is what makes a row mean anything. Written
                 # without one, a row is not a weak result -- it is not a result.
                 #

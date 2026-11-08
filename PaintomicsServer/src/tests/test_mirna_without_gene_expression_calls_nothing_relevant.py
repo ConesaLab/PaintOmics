@@ -19,7 +19,10 @@ What this file asserts
 3. the answer says no score could be computed, and the job's description and the
    results' Selection column do not name a correlation that never ran;
 4. score_method=fc beside a gene expression file does the same and says why;
-5. a relevant associations file, and a real correlation, work as they did.
+5. a relevant associations file, and a real correlation, work as they did;
+6. selection_method=fc, which the form offered as "by max. fold-change of feature
+   expression" and which computed no fold change, selects exactly as
+   positive_correlation, as it always did, and now says so and is named so.
 
 Usage:
     cd PaintomicsServer
@@ -191,6 +194,62 @@ class ScoreMethodFcBesideGeneExpressionTest(unittest.TestCase):
         self.assertTrue(answer.content["notice"].startswith(
             'The score method "fc" (fold change) computes no score: 4 miRNA-target pairs were read'))
         self.assertIn("use a correlation score method or a relevant associations file.", answer.content["notice"])
+
+
+class SelectionMethodFcBesideGeneExpressionTest(unittest.TestCase):
+    """The selection "by max. fold-change of feature expression" computed no fold change.
+
+    With a correlation as the score, "fc" matched neither the negative nor the
+    absolute branch, so a pair was kept when its correlation was above the cutoff:
+    positive correlation, while the results' Selection column said "fc".
+    """
+
+    RELEVANT = ("regulator_relevant_associations.tab", "regulator2Gene_relevant.tab",
+                "regulator_associations.tab", "regulator2Gene_output.tab")
+
+    def test_it_selects_exactly_as_positive_correlation(self):
+        """What a request that still sends it gets is what it always got."""
+        for cutoff in (0.3, 0.5, -0.5):
+            with self.subTest(cutoff=cutoff):
+                fc, _job, fcFiles = runTool(genes=GENES, selection_method="fc", cutoff=cutoff)
+                positive, _job, positiveFiles = runTool(genes=GENES, selection_method="positive_correlation",
+                                                        cutoff=cutoff)
+                self.assertIs(fc.content["success"], True, fc.content)
+                self.assertIs(positive.content["success"], True, positive.content)
+                for name in self.RELEVANT:
+                    self.assertEqual(fcFiles[name], positiveFiles[name], name)
+        # Kendall on three conditions: miR-1 with G1 is +1/3 and miR-2 with G2 is +1.
+        _answer, _job, files = runTool(genes=GENES, selection_method="fc", cutoff=0.3)
+        self.assertEqual(sorted(files["regulator_relevant_associations.tab"].splitlines()),
+                         ["G1\tHSA-MIR-1", "G2\tHSA-MIR-2"])
+
+    def test_its_results_name_what_it_did_and_say_why(self):
+        answer, job, files = runTool(genes=GENES, selection_method="fc", cutoff=0.3)
+        self.assertEqual(answer.content["notice"],
+                         "The selection method \"fc\", offered as \"by max. fold-change of feature "
+                         "expression\", computed no fold change: it kept a pair when its correlation "
+                         "with the target gene was above the cutoff, which is selection by positive "
+                         "correlation. This run selected that way, and its results name it "
+                         "positive_correlation.")
+        self.assertEqual(files["genesToMiRNAFile.tab"].splitlines()[0], "# " + answer.content["notice"])
+        self.assertEqual({row[4] for row in rows(files["genesToMiRNAFile.tab"])}, {"positive_correlation"})
+        self.assertIn("Score method=kendall;Selection method=positive_correlation;",
+                      answer.content["description"])
+        self.assertEqual(job.getOptions()["selection_method"], "positive_correlation")
+
+    def test_a_relevant_associations_file_decides_and_nothing_is_said(self):
+        """There the selection method is not used, so there is nothing to tell."""
+        answer, _job, files = runTool(genes=GENES, selection_method="fc", cutoff=0.3,
+                                      relevantAssociations=[["# Gene name", "miRNA ID"], ["G3", "hsa-miR-2"]])
+        self.assertIs(answer.content["success"], True, answer.content)
+        self.assertIsNone(answer.content["notice"])
+        self.assertEqual(files["regulator_relevant_associations.tab"], "G3\tHSA-MIR-2\n")
+
+    def test_a_selection_the_tool_does_not_have_is_refused(self):
+        answer, _job, _files = runTool(genes=GENES, selection_method="max_fc", cutoff=0.3)
+        self.assertEqual(answer.status, 400)
+        self.assertIs(answer.content["extra"]["input_error"], True)
+        self.assertIn("The selection method \"max_fc\" is not one this tool has.", answer.content["message"])
 
 
 class WhatStillWorksTest(unittest.TestCase):

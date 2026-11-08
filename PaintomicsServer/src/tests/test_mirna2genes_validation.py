@@ -26,11 +26,18 @@ from the code that calls it.
 None of this is reachable from the bundled example: `validateFile` returns
 immediately when `isExample` is set. Every case is built from `fake_omics`.
 
+The selection method is checked here too. The form offered "by max. fold-change
+of feature expression" (value "fc"), which computed no fold change and selected
+as positive correlation does, and so did any other value the selection does not
+name. The form now offers the three it has, and the server
+refuses any other value but "fc", which it still runs as positive correlation.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_mirna2genes_validation
 """
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -39,7 +46,42 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.classes.JobInstances.MiRNA2GeneJob import MiRNA2GeneJob
+from src.common.ServerErrorManager import InputFileError
 from src.tests import fake_omics
+
+# Written out rather than imported, so that a change to the server's list has to
+# be a change here too.
+SELECTION_METHODS = ("negative_correlation", "positive_correlation", "abs_correlation")
+
+STEP1_VIEWS = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "PaintomicsClient",
+    "public_html", "app", "view", "PathwayAcquisitionViews", "PA_Step1Views.js"))
+
+
+def _withoutComments(source):
+    """The source without /* */ and // comments. Good enough for the miRNA card's
+    correlation options, whose strings hold no "//" and no "/*"."""
+    return re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", source, flags=re.S))
+
+
+def _correlationOptionsText():
+    """The miRNA card's correlation options, from Report to the end of the cutoff
+    field, as the browser gets them, comments left out."""
+    with open(STEP1_VIEWS, encoding="utf-8") as handle:
+        source = handle.read()
+    start = source.index('itemId: "reportMethodField"')
+    cutoff = source.index('itemId: "cutoffField"', start)
+    end = source.index("helpTip:", cutoff)
+    end = source.index("\n", end)
+    return _withoutComments(source[start:end])
+
+
+def _offeredSelections():
+    """(label, value) of each entry in the Selection method combo."""
+    text = _correlationOptionsText()
+    start = text.index('itemId: "selectionMethodField"')
+    block = text[start:text.index("helpTip:", start)]
+    return re.findall(r'\[\s*"([^"]*)"\s*,\s*"([^"]*)"\s*\]', block)
 
 
 class _Job(MiRNA2GeneJob):
@@ -49,6 +91,7 @@ class _Job(MiRNA2GeneJob):
         self._inputDir = inputDir
         self.geneBasedInputOmics = []
         self.cutoff = 0.5
+        self.selection_method = "negative_correlation"
 
     def getInputDir(self):
         return self._inputDir
@@ -123,6 +166,48 @@ class MiRNAOmicValidationTest(unittest.TestCase):
 
         self.assertEqual(self._error(), "")
         self.assertEqual(self.job.cutoff, 0.8)
+
+    # -- the selection method -----------------------------------------------
+
+    def test_every_selection_method_the_form_offers_is_accepted(self):
+        """And "fc", which the form offered until it was found to be positive
+        correlation under another name: a page opened before the change still sends it."""
+        for method in SELECTION_METHODS + ("fc",):
+            with self.subTest(method=method):
+                self._miRNAOnly()
+                self.job.selection_method = method
+                self.assertEqual(self._error(), "")
+
+    def test_an_unknown_selection_method_is_refused_by_name(self):
+        """It fell through every branch of the selection, as "fc" did, and kept the
+        pairs whose correlation was above the cutoff under the name it came with."""
+        for method in ("max_fc", "similar_fc", "", "Negative_Correlation"):
+            with self.subTest(method=method):
+                self._miRNAOnly()
+                self.job.selection_method = method
+                with self.assertRaises(InputFileError) as refused:
+                    self.job.validateInput()
+                self.assertIn(
+                    "The selection method %s is not one this tool has. Use "
+                    "negative_correlation, positive_correlation or abs_correlation."
+                    % ("\"%s\"" % method if method else "sent"), str(refused.exception))
+
+    def test_a_selection_method_that_is_not_plain_text_is_not_repeated(self):
+        self._miRNAOnly()
+        self.job.selection_method = "<img src=x onerror=alert(1)>"
+        error = self._error()
+        self.assertIn("The selection method sent is not one this tool has.", error)
+        self.assertNotIn("<img", error)
+
+    def test_the_form_offers_exactly_these_selection_methods(self):
+        """What the Step 1 miRNA card and the tool page (the same panel) offer."""
+        self.assertEqual(sorted(value for _label, value in _offeredSelections()),
+                         sorted(SELECTION_METHODS))
+
+    def test_no_correlation_option_on_the_form_speaks_of_a_fold_change(self):
+        """The cutoff's help said "Threshold for the correlation or fold change", and
+        nothing computes a fold change."""
+        self.assertNotIn("fold", _correlationOptionsText().lower())
 
     # -- the values file ----------------------------------------------------
 

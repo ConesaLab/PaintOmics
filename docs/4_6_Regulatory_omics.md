@@ -404,8 +404,8 @@ The correlation block has four controls:
 | --- | --- | --- |
 | **Report** | All features | Whether to report all regulators or only the relevant (e.g. differentially expressed) ones |
 | **Score method** | Kendall | The correlation statistic between regulator and target gene: Spearman, Kendall or Pearson |
-| **Selection method** | by negative correlation | Which direction counts. Negative is the expected sign for miRNA repression |
-| **Filter cutoff** | −0.5 | The threshold, applied in the direction of the selection method. Its sign follows the method you chose |
+| **Selection method** | by negative correlation | Which direction counts: negative (correlation below the cutoff), positive (above it) or absolute (its size above it). Negative is the expected sign for miRNA repression |
+| **Filter cutoff** | −0.5 | The threshold on the correlation, applied in the direction of the selection method. Its sign follows the method you chose |
 
 A checkbox at the top of the card, **My features are already mapped to Gene
 IDs, skip this step.**, swaps the card for a shorter form that accepts files
