@@ -989,8 +989,30 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         for text in ("Ccc has Log2FC of 0.10 and 2.43", "Ccc rises (+0.10 at 2h, 2.43 at 6h)"):
             self.assertEqual([v for v, _at in verify.invented_values(text, {"+0.10"}, heats)], ["2.43"], text)
         for text in ("Ccc has Log2FC of 0.10, the hottest at 2.43", "Ccc has Log2FC of 0.10; Bbb heat 2.43",
-                     "sits on the hottest branch (cysC/cysQ at 0.10, cysA/P/U/W at 2.43)"):
+                     "sits on the hottest branch (cysC/cysQ at 0.10, cysA/P/U/W at 2.43)",
+                     "Ccc has Log2FC of 0.10, while Bbb is the other 2.43 neighbour"):
             self.assertEqual(verify.invented_values(text, {"+0.10"}, heats), [], text)
+        labels = verify.measure_labels(self.ov)
+        self.assertEqual([v for v, _at in verify.invented_values(
+            "Ccc Gene expression +0.10 at 6h · 2.43 in Proteomics", {"+0.10"}, heats, labels=labels)], ["2.43"])
+
+    def test_a_heat_after_other_nodes_names_ends_the_list(self):
+        """Round heat8 (1WytoKdgT4, sot00630, t23), the stop's reason, refused:
+        0.41 read as continuing M1A0B7's −0.90; it is the heat of the r=0
+        companions named before it."""
+        reason = ("The walk read the neighbourhood: the seed C00160 (−0.12) is cold; the hot signal is the "
+                  "glycine-cleavage/serine-hydroxymethyl hub around M1A0B7 (relevant, −0.90) with its r=0 "
+                  "companions M0ZSL5/M1AP15/M1CL70/M1CL86/gdcsP (0.41) and GCVT/LPD2/SHMT, and its relevant "
+                  "metabolite neighbours C00065 and C00037 (+0.09). Budget is spent; remaining neighbours "
+                  "repeat this pattern.")
+        heats = {"0.41": ["M0ZSL5", "M1AP15", "M1CL70", "M1CL86", "gdcsP"], "0.42": ["M1A0B7"]}
+        ov = ov_mod.Overlay()
+        ov.labels = {"Proteomics": ["Log2FC"], "Metabolomics": ["Log2FC"]}
+        self.assertEqual(verify.invented_values(reason, {"−0.12", "−0.90", "+0.09"}, heats,
+                                                labels=verify.measure_labels(ov)), [])
+        self.assertFalse(verify.list_gap(") with its r=0 companions M0ZSL5/M1AP15/M1CL70/M1CL86/gdcsP ("))
+        self.assertTrue(verify.list_gap(" at 2h, "))
+        self.assertTrue(verify.list_gap(" (relevant) and "))
 
     def test_heat_as_biology_is_not_the_score(self):
         """F4 (round heat7 review): "under heat (+9.99)" put an invented signed

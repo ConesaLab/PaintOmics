@@ -1123,11 +1123,16 @@ HEAT_AFTER_RE = re.compile(r"^[\s\-–]*" + HEAT_WORD, re.I)
 
 
 # A relevance flag right after a number reads it as a layer's: "Ccc (2.43,
-# relevant)". And a heat word or "hot" between two values ends a measurement
-# list ("Log2FC of 0.10 and 2.43" continues; "... 0.10, the hottest at 2.43"
-# does not).
+# relevant)".
 RELEVANCE_AFTER_RE = re.compile(r"^\s*[,;]?\s*\(?(?:not\s+)?relevant\b", re.I)
-HEAT_OR_HOT_RE = re.compile(HEAT_WORD + "|" + HOT_RE.pattern, re.I)
+# What may stand between two values of one measured list (list_gap): list
+# punctuation and words, a layer's relevance flag, and time points or the
+# layers' own labels, which list_gap removes first. "Log2FC of 0.10 and
+# 2.43" and "(+0.10 at 2h, 2.43 at 6h)" continue; a node name, a heat word or
+# any other word ends the list.
+LIST_GAP_WORDS_RE = re.compile(
+    r"^(?:[\s,/&()\[\]·→:=~≈\-–−]|\b(?:and|or|then|to|vs|versus|at|in|from)\b|\b(?:not\s+)?relevant\b)*$", re.I)
+TIME_POINT_RE = re.compile(r"(?<![\w.])\d+(?:\.\d+)?\s?(?:h|hrs?|hpf|hpi|dpf|dpi|d|min)(?!\w)", re.I)
 
 
 def measure_labels(overlay):
@@ -1162,6 +1167,17 @@ def measure_labels(overlay):
     return pattern
 
 
+def list_gap(text, labels=None):
+    """Whether ``text``, what stands between two values, joins them as one
+    list: nothing in it but LIST_GAP_WORDS_RE once its time points
+    (TIME_POINT_RE) and the layers' own labels (``labels``, measure_labels)
+    are taken out."""
+    text = TIME_POINT_RE.sub(" ", str(text or ""))
+    if labels is not None:
+        text = labels.sub(" ", text)
+    return bool(LIST_GAP_WORDS_RE.match(text))
+
+
 def measured(text, start, end, values, labels=None):
     """Whether the number at text[start:end] is written as a measurement: a
     unit or a relevance flag right after it (MEASURE_AFTER_RE,
@@ -1169,10 +1185,14 @@ def measured(text, start, end, values, labels=None):
     (MEASURE_BEFORE_RE) or one of the layers' own words (``labels``,
     measure_labels) since the later of its clause's start and the end of
     the value before it (``values``, data_values); or it continues a list
-    whose value before it, in the clause, is signed or measured, with no heat
-    word between: "Log2FC of 0.10 and 2.43", "(+0.10 at 2h, 2.43 at 6h)".
-    Round heat7's review found "Ccc Gene expression 2.43" and "Ccc (2.43,
-    relevant)" passing as heat references."""
+    whose value before it, in the clause, is signed or measured, with nothing
+    but list words between (list_gap): "Log2FC of 0.10 and 2.43", "(+0.10 at
+    2h, 2.43 at 6h)". Round heat7's review found "Ccc Gene expression 2.43"
+    and "Ccc (2.43, relevant)" passing as heat references. Any signed value
+    earlier in the clause was a list once, and in round heat8 (1WytoKdgT4,
+    sot00630) "...hub around M1A0B7 (relevant, −0.90) with its r=0 companions
+    M0ZSL5/M1AP15/M1CL70/M1CL86/gdcsP (0.41)" was refused: 0.41 is their
+    heat."""
     if MEASURE_AFTER_RE.match(text[end:]) or RELEVANCE_AFTER_RE.match(text[end:]):
         return True
     opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, start)]
@@ -1184,7 +1204,7 @@ def measured(text, start, end, values, labels=None):
         return True
     if earlier:
         value, at = earlier[-1]
-        if not HEAT_OR_HOT_RE.search(span) and (
+        if list_gap(span, labels) and (
                 value[:1] in "+-−" or measured(text, at, at + len(value), values, labels)):
             return True
     return False

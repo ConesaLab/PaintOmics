@@ -693,7 +693,7 @@ class HeatIsNotAValueTest(unittest.TestCase):
         measured, so in "Log2FC of 0.10 and 2.43" Ccc's heat 2.43 passed. A
         heat word or "hottest" between the two ends the list."""
         for reading in ("Ccc Gene expression has Log2FC of 0.10 and 2.43",
-                        "Ccc Gene expression rises (+0.05 at first, 2.43 later)"):
+                        "Ccc Gene expression rises (+0.05, then 2.43)"):
             w, _opening = self.walker()
             answer = w.step("Ccc", reading, "on")
             self.assertTrue(answer.startswith("REFUSED"), (reading, answer))
@@ -703,6 +703,20 @@ class HeatIsNotAValueTest(unittest.TestCase):
             w, _opening = self.walker()
             answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
             self.assertTrue(answer.startswith("e1"), (reason, answer))
+
+    def test_a_heat_after_other_nodes_names_ends_the_list(self):
+        """Round heat8 (1WytoKdgT4, sot00630, t23): the stop's reason "...hub
+        around M1A0B7 (relevant, −0.90) with its r=0 companions
+        M0ZSL5/M1AP15/M1CL70/M1CL86/gdcsP (0.41) and GCVT/LPD2/SHMT" was
+        refused, 0.41 read as continuing M1A0B7's −0.90; it is the companions'
+        heat. Here Bbb is M1A0B7 and Ccc/Ddd the companions (heat 2.43)."""
+        w, _opening = self.walker({"g:4": 2.43})
+        self.assertTrue(w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "read it").startswith("e1"))
+        reason = ("The walk read the neighbourhood: the seed Aaa is read; the hot signal is the "
+                  "glycine-cleavage/serine-hydroxymethyl hub around Bbb (relevant, −1.20) with its r=0 "
+                  "companions Ccc/Ddd (2.43) and Eee. Budget is spent.")
+        answer = w.stop("Bbb Gene expression 2h −1.20, relevant", reason)
+        self.assertTrue(answer.startswith("done ·"), answer)
 
     def test_heat_as_biology_is_not_the_score(self):
         """F4: "under heat (+9.99)" hid an invented signed value, and "Log2FC
