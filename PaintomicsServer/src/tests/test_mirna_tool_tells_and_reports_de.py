@@ -16,7 +16,9 @@ What happened
    filter into marks, leaving their 'continue' commented out side by side, and the
    pairs that are not relevant are the background the Step 1 enrichment counts. So
    the help is what changes, and a run where Report can mark nothing (no relevant
-   regulators file, or none of the paired miRNAs in it) now says so.
+   regulators file, or none of the paired miRNAs in it) now says so. The tool page
+   and the user guide said the same of the cutoff ("used for filtering the matched
+   targets", "the genes that are finally reported"), which also only marks pairs.
 3. The score method was never checked ("TODO: CHECK VALID SCORE METHODS"). Any value
    but the three correlations came back from getScore as None, was written as the
    score "None", and float("None") crashed the job with Report.
@@ -26,9 +28,10 @@ What this file asserts
 1. conversionNoticeAsHtml shows a notice as text; the tool page shows it first, as a
    warning; a Step 1 conversion puts it on the omic's card and says it again once
    Step 2 opens; a run with no notice reads as before;
-2. under both Report choices every pair is in the values and associations files and
-   only the relevant associations differ; the help and the tool page say so; a run
-   where Report "DE" can mark nothing says why, in the answer and in the results;
+2. under both Report choices, and under any cutoff, every pair is in the values and
+   associations files and only the relevant associations differ; the help, the tool
+   page and the user guide say so for both; a run where Report "DE" can mark nothing
+   says why, in the answer and in the results;
 3. an unknown score method is refused as an input problem that names kendall,
    spearman and pearson, before anything runs, and the four accepted values pass.
 
@@ -241,6 +244,69 @@ class TheHelpSaysWhatReportDoesTest(unittest.TestCase):
                       "their values, and are never marked relevant.", page)
 
 
+def _withoutComments(source):
+    return re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", source, flags=re.S))
+
+
+def _helpOf(source, itemId):
+    """The helpTip string of the field with this itemId, comments left out."""
+    start = source.index('itemId: "%s"' % itemId)
+    at = source.index("helpTip:", start)
+    end = source.index("\n\t\t\t\t\t\t}", at)
+    return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', _withoutComments(source[at:end])))
+
+
+class TheHelpSaysWhatTheCutoffDoesTest(unittest.TestCase):
+    """The cutoff, like Report, marks pairs as relevant and drops none (STEP 5.2), while
+    the tool page said the gene expression file was "used for filtering the matched
+    targets" and that the cutoff "determines the selection of the genes that are
+    finally reported", one bullet below the one saying no pair is dropped."""
+
+    def test_runs_with_any_cutoff_write_the_same_pairs(self):
+        """What the help now says, checked on a run: a cutoff nothing passes and one
+        everything passes write the same pairs to every file but the relevant ones."""
+        none, noneFiles = runTool(cutoff=0.99)
+        every, everyFiles = runTool(cutoff=0.0)
+        self.assertIs(none.content["success"], True, none.content)
+        self.assertIs(every.content["success"], True, every.content)
+        self.assertEqual(valueRows(noneFiles["regulator2Gene_output.tab"]), EVERY_PAIR)
+        self.assertEqual(pairs(noneFiles["regulator_associations.tab"]), EVERY_PAIR)
+        self.assertEqual(noneFiles["regulator_associations.tab"], everyFiles["regulator_associations.tab"])
+        self.assertEqual(pairs(noneFiles["regulator_relevant_associations.tab"]), MIR2_PAIRS)
+        self.assertEqual(pairs(everyFiles["regulator_relevant_associations.tab"]), EVERY_PAIR)
+
+    def test_the_tool_page_does_not_say_the_cutoff_drops_targets(self):
+        page = _withoutComments(_read(TOOL_PAGE))
+        for wording in ("used for filtering the matched targets", "finally reported",
+                        "kept or dropped"):
+            with self.subTest(wording=wording):
+                self.assertNotIn(wording, page)
+        self.assertIn("the cutoff on the correlation decides which pairs are marked as relevant. "
+                      "The other pairs are not dropped: they stay in the results with their scores.",
+                      page)
+
+    def test_the_step1_card_does_not_say_the_cutoff_drops_pairs(self):
+        source = _read(STEP1_VIEWS)
+        geneExpression = _helpOf(source, "rnaseqauxFileSelector")
+        cutoff = _helpOf(source, "cutoffField")
+        self.assertNotIn("filter", geneExpression)
+        self.assertIn("every pair stays in the results.", geneExpression)
+        self.assertNotIn("is kept", cutoff)
+        self.assertIn("With negative correlation a pair is marked relevant when its correlation is "
+                      "below the cutoff", cutoff)
+        self.assertTrue(cutoff.endswith("A pair that does not pass stays in the results with its score."),
+                        cutoff)
+
+    def test_the_user_guide_does_not_say_the_targets_are_filtered(self):
+        guide = _read(os.path.join(REPO, "docs", "2_1_accepted_input.md"))
+        for wording in ("used to filter the predicted targets", "filtered on it",
+                        "default selection keeps"):
+            with self.subTest(wording=wording):
+                self.assertNotIn(wording, guide)
+        self.assertIn("the other pairs are not dropped: they\n  stay in the results with their scores.",
+                      guide)
+
+
 class TheScoreMethodIsCheckedTest(unittest.TestCase):
 
     def test_an_unknown_score_method_is_refused_by_name_before_anything_runs(self):
@@ -270,8 +336,9 @@ class TheScoreMethodIsCheckedTest(unittest.TestCase):
         self.assertNotIn("<img", answer.content["message"])
 
     def test_the_accepted_score_methods_pass_validation(self):
-        """The three the form offers, and "fc", which it offered before #221 and which
-        runs with no score and says so."""
+        """The three the form offers, and "fc", which the form never offered (its
+        option was commented out from the first commit) but miRNA2Target has always
+        taken, and which runs with no score and says so, as #221 made it."""
         job = MiRNA2GeneJob("scorejob", None, tempfile.gettempdir() + "/")
         job.geneBasedInputOmics = [{"omicName": "miRNA-seq", "inputDataFile": "values.tab",
                                     "isExample": True}]

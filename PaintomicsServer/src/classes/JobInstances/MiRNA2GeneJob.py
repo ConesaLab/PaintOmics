@@ -69,8 +69,10 @@ RETIRED_SELECTION_METHODS = {"fc": "positive_correlation"}
 # Report for a value off the request.
 SCORE_METHODS = ("kendall", "spearman", "pearson")
 
-# "fc" is still run: the form offered it before #221, it computes no score, and the run
-# says so in its notice (see noScoreNotice and miRNA2Target.run).
+# "fc" is still run, as #221 made it: it computes no score, and the run says so in its
+# notice (see noScoreNotice and miRNA2Target.run). The form never offered it (its
+# option, "Fold Change of miRNA expression", was commented out from the first commit,
+# 54ff9dc3, until #233 removed the line), but miRNA2Target has always taken it.
 RETIRED_SCORE_METHODS = ("fc",)
 
 
