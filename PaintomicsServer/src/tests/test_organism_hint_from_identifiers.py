@@ -445,8 +445,9 @@ MAIZE_V5 = ["Zm00001eb000010", "Zm00001eb000020", "Zm00001eb000010_T001", "Zm000
 # reference table, cDNA file and protein file. zma holds none of these.
 MAIZE_V5_PRELIMINARY = ["Zm00001e000001", "Zm00001e000002", "Zm00001e009486_T001", "Zm00001e035004_T001",
                         "Zm00001e009486_P001", "Zm00001e035004_P001"]
-# Grape, each form from where it was read. Only PN_T2T is in the vvi database on
-# paintomics.org (97,771 ids; none of any other form here).
+# Grape, each form from where it was read. Only PN_T2T was in the vvi database on
+# paintomics.org (97,771 ids; none of any other form here) before identifier_aliases/vvi.tsv.gz,
+# which adds the 12X, v4 and NCBI-tag forms where it is applied.
 GRAPE = {
     "PN_T2T, the vvi database": ["Vitis01g00541", "Vitis15g01003", "Vitis04g00873.t01", "Vitis02g00420.t01",
                                  "Vitis07g00050.t01.CDS"],
@@ -569,7 +570,11 @@ class CountSaysWhatWasCountedTest(unittest.TestCase):
         self.assertNotIn("match its identifier index", message)
 
     def test_a_form_the_organism_does_not_hold_is_not_told_to_choose_it(self):
-        """Choosing vvi cannot help a 12X file: vvi holds PN_T2T, and the next run matches nothing again."""
+        """Choosing vvi cannot help a file of a form its index does not hold, and the next run matches nothing again.
+
+        The lookup here holds PN_T2T only, as vvi does before vvi.tsv.gz is applied. That is the case of
+        12X, v4 and NCBI-tag files on such a server, and of 12X.v2 and UniProt-name files on any server.
+        """
         for version, identifiers in GRAPE.items():
             if identifiers is GRAPE_INDEXED:
                 continue

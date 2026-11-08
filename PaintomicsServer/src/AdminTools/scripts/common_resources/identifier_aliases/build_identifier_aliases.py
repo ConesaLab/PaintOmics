@@ -96,6 +96,8 @@ GRAPE_VERSIONS = (
 )
 #: Added to a grape version's evidence when the position test ran on the row and passed.
 COLLINEAR = "+collinear"
+#: KEGG's names, in vvi's kegg2genesymbol.list, for the plastid and mitochondrial genomes.
+GRAPE_ORGANELLES = ("CP", "MT")
 
 #: A sequence match has to clear these both ways before it can name a gene: ZW6
 #: is another cultivar, so an exact match is not expected, but a weaker one is a
@@ -721,9 +723,12 @@ def grapeRows(species, locusTags, versions, places):
     id and its GeneID are both on numbered chromosomes, the other links of the same
     version around the id have to put the GeneID where KEGG has it (Collinearity, with the
     row itself left out): VIT_05s0062g01430 and Vitvi05g01375, on chromosome 5 in both
-    versions, link a GeneID on chromosome 7. Such a row is marked COLLINEAR, and one the
-    test cannot ask (an id on 12X's Un, a GeneID on CP) stays without the mark, as maize's
-    untested locus tags do. An id two routes give different GeneIDs gives none.
+    versions, link a GeneID on chromosome 7. Such a row is marked COLLINEAR. An id on a
+    numbered chromosome whose GeneID KEGG puts on the plastid or the mitochondrion
+    (GRAPE_ORGANELLES) is a nuclear gene model, not where that gene is, and is dropped the
+    same way: VIT_13s0019g02630, on chromosome 13, links psbA. One the test
+    cannot place (an id on 12X's Un or a _random sequence) stays without the mark, as
+    maize's untested locus tags do. An id two routes give different GeneIDs gives none.
     """
     kegg = species.displayIds("kegg_id")
 
@@ -747,12 +752,15 @@ def grapeRows(species, locusTags, versions, places):
                   if numbered(own.get(gene)) and numbered(places.kegg.get(geneId))}
         collinearity = Collinearity([(own[gene], places.kegg[geneId]) for gene, geneId in tested.items()])
         for gene, geneId in sorted(pairs.items()):
-            if gene not in tested:
-                named[gene].setdefault(geneId, evidence)
-            elif collinearity.supports(own[gene], places.kegg[geneId], leaveOut=True):
-                named[gene].setdefault(geneId, evidence + COLLINEAR)
-            else:
+            if gene in tested:
+                if collinearity.supports(own[gene], places.kegg[geneId], leaveOut=True):
+                    named[gene].setdefault(geneId, evidence + COLLINEAR)
+                else:
+                    misplaced.append(gene)
+            elif numbered(own.get(gene)) and places.kegg.get(geneId, ("",))[0] in GRAPE_ORGANELLES:
                 misplaced.append(gene)
+            else:
+                named[gene].setdefault(geneId, evidence)
     rows = []
     conflicts = []
     for alias in sorted(named):
@@ -1054,8 +1062,8 @@ def buildGrape(args):
     requirePlaced("KEGG's gene list", {gene: place[0] for gene, place in places.kegg.items()},
                   species.displayIds("kegg_id"), MIN_GRAPE_PLACED, code="vvi")
     rows, misplaced, conflicts = grapeRows(species, locusTags, versions, places)
-    sys.stderr.write("vvi: Ensembl link whose neighbours do not put the GeneID there, %d skipped: %s\n"
-                     % (len(misplaced), " ".join(misplaced)))
+    sys.stderr.write("vvi: Ensembl link whose neighbours do not put the GeneID there, or a nuclear gene linked to a "
+                     "plastid or mitochondrial one, %d skipped: %s\n" % (len(misplaced), " ".join(misplaced)))
     sys.stderr.write("vvi: ids two sources give different GeneIDs, %d skipped: %s\n"
                      % (len(conflicts), " ".join(conflicts)))
     return species, rows

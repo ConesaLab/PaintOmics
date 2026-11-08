@@ -312,13 +312,13 @@ KEGG lists grape's genes as NCBI GeneIDs on the PN_T2T assembly (RefSeq `GCF_030
 and the installed Ensembl genebuild is PN_T2T as well (`Vitis01g00541`, Ensembl Plants 61
 on). Before it, Ensembl Plants annotated 12X (`VIT_00s0125g00090`, up to release 52) and
 PN40024.v4 (`Vitvi18g00828`, releases 53 to 60), and NCBI files most GeneIDs under a locus
-tag (`VIT_00032725001`). None of these was in the installed tables. 42,531 rows:
+tag (`VIT_00032725001`). None of these was in the installed tables. 42,523 rows:
 
 | `evidence` | Rows | Target | How |
 |---|---:|---|---|
 | `ncbi_locus_tag` | 17,400 | `ncbi_geneid` | NCBI's locus tag for the gene starts `VIT_` and KEGG has its GeneID |
 | `ensembl52_12x+collinear` | 15,881 | `ncbi_geneid` | Ensembl Plants 52 links the 12X gene to one GeneID KEGG has, and the position test below passes |
-| `ensembl52_12x` | 1,079 | `ncbi_geneid` | The same, where the test cannot run: the 12X gene is on `Un` (807) or a `_random` sequence (264), or the GeneID is on the plastid or mitochondrion (8) |
+| `ensembl52_12x` | 1,071 | `ncbi_geneid` | The same, where the test cannot run because the 12X gene is on `Un` (807) or a `_random` sequence (264). 14 of them (13 on `Un`, 1 on `16_random`) link a plastid or mitochondrial gene |
 | `ensembl60_v4+collinear` | 8,111 | `ncbi_geneid` | Ensembl Plants 60 links the v4 gene to one GeneID KEGG has, and the position test passes |
 | `ensembl60_v4` | 60 | `ncbi_geneid` | The same, with the v4 gene on `Un`, where the test cannot run |
 
@@ -349,6 +349,18 @@ tag (`VIT_00032725001`). None of these was in the installed tables. 42,531 rows:
   are on chromosome 3 and links one on 7. A row the test cannot ask keeps the evidence
   without `+collinear`, as maize's untested locus tags stay: the link is Ensembl's, and the
   test only vetoes it.
+* **Nuclear genes linked to an organelle's.** 8 more 12X rows are dropped: the 12X gene is on
+  a numbered chromosome of the nuclear genome, and the GeneID is a gene of the plastid (`CP`
+  in KEGG's list) or the mitochondrion (`MT`). `VIT_13s0019g02630`, on chromosome 13, links
+  psbA (4025118); the others link atp6, atp8, rps4, rpl14, rpl22, cemA and ycf1. Wherever such
+  a model's sequence came from (a nuclear copy of the organelle gene, or organelle sequence
+  the assembly placed in a chromosome), it is not where that gene is, so the row goes the way
+  a link to another chromosome does. No 12X gene model sits on a plastid or mitochondrial
+  sequence, so a 12X file has no other id for these 8 genes, 6 of them on a KEGG pathway: on
+  `vvi` they map from the PN_T2T form only. The 14 links from `Un` and `_random` stay: their place is unknown,
+  and some `Un` stretches hold several organelle genes in a row (`VIT_00s0246g00060` to
+  `VIT_00s0246g00240` link 4 mitochondrial and plastid genes), which looks like organelle
+  sequence the assembly could not place. No v4 row links an organelle gene.
 
 | Position test, grape | 12X, release 52 | v4, release 60 |
 |---|---:|---:|
@@ -369,11 +381,11 @@ that agrees with them, such as `VIT_13s0101g00090` and `VIT_13s0101g00100`, 2 Mb
 their neighbours put them, and the chromosome 5 pair above. Some of those may be right. They
 are dropped because the rule asks for neighbours that agree.
 
-The rows reach 20,528 of KEGG's 26,425 grape genes, 5,074 of its 6,273 pathway genes: NCBI's
-tags reach 17,400 (4,569 on a pathway), the 12X ids 16,910 (4,411) and the v4 ids 8,161
+The rows reach 20,520 of KEGG's 26,425 grape genes, 5,068 of its 6,273 pathway genes: NCBI's
+tags reach 17,400 (4,569 on a pathway), the 12X ids 16,902 (4,405) and the v4 ids 8,161
 (2,221). 16,017 of these genes are reached by more than one alias, mostly one of each form;
 within one release, 50 KEGG genes are reached by two 12X ids and 10 by two v4 ids. They cover
-16,961 of the 29,927 protein-coding 12X genes and 8,171 of the 35,134 v4 genes: Ensembl links
+16,953 of the 29,927 protein-coding 12X genes and 8,171 of the 35,134 v4 genes: Ensembl links
 only 8,299 v4 genes to any GeneID.
 
 Every row targets a GeneID's `ncbi_geneid` document, whose group holds that GeneID's KEGG
@@ -403,7 +415,7 @@ reached by more than one alias, and those aliases merge there the way two Ensemb
 do (without the tables, 404 maize and 140 pea KEGG genes are reached by more than one Ensembl
 gene). Grape's forms are meant to: a GeneID's NCBI tag, its 12X id and its v4 id all reach it.
 
-On a copy of paintomics.org's `vvi` database (2026-11-08), every one of the 42,531 grape rows
+On a copy of paintomics.org's `vvi` database (2026-11-08), every one of the 42,523 grape rows
 is accepted by the build (`processIdentifierAliases` on the deployed `mapping/` files) and by
 the additive script that adds a table to an installed species, and none is refused. Every name
 the database held before answers the mapper as it did.
@@ -457,7 +469,7 @@ tables, byte for byte from one run to the next:
 | `zma.tsv.gz` | 27,769 | 167,226 | `d61bffc4e46eaf07a8cede9bc78c709b` |
 | `psat.tsv.gz` | 21,979 | 140,768 | `bcd3ed7272608db40d537125618dda87` |
 | `sbi.tsv.gz` | 3,192 | 20,854 | `902915412cb3bfc070c9c7f126aff035` |
-| `vvi.tsv.gz` | 42,531 | 265,745 | `1d0c99e85b9516da65a335aa6029b076` |
+| `vvi.tsv.gz` | 42,523 | 265,655 | `99f3a73bcb556190faee564b0bc1c0ba` |
 
 Expect differences on a later date: NCBI rewrites gene_info daily, and KEGG and Ensembl
 move with each release.
