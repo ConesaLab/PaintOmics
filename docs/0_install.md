@@ -160,7 +160,7 @@ to the `environment:` block of the app service.
 | Setting | Shipped default | What it does |
 |---|---|---|
 | `PAINTOMICS_BASE_URL` | `http://localhost:8000` in the template; **compose refuses to start without it** | The externally reachable URL. It is embedded in the links in the welcome, password-reset and job-reminder emails, so a localhost value sends real users links they cannot follow |
-| `PAINTOMICS_HOSTED_BY` | paintomics.org's: `[Supercomputador Drago](https://aic.csic.es/supercomputador-drago/) (CSIC)` | The welcome dialog says "PaintOmics AI runs on" and then these words; `[words](https://address)` makes a link. Any server other than paintomics.org sets its own words, for example `the Universitat de Valencia (I2SysBio)`, or sets it empty to say nothing about where it runs. A `serverconf.py` written before this setting existed also says nothing |
+| `PAINTOMICS_HOSTED_BY` | paintomics.org's: `[Supercomputador Drago](https://aic.csic.es/supercomputador-drago/) (CSIC)` | The welcome dialog says "PaintOmics AI runs on" and then these words; `[words](https://address)` makes a link. Any server other than paintomics.org sets its own words, for example `servers of the Universitat de València (I2SysBio)`, or sets it empty to say nothing about where it runs. A `serverconf.py` written before this setting existed also says nothing |
 | `SERVER_HOST_NAME` | `0.0.0.0` | Interface to listen on |
 | `SERVER_PORT_NUMBER` | `8000` | Port |
 | `SERVER_ALLOW_DEBUG` | `false` | Never true in production. The smoke test reports it if it is on |

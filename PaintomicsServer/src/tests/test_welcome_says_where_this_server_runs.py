@@ -8,7 +8,7 @@ The welcome dialog on every PaintOmics server said
     PaintOmics AI runs on Supercomputador Drago (CSIC). For any inquiries, ...
 
 because the sentence was written into MainView.js. That is true of
-paintomics.org and false of paintomics.uv.es (Universitat de Valencia) and of
+paintomics.org and false of paintomics.uv.es (Universitat de València) and of
 any other server built from this repository.
 
 The sentence is a server setting now, PAINTOMICS_HOSTED_BY, and reaches the
@@ -52,7 +52,7 @@ TEMPLATE = os.path.join(SRC, "resources", "example_serverconf.py")
 COMPOSE = os.path.join(REPO_ROOT, "deploy", "compose.yaml")
 
 DRAGO_SETTING = "[Supercomputador Drago](https://aic.csic.es/supercomputador-drago/) (CSIC)"
-UV_SETTING = "the Universitat de Valencia (I2SysBio)"
+UV_SETTING = "servers of the Universitat de València (I2SysBio)"
 
 CONTACT = ('For any inquiries, please contact us at '
            '<a href="mailto:paintomicsai@gmail.com">paintomicsai@gmail.com</a>')
@@ -69,7 +69,7 @@ class HostingSentenceTest(unittest.TestCase):
 
     def test_plain_words(self):
         self.assertEqual(hostingSentenceHtml(UV_SETTING),
-                         "PaintOmics AI runs on the Universitat de Valencia (I2SysBio).")
+                         "PaintOmics AI runs on servers of the Universitat de València (I2SysBio).")
 
     def test_no_setting_no_sentence(self):
         for setting in (None, "", "   ", ".", 0, ["Drago"]):
@@ -78,7 +78,7 @@ class HostingSentenceTest(unittest.TestCase):
 
     def test_a_full_stop_in_the_setting_is_not_doubled(self):
         self.assertEqual(hostingSentenceHtml(UV_SETTING + ". "),
-                         "PaintOmics AI runs on the Universitat de Valencia (I2SysBio).")
+                         "PaintOmics AI runs on servers of the Universitat de València (I2SysBio).")
 
     def test_the_words_are_text(self):
         sentence = hostingSentenceHtml('<img src=x onerror="alert(1)"> & Co')
@@ -254,7 +254,7 @@ class WelcomeDialogTest(unittest.TestCase):
 
     def test_another_server_names_itself_not_drago(self):
         self.assertEqual(self.uv["message"],
-                         "PaintOmics AI runs on the Universitat de Valencia (I2SysBio). " + CONTACT)
+                         "PaintOmics AI runs on servers of the Universitat de València (I2SysBio). " + CONTACT)
 
     def test_a_server_without_the_setting_names_no_host(self):
         for dialog in (self.empty, self.missing):

@@ -2,14 +2,14 @@
 
 The same client is served by paintomics.org, which runs on Supercomputador
 Drago (CSIC), and by other servers, among them paintomics.uv.es at the
-Universitat de Valencia. The sentence used to be written into MainView.js, so
+Universitat de València. The sentence used to be written into MainView.js, so
 every server told its visitors it ran on Drago. It is a server setting now,
 PAINTOMICS_HOSTED_BY (see example_serverconf.py), and a server without the
 setting says nothing about where it runs.
 
 The setting holds the words that follow "PaintOmics AI runs on", for example
 
-    the Universitat de Valencia (I2SysBio)
+    servers of the Universitat de València (I2SysBio)
 
 and may carry links written as [words](https://address):
 

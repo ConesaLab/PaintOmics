@@ -193,7 +193,7 @@ PAINTOMICS_DOCS_URL     = os.getenv("PAINTOMICS_DOCS_URL", "https://conesalab.gi
 # "PaintOmics AI runs on", with any link written as [words](https://address).
 # The default is paintomics.org's. Every other server must set its own, or set
 # it empty to say nothing about where it runs, for example
-#     PAINTOMICS_HOSTED_BY="the Universitat de Valencia (I2SysBio)"
+#     PAINTOMICS_HOSTED_BY="servers of the Universitat de València (I2SysBio)"
 # A serverconf.py that does not define this at all also says nothing. See
 # src/common/HostingSentence.py.
 PAINTOMICS_HOSTED_BY    = os.getenv(
