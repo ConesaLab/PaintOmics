@@ -12,9 +12,10 @@ whenever the map passed. The network's "N of M KEGG pathways" counted it in M.
 
 The rule pinned here: one predicate, paStep3IsGlobalMap, decides what the
 global map is, on any organism code (a KEGG organism, the second rice entry, a
-species installed from a KO table); the counts skip what it names; whether a
-database is filtered is still asked of every pathway the server sent, as
-before, because the server adjusted the p-values over a set that holds the map.
+species installed from a KO table); the counts skip what it names, and so does
+the question whether a database is filtered: Step 2 corrects the p-values over
+the rows the table lists, without the map (test_adjusted_pvalues_stay_put), so
+hiding only the map is no filter.
 
 The real functions from PA_Step3Views.js run under node against a stand-in
 model; no DOM. The manual's worked example is checked against the stored STATegra
@@ -193,16 +194,33 @@ class CountsLeaveOutTheGlobalMapTest(unittest.TestCase):
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")
 class FilteredIsAskedOfEveryPathwayTest(unittest.TestCase):
-    """Whether the adjusted p-values are recomputed must not move with the
-    counts: hiding only the global map is a filter, as it always was."""
+    """Whether the adjusted p-values are recomputed is asked of the rows the
+    table lists. Step 2 corrects over those rows, without the global map, so
+    hiding only the map hides no row and must not recompute anything: it used
+    to, and every FDR column moved with nothing hidden from the table."""
 
-    def test_hiding_only_the_global_map_still_filters(self):
-        pathways = job("mmu")
-        pathways[3][2] = True                       # nothing hidden ...
-        self.assertFalse(run("mmu", pathways, {"f": "view.isDatabaseFiltered('KEGG')"})["f"])
-        pathways[0][2] = False                      # ... but the map
+    def test_hiding_only_the_global_map_is_no_filter(self):
+        for code in ("mmu", "dosa", "thaz"):
+            pathways = job(code)
+            pathways[3][2] = True                       # nothing hidden ...
+            self.assertFalse(run(code, pathways, {"f": "view.isDatabaseFiltered('KEGG')"})["f"], code)
+            pathways[0][2] = False                      # ... but the map
+            self.assertFalse(run(code, pathways, {"f": "view.isDatabaseFiltered('KEGG')"})["f"],
+                             "%s: hiding only the global map recomputes the FDR columns" % code)
+            self.assertFalse(run(code, pathways, {"f": "view.isDatabaseFiltered('Reactome')"})["f"], code)
+
+    def test_hiding_a_row_filters_with_or_without_the_map(self):
+        pathways = job("mmu")                       # mmu00020 hidden
         self.assertTrue(run("mmu", pathways, {"f": "view.isDatabaseFiltered('KEGG')"})["f"])
-        self.assertFalse(run("mmu", pathways, {"f": "view.isDatabaseFiltered('Reactome')"})["f"])
+        pathways[0][2] = False                      # and the map
+        self.assertTrue(run("mmu", pathways, {"f": "view.isDatabaseFiltered('KEGG')"})["f"])
+        pathways[4][2] = False                      # a Reactome row
+        self.assertTrue(run("mmu", pathways, {"f": "view.isDatabaseFiltered('Reactome')"})["f"])
+
+    def test_another_organisms_map_hidden_is_a_filter(self):
+        """Only the job's own map is not a row; hsa01100 in a mouse job is one."""
+        pathways = [["hsa01100", "KEGG", False, 0.01], ["mmu00010", "KEGG", True, 0.5]]
+        self.assertTrue(run("mmu", pathways, {"f": "view.isDatabaseFiltered('KEGG')"})["f"])
 
     def test_both_callers_ask_it(self):
         source = read_source()

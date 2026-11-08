@@ -117,9 +117,11 @@ shared, its rows change either way.
     A false discovery rate correction depends on how many tests are in the
     family, and hiding pathways removes tests. PaintOmics therefore asks the
     server for a fresh set of adjusted p-values over the pathways that remain
-    each time you apply a filter, and swaps them into the table. The raw
-    p-values never move; the FDR columns do. If you are going to quote an FDR
-    value, say what was filtered when you read it.
+    each time you apply a filter, and swaps them into the table. The family
+    holds every database's remaining pathways, as when the job was computed,
+    so hiding a KEGG category moves Reactome's FDR values a little too. The
+    raw p-values never move; the FDR columns do. If you are going to quote an
+    FDR value, say what was filtered when you read it.
 
 ## Where to go next
 

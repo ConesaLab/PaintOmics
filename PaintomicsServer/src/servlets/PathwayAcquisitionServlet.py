@@ -1723,6 +1723,36 @@ def pathwayAcquisitionMetagenes_PART2(ROOT_DIRECTORY, userID, savedJobInstance, 
 
         return RESPONSE
 
+def _adjustAcrossDatabases(pvaluesByDatabase):
+    """Corrects ``{database: {pathwayID: pValue}}`` as ONE family, every
+    database together, and answers by database:
+    ``{database: {"FDR BH": {pathwayID: adjusted}, "FDR BY": {...}}}``.
+
+    One family because that is how Step 2 corrects a job
+    (adjustPathwayPvalues in PathwayAcquisitionJob.py), and this route answers
+    a category filter by correcting the rows the table still shows: it must
+    give what Step 2 would give for those rows. It corrected each database on
+    its own, so on a job with more than one database the first filter moved
+    the FDR values of every database, even one with no row hidden. On the
+    stategra example (tests/baseline/08-stategra-multiomics), hiding one KEGG
+    pathway whose p-value is 1 moved them by up to 0.58, Reactome's by up to
+    0.40, and 25 FDR BH values crossed 0.05.
+
+    Keyed by (database, pathwayID) inside, so two databases can never share an
+    entry. Every database asked about is in the answer, with both methods,
+    even when none of its pathways was sent.
+    """
+    corrected = adjustPvalues({(database, pathwayID): pvalue
+                               for database, pathways in pvaluesByDatabase.items()
+                               for pathwayID, pvalue in pathways.items()})
+    byDatabase = {database: {method: {} for method in corrected}
+                  for database in pvaluesByDatabase}
+    for method, values in corrected.items():
+        for (database, pathwayID), value in values.items():
+            byDatabase[database][method][pathwayID] = value
+    return byDatabase
+
+
 def pathwayAcquisitionAdjustPvalues(request, response):
     try:
         #****************************************************************
@@ -1748,11 +1778,10 @@ def pathwayAcquisitionAdjustPvalues(request, response):
             newStoufferWeights = formFields.get("stoufferWeights")
             visiblePathways = formFields.get("visiblePathways")
 
-            newStoufferPvalues = defaultdict(dict)
-            newAdjustedStoufferPvalues = defaultdict(dict)
+            newStoufferPvalues = {}
 
-            # Iterate over each database (adjusting it independently)
             for db_name, db_pvalues in pvalues.items():
+                newStoufferPvalues[db_name] = {}
                 # Each pathway has a different set of matching omics and thus, Stouffer weights.
                 # The new Stouffer p-value will be computed for each pathway, even those that are currently hidden.
                 for pathway_id, pathway_pvalues in db_pvalues.items():
@@ -1764,8 +1793,12 @@ def pathwayAcquisitionAdjustPvalues(request, response):
 
                     newStoufferPvalues[db_name][pathway_id] = newStoufferValue
 
-                # Adjust the new Stouffer p-values passing only those pathways that are currently visible
-                newAdjustedStoufferPvalues[db_name] = adjustPvalues({pathway: pvalue for pathway, pvalue in newStoufferPvalues[db_name].items() if pathway in visiblePathways})
+            # Correct the new Stouffer p-values of the pathways that are visible
+            # now, every database in one family (_adjustAcrossDatabases).
+            visible = set(visiblePathways)
+            newAdjustedStoufferPvalues = _adjustAcrossDatabases({
+                db_name: {pathway: pvalue for pathway, pvalue in dbStouffer.items() if pathway in visible}
+                for db_name, dbStouffer in newStoufferPvalues.items()})
 
             response.setContent({
                 "success": True,
@@ -1774,21 +1807,24 @@ def pathwayAcquisitionAdjustPvalues(request, response):
             })
         else:
 
-            # No new stouffer weights, just recalculate the provided p-values
-
-            # Iterate over each database (adjusting it independently)
-            adjustedPvaluesByOmic = defaultdict()
+            # No new stouffer weights, just recalculate the provided p-values:
+            # one family per omic and per combined method, every database in
+            # it (_adjustAcrossDatabases). pvaluesByOmic[omic][db][pathway].
+            pvaluesByOmic = defaultdict(lambda: defaultdict(dict))
 
             for db_name, db_pvalues in pvalues.items():
-                pvaluesByOmic = defaultdict(dict)
-
                 for pathway, pathwayPvalues in db_pvalues.items():
                     for omic, omicPvalue in pathwayPvalues.items():
                         # Skip those in which there is no pValue (no matching in the pathway for that omic)
                         if omicPvalue != '-':
-                            pvaluesByOmic[omic][pathway] = omicPvalue
+                            pvaluesByOmic[omic][db_name][pathway] = omicPvalue
 
-                adjustedPvaluesByOmic[db_name] = {omic: adjustPvalues(omic_pvalues) for omic, omic_pvalues in pvaluesByOmic.items()}
+            # An omic is answered only under the databases it has a p-value in,
+            # as before.
+            adjustedPvaluesByOmic = {db_name: {} for db_name in pvalues}
+            for omic, byDatabase in pvaluesByOmic.items():
+                for db_name, corrected in _adjustAcrossDatabases(byDatabase).items():
+                    adjustedPvaluesByOmic[db_name][omic] = corrected
 
             response.setContent({
                 "success": True,

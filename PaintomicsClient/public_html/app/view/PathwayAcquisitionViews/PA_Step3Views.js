@@ -543,17 +543,20 @@ function PA_Step3JobView() {
 	};
 
 	/**
-	* Whether the category filter hides any of this database's pathways, which
-	* is what sends the adjusted p-values back to the server to be recomputed
-	* over the visible rows. Asked of every pathway the server sent, the global
-	* map included: the server adjusted the p-values over a set that holds it,
-	* so hiding it is a filter like any other even though no row or count shows
-	* it. This is exactly what comparing the pathway total with the visible
-	* count said while the visible count still included the map.
+	* Whether the category filter hides any of this database's pathways the
+	* table lists, which is what sends the adjusted p-values back to the server
+	* to be recomputed over the visible rows. The global map does not count
+	* (paStep3IsGlobalMap): the server corrects a job's p-values over the rows
+	* the table lists, without the map (adjustPathwayPvalues in
+	* PathwayAcquisitionJob.py), so hiding only the map hides no row and must
+	* change no adjusted p-value. It used to count, while the server's
+	* correction still held the map, and hiding the map alone recomputed every
+	* FDR column over a family one test smaller.
 	*/
 	this.isDatabaseFiltered = function(db){
+		var organism = this.getModel().getOrganism();
 		return this.getModel().getPathwaysByDB(db).some(function(pathway) {
-			return !pathway.isVisible();
+			return !pathway.isVisible() && !paStep3IsGlobalMap(pathway.getID(), organism);
 		});
 	};
 
