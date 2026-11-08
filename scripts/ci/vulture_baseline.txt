@@ -180,6 +180,8 @@ PaintomicsServer/src/tests/test_model_fallback.py: unused class 'CompleteFallsBa
 PaintomicsServer/src/tests/test_model_fallback.py: unused class 'Ladder' (60% confidence)
 PaintomicsServer/src/tests/test_model_fallback.py: unused class 'ProbeVerdict' (60% confidence)
 PaintomicsServer/src/tests/test_model_fallback.py: unused class 'SdkShimFallsBack' (60% confidence)
+PaintomicsServer/src/tests/test_omic_name_is_text_in_steps_3_and_4.py: unused method 'handle_data' (60% confidence)
+PaintomicsServer/src/tests/test_omic_name_is_text_in_steps_3_and_4.py: unused variable 'handle_startendtag' (60% confidence)
 PaintomicsServer/src/tests/test_organism_search.py: unused class 'ComboIntegration' (60% confidence)
 PaintomicsServer/src/tests/test_organism_search.py: unused class 'CommonNamesAndCodes' (60% confidence)
 PaintomicsServer/src/tests/test_organism_search.py: unused class 'CuratedList' (60% confidence)

@@ -2890,7 +2890,10 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			var db_suffix = (me.dbid != "KEGG" ? "_" + me.dbid.toLowerCase(): '');
 
 			for(var cluster in CLUSTERS){
-				img_path = SERVER_URL_GET_CLUSTER_IMAGE + "/" + this.getModel().getJobID() + "/output/" + visualOptions.colorBy + "_cluster_" + cluster + db_suffix + ".png";
+				/* colorBy is the omic's name, and this path goes into src="...":
+				   encoded as a path segment, a quote cannot close the attribute,
+				   and a "#" or "?" in the name no longer cuts the URL short. */
+				img_path = SERVER_URL_GET_CLUSTER_IMAGE + "/" + this.getModel().getJobID() + "/output/" + encodeURIComponent(visualOptions.colorBy) + "_cluster_" + cluster + db_suffix + ".png";
 				htmlCode+= '<span class="networkClusterImage" name="'+ cluster + '"><i class="fa fa-eye-slash fa-2x"></i><img src="' + img_path +'"><p><i class="fa fa-square" style="color:' + CLUSTERS[cluster] +'"></i> Cluster ' + cluster + '</p></span>';
 			}
 			$("#networkClustersContainer_" + me.dbid + " div").html(htmlCode);
@@ -3806,10 +3809,15 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		var htmlContent = '<div class="radio"><input type="radio" ' + ((visualOptions.colorBy === "classification")? "checked": "") + ' id="classification-check_' + this.dbid + '"  name="colorByCheckbox_' + this.dbid + '" value="classification"><label for="classification-check_' + this.dbid + '">Classification</label></div>';
 		var inputOmics = this.getModel().getGeneBasedInputOmics();
 		for(var i in inputOmics){
+			/* The omic's name as typed in Step 1: encoded in the label and the
+			   value (.val() reads the value back decoded, so colorBy keeps the
+			   name itself), and reduced to a safe key in the id. */
+			var colorByName = inputOmics[i].omicName;
+			var colorByID = paDomKey(colorByName.replace(/ /g, "_").toLowerCase()) + '-check_' + this.dbid;
 			htmlContent +=
 			'<div class="radio">' +
-			'  <input type="radio" ' + ((visualOptions.colorBy === inputOmics[i].omicName)? "checked": "")+ ' id="' + inputOmics[i].omicName.replace(/ /g, "_").toLowerCase() + '-check_' + this.dbid + '" name="colorByCheckbox_' + this.dbid + '" value="' + inputOmics[i].omicName + '">' +
-			'  <label for="' + inputOmics[i].omicName.replace(/ /g, "_").toLowerCase() + '-check_' + this.dbid + '">' + inputOmics[i].omicName + '</label>' +
+			'  <input type="radio" ' + ((visualOptions.colorBy === colorByName)? "checked": "")+ ' id="' + colorByID + '" name="colorByCheckbox_' + this.dbid + '" value="' + Ext.String.htmlEncode(colorByName) + '">' +
+			'  <label for="' + colorByID + '">' + Ext.String.htmlEncode(colorByName) + '</label>' +
 			'</div>';
 		}
 		$("#colorByContainer_" + this.dbid).html(htmlContent);
@@ -4531,9 +4539,11 @@ function PA_Step3PathwayDetailsView() {
 					var globalP = (globalOmicPvalues[omicName] !== undefined) ? globalOmicPvalues[omicName] : significanceValues[omicName][0][2]; // Fallback to first condition if global not present
 					var renderedGlobalP = (globalP > 0.001 || globalP === 0) ? parseFloat(globalP).toFixed(5) : parseFloat(globalP).toExponential(4);
 					
-					var omicID = omicName.replace(/ /g, "_");
-					
-					htmlCode += '<tr class="omic-row" data-omic="' + omicID + '"><td class="pa-details-omic">' + omicName + '</td><td class="pa-details-num">' + significanceValues[omicName][0][0] + ' (' + significanceValues[omicName][0][1] + ')</td><td class="pa-details-num">' + renderedGlobalP + '</td>' +
+					/* The omic's name is the user's: text in the cell, a safe
+					   key in the attributes, classes and ids built from it. */
+					var omicID = paDomKey(omicName.replace(/ /g, "_"));
+
+					htmlCode += '<tr class="omic-row" data-omic="' + omicID + '"><td class="pa-details-omic">' + Ext.String.htmlEncode(omicName) + '</td><td class="pa-details-num">' + significanceValues[omicName][0][0] + ' (' + significanceValues[omicName][0][1] + ')</td><td class="pa-details-num">' + renderedGlobalP + '</td>' +
 					            '<td class="pa-details-actions">' +
 					            '<i class="fa fa-chevron-right expandConditions" title="Show per-condition p-values" data-omic="' + omicID + '"></i>' +
 					            (! Ext.Object.isEmpty(foundFeatures[omicName]) ? '<i class="fa fa-plus-square-o expandMatched" title="Show matched features" data-id="' + omicID + '"></i>' : '') +
@@ -4547,7 +4557,7 @@ function PA_Step3PathwayDetailsView() {
 						var condName = conditionNames[c] || ("Condition " + (c+1));
 
 						htmlCode += '<tr class="condition-row cond-row-' + omicID + '" style="display:none;">' +
-						            '<td class="pa-details-cond">' + condName + '</td>' +
+						            '<td class="pa-details-cond">' + Ext.String.htmlEncode(condName) + '</td>' +
 						            '<td class="pa-details-num">' + significanceValues[omicName][c][0] + ' (' + significanceValues[omicName][c][1] + ')</td>' +
 						            '<td class="pa-details-num">' + renderedCondP + '</td><td></td></tr>';
 					}
@@ -4557,7 +4567,7 @@ function PA_Step3PathwayDetailsView() {
 
 				var detailedHTMLcode = '';
 				Object.keys(foundFeatures).forEach(function(omicName) {
-					detailedHTMLcode += '<div id="matchedlist_' + omicName.replace(/ /g, "_") + '" class="pa-details-matchedlist" style="display: none;"><h5>Matched features: ' + omicName + '</h5>';
+					detailedHTMLcode += '<div id="matchedlist_' + paDomKey(omicName.replace(/ /g, "_")) + '" class="pa-details-matchedlist" style="display: none;"><h5>Matched features: ' + Ext.String.htmlEncode(omicName) + '</h5>';
 
 					if (! Ext.Object.isEmpty(foundFeatures[omicName])) {
 						// Sort alphabetically
@@ -4637,7 +4647,7 @@ function PA_Step3PathwayDetailsView() {
 					/* STEP 3.B IF WE DO NOT HAVE DATA FOR CURRENT PATHWAY          */
 					/****************************************************************/
 					pathwayPlotwrappers.append(
-						"<h4 style='color: #D16949;font-size: 13px;margin: 0;'>" + omicDataType[i] + "</h4>"+
+						"<h4 style='color: #D16949;font-size: 13px;margin: 0;'>" + Ext.String.htmlEncode(omicDataType[i]) + "</h4>"+
 						"<b>No data for this pathway.</b>"
 					);
 				}else if (metagenes.length === 0){
@@ -4646,7 +4656,7 @@ function PA_Step3PathwayDetailsView() {
 					   gives the next omic the air a chart would have left. */
 					pathwayPlotwrappers.append(
 						"<div class='paOmicNoTrend'>" +
-						"  <h4>" + omicDataType[i] + "</h4>" +
+						"  <h4>" + Ext.String.htmlEncode(omicDataType[i]) + "</h4>" +
 						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> No major trends in this pathway.</span>" +
 						"</div>"
 					);
@@ -4654,10 +4664,10 @@ function PA_Step3PathwayDetailsView() {
 					/****************************************************************/
 					/* STEP 3.C UPDATE THE HEATMAP AND THE PLOT                     */
 					/****************************************************************/
-					var divName = this.getComponent().getId() + "_" + omicDataType[i].replace(/ /g, "_").toLowerCase();
+					var divName = this.getComponent().getId() + "_" + paDomKey(omicDataType[i].replace(/ /g, "_").toLowerCase());
 					pathwayPlotwrappers.append(
 						"<div>"+
-						"  <h4>" + omicDataType[i] + "</h4>"+
+						"  <h4>" + Ext.String.htmlEncode(omicDataType[i]) + "</h4>"+
 						"  <span class='tooltipDetailsSpan'><i class='fa fa-info-circle'></i> " + metagenes.length + " major trend" + (metagenes.length === 1 ? "" : "s") + " in this pathway.</span></br>"+
 						"  <div class='twoOptionsButtonWrapper'>" +
 						'      <a href="javascript:void(0)" class="button twoOptionsButton" name="heatmap-chart">Heatmap</a>'+
@@ -5076,7 +5086,7 @@ function PA_Step3PathwayTableView() {
 
 			significanceValues = pathwayModel.getSignificanceValues();
 			for (var j in significanceValues) {
-				omicName = "-" + j.toLowerCase().replace(/ /g, "-");
+				omicName = paOmicFieldSuffix(j);
 				
 				// Keep global backward compatibility
 				pathwayData['totalMatched' + omicName] = significanceValues[j][0][0];
@@ -5094,7 +5104,7 @@ function PA_Step3PathwayTableView() {
 			var globalOmicPvalues = pathwayModel.getGlobalOmicPvalues();
 			if (globalOmicPvalues) {
 				for (var j in globalOmicPvalues) {
-					omicName = "-" + j.toLowerCase().replace(/ /g, "-");
+					omicName = paOmicFieldSuffix(j);
 					if (globalOmicPvalues[j] !== undefined) {
 					    pathwayData['pValue' + omicName] = globalOmicPvalues[j];
 					}
@@ -5103,7 +5113,7 @@ function PA_Step3PathwayTableView() {
 
 			adjustedSignificanceValues = pathwayModel.getAdjustedSignificanceValues();
 			for (var j in adjustedSignificanceValues) {
-				omicName = "-" + j.toLowerCase().replace(/ /g, "-");
+				omicName = paOmicFieldSuffix(j);
 
 				for (var k in adjustedSignificanceValues[j]) {
 					pathwayData["adjpval" + k + omicName] = adjustedSignificanceValues[j][k];
@@ -5480,16 +5490,18 @@ function PA_Step3PathwayTableView() {
 		gridPanel.el.on('click', function(e, t) {
 			var el = Ext.get(t);
 			if (el.hasCls('expandOmicConditions')) {
-				var omicName = el.getAttribute('data-omic');
+				// The omic's key (paDomKey), as generateColumns put it in both places.
+				var omicKey = el.getAttribute('data-omic');
 				var isExpanded = el.hasCls('fa-chevron-down');
-				
+
 				// Toggle icon
 				el.toggleCls('fa-chevron-right');
 				el.toggleCls('fa-chevron-down');
-				
-				// Toggle columns
+
+				// Toggle columns. A whole class name, not a prefix: "-rna" used to
+				// open "-rna-seq"'s conditions as well.
 				gridPanel.headerCt.getGridColumns().forEach(function(column) {
-					if (column.cls && column.cls.indexOf('condition-column-' + omicName) !== -1) {
+					if (column.cls && (" " + column.cls + " ").indexOf(" condition-column-" + omicKey + " ") !== -1) {
 						if (isExpanded) column.hide(); else column.show();
 					}
 				});
@@ -5660,7 +5672,7 @@ function PA_Step3PathwayTableView() {
 							if (combinedPvaluesMethods.indexOf(adjustedColumn) != -1) {
 								keyField = "adjustedCombinedSignificancePvalue" + adjustedColumn + "%fdrterm%";
 							} else {
-								keyField = "adjpval%fdrterm%-" + adjustedColumn.toLowerCase().replace(/ /g, "-");
+								keyField = "adjpval%fdrterm%" + paOmicFieldSuffix(adjustedColumn);
 							}
 
 							/* Iterate over multiple test adjustment methods */
@@ -5709,7 +5721,7 @@ function PA_Step3PathwayTableView() {
 			visiblePvalues[rowData.source][rowData.pathwayID] = {};
 
 			omicNames.forEach(function(omic) {
-				visiblePvalues[rowData.source][rowData.pathwayID][omic] = rowData["pValue-" + omic.toLowerCase().replace(/ /g, "-")];
+				visiblePvalues[rowData.source][rowData.pathwayID][omic] = rowData["pValue" + paOmicFieldSuffix(omic)];
 			});
 
 			combinedPvaluesMethods.forEach(function(combMethod) {
@@ -5737,13 +5749,18 @@ function PA_Step3PathwayTableView() {
 		var conditionNames = me.model.conditionNames || [];
 
 		var renderFunction = function(value, metadata, record) {
+			/* The header text is HTML already (generateColumns encodes the omic
+			   and condition names in it), and the tip is HTML too. What goes in
+			   data-qtip="..." is attribute-encoded on top: the browser decodes
+			   it once and the tip shows the HTML, so a name's "&lt;" reaches
+			   the tip as "&lt;" and reads "<". */
 			var myToolTipText = "<b style='display:block; width:200px'>" + metadata.column.text.replace(/<\/br>/g, " ") + "</b>";
 			metadata.style = "height: 40px; font-size:12px;"
 
 			//IF THERE IS NOT DATA FOR THIS PATHWAY, FOR THIS OMIC, PRINT A '-'
 			if (value === "-" || value == undefined || isNaN(value)) {
 				myToolTipText = myToolTipText + "<i>No data for this pathway</i>";
-				metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+				metadata.tdAttr = 'data-qtip="' + paEscapeAttribute(myToolTipText) + '"';
 				metadata.style += "background-color:var(--pa-cell-empty,#D4D4D4);";
 				return "-";
 			}
@@ -5771,15 +5788,10 @@ function PA_Step3PathwayTableView() {
 				var sourceDB = record.get("source");
 				var totalFeatures, totalRelevant;
 				
-				var rawOmicName = metadata.column.text.replace(/<\/br>/g, " ");
-				// If it is a condition column, the header might be just the condition name.
-				// We need the omic name to look up total features.
-				if (isCondition) {
-					// We find the omic name by looking at the parent/sibling column or from the dataIndex
-					// For now, we try to extract it from the dataIndex which we know is 'pValue_c' + c + omicName
-					// or we can use the 'omic' property if we added it to the column definition.
-					rawOmicName = metadata.column.omic || rawOmicName;
-				}
+				// The omic's own name, which every omic column carries in `omic`.
+				// Not the header text: that is encoded HTML now, and a name with
+				// "&" or "<" would look up nothing.
+				var rawOmicName = metadata.column.omic || metadata.column.text.replace(/<\/br>/g, " ");
 
 				// Keep compatibility with old jobs
 				if (me.model.summary[4].hasOwnProperty(sourceDB)) {
@@ -5818,7 +5830,7 @@ function PA_Step3PathwayTableView() {
 						'  <tr><td>Not found</td><td>' + notFoundRelevant + '</td><td>' + notFoundNotRelev + '</td><td>' + (totalFeatures - foundFeatures) + '</td></tr>' +
 						'  <tr><td></td><td>' + totalRelevant + '</td><td>' + (totalFeatures - totalRelevant) + '</td><td>' + (totalFeatures) + '</td></tr>' +
 						'</table>';
-						metadata.tdAttr = 'data-qtip="' + myToolTipText + '"';
+						metadata.tdAttr = 'data-qtip="' + paEscapeAttribute(myToolTipText) + '"';
 					}
 				}
 
@@ -5831,8 +5843,14 @@ function PA_Step3PathwayTableView() {
 
 		for (var i in omics) {
 			var omic = omics[i];
-			omicName = "-" + omic.omicName.toLowerCase().replace(/ /g, "-");
-			
+			/* The field names' suffix, which is also the key the expand icon and
+			   its condition columns share: letters, digits, "-" and "_" only (see
+			   paOmicFieldSuffix). A column header is HTML, and the omic's name is
+			   the user's, shown to anyone a job is shared with: encoded there. */
+			omicName = paOmicFieldSuffix(omic.omicName);
+			var omicHeaderText = Ext.String.htmlEncode(omic.omicName).replace(" ", "</br>");
+			var omicKey = omicName;
+
 			// Detect number of conditions across all pathways for this omic
 			var nConditions = 0;
 			var allPathways = Object.values(me.model.getPathways());
@@ -5849,7 +5867,7 @@ function PA_Step3PathwayTableView() {
 			}
 
 			var omicColumn = {
-				text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer;" data-omic="' + omicName + '"></i> ' : '') + omic.omicName.replace(" ","</br>"), 
+				text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer;" data-omic="' + omicKey + '"></i> ' : '') + omicHeaderText,
 				cls:"header-45deg",
 				// 88, not 90: "Metabolomics" needs 66px of the 68 left inside the
 				// padding, and the 2px per omic go to Pathway name (its minWidth).
@@ -5871,7 +5889,8 @@ function PA_Step3PathwayTableView() {
 				for (var c = 0; c < nConditions; c++) {
 					var condName = conditionNames[c] || ("Cond " + (c+1));
 					subColumns.push({
-						text: condName,
+						// A header from the user's file, so text as well.
+						text: Ext.String.htmlEncode(condName),
 						dataIndex: 'pValue_c' + c + omicName,
 						width: 90, flex: 1, hidden: true, // Hidden by default
 						sortable: true, align: "center",
@@ -5880,7 +5899,7 @@ function PA_Step3PathwayTableView() {
 						omic: omic.omicName,
 						isCondition: true,
 						nConditions: nConditions,
-						cls: "header-45deg condition-column-" + omicName
+						cls: "header-45deg condition-column-" + omicKey
 					});
 					
 					// Add fields to row model for conditions
@@ -5890,7 +5909,7 @@ function PA_Step3PathwayTableView() {
 				}
 				
 				columns.push({
-					text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer; margin-right:5px;" data-omic="' + omicName + '"></i> ' : '') + omic.omicName.replace(" ","</br>"),
+					text: (nConditions > 1 ? '<i class="fa fa-chevron-right expandOmicConditions" style="cursor:pointer; margin-right:5px;" data-omic="' + omicKey + '"></i> ' : '') + omicHeaderText,
 					columns: subColumns,
 					omic: omic.omicName
 				});
@@ -5916,7 +5935,7 @@ function PA_Step3PathwayTableView() {
 			//Apply only when there are adjusted p-values
 			adjustedPvaluesMethods.forEach(function(m) {
 				columns.push({
-					text: omics[i].omicName.replace(" ","</br>") + '</br>(' + m + ')', cls:"header-45deg",
+					text: omicHeaderText + '</br>(' + m + ')', cls:"header-45deg",
 					dataIndex: 'adjpval' + m + omicName, width:88,
 					flex: 1, hidden: (hidden || selectedAdjustedMethod != m),
 					sortable: true, align: "center",
@@ -6039,8 +6058,8 @@ function PA_Step3PathwayTableView() {
 								});
 
 								// Writes the current weight onto the field label so it is readable without
-								// dragging. The label text itself is untouched, because the Apply handler
-								// maps sliders back to omics through getFieldLabel().
+								// dragging. The label text itself is untouched; the Apply handler maps
+								// sliders back to omics through their omicName.
 								var showWeight = function(slider, value) {
 									if (slider.labelEl && slider.labelEl.dom) {
 										slider.labelEl.dom.setAttribute("data-pa-weight", value);
@@ -6063,7 +6082,10 @@ function PA_Step3PathwayTableView() {
 								var omicSliders = me.getModel().getOmicNames().map(function(omic) {
 									return({
 										xtype: 'slider',
-										fieldLabel: omic,
+										// A field label is HTML; the weights are keyed by
+										// omicName, the name itself, not by the label.
+										fieldLabel: Ext.String.htmlEncode(omic),
+										omicName: omic,
 										minValue: 0,
 										maxValue: 10,
 										increment: 1,
@@ -6118,7 +6140,7 @@ function PA_Step3PathwayTableView() {
 															var visiblePathways = Object.keys(me.getAssociatedPathways(true));
 
 															sliders.forEach(function(omicSlider) {
-																stoufferWeigths[omicSlider.getFieldLabel()] = parseFloat(omicSlider.getValue());
+																stoufferWeigths[omicSlider.omicName] = parseFloat(omicSlider.getValue());
 															});
 
 															me.getParent().setVisualOptions("stoufferWeights", stoufferWeigths);
@@ -6139,7 +6161,7 @@ function PA_Step3PathwayTableView() {
 															var sliders = Ext.ComponentQuery.query("[itemId=stoufferTip]")[0].query("slider");
 
 															sliders.forEach(function(omicSlider) {
-																omicSlider.setValue(defaultValues[omicSlider.getFieldLabel()]);
+																omicSlider.setValue(defaultValues[omicSlider.omicName]);
 															});
 														}
 													}
@@ -7549,8 +7571,10 @@ function PA_Step3RegulationView() {
 		return n.toFixed(3);
 	};
 
+	/* A grid cell is HTML, and these are MORE's own columns as the user's run
+	   wrote them: the omic is the name the user gave the regulatory omic. */
 	var _stringRenderer = function (val) {
-		return _isBlank(val) ? "" : val;
+		return _isBlank(val) ? "" : Ext.String.htmlEncode(String(val));
 	};
 
 	this.initComponent = function () {
@@ -7718,6 +7742,13 @@ function PA_Step3RegulationView() {
 			store: omicComboData,
 			value: "__all__",
 			editable: false,
+			/* The list draws each option as HTML from '{field2}'; the omic names
+			   are the user's. The box itself shows the chosen one as text. */
+			listConfig: {
+				getInnerTpl: function (displayField) {
+					return "{" + displayField + ":htmlEncode}";
+				}
+			},
 			listeners: {
 				change: function (combo, val) {
 					filterState.omic = val || "__all__";
@@ -8418,6 +8449,39 @@ var paEscapeAttribute = function (text) {
 };
 
 /**
+ * An omic name as a piece of a DOM id, a class or a radio group's name.
+ *
+ * Steps 3 and 4 build ids from the omic name ("globalHeatmapContainer-" + name,
+ * "matchedlist_" + name), write them into attributes and find them again with
+ * "#" + id. The name is whatever was typed in Step 1, and a shared job shows it
+ * to anyone with the link, so a quote in it closed the attribute and the rest
+ * of the name became markup; a "(" or "." made the selector throw. Letters,
+ * digits, "-" and "_" are kept and any other character becomes "_<hex>_", so
+ * the key is safe in an attribute and in a selector, and an ordinary name keeps
+ * the id it always had ("gene-expression"). The visible name is written with
+ * Ext.String.htmlEncode, never through this.
+ */
+var paDomKey = function (text) {
+	return String((text === undefined || text === null) ? "" : text)
+		.replace(/[^A-Za-z0-9_-]/g, function (c) { return "_" + c.charCodeAt(0).toString(16) + "_"; });
+};
+
+/**
+ * An omic name as the suffix of the pathway table's field names: "pValue" +
+ * paOmicFieldSuffix("Gene expression") is "pValue-gene-expression", as always.
+ *
+ * ExtJS writes a store's field names into the source of a function it compiles
+ * (the reader's record extractor), so a quote in an omic's name ended a string
+ * literal in that source: the rest of the name ran as code, or the whole table
+ * failed to draw. The suffix goes through paDomKey, so only letters, digits,
+ * "-" and "_" reach it. Every place that names these fields builds it here.
+ */
+var paOmicFieldSuffix = function (omicName) {
+	return "-" + paDomKey(String((omicName === undefined || omicName === null) ? "" : omicName)
+		.toLowerCase().replace(/ /g, "-"));
+};
+
+/**
  * Truncation that keeps the END of the string.
  *
  * Every truncation in these two files used to keep the head - "first 14", or
@@ -8876,12 +8940,19 @@ var paConditionAxis = function (columnCount, omicHeader, options) {
  * identifier keeps its tail (paTruncateTail). The full untruncated pair goes
  * into a title attribute, because the tooltip is not a fallback for what is
  * lost here - it truncates to 12 characters as well.
+ *
+ * options.text: both sides are plain text, written encoded, and a "<" is a
+ * character, not the start of a tag. For rows named after an omic: the omic
+ * name is the user's, and a shared job shows it to anyone with the link.
  */
 var paRowLabel = function (primary, secondary, options) {
 	options = options || {};
 
 	var width = options.width || 100;
 	var maxChars = options.maxChars || 14;
+	var asText = options.text === true;
+	var encode = asText ? function (value) { return Ext.String.htmlEncode(value); }
+	                    : function (value) { return value; };
 	var replaceSymbols = {
 		"*": '<i class="relevantFeature"></i>',
 		"^": '<i class="relevantAssociationFeature"></i>'
@@ -8893,11 +8964,11 @@ var paRowLabel = function (primary, secondary, options) {
 	/* Regulator rows embed markup (e.g. "WRKY40<br><span ...>AT2G25000</span>")
 	 * in the primary side; slicing characters there would cut a tag in half, so
 	 * those are rendered verbatim. */
-	var primaryHasHTML = primary.indexOf("<") >= 0;
+	var primaryHasHTML = !asText && primary.indexOf("<") >= 0;
 	var renderedPrimary = primaryHasHTML
 		? primary
-		: paTruncateHead(primary, maxChars).replace(/[\*\^]/g, function (c) { return replaceSymbols[c]; });
-	var renderedSecondary = paTruncateTail(secondary, maxChars);
+		: encode(paTruncateHead(primary, maxChars)).replace(/[\*\^]/g, function (c) { return replaceSymbols[c]; });
+	var renderedSecondary = encode(paTruncateTail(secondary, maxChars));
 	var fullText = (primaryHasHTML ? primary.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : primary) +
 		(secondary ? "  |  " + secondary : "");
 
@@ -8996,11 +9067,17 @@ var paFitReferenceLabels = function (axis) {
  * beyond the colour scale so the label is inside the thing it names. The
  * clip hairlines stay, unlabelled, where the shading already says what they
  * are.
+ *
+ * options.yAxisTitle is plain text (the class map passes the omic's name).
+ * Highcharts 6 reads tags in a plain label too, and turns an href in one into
+ * an onclick, so the title is encoded; it decodes the entities when it draws,
+ * and the name reads as typed.
  */
 var paPlotYAxis = function (limits, dataMin, dataMax, options) {
 	options = options || {};
 	var axis = {
-		title: {text: options.yAxisTitle || null, style: {color: "#78879A", fontSize: "10px"}},
+		title: {text: options.yAxisTitle ? Ext.String.htmlEncode(options.yAxisTitle) : null,
+			style: {color: "#78879A", fontSize: "10px"}},
 		gridLineColor: "#E9EDF1",
 		labels: {style: {fontSize: "10px", color: "#78879A"}},
 		plotLines: [],

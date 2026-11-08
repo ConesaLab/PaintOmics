@@ -383,7 +383,9 @@ class SourceStructureTest(unittest.TestCase):
 
 
 Y_AXIS = r"""
-var Ext = { apply: function (t, s) { for (var k in s) t[k] = s[k]; return t; } };
+var Ext = { apply: function (t, s) { for (var k in s) t[k] = s[k]; return t; },
+    String: { htmlEncode: function (s) { return String(s).replace(/[&<>"']/g, function (c) {
+        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); } } };
 %s
 %s
 var crossing = paPlotYAxis({min: -0.3, max: 0.3, absMin: -2, absMax: 2}, -0.5, 0.25, {yAxisTitle: "Metabolomics"});

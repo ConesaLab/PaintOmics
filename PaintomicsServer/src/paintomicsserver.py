@@ -119,6 +119,7 @@ from src.servlets.AIInterpretServlet import (
     getAIProviderInfo,
 )
 from src.common.UserSessionManager import UserSessionManager
+from src.common.Util import unsafeNameReason
 from src.common.LoggingSetup import configureLogging
 from src.common.KeggInformationManager import KeggInformationManager
 from src.common.JobInformationManager import JobInformationManager
@@ -316,21 +317,30 @@ class Application(object):
         ##*******************************************************************************************
         ##* GET PATHWAY IMAGE
         ##*******************************************************************************************
+        # The organism is the URL's own text and becomes the folder, which
+        # send_from_directory trusts (it only checks the file name inside it):
+        # "../.." in it served that file from any folder. An organism code is
+        # one folder name under current/.
+        def organismNetwork(specie, fileName):
+            if unsafeNameReason(specie) is not None:
+                return jsonify({"success": False, "errorMessage": "Unknown organism"}), 404
+            return send_from_directory(KEGG_DATA_DIR + 'current/' + specie, fileName)
+
         @self.app.route(SERVER_SUBDOMAIN + '/kegg_data/pathway_network/<path:specie>')
         def get_pathway_network(specie):
-            return send_from_directory(KEGG_DATA_DIR + 'current/' + specie, 'pathways_network.json')
+            return organismNetwork(specie, 'pathways_network.json')
 
         @self.app.route(SERVER_SUBDOMAIN + '/kegg_data/pathway_network_reactome/<path:specie>')
         def get_pathway_network_reactome(specie):
-            return send_from_directory(KEGG_DATA_DIR + 'current/' + specie, 'pathways_network_Reactome.json')
+            return organismNetwork(specie, 'pathways_network_Reactome.json')
 
         @self.app.route( SERVER_SUBDOMAIN + '/kegg_data/pathway_network_mapman/<path:specie>' )
         def get_pathway_network_mapman(specie):
-            return send_from_directory( KEGG_DATA_DIR + 'current/' + specie, 'pathways_network_MapMan.json' )
+            return organismNetwork(specie, 'pathways_network_MapMan.json')
 
         @self.app.route( SERVER_SUBDOMAIN + '/kegg_data/pathway_network_omnipath/<path:specie>' )
         def get_pathway_network_omnipath(specie):
-            return send_from_directory( KEGG_DATA_DIR + 'current/' + specie, 'pathways_network_OmniPath.json' )
+            return organismNetwork(specie, 'pathways_network_OmniPath.json')
 
         ##*******************************************************************************************
         ##* GET THE INTERACTION NETWORK OF ONE OmniPath PATHWAY

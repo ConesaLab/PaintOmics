@@ -192,6 +192,7 @@ test_no_association_without_an_identifier	0.0
 test_no_empty_error_messages	0.1
 test_no_lazy_map_results	0.6
 test_omic_card_sizes_itself	0.4
+test_omic_name_is_text_in_steps_3_and_4	3.6
 test_omicvalue_more_fields	0.1
 test_one_step_per_job_at_a_time	0.1
 test_organism_request_rejects_installed	4.4
@@ -260,6 +261,7 @@ test_transport_respects_the_deadline	15.3
 test_unavailable_job_is_not_an_error	1.8
 test_uniprot_two_hop_mapping	0.3
 test_unmapped_features_are_not_errors	1.8
+test_upload_names_stay_in_the_users_folder	3.3
 test_user_directory_setup	0.2
 test_user_id_allocation	0.2
 test_user_identity_security	0.7

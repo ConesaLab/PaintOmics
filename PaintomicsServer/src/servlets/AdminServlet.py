@@ -41,7 +41,7 @@ from src.common.DAO.ReportDAO import ReportDAO
 from src.classes.Message import Message
 from src.classes.Report import Report
 
-from src.common.Util import sendEmail
+from src.common.Util import sendEmail, resolveWithin, unsafeNameReason
 from src.common.EmailTemplates import reportNotificationEmail
 
 from src.conf.serverconf import (
@@ -438,8 +438,15 @@ def adminServletDeleteUser(request, response, toDeleteUserID):
             logging.info("STEP3 - REMOVING ALL FILES FROM DATABASE...")
             filesDAOInstance.removeAll(otherParams={"userID":toDeleteUserID})
             logging.info("STEP3 - REMOVING ALL FILES FROM USER DIRECTORY...")
-            if os_path.isdir(CLIENT_TMP_DIR + toDeleteUserID):
-                shutil_rmtree(CLIENT_TMP_DIR + toDeleteUserID)
+            # The id is the URL's own text and rmtree recurses: "../x" named a
+            # folder beside CLIENT_TMP rather than a user's. Only a plain name
+            # inside CLIENT_TMP is removed.
+            userDirectory = (resolveWithin(CLIENT_TMP_DIR, toDeleteUserID)
+                             if unsafeNameReason(toDeleteUserID) is None else None)
+            if userDirectory is None:
+                logging.warning("STEP3 - REFUSED user id %r: not a folder name in CLIENT_TMP", toDeleteUserID)
+            elif os_path.isdir(userDirectory):
+                shutil_rmtree(userDirectory)
 
             #****************************************************************
             # Step 4. DELETE THE USER INSTANCE FROM DATABASE

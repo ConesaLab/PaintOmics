@@ -50,7 +50,8 @@ def fromBEDtoGenes_STEP1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID, EXAMPLE_FILE
     @returns Response
     """
     #TODO: ALLOWED_EXTENSIONS http://flask.pocoo.org/docs/0.10/patterns/fileuploads/
-    #TODO: secure_filename
+    # File names off the request: saveFile and saveFiles put each through
+    # Util.fileInFolder, which refuses one that is not a plain name.
     #****************************************************************
     #Step 0. VARIABLE DECLARATION
     #The following variables are defined:
