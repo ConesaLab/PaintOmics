@@ -16,8 +16,7 @@ import logging.config
 # The rest were found at DEBUG in paintomics.org's application.log (2026-11-08,
 # the file since 7 Nov 06:07; counts are its lines):
 #   apscheduler  "Looking for jobs to run", "Next wakeup is due" on every
-#                wakeup of the cleaning cron (30). On paintomics.uv.es these
-#                filled the uWSGI log to 7.7 GB.
+#                wakeup of the cleaning cron, which wakes once a day (30).
 #   httpcore     every step of every HTTP call to the AI gateway (5,659), with
 #                the response headers.
 #   openai       the OpenAI client (openai._base_client, 1,782) and the Agents
