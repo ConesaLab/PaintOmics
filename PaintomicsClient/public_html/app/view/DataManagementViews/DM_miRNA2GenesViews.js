@@ -128,7 +128,12 @@ function DM_miRNA2GenesJobView() {
 						'   <h3>About multiple target genes</h3>' +
 						'   <p>Usually, for each miRNA there are numerous known target genes. However, the presence of a miRNA does not mean that a certain target gene is being regulated for that miRNA. Hence, it is necessary to discriminate those genes that may be affected by the action of a miRNA from the complete list of potential target genes for that miRNA. Assuming that all files explained above are provided, miRNA2Genes includes the following selection strategies.</p>' +
 						'   <ul>' +
-						'     <li>If the list of relevant miRNAs is provided, you can choose between reporting the target genes for all miRNAs in the input files, or reporting only the target genes for the relevant miRNAs (e.g. the DE miRNAs), ignoring the rest.</li>' +
+						/* It said "reporting only the target genes for the relevant miRNAs
+						   (e.g. the DE miRNAs), ignoring the rest". The rest were never
+						   left out: every pair is in every results file under both
+						   choices, and only which pairs can be marked relevant changes
+						   (see STEP 5.2 in MiRNA2GeneJob.py). */
+						'     <li>If the list of relevant miRNAs is provided, you can choose whether the pairs of every miRNA can be marked as relevant, or only the pairs of the relevant miRNAs (e.g. the DE miRNAs). The other miRNAs are not dropped: their pairs stay in the results with their values, and are never marked relevant.</li>' +
 						'     <li>If the transcriptomics quantification file is provided, reported target genes can be discriminated based on the existing correlation between the quantification for a miRNA and the codified by target genes. Usually, it is expected a negative correlation between miRNA and target genes being regulated, and the usage of a cutoff for correlation value determines the selection of the genes that are finally reported.</li>' +
 						'   </ul>' +
 						'   <img alt="Worked example: targets kept or dropped by the Kendall correlation between miRNA and target expression against a cutoff" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+

@@ -4219,7 +4219,15 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 									["Only relevant features (e.g. DE)", "DE"]
 								]
 							}),
-							helpTip: "Choose between consider all features in the quantification file or just those features that are differentially expressed. Default: 'All features'"
+							// It said "just those features that are differentially expressed",
+							// and the tool page "ignoring the rest": every pair is written to
+							// every results file under both choices, and only which pairs can
+							// be marked relevant changes (see STEP 5.2 in MiRNA2GeneJob.py).
+							helpTip:
+							"Which miRNAs' pairs can be marked as relevant. All features: the pairs of every miRNA, when they pass the selection below. " +
+							"Only relevant features (e.g. DE): only the pairs of the miRNAs in the Relevant regulators file, when they pass it; " +
+							"without that file no pair is marked. Either way every pair stays in the results with its values: " +
+							"the other miRNAs are not dropped, they are never marked relevant. Default: 'All features'."
 						},
 						{
 							xtype: 'combo',

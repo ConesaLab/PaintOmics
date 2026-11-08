@@ -402,7 +402,7 @@ The correlation block has four controls:
 
 | Control | Default | What it does |
 | --- | --- | --- |
-| **Report** | All features | Whether to report all regulators or only the relevant (e.g. differentially expressed) ones |
+| **Report** | All features | Whose pairs can be marked relevant: every regulator's, or only those of the regulators in the Relevant regulators file (e.g. the differentially expressed ones). The other regulators are not dropped: every pair stays in the results with its values |
 | **Score method** | Kendall | The correlation statistic between regulator and target gene: Spearman, Kendall or Pearson |
 | **Selection method** | by negative correlation | Which direction counts: negative (correlation below the cutoff), positive (above it) or absolute (its size above it). Negative is the expected sign for miRNA repression |
 | **Filter cutoff** | −0.5 | The threshold on the correlation, applied in the direction of the selection method. Its sign follows the method you chose |
