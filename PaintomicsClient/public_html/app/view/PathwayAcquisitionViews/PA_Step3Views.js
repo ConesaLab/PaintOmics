@@ -9067,11 +9067,17 @@ var paFitReferenceLabels = function (axis) {
  * beyond the colour scale so the label is inside the thing it names. The
  * clip hairlines stay, unlabelled, where the shading already says what they
  * are.
+ *
+ * options.yAxisTitle is plain text (the class map passes the omic's name).
+ * Highcharts 6 reads tags in a plain label too, and turns an href in one into
+ * an onclick, so the title is encoded; it decodes the entities when it draws,
+ * and the name reads as typed.
  */
 var paPlotYAxis = function (limits, dataMin, dataMax, options) {
 	options = options || {};
 	var axis = {
-		title: {text: options.yAxisTitle || null, style: {color: "#78879A", fontSize: "10px"}},
+		title: {text: options.yAxisTitle ? Ext.String.htmlEncode(options.yAxisTitle) : null,
+			style: {color: "#78879A", fontSize: "10px"}},
 		gridLineColor: "#E9EDF1",
 		labels: {style: {fontSize: "10px", color: "#78879A"}},
 		plotLines: [],

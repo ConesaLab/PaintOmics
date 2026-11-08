@@ -6,6 +6,8 @@ the colour-by options of the pathway network, the pathway table's column headers
 the tooltips of their cells, the pathway details panel, the Stouffer weights, the
 visual settings, the global heatmap's panel and headings, and the row labels and
 tooltips of the feature heatmaps. A name such as "<img src=x onerror=...>" ran there.
+The class map's axis title and the feature popup's legend are plain chart labels, but
+the bundled Highcharts 6 reads a link in one and makes it clickable script.
 
 Each check runs the real view code under node, with a stub page that records the HTML
 it is handed, and parses that HTML here: the hostile name must create no element and
@@ -43,6 +45,12 @@ STEP4 = os.path.join(VIEWS, "PA_Step4Views.js")
 # Closes a double-quoted attribute, opens an element, and carries a single quote too.
 HOSTILE = "<img src=x onerror=console.log(1)> \"autofocus onfocus=\"x' &amp;"
 HOSTILE_CONDITION = "<img src=x onerror=console.log(2)> T0"
+# A link in a chart label: see _Checks.assertPlainChartLabel().
+HOSTILE_LINK = "<a href=\"javascript:console.log('link')\">Metabolomics"
+
+# The entities Highcharts 6.2 turns back into characters when it draws a label, in
+# its own order (SVGRenderer.escapes in js/libs/highcharts/highcharts.js).
+HIGHCHARTS_ENTITIES = (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&#39;", "'"), ("&quot;", '"'))
 
 HAS_NODE = shutil.which("node") is not None
 
@@ -97,6 +105,20 @@ class _Checks(unittest.TestCase):
         if allowed is not None:
             self.assertEqual(set(parsed.tags()) - set(allowed), set(), html[:600])
         return parsed
+
+    def assertPlainChartLabel(self, label, name):
+        """A label Highcharts 6.2 draws without useHTML carries no markup and reads `name`.
+
+        Such a label is SVG text, but SVGRenderer.buildText still reads "<...>" in it
+        and copies the class, style and href it finds onto the text (an href becomes an
+        onclick that sets location.href). It looks for them up to the first ">", in
+        quotes, so a label with none of < > " ' carries nothing; Highcharts then turns
+        its entities back into characters, and the name reads as typed, once.
+        """
+        self.assertFalse(set(label) & set("<>\"'"), "a chart label holds markup: %r" % label)
+        for entity, char in HIGHCHARTS_ENTITIES:
+            label = label.replace(entity, char)
+        self.assertEqual(label, name, "encoded twice, or not the name")
 
 
 PRELUDE = r"""
@@ -157,7 +179,7 @@ function paMetagenesForDisplay(jobModel, omicName, metagenes) { return metagenes
 function paInkOnCell() { return "#000"; }
 const charts = [];
 const Highcharts = {Chart: function (cfg) { charts.push(cfg); this.chartHeight = 100; }};
-const H = %(hostile)s, HC = %(condition)s;
+const H = %(hostile)s, HC = %(condition)s, L = %(link)s;
 %(helpers)s
 """
 
@@ -175,7 +197,7 @@ def _helpers(step3):
 
 def _run(script, step3):
     return _node((PRELUDE % {"hostile": json.dumps(HOSTILE), "condition": json.dumps(HOSTILE_CONDITION),
-                             "helpers": _helpers(step3)}) + script)
+                             "link": json.dumps(HOSTILE_LINK), "helpers": _helpers(step3)}) + script)
 
 
 @unittest.skipUnless(HAS_NODE, "node is not installed")
@@ -251,6 +273,22 @@ process.stdout.write(JSON.stringify(result));
 process.stdout.write(JSON.stringify(render(H)));
 """ % {"isBlank": extract_block(step3, "var _isBlank = function", "PA_Step3Views.js"),
        "renderer": extract_block(step3, "var _stringRenderer = function", "PA_Step3Views.js")}, step3)
+
+        # The compound class map's line chart, titled with the omic's name.
+        cls.classPlot = _run(r"""
+function paScaleClipLine() { return {}; }
+%(values)s;
+%(axis)s;
+%(plot)s;
+const row = {keggName: "C00031", inputName: "glucose", values: [0.2, 3],
+             isRelevant() { return true; }, isRelevantAssociation() { return false; }};
+[H, L].forEach(function (name) {
+    generatePlot("classDetail_pl", name, [row], {}, null, {}, ["#id", "T0", "T1"], {yAxisTitle: name});
+});
+process.stdout.write(JSON.stringify(charts.map(function (chart) { return chart.yAxis.title.text; })));
+""" % {"values": helper(step3, "paValuesForHeader", "PA_Step3Views.js"),
+       "axis": extract_block(step3, "var paPlotYAxis = function", "PA_Step3Views.js"),
+       "plot": extract_block(step3, "let generatePlot = function", "PA_Step3Views.js")}, step3)
         cls.source = step3
 
     def test_the_colour_by_option_is_text_and_its_value_is_the_name(self):
@@ -363,6 +401,12 @@ process.stdout.write(JSON.stringify(render(H)));
         self.assertInert(self.regulation)
         self.assertEqual(_Parsed(self.regulation).joined(), HOSTILE)
 
+    def test_the_class_maps_axis_title_is_text(self):
+        self.assertEqual(len(self.classPlot), 2)
+        for title, name in zip(self.classPlot, (HOSTILE, HOSTILE_LINK)):
+            with self.subTest(name=name[:20]):
+                self.assertPlainChartLabel(title, name)
+
     def test_the_stouffer_weights_are_keyed_by_the_name_not_the_label(self):
         code = re.sub(r"//[^\n]*", "", self.source)
         self.assertIn("fieldLabel: Ext.String.htmlEncode(omic),", code)
@@ -424,6 +468,31 @@ process.stdout.write(JSON.stringify({
 """ % {"block": method(step4, "PA_Step4KeggDiagramFeatureView",
                        "this.generateHeatmap = function(divID, visibleOmics, dataDistributionSummaries, visualOptions)",
                        "PA_Step4Views.js")}, step3)
+
+        # The feature popup's line chart: one legend entry per omic, or per row of
+        # it, named after the omic and the feature.
+        cls.featurePlot = _run(r"""
+function scaleValue(value) { return value; }
+function paReferenceLine() { return {}; }
+function paFitReferenceLabels() {}
+Highcharts.Chart.prototype.yAxis = [{setExtremes() {}}];
+const one = {getValues() { return [1, 2]; }, inputName: "15275", originalName: undefined};
+const two = [{getValues() { return [1, 2]; }, inputName: "C00031", originalName: L},
+             {getValues() { return [3, 4]; }, inputName: "C00032", originalName: undefined}];
+const feature = {getOmicValues(omic) { return omic === H ? [one] : (omic === L ? two : null); }};
+const jobModel = {getReplicateMode() { return "replicates"; }};
+const view = {getModel() { return {getFeature() { return feature; }}; },
+              getParent(name) { return name === "PA_Step4JobView" ? {getModel() { return jobModel; }} : null; }};
+(function () { %(block)s; }).call(view);
+view.generatePlot("plot", [H + "#genebased", L + "#compoundbased"], {}, {colorReferences: {}});
+const chart = charts[0];
+// Highcharts' own default when the chart names none.
+const format = (chart.legend && chart.legend.labelFormatter) || function () { return this.name; };
+process.stdout.write(JSON.stringify({enabled: !chart.legend || chart.legend.enabled !== false,
+    entries: chart.series.map(function (s) { return {name: s.name, label: format.call({name: s.name})}; })}));
+""" % {"block": method(step4, "PA_Step4KeggDiagramFeatureView",
+                       "this.generatePlot = function(divID, visibleOmics, dataDistributionSummaries, visualOptions)",
+                       "PA_Step4Views.js")}, step3)
         cls.source = step4
 
     def test_the_visual_settings_show_the_names_as_text(self):
@@ -474,6 +543,15 @@ process.stdout.write(JSON.stringify({
         for html in self.feature["labels"]:
             parsed = self.assertInert(html, {"span", "i", "br"})
             self.assertNotIn("&lt;", parsed.joined(), "encoded twice on screen")
+
+    def test_the_feature_plots_legend_is_text(self):
+        self.assertTrue(self.featurePlot["enabled"], "the legend is drawn")
+        entries = self.featurePlot["entries"]
+        self.assertEqual([e["name"] for e in entries],
+                         [HOSTILE, HOSTILE_LINK + " [" + HOSTILE_LINK + "]", HOSTILE_LINK + " [C00032 - 2]"])
+        for entry in entries:
+            with self.subTest(name=entry["name"][:20]):
+                self.assertPlainChartLabel(entry["label"], entry["name"])
 
     def test_the_heatmap_ids_and_headings_go_through_the_key_and_the_encoder(self):
         code = re.sub(r"//[^\n]*", "", self.source)
@@ -533,8 +611,10 @@ class TheRefusalDialogTest(unittest.TestCase):
         util = read(UTIL)
         results = _node(DIALOG_HARNESS % {
             "client": "\n".join(extract_function(util, fn, "Util.js") for fn in
-                                ("showMessage", "showErrorMessage", "serverTextAsHtml", "ajaxErrorHandler",
-                                 "extJSErrorHandler", "splitServerError")),
+                                ("showMessage", "showErrorMessage", "showWarningMessage", "serverTextAsHtml",
+                                 "ajaxErrorHandler", "extJSErrorHandler", "splitServerError",
+                                 "isInvalidSessionAnswer", "readableAnswer", "connectionFailed",
+                                 "showConnectionFailedMessage", "describeUnansweredRequest")),
             "bodies": json.dumps({"refusal": body})})
         for how in ("ajax", "extjs"):
             with self.subTest(handler=how):

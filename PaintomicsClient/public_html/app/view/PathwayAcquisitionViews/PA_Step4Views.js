@@ -2602,7 +2602,12 @@ function PA_Step4KeggDiagramFeatureView(showButtons) {
 				legend: {
 					itemStyle: {fontSize: "9px",fontWeight: 'lighter'},
 					margin: 5,
-					padding: 5
+					padding: 5,
+					// Each entry is named after the omic and a feature, both the
+					// user's. Highcharts 6 reads tags in a plain label and turns an
+					// href in one into an onclick, so the name goes in encoded; it
+					// decodes the entities when it draws.
+					labelFormatter: function () { return Ext.String.htmlEncode(this.name); }
 				},
 				tooltip: {enabled: false},
 
