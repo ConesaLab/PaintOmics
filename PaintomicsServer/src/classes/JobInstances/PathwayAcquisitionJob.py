@@ -314,9 +314,15 @@ def _inputFeatureLookups(inputGenes, inputCompounds):
 
 
 def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAllPathways, inputGenes,
-                    inputCompounds, totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways,
-                    mappedRatiosByOmic, enrichmentByOmic, lookups=None):
-    """Module-level wrapper so multiprocessing.Process can pickle the target."""
+                    inputCompounds, totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedShares,
+                    resultSlot, mappedRatiosByOmic, enrichmentByOmic, lookups=None):
+    """Module-level wrapper so multiprocessing.Process can pickle the target.
+
+    The worker hands its results to the parent as ONE assignment,
+    ``matchedShares[resultSlot] = {pathwayID: Pathway}``, made only after it
+    has tested its whole share. So a slot that is missing at the end is a
+    worker that never finished (see _sharesNotDelivered).
+    """
     keggInformationManager = KeggInformationManager()
 
     if lookups is None:
@@ -353,7 +359,41 @@ def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAll
             pathway.setSource(sourceDB)
             localMatched[pathwayID] = pathway
 
-    matchedPathways.update(localMatched)
+    matchedShares[resultSlot] = localMatched
+
+
+def _sharesNotDelivered(shares, delivered):
+    """The slots of ``shares`` (one list of pathway or class IDs per worker)
+    whose worker never handed its results over: missing from ``delivered``,
+    the parent's copy of the workers' ``matchedShares``.
+
+    A worker lost this way is one the system killed (out of memory) or one
+    that stopped on an error, and it takes its whole share with it. Nothing
+    else said so: the job used to finish as a success with those pathways
+    missing from its list, as if none of them had been significant.
+
+    The count is taken from what arrived, never from ``exitcode`` or
+    ``is_alive()``: when two jobs run at once another job's thread can
+    collect a worker's exit status first, and the code then stays unknown
+    (see _stillRunning). A worker that exits 0 without delivering is lost too.
+    """
+    return [slot for slot in range(len(shares)) if slot not in delivered]
+
+
+def _lostWorkersMessage(lostWorkers, totalWorkers, untested):
+    """What the user is told when enrichment workers were lost.
+
+    ``untested`` is a list of (lost, total, noun) per kind of result, e.g.
+    [(62, 364, "pathways")], kinds with nothing lost left out. Plain
+    Exception at the caller, so the browser shows it as an internal error
+    with Report error: it is our side that failed, never the user's file.
+    """
+    what = " and ".join("%d of %d %s" % (lost, total, noun) for lost, total, noun in untested)
+    return ("Pathway enrichment lost %d of %d worker processes, and with them the results for %s. "
+            "The job was stopped rather than show a list with those missing. A worker is lost "
+            "when the server runs short of memory or the worker stops on an error. Please try "
+            "again, and upload smaller files if it persists."
+            % (lostWorkers, totalWorkers, what))
 
 
 class PathwayAcquisitionJob(Job):
@@ -1675,7 +1715,10 @@ class PathwayAcquisitionJob(Job):
         logging.info("USING " + str(nThreads) + " THREADS")
 
         manager = Manager()
-        matchedPathways = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+        # WILL STORE THE OUTPUT FROM THE THREADS: one entry per worker, under
+        # its slot, so the parent can tell which workers delivered (see
+        # _sharesNotDelivered).
+        matchedPathways = manager.dict()
         nPathwaysPerThread = int(
             ceil(len(pathwaysList) / nThreads)) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
 
@@ -1695,25 +1738,26 @@ class PathwayAcquisitionJob(Job):
         lookups = _inputFeatureLookups(inputGenes, inputCompounds)
 
         # LAUNCH THE THREADS
-        for pathwayIDsList in pathwaysListParts:
+        for slot, pathwayIDsList in enumerate(pathwaysListParts):
             thread = Process(target=_matchPathways, args=(
                 self, pathwayIDsList, allGenesInPathway, allCompoundsInPathway, inputGenes, inputCompounds,
-                totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, mappedRatiosByOmic,
+                totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedPathways, slot, mappedRatiosByOmic,
                 enrichmentByOmic, lookups))
             threadsList.append(thread)
             thread.start()
 
         # Add class enrichment for PaintOmics 4
+        classListParts = []
         if 'Reactome' in self.databases:
-            matchedClass = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS
+            matchedClass = manager.dict()  # WILL STORE THE OUTPUT FROM THE THREADS, one entry per worker
             nClassPerThread = int(
                 ceil(
                     len( classGene.keys() ) / nThreads ) ) + 1  # GET THE NUMBER OF PATHWAYS TO BE PROCESSED PER THREAD
             classListParts = chunks( list( classGene.keys() ), nClassPerThread )  # SPLIT THE ARRAY IN n PARTS
-            for classNameList in classListParts:
+            for slot, classNameList in enumerate(classListParts):
                 threadClass = Process( target=_matchPathways, args=(
                     self, classNameList, classGene, classComp, inputGenes, inputCompounds,
-                    totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedClass, mappedRatiosByOmic,
+                    totalFeaturesByOmic, totalRelevantFeaturesByOmic, matchedClass, slot, mappedRatiosByOmic,
                     enrichmentByOmic, lookups) )
                 threadsList.append( threadClass )
                 threadClass.start()
@@ -1736,12 +1780,45 @@ class PathwayAcquisitionJob(Job):
 
         _markStage("enrichment_threads")
 
-        self.setMatchedPathways(dict(matchedPathways))
+        # Copied out (one round trip each) BEFORE manager.shutdown(): asking the
+        # manager afterwards raises "Broken pipe" in place of any message below.
+        pathwaysBySlot = matchedPathways.copy()
+        classesBySlot = matchedClass.copy() if 'Reactome' in self.databases else {}
+
+        # A worker the system killed for memory, or one that stopped on an
+        # error, used to take its share of the pathways with it, and the job
+        # finished as a success with a shorter list and no word about it. The
+        # identifier mapper of Step 1 has had this check for its own workers
+        # ("Identifier mapping lost N of M worker processes").
+        lostPathwaySlots = _sharesNotDelivered(pathwaysListParts, pathwaysBySlot)
+        lostClassSlots = _sharesNotDelivered(classListParts, classesBySlot)
+        if lostPathwaySlots or lostClassSlots:
+            manager.shutdown()
+            pathwayWorkers, classWorkers = threadsList[:len(pathwaysListParts)], threadsList[len(pathwaysListParts):]
+            # The exit code tells memory (-9, SIGKILL) from an error (1) in the
+            # log; it can be None when another job's thread collected it first.
+            logging.error("STEP2 LOST ENRICHMENT WORKERS: pathway slots %s (exit codes %s), class slots %s (exit codes %s)" % (
+                lostPathwaySlots, [pathwayWorkers[slot].exitcode for slot in lostPathwaySlots],
+                lostClassSlots, [classWorkers[slot].exitcode for slot in lostClassSlots]))
+            untested = []
+            if lostPathwaySlots:
+                untested.append((sum(len(pathwaysListParts[slot]) for slot in lostPathwaySlots),
+                                 len(pathwaysList), "pathways"))
+            if lostClassSlots:
+                untested.append((sum(len(classListParts[slot]) for slot in lostClassSlots),
+                                 len(classGene), "Reactome classes"))
+            raise Exception(_lostWorkersMessage(
+                len(lostPathwaySlots) + len(lostClassSlots), len(threadsList), untested))
+
+        # Merged in slot order, which is the order of the pathway list.
+        self.setMatchedPathways({pathwayID: pathway for slot in range(len(pathwaysListParts))
+                                 for pathwayID, pathway in pathwaysBySlot[slot].items()})
         totalMatchedKeggPathways = len(self.getMatchedPathways())
 
         #PaintOmics 4
         if 'Reactome' in self.databases:
-            self.setMatchedClass(dict(matchedClass))
+            self.setMatchedClass({className: matched for slot in range(len(classListParts))
+                                  for className, matched in classesBySlot[slot].items()})
 
         # The manager server is a forked process holding a copy of every
         # matched pathway; release it now instead of when the GC gets round to it.
