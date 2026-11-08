@@ -17,6 +17,7 @@ from src.classes.AIInterpret.walker import null as null_mod       # noqa: E402
 from src.classes.AIInterpret.walker import overlay as ov_mod      # noqa: E402
 from src.classes.AIInterpret.walker import policies               # noqa: E402
 from src.classes.AIInterpret.walker import verify                 # noqa: E402
+from src.classes.AIInterpret.walker import writer as writer_mod   # noqa: E402
 from src.classes.AIInterpret.walker.walk import Walker, params_for  # noqa: E402
 from src.tests import walker_fixture as fx                        # noqa: E402
 
@@ -1091,6 +1092,45 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         found = self.problems(prose)
         self.assertEqual(len(found), 1, found)
         self.assertIn("3.33 is Ddd's heat, not a measured value", found[0])
+
+    def test_an_objection_prints_only_layers_the_walk_read(self):
+        """R2 (review of c8214f62): the objection named a heat owner the walk
+        never read and printed its layers; a rewrite quoting them was objected
+        to again, for they are no read node's, and the statement was dropped.
+        Ddd's heat (3.33) was printed in a scan only."""
+        self.with_heats({"g:4": 3.33}, shown={"g:4"})
+        self.assertNotIn("g:4", verify.read_nodes(self.walker))
+        found = self.problems("Ccc is not relevant, and Eee rises to 3.33.")
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("3.33 is Ddd's heat, not a measured value", found[0])
+        self.assertNotIn("−2.00", found[0])                              # Ddd's layers, never read
+        self.assertIn("the walk never read Ddd's layers", found[0])
+        self.assertEqual(len(self.problems("Ccc is not relevant, and Ddd reads −2.00 at 0h.")), 1)
+
+    def test_a_heat_the_writer_brief_prints_is_held_to_the_heat_check(self):
+        """R4: the Writer brief lists the seen rows with their heats
+        (writer.seen_text), and heats_shown holds only the first names_shown
+        of a move's neighbours, so a heat the Writer read there could be
+        quoted as a value. Eee stands as seen only here, heat 2.71."""
+        self.with_heats({"g:5": 2.71})
+        for kept in (self.walker.heats_shown, self.walker.layers_shown):
+            if "g:5" in kept:
+                kept.discard("g:5")
+                self.addCleanup(kept.add, "g:5")
+        if "g:5" not in self.walker.seen:
+            self.walker.seen["g:5"] = [1]
+            self.addCleanup(self.walker.seen.pop, "g:5")
+        self.assertNotIn("g:5", verify.read_nodes(self.walker))
+        self.assertIn("Eee · r=1 · heat 2.71", writer_mod.seen_text(self.walker))
+        found = self.problems("Ccc is not relevant; Eee Gene expression 2.71 follows.")
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("2.71 is Eee's heat, not a measured value", found[0])
+
+    def test_a_dose_is_never_a_reading(self):
+        """R6: "0.25 mM", a dose the size of Ccc's printed heat."""
+        self.with_heats({"g:3": 0.25})
+        self.assertEqual(self.problems("Ccc is not relevant after 0.25 mM H2O2 for 0.25 h."), [])
+        self.assertEqual(len(self.problems("Ccc is not relevant, with Log2FC of 0.25.")), 1)
 
     def test_the_hint_names_the_read_node_nearest_the_value(self):
         found = self.problems("Bbb falls while Aaa reaches +3.10; Ccc is not relevant.")

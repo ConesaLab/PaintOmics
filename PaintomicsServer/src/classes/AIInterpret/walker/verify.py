@@ -37,8 +37,12 @@ BOUND_BEFORE_RE = re.compile(r"[±<>≤≥|]\s*$")
 # is never signed, so no heat word binds a signed number (data_values). The
 # round heat7 review found "Ccc rises under heat (+9.99)" quoting no value at
 # all, and "Log2FC of 2.43 heat-shock induction" read as a heat.
+# A review of c8214f62 found "heat, 2.43", "heat value of 2.43" and "heat of
+# about 2.43" read as a value: a comma, "value" and an approximation word are
+# heat words too.
 HEAT_WORD = r"\bheats?\b(?![\s\-–]*(?:shock|stress|treat|toleran|expos))"
-_HEAT_WORDS = HEAT_WORD + r"(?:\s+scores?)?(?:\s+(?:of|is|was|are|were|at))?\s*[:=≈(\-–−]?\s*"
+_HEAT_WORDS = (HEAT_WORD + r"(?:\s+(?:scores?|values?))?(?:\s+(?:of|is|was|are|were|at))?"
+               r"(?:\s+(?:about|around|approximately|roughly|nearly))?\s*[:=≈(,~\-–−]?\s*")
 HEAT_BEFORE_RE = re.compile(_HEAT_WORDS + r"$", re.I)
 
 
@@ -556,7 +560,16 @@ def _invented_problems(stmt, walker, papers):
         owners = heat_owners(value, heats)
         node_id = given[at][1] if at in given else \
             next((n for n in reversed(before) if n in owners), None) or (owners[0] if owners else None)
-        if node_id is not None:
+        if node_id is not None and node_id not in readable:
+            # Its heat was printed, its layers never: values from them would be
+            # no read node's, and a rewrite quoting them is refused again
+            # (review of c8214f62).
+            label = walker.label(node_id)
+            out.append("quotes %s for %s (\"%s\"); %s is %s's heat, not a measured value, and the walk never read "
+                       "%s's layers: describe it without a number" % (
+                           value, label, snippet(text, at, at + len(value)), _norm(value).lstrip("+−"), label,
+                           label))
+        elif node_id is not None:
             label = walker.label(node_id)
             out.append("quotes %s for %s (\"%s\"), which its layers do not hold (%s); %s is %s's heat, not a "
                        "measured value" % (value, label, snippet(text, at, at + len(value)),
@@ -998,9 +1011,13 @@ def _record_numbers(walker, nodes=None):
 def heat_nodes(walker, value_nodes):
     """The nodes whose printed heat a text may misread as a value: the value
     nodes (read_nodes, or the walker guard's readable set), then every node
-    any answer printed a heat for (Walker.heats_shown). The one definition
-    the walker guard and the Verifier share, so their heat sets cannot drift."""
-    return list(dict.fromkeys(list(value_nodes) + sorted(getattr(walker, "heats_shown", ()) or ())))
+    any answer printed a heat for (Walker.heats_shown), then every node the
+    walk saw (Walker.seen), whose heats the Writer brief lists (writer.
+    seen_text; heats_shown holds only the first names_shown of a move's
+    neighbours, review of c8214f62). The one definition the walker guard and
+    the Verifier share, so their heat sets cannot drift."""
+    return list(dict.fromkeys(list(value_nodes) + sorted(getattr(walker, "heats_shown", ()) or ())
+                              + sorted(getattr(walker, "seen", None) or ())))
 
 
 def read_nodes(walker, chain=None):
@@ -1167,6 +1184,12 @@ def measure_labels(overlay):
     return pattern
 
 
+# A number with a dose, a mass or a time after it is the design's or a
+# paper's, never a node's reading, whatever heat it equals: "after 0.25 mM
+# H2O2", "at 0.25 h" (review of c8214f62).
+DOSE_OR_TIME_AFTER_RE = re.compile(r"^\s*(?:[µunpm]M|kDa|h|hrs?|hpf|hpi|dpf|dpi|min|d)\b", re.I)
+
+
 def list_gap(text, labels=None):
     """Whether ``text``, what stands between two values, joins them as one
     list: nothing in it but LIST_GAP_WORDS_RE once its time points
@@ -1187,12 +1210,15 @@ def measured(text, start, end, values, labels=None):
     the value before it (``values``, data_values); or it continues a list
     whose value before it, in the clause, is signed or measured, with nothing
     but list words between (list_gap): "Log2FC of 0.10 and 2.43", "(+0.10 at
-    2h, 2.43 at 6h)". Round heat7's review found "Ccc Gene expression 2.43"
+    2h, 2.43 at 6h)"; never with a dose or a time point after it
+    (DOSE_OR_TIME_AFTER_RE). Round heat7's review found "Ccc Gene expression 2.43"
     and "Ccc (2.43, relevant)" passing as heat references. Any signed value
     earlier in the clause was a list once, and in round heat8 (1WytoKdgT4,
     sot00630) "...hub around M1A0B7 (relevant, −0.90) with its r=0 companions
     M0ZSL5/M1AP15/M1CL70/M1CL86/gdcsP (0.41)" was refused: 0.41 is their
     heat."""
+    if DOSE_OR_TIME_AFTER_RE.match(text[end:]):
+        return False
     if MEASURE_AFTER_RE.match(text[end:]) or RELEVANCE_AFTER_RE.match(text[end:]):
         return True
     opened = [m.end() for m in CLAUSE_END_RE.finditer(text, 0, start)]

@@ -582,7 +582,8 @@ class HeatIsNotAValueTest(unittest.TestCase):
         answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
         self.assertTrue(answer.startswith("REFUSED"), answer)
         self.assertIn("3.15 is the heat of Eee", answer)
-        self.assertNotIn("g:5", w._readable("g:3"))                      # a heat, never a value source
+        self.assertIn("Eee's layers:", answer)
+        self.assertIn("g:5", w._readable("g:3"))       # its layers, printed by the refusal: read now (R1)
 
     def test_a_heat_given_to_its_node_is_refused_though_another_node_holds_it(self):
         """Bgm0v4EU01, round heat2 (2026-10-31): "Pkm ... shows Control +0.52,
@@ -746,6 +747,64 @@ class HeatIsNotAValueTest(unittest.TestCase):
         for call in given.call_args_list:
             self.assertIsNotNone(call.kwargs.get("values"))
             self.assertIsNotNone(call.kwargs.get("mentions"))
+
+    def test_layers_a_refusal_prints_may_be_quoted_on_the_retry(self):
+        """R1 (review of c8214f62): a refusal printed the layers of the node
+        whose heat was quoted and said "Quote those values", but the node
+        never entered layers_shown, so the retry quoting them was refused
+        again, the loop 1WytoKdgT4's walker ran 23 times (round heat6). Eee's
+        heat (3.15) was printed by a scan only."""
+        w, _opening = self.walker()
+        w.overlay.heat["g:5"] = dict(w.overlay.heat["g:5"], heat=3.15)
+        w.scan("here", 2)
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "Eee rises 3.15 two steps out")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("Eee's layers:", answer)
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant",
+                        "Eee's Proteomics reaches +2.50 at 6h two steps out")
+        self.assertTrue(answer.startswith("e1"), answer)
+
+    def test_a_neighbour_never_shown_is_no_value_source(self):
+        """R3: the guard read every neighbour of the current node as a value
+        source, its layers printed or not; the Verifier reads the chain and
+        the nodes an answer printed the layers of (read_nodes), so a value
+        the guard took could be dropped from a statement. Ccc is Bbb's r=0
+        neighbour, its layers never printed."""
+        w, _opening = self.walker()
+        self.assertNotIn("g:3", w.layers_shown)
+        answer = w.note("Ccc sits at +0.05 at 0h, flat")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", "read it")
+        chain = [n for leg in w.chain for n in (leg.src, leg.dst)]
+        self.assertEqual(set(w._readable()), set(verify.read_nodes(w, chain)))
+
+    def test_a_heat_named_with_a_comma_a_value_or_about_passes(self):
+        """R5: "heat, 2.43", "heat value of 2.43" and "heat of about 2.43"
+        name the heat, and were refused as a measured value."""
+        for reason in ("Ccc shows the highest heat, 2.43", "Ccc has a heat value of 2.43",
+                       "Ccc shows a heat of about 2.43"):
+            w, _opening = self.walker()
+            answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+            self.assertTrue(answer.startswith("e1"), (reason, answer))
+
+    def test_a_dose_or_a_time_point_is_never_a_reading(self):
+        """R6: a design's dose or time point the size of a printed heat, "0.25
+        mM", was refused as that node's misread heat."""
+        for reason in ("Ccc is next after the 0.25 mM treatment", "Ccc rises by 0.25 h after the treatment"):
+            w, _opening = self.walker({"g:3": 0.25})
+            answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+            self.assertTrue(answer.startswith("e1"), (reason, answer))
+        w, _opening = self.walker({"g:3": 0.25})
+        self.assertTrue(w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant",
+                               "Ccc shows Log2FC of 0.25").startswith("REFUSED"))
+
+    def test_a_value_given_twice_names_its_text_once(self):
+        """R7: "The reading and the reading give Ccc +1.50"."""
+        w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+        answer = w.step("Ccc", "Ccc Gene expression shows +1.50; later Ccc reads +1.50 again", "on")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("The reading gives Ccc +1.50", answer)
+        self.assertNotIn("reading and the reading", answer)
 
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()

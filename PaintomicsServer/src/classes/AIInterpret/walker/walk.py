@@ -349,14 +349,15 @@ class Walker:
 
     def _readable(self, target=None):
         """The nodes whose layers a text may quote values from: the target of
-        the move, where the walker stands, its neighbours, every node on this
-        walker's chain and every node whose layers an answer printed
-        (layers_shown: a relevant neighbour read two moves back is still read).
-        Not ``visited``: parallel walkers share it."""
-        nodes = [target, self.current] + [n for leg in self.chain for n in (leg.src, leg.dst)]
-        nodes += sorted(self.layers_shown)
-        if self.current is not None:
-            nodes += [row["id"] for row in self.neighbour_rows()]
+        the move, then the Verifier's set (verify.read_nodes) over this
+        walker's chain: every chain node and every node whose layers an
+        answer printed (layers_shown: where the walker stands, a relevant
+        neighbour read two moves back). Not ``visited``: parallel walkers
+        share it. Not every neighbour: an r=0 neighbour's layers are never
+        printed, and a value the guard took from one the Verifier dropped
+        from the statement (review of c8214f62)."""
+        chain = [n for leg in self.chain for n in (leg.src, leg.dst)]
+        nodes = [target, self.current] + verify.read_nodes(self, list(dict.fromkeys(chain)))
         return [n for n in dict.fromkeys(nodes) if n is not None]
 
     def _invented(self, tool, args, texts, target=None):
@@ -402,9 +403,12 @@ class Walker:
             mentions = verify._mentions(text, catalog)
             for value, at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay,
                                                                    values=values[name], mentions=mentions):
-                if verify._norm(value) not in unheld:
-                    given.setdefault((value, node_id), []).append(name)
-                    quoted.setdefault((value, node_id), verify.snippet(text, at, at + len(value)))
+                if verify._norm(value) in unheld:
+                    continue
+                names = given.setdefault((value, node_id), [])
+                if name not in names:                # never "the reading and the reading give"
+                    names.append(name)
+                quoted.setdefault((value, node_id), verify.snippet(text, at, at + len(value)))
         if not found and not given:
             return None
         why, owners = [], []
@@ -428,6 +432,10 @@ class Walker:
         why.append("The number after \"heat\" beside a neighbour's name is how surprising its neighbourhood's "
                    "relevant count is; a node's values are only those its layers block prints.")
         for node_id in [n for n in dict.fromkeys([target] + owners) if n is not None][:3]:
+            # Printed now, so quoted next: a node whose layers an answer printed
+            # is one the walk read (layers_shown). Left out, the retry quoting
+            # them was refused again (review of c8214f62).
+            self.layers_shown.add(node_id)
             why.append("%s's layers:\n%s" % (self.label(node_id), _indent(self.overlay.layer_text(node_id))))
         why.append("Quote those values, or describe the node without numbers.")
         return self._refuse(tool, args, "\n".join(why))
