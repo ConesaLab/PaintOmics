@@ -117,7 +117,10 @@ function DM_miRNA2GenesJobView() {
 						'   <p>Two optional files can be added for more accurate results.</p>' +
 						'   <ul>' +
 						'     <li>A list of relevant miRNAs, usually the differentially expressed miRNAs (Figure 1.B).</li>' +
-						'     <li>A mRNA-Seq quantification file that will be used for filtering the matched targets based on the correlation between gene expression and miRNA expression.<br>Its gene names must match those in the miRNA &rarr; target file (Figure 1.D).</li>' +
+						/* It said this file "will be used for filtering the matched targets":
+						   the cutoff marks pairs as relevant and drops none (see STEP 5.2 in
+						   MiRNA2GeneJob.py). */
+						'     <li>A mRNA-Seq quantification file, used to score each miRNA &rarr; target pair by the correlation between gene expression and miRNA expression, and to mark as relevant the pairs that pass the cutoff.<br>Its gene names must match those in the miRNA &rarr; target file (Figure 1.D).</li>' +
 						'   </ul>' +
 						'   <p>Identifiers are not restricted: any miRNA and gene naming works, as long as the quantification and miRNA &rarr; target files use the same convention (for example, if the quantification file uses "mmu-miR-XXX", the miRNA &rarr; target file must use the same names).</p>' +
 						'   <img alt="Figure 1: A, miRNA quantification; B, relevant miRNAs; C, miRNA-to-target associations; D, gene expression" src="resources/images/paintomics_input_figure5b.png" style="max-width: 800px;margin: auto;display: block;">' +
@@ -128,10 +131,19 @@ function DM_miRNA2GenesJobView() {
 						'   <h3>About multiple target genes</h3>' +
 						'   <p>Usually, for each miRNA there are numerous known target genes. However, the presence of a miRNA does not mean that a certain target gene is being regulated for that miRNA. Hence, it is necessary to discriminate those genes that may be affected by the action of a miRNA from the complete list of potential target genes for that miRNA. Assuming that all files explained above are provided, miRNA2Genes includes the following selection strategies.</p>' +
 						'   <ul>' +
-						'     <li>If the list of relevant miRNAs is provided, you can choose between reporting the target genes for all miRNAs in the input files, or reporting only the target genes for the relevant miRNAs (e.g. the DE miRNAs), ignoring the rest.</li>' +
-						'     <li>If the transcriptomics quantification file is provided, reported target genes can be discriminated based on the existing correlation between the quantification for a miRNA and the codified by target genes. Usually, it is expected a negative correlation between miRNA and target genes being regulated, and the usage of a cutoff for correlation value determines the selection of the genes that are finally reported.</li>' +
+						/* It said "reporting only the target genes for the relevant miRNAs
+						   (e.g. the DE miRNAs), ignoring the rest". The rest were never
+						   left out: every pair is in every results file under both
+						   choices, and only which pairs can be marked relevant changes
+						   (see STEP 5.2 in MiRNA2GeneJob.py). */
+						'     <li>If the list of relevant miRNAs is provided, you can choose whether the pairs of every miRNA can be marked as relevant, or only the pairs of the relevant miRNAs (e.g. the DE miRNAs). The other miRNAs are not dropped: their pairs stay in the results with their values, and are never marked relevant.</li>' +
+						/* It said the cutoff "determines the selection of the genes that are
+						   finally reported", and the picture's text "targets kept or dropped":
+						   like Report, the cutoff only marks pairs, and the picture's Report
+						   column reads True or False. */
+						'     <li>If the transcriptomics quantification file is provided, each miRNA &rarr; target pair is scored by the correlation between the miRNA\'s values and its target gene\'s. A miRNA usually represses its target, so a negative correlation is expected, and the cutoff on the correlation decides which pairs are marked as relevant. The other pairs are not dropped: they stay in the results with their scores.</li>' +
 						'   </ul>' +
-						'   <img alt="Worked example: targets kept or dropped by the Kendall correlation between miRNA and target expression against a cutoff" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+
+						'   <img alt="Worked example: the Kendall correlation between a miRNA and each of two targets against a cutoff of -0.6, and whether each pair is marked relevant (True) or not (False)" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+
 						'</div>'
 					},{
 						xtype: 'form', bodyCls: "contentbox", cls: "paToolForm", itemId: "omicSubmittingForm",

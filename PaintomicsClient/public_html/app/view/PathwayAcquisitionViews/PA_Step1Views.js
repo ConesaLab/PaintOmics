@@ -4181,7 +4181,10 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 								}
 							}],
 							itemId: "rnaseqauxFileSelector",
-							helpTip: "Upload the quantification file for the gene expression. This file is used to calculate the correlation of the expression of the genes and their associated features. Using this correlation we can filter and order the features that will be assigned to each gene. See above the accepted format for the file."
+							// It said "Using this correlation we can filter and order the
+							// features": the cutoff marks pairs as relevant and drops none
+							// (see STEP 5.2 in MiRNA2GeneJob.py).
+							helpTip: "Upload the quantification file for the gene expression. This file is used to calculate the correlation of the expression of the genes and their associated features. This correlation decides which pairs are marked as relevant, and in which order each gene's features are listed; every pair stays in the results. See above the accepted format for the file."
 						}, {
 							xtype: 'textfield',
 							fieldLabel: 'File Type',
@@ -4219,7 +4222,15 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 									["Only relevant features (e.g. DE)", "DE"]
 								]
 							}),
-							helpTip: "Choose between consider all features in the quantification file or just those features that are differentially expressed. Default: 'All features'"
+							// It said "just those features that are differentially expressed",
+							// and the tool page "ignoring the rest": every pair is written to
+							// every results file under both choices, and only which pairs can
+							// be marked relevant changes (see STEP 5.2 in MiRNA2GeneJob.py).
+							helpTip:
+							"Which miRNAs' pairs can be marked as relevant. All features: the pairs of every miRNA, when they pass the selection below. " +
+							"Only relevant features (e.g. DE): only the pairs of the miRNAs in the Relevant regulators file, when they pass it; " +
+							"without that file no pair is marked. Either way every pair stays in the results with its values: " +
+							"the other miRNAs are not dropped, they are never marked relevant. Default: 'All features'."
 						},
 						{
 							xtype: 'combo',
@@ -4308,11 +4319,12 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							// Deliberately not "features below the cutoff are removed".
 							// MiRNA2GeneJob.fromMiRNA2Genes inverts both the cutoff and the
 							// score when the selection method is negative correlation, so at
-							// the -0.5 default an association is kept when its correlation is
-							// *more negative* than -0.5. The direction belongs to the method,
-							// so each method's is named. It also said "or fold change", which
-							// nothing computes.
-							helpTip: "Threshold for the correlation, applied in the direction of the selection method above. With negative correlation a pair is kept when its correlation is below the cutoff, so at the default -0.5 it must be more negative than -0.5. With positive correlation it must be above the cutoff, and with absolute correlation its size must be above the cutoff."
+							// the -0.5 default an association is marked relevant when its
+							// correlation is *more negative* than -0.5. The direction belongs to
+							// the method, so each method's is named. It also said "or fold
+							// change", which nothing computes. It said a pair "is kept": one
+							// that does not pass stays in the results with its score.
+							helpTip: "Threshold for the correlation, applied in the direction of the selection method above. With negative correlation a pair is marked relevant when its correlation is below the cutoff, so at the default -0.5 it must be more negative than -0.5. With positive correlation it must be above the cutoff, and with absolute correlation its size must be above the cutoff. A pair that does not pass stays in the results with its score."
 						}
 					]
 				}

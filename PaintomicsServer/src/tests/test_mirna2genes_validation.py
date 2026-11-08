@@ -91,6 +91,7 @@ class _Job(MiRNA2GeneJob):
         self._inputDir = inputDir
         self.geneBasedInputOmics = []
         self.cutoff = 0.5
+        self.score_method = "kendall"
         self.selection_method = "negative_correlation"
 
     def getInputDir(self):

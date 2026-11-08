@@ -517,8 +517,8 @@ It takes:
 * the **miRNA-to-target table**, [regulator then target](#association-and-design-files-for-regulatory-omics),
   optionally with a score;
 * optionally, a **list of relevant miRNAs**;
-* optionally, a **gene expression matrix**, used to filter the predicted targets
-  by correlation.
+* optionally, a **gene expression matrix**, used to score each predicted target
+  by correlation and to mark as relevant the pairs that pass a cutoff.
 
 There is no restriction on the identifiers, and no translation happens here: the
 only requirement is that the same convention is used on both sides. If your
@@ -543,14 +543,20 @@ expression file uses.
 Most miRNAs have many predicted targets and few real ones at any given moment,
 so the point of the tool is to discriminate:
 
-* If you supply a **list of relevant miRNAs**, you can report targets for every
-  miRNA in the file or only for the relevant ones.
+* If you supply a **list of relevant miRNAs**, **Report** chooses whether the
+  pairs of every miRNA can be marked relevant, or only the pairs of the relevant
+  ones. The other miRNAs are not dropped: under both choices every pair is in the
+  results with its values, and only the relevant associations file changes.
+  Without the list, **Only relevant features** marks no pair, and the answer's
+  `notice` field says so.
 * If you supply a **gene expression matrix**, each miRNA-target pair is scored by
   the correlation between the two profiles — Kendall by default, Spearman or
-  Pearson on request — and filtered on it. A miRNA usually represses its target,
-  so the default selection keeps pairs whose correlation is more negative than
-  -0.5. The selection can also keep correlations above the cutoff (positive) or
-  whose size is above it, whatever their sign (absolute).
+  Pearson on request — and marked relevant when the score passes the cutoff. A
+  miRNA usually represses its target, so the default selection marks pairs whose
+  correlation is more negative than -0.5. The selection can also mark
+  correlations above the cutoff (positive) or whose size is above it, whatever
+  their sign (absolute). As with **Report**, the other pairs are not dropped: they
+  stay in the results with their scores.
 
 The form used to offer a fourth selection, "by max. fold-change of feature
 expression". It computed no fold change: it kept a pair when its correlation was
@@ -566,4 +572,9 @@ result.
 The form asks for a gene expression matrix or a relevant associations file. A
 request to the server with neither has nothing to score against: every pair is
 carried onto its gene with `nan` as its score, no pair is marked relevant, and the
-answer's `notice` field says so.
+answer's `notice` field says so. The score method `fc` does the same beside a gene
+expression file; any score method other than `kendall`, `spearman`, `pearson` and
+`fc` is refused.
+
+A notice is shown in the dialog that says the tool has finished, and when Step 1
+prepares the file, on the omic's card and once Step 2 opens.

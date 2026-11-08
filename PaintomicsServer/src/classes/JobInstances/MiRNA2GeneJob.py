@@ -63,6 +63,27 @@ SELECTION_METHODS = ("negative_correlation", "positive_correlation", "abs_correl
 RETIRED_SELECTION_METHODS = {"fc": "positive_correlation"}
 
 
+# The correlations miRNA2Target.getScore computes. Any other value came back from it
+# as None, which was written to the scoring step's output as the score "None", and
+# reading that back raised "could not convert string to float: 'None'": a crash with
+# Report for a value off the request.
+SCORE_METHODS = ("kendall", "spearman", "pearson")
+
+# "fc" is still run, as #221 made it: it computes no score, and the run says so in its
+# notice (see noScoreNotice and miRNA2Target.run). The form never offered it (its
+# option, "Fold Change of miRNA expression", was commented out from the first commit,
+# 54ff9dc3, until #233 removed the line), but miRNA2Target has always taken it.
+RETIRED_SCORE_METHODS = ("fc",)
+
+
+def unknownScoreText(method):
+    """The refusal of a score method this tool does not have, worded as
+    unknownSelectionText is: the value is repeated only when it is plain text."""
+    named = quotable(method)
+    return ("The score method %s is not one this tool has. Use kendall, spearman or pearson."
+            % ("\"%s\"" % named if named else "sent"))
+
+
 def unknownSelectionText(method):
     """The refusal of a selection method this tool does not have.
 
@@ -209,6 +230,33 @@ def noScoreNotice(stats):
     return ("%s: %s and none was marked as relevant. Every pair read is in the results, "
             "with nan as its score. To select pairs, use %s or a relevant associations file."
             % (why, _pairsWereRead(stats.get("pairs", 0)), fix))
+
+
+def noRelevantRegulatorNotice(pairedMiRNAs, listGiven):
+    """What a run with Report "DE" says when none of its paired miRNAs is relevant.
+
+    Report "DE" lets only the pairs of a miRNA in the relevant regulators file be
+    marked relevant, and every pair stays in the results (see fromMiRNA2Genes). With
+    no such file, or one that names none of the miRNAs that paired with a target, no
+    pair can be marked, and the empty relevant list read as a cutoff nothing passed.
+    """
+    if not listGiven:
+        why = "no such file was given"
+        fix = "To select pairs, add the list of relevant miRNAs"
+    else:
+        why = ("the one miRNA paired with a target is not in that file" if pairedMiRNAs == 1
+               else "none of the %d miRNAs paired with a target is in that file" % pairedMiRNAs)
+        fix = "Check that the file names the miRNAs as the quantification file does"
+    return ("Report is \"Only relevant features (e.g. DE)\", which lets only the pairs of "
+            "the miRNAs in the relevant regulators file be marked as relevant, and %s, so "
+            "no pair was marked as relevant. Every pair read is in the results. %s, or set "
+            "Report to \"All features\"." % (why, fix))
+
+
+def joinNotices(*notices):
+    """One notice from several, or None when there is none. It is one line: the
+    answer carries it, and so does the first line of genesToMiRNAFile.tab."""
+    return " ".join(notice for notice in notices if notice) or None
 
 
 def unfinishedRunError(stats):
@@ -444,8 +492,11 @@ class MiRNA2GeneJob(Job):
         @returns True if not error
         """
         error = ""
-        #TODO: CHECK VALID SCORE METHODS
         # On its own, not under "Errors detected in input files": no file is at fault.
+        # The score method first, in the order of the form.
+        if (self.score_method not in SCORE_METHODS
+                and self.score_method not in RETIRED_SCORE_METHODS):
+            raise InputFileError(unknownScoreText(self.score_method))
         if (self.selection_method not in SELECTION_METHODS
                 and self.selection_method not in RETIRED_SELECTION_METHODS):
             raise InputFileError(unknownSelectionText(self.selection_method))
@@ -803,6 +854,11 @@ class MiRNA2GeneJob(Job):
                 if self.selection_method == "negative_correlation":
                     self.cutoff *= -1 #INVERT VALUES
 
+                # For Report "DE": which miRNAs paired with a target, and whether
+                # any of them is in the relevant regulators file.
+                pairedMiRNAs = set()
+                anyRelevantMiRNA = False
+
                 for line in csvReader:
                     #STEP 5.1 GET THE mirna ID, THE ASSOCIATED GENE ID AND THE QUANTIFICATION VALUES
 
@@ -831,6 +887,8 @@ class MiRNA2GeneJob(Job):
 
                     isRelevant = mirnaID.lower() in relevantMiRNAS
                     isRelevantAssociation = False
+                    pairedMiRNAs.add(mirnaID)
+                    anyRelevantMiRNA = anyRelevantMiRNA or isRelevant
 
                     if useCorrelation:
                         if self.selection_method == "negative_correlation":
@@ -843,12 +901,17 @@ class MiRNA2GeneJob(Job):
                         # are considered relevant.
                         isRelevantAssociation = (score > self.cutoff)
 
-                        #STEP 5.2 FILTER MIRNAS
-                        #IF THE OPTION "ONLY RELEVANTS" WAS SELECTED, IGNORE ENTRY
-
-                        # Add an extra check to ensure that the regulator is inside the list of
-                        # relevant regulators (depends on configuration options).
-                        if self.report == "DE":# and not isRelevant:
+                        #STEP 5.2 REPORT "DE": ONLY A RELEVANT miRNA'S PAIRS CAN BE RELEVANT
+                        # Every pair is still written to every results file; only the
+                        # relevant associations file follows the report. The first commit
+                        # (54ff9dc3) shows this was chosen: the line read
+                        # 'if self.report == "DE":# and not isRelevant:' over a commented-out
+                        # 'continue', beside the cutoff's own commented-out 'continue', so
+                        # both filters became marks at once. The pairs that are not
+                        # relevant are the background of the Step 1 enrichment
+                        # (PathwayAcquisitionJob counts every association and the relevant
+                        # ones), so dropping them would shrink the background as well.
+                        if self.report == "DE":
                             isRelevantAssociation = isRelevantAssociation and isRelevant
 
                     else:
@@ -883,6 +946,15 @@ class MiRNA2GeneJob(Job):
                 if len(self.getInputGenesData()) < 1:
                     logging.info("MIRNA2GENES - NO RESULTS")
                     raise emptyResultError(matchStats)
+
+                # Report "DE" where no paired miRNA is relevant marks no pair, and an
+                # empty relevant list reads as a cutoff nothing passed. Not said where
+                # nothing was scored: that notice already says no pair was marked.
+                if (useCorrelation and self.report == "DE" and not anyRelevantMiRNA
+                        and self.score_method != NO_SCORE_METHOD):
+                    self.notice = joinNotices(self.notice, noRelevantRegulatorNotice(
+                        len(pairedMiRNAs), bool(relevantFile) and os_path.isfile(relevantFile)))
+                    logging.info("MIRNA2GENES - %s", self.notice)
 
                 #STEP 6. FOR EACH GENE, ORDER THE MIRNAS BY THEIR SCORE IN THE DIRECTION OF THE SELECTION
                 filePrefix = '' if self.getUserID() is not None else self.getJobID() + '_'

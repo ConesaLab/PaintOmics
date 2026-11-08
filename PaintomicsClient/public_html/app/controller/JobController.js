@@ -103,6 +103,25 @@ function step1FailureReason(response) {
 		.replace(/\n\s*-\s+/g, "<br/>");
 }
 
+/* The notice of a conversion job that finished, as HTML, or "".
+ *
+ * From miRNA to Genes answers a run that finished without doing all it was asked
+ * with a notice: no score without gene expression (#221), a retired selection
+ * method run as what it always did (#233), Report "Only relevant features" with no
+ * relevant miRNA among the pairs. Neither page showed it, so it reached the user
+ * only as the first line of genesToMiRNAFile.tab inside the results archive. It is
+ * text: escaped here, "[" too, because showMessage turns [b], [br], [ul] and [li]
+ * into tags. The other conversions send no notice, and get "".
+ */
+function conversionNoticeAsHtml(response) {
+	var notice = response && response.notice;
+	if (notice === undefined || notice === null) { return ""; }
+	notice = String(notice).trim();
+	return notice
+		.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/\[/g, "&#91;");
+}
+
 /* The omic's name as the preparation dialogs show it. The user typed it, and all
    of them reach showMessage's .html(): the name of the file being prepared in the
    titles, and beside the server's encoded text in showStep1PreparationFailure. */
@@ -510,6 +529,7 @@ function JobController() {
 		jobView.runningRequests = 0;
 		jobView.failedRequests = 0;
 		jobView.step1InputRefusals = 0;
+		jobView.step1ConversionNotices = [];
 
 		var me = this;
 
@@ -553,6 +573,7 @@ function JobController() {
 
 				//STEP2. SHOW WAITING MESSAGE INSIDE THE PANEL
 				subview.remove(subview.queryById("errorMessage"));
+				subview.remove(subview.queryById("conversionNotice"));
 
 				//STEP3. CREATE A TEMPORAL FORM TO SUBMIT THE DATA
 				var itemsContainer = subview.queryById("itemsContainer");
@@ -633,7 +654,8 @@ function JobController() {
 						* @returns {undefined}
 						*/
 						var callback = function (response, jobID, jobView, other) {
-							showInfoMessage("Preparing " + omicLabel + " (conversion job " + jobID + ") finished successfully.", {logMessage: "Job " + jobID + " finished.", showSpin: true, append: true, itemId: jobID, icon: "check-circle-o"});
+							var notice = conversionNoticeAsHtml(response);
+							showInfoMessage("Preparing " + omicLabel + " (conversion job " + jobID + ") finished successfully" + (notice ? ", with a note." : "."), {logMessage: "Job " + jobID + " finished.", showSpin: true, append: true, itemId: jobID, icon: "check-circle-o"});
 
 							jobView.pendingRequests--;
 
@@ -647,6 +669,15 @@ function JobController() {
 								enrichmentType: response.featureEnrichment,
 								response: response
 							});
+
+							/* On the card, under the files it is about, and kept for the
+							   end of Step 1: the analysis goes on by itself, and Step 2
+							   replaces this page before anyone reads the card. */
+							if (notice) {
+								other.subview.add(Ext.widget({xtype: "box", itemId: "conversionNotice", html: '<p style="margin: 10px 15px; font-size: 14px;"><i class="fa fa-info-circle" aria-hidden="true"></i> <b>Note:</b> ' + notice + '</p>'}));
+								jobView.step1ConversionNotices = jobView.step1ConversionNotices || [];
+								jobView.step1ConversionNotices.push("<b>" + omicLabel + "</b>: " + notice);
+							}
 
 							if (jobView.pendingRequests === 0) {
 								if (jobView.failedRequests === 0) {
@@ -743,6 +774,12 @@ function JobController() {
 			// takes it here, and is refused if it is held.
 			if (options.chained !== true && !me.beginStep1Submission(jobView)) {
 				return false;
+			}
+			if (options.chained !== true) {
+				// Notices are of the conversions that ran just before this; a
+				// submission that converted nothing has none to repeat. Its
+				// cards keep theirs.
+				jobView.step1ConversionNotices = [];
 			}
 			var form = jobView.getComponent().down("form").getForm();
 
@@ -885,7 +922,18 @@ function JobController() {
 
 						me.updateStoredApplicationData("jobModel", jobModel);
 						me.showJobInstance(jobModel);
-						showSuccessMessage("Done", {logMessage: "Generating Metabolites list...DONE", showTimeout: 1, closeTimeout: 0.5});
+						// A conversion that finished with a notice says it here, where
+						// it can be read: its card is gone with Step 1.
+						var notices = jobView.step1ConversionNotices || [];
+						jobView.step1ConversionNotices = [];
+						if (notices.length) {
+							showWarningMessage("Your files were prepared, with a note", {
+								message: notices.join("</br></br>"),
+								logMessage: "Generating Metabolites list...DONE", showTimeout: 1, showButton: true
+							});
+						} else {
+							showSuccessMessage("Done", {logMessage: "Generating Metabolites list...DONE", showTimeout: 1, closeTimeout: 0.5});
+						}
 					};
 
 					// A job that fails on the queue (a validation error in the
@@ -1671,8 +1719,16 @@ function JobController() {
 					*/
 					var callback = function (response, jobID, jobView) {
 						var jobId = response.jobID;
-						showSuccessMessage("miRNA2Genes finished successfully", {
-							message: "Click on the link below to download your files.</br>" +
+						/* A run that finished without doing all it was asked says
+						   so first, and is a warning rather than a success: "none
+						   was marked as relevant" under a green tick was easy to
+						   take for a cutoff that nothing passed. The title names it
+						   a note; "Note" already opens a sentence below. */
+						var notice = conversionNoticeAsHtml(response);
+						(notice ? showWarningMessage : showSuccessMessage)(
+							notice ? "miRNA2Genes finished, with a note" : "miRNA2Genes finished successfully", {
+							message: (notice ? notice + "</br></br>" : "") +
+							"Click on the link below to download your files.</br>" +
 							"<b>Note</b> that the main output (quantification at gene level) is now available at your data section.</br>" +
 							"<a href='" + window.location.pathname + SERVER_URL_DM_DOWNLOAD_FILE + "?jobID=" + jobId + "&fileName=" + response.compressedFileName + "&fileType=job_result'>Download files.</a>",
 							showButton: true
