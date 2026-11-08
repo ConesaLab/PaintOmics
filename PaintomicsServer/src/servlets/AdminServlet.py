@@ -43,6 +43,7 @@ from src.classes.Report import Report
 
 from src.common.Util import sendEmail, resolveWithin, unsafeNameReason
 from src.common.EmailTemplates import reportNotificationEmail
+from src.common.HostingSentence import hostingSentenceHtml
 
 from src.conf.serverconf import (
     MONGODB_HOST,
@@ -555,7 +556,17 @@ def adminServletGetMessage(request, response):
         #****************************************************************
         daoInstance = MessageDAO()
         matchedMessages = daoInstance.findAll(otherParams={"message_type" : message_type})
-        response.setContent({"success": True, "messageList" : matchedMessages})
+        content = {"success": True, "messageList" : matchedMessages}
+
+        # The welcome dialog's "PaintOmics AI runs on ..." comes from this
+        # server's own setting; it used to name Drago on every server. getattr:
+        # a hand-kept serverconf.py written before the setting existed must
+        # still answer, with no hosting sentence.
+        if message_type == "starting_message":
+            content["hostingSentence"] = hostingSentenceHtml(
+                getattr(_serverconf, "PAINTOMICS_HOSTED_BY", ""))
+
+        response.setContent(content)
 
     except Exception as ex:
         handleException(response, ex, __file__ , "adminServletGetMessage")

@@ -12,7 +12,24 @@ import logging.config
 # data -- into application.log. Setting the parent logger is enough; the
 # per-component children (command, connection, serverSelection, topology)
 # inherit it.
-NOISY_THIRD_PARTY_LOGGERS = ("pymongo", "urllib3", "requests", "matplotlib")
+#
+# The rest were found at DEBUG in paintomics.org's application.log (2026-11-08,
+# the file since 7 Nov 06:07; counts are its lines):
+#   apscheduler  "Looking for jobs to run", "Next wakeup is due" on every
+#                wakeup of the cleaning cron, which wakes once a day (30).
+#   httpcore     every step of every HTTP call to the AI gateway (5,659), with
+#                the response headers.
+#   openai       the OpenAI client (openai._base_client, 1,782) and the Agents
+#                SDK under openai.agents: a line per span, turn, tool call and
+#                model call (5,207). PaintOmics logs its own LLM failures and
+#                retries at WARNING (llm_client.py).
+#   tzlocal      the time zone lookup, every time a scheduler is built (15).
+#   PIL          each PNG chunk read, "STREAM b'IHDR' 16 13" (6).
+#   asyncio      "Using selector: EpollSelector" (2).
+# WARNING and above still get through from all of them.
+NOISY_THIRD_PARTY_LOGGERS = ("pymongo", "urllib3", "requests", "matplotlib",
+                             "apscheduler", "httpcore", "openai", "tzlocal",
+                             "PIL", "asyncio")
 
 
 def configureLogging(configPath):
