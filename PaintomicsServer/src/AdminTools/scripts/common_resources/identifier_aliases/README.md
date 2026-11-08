@@ -10,11 +10,11 @@ resolves the rebuilt species' ids afresh on each mapping call. But `install` rep
 species' identifier tables in place, so a job mapping that species while it runs can come
 back short, and nothing says so.
 
-`scripts/default/build_database.py` calls it, which is what builds these three, and so
+`scripts/default/build_database.py` calls it, which is what builds these four, and so
 does `osa_resources/build_database.py`, which has to keep every call of the default (rice
 has no table, so there it does nothing). No other species script does. So do not create
-`zma_resources`, `psat_resources` or `sbi_resources`: a directory wins over the default
-script, and the table would stop being read.
+`zma_resources`, `psat_resources`, `sbi_resources` or `vvi_resources`: a directory wins
+over the default script, and the table would stop being read.
 
 ## The tables
 
@@ -36,8 +36,8 @@ a `gene_alias` row is never walked through to anything else. Sorghum's rows, fil
 `ensembl_gene`, are: see below.
 
 All aliases are gene level. A transcript id of another genome version
-(`Zm00001d027230_T001`, `Psat.cameor.v2.1g306350.1`) stays unmapped and no row may be
-added for one.
+(`Zm00001d027230_T001`, `Psat.cameor.v2.1g306350.1`, `VIT_00s0125g00090.t01`) stays
+unmapped and no row may be added for one.
 
 ### `zma.tsv.gz`: maize B73 RefGen_v4 gene ids (`Zm00001d...`)
 
@@ -245,9 +245,10 @@ The owner may want the inferred rows gone later: they are the ones marked
 
 ### Where the gene is
 
-Both species use one test (`Collinearity` in the script), from pairs of genes already
-trusted, called anchors: maize's are MaizeGDB's 1:1 pairs, pea's the genes both routes
-agree on. A row pairs a gene on one genome with a gene on the other. The test takes the 4
+Maize, pea and grape use one test (`Collinearity` in the script), from pairs of genes
+already trusted, called anchors: maize's are MaizeGDB's 1:1 pairs, pea's the genes both
+routes agree on, and grape's the other rows of the same Ensembl release, with the row
+being tested left out (see `vvi.tsv.gz` below for its measurements). A row pairs a gene on one genome with a gene on the other. The test takes the 4
 anchors nearest the gene on its own genome, and an anchor agrees when it sits on the
 partner's sequence and no further from the partner than it sits from the gene, plus 1 Mb.
 At least half of the anchors asked have to agree, and at least one. It compares distances,
@@ -305,6 +306,99 @@ which Ensembl files under both SORBI_3010G273600 and SORBI_3K029900, go from one
 to both genes', and A0A1Z5R9A2 goes from 0 to 2 KEGG genes. The two genes do not become
 mates. On `zma` and `psat` the same comparison changes no existing name.
 
+### `vvi.tsv.gz`: grape gene ids of the 12X and PN40024.v4 genomes, and NCBI's locus tags
+
+KEGG lists grape's genes as NCBI GeneIDs on the PN_T2T assembly (RefSeq `GCF_030704535.1`),
+and the installed Ensembl genebuild is PN_T2T as well (`Vitis01g00541`, Ensembl Plants 61
+on). Before it, Ensembl Plants annotated 12X (`VIT_00s0125g00090`, up to release 52) and
+PN40024.v4 (`Vitvi18g00828`, releases 53 to 60), and NCBI files most GeneIDs under a locus
+tag (`VIT_00032725001`). None of these was in the installed tables. 42,523 rows:
+
+| `evidence` | Rows | Target | How |
+|---|---:|---|---|
+| `ncbi_locus_tag` | 17,400 | `ncbi_geneid` | NCBI's locus tag for the gene starts `VIT_` and KEGG has its GeneID |
+| `ensembl52_12x+collinear` | 15,881 | `ncbi_geneid` | Ensembl Plants 52 links the 12X gene to one GeneID KEGG has, and the position test below passes |
+| `ensembl52_12x` | 1,071 | `ncbi_geneid` | The same, where the test cannot run because the 12X gene is on `Un` (807) or a `_random` sequence (264). 14 of them (13 on `Un`, 1 on `16_random`) link a plastid or mitochondrial gene |
+| `ensembl60_v4+collinear` | 8,111 | `ncbi_geneid` | Ensembl Plants 60 links the v4 gene to one GeneID KEGG has, and the position test passes |
+| `ensembl60_v4` | 60 | `ncbi_geneid` | The same, with the v4 gene on `Un`, where the test cannot run |
+
+* **NCBI's locus tags.** 17,555 GeneIDs of taxon 29760 carry a `VIT_` locus tag, all but one
+  of them `VIT_` and 11 digits; 17,400 of those GeneIDs are in KEGG. A tag is NCBI's own name
+  for the gene, as sorghum's are, and no source used here places it on a genome, so no
+  position test applies. The other tags of the taxon (`ViviCp027`, `ViviM_p001`) are plastid
+  and mitochondrial genes, not another genome version's, and are left out. One tag has the
+  12X form, `VIT_16s0100g01030`; Ensembl links that 12X gene to the same GeneID, and the row
+  carries NCBI's evidence.
+* **Ensembl Plants' links.** Each release's `entrez.tsv.gz` links a gene to the GeneIDs
+  Ensembl's cross-reference pipeline matched to it, at the time of that release. Only rows
+  with `db_name` `EntrezGene` count. A gene gives a row when exactly one of its GeneIDs is in
+  KEGG (another GeneID KEGG does not list, often one NCBI has since retired, does not make it
+  ambiguous): 16,993 of the 18,525 12X genes with a link (518 have several, 1,014 none in
+  KEGG), and 8,206 of the 8,299 v4 genes (93 have several). Releases 50 and 52 give the same
+  18,525 genes and links; 52 is the last on 12X, 60 the last on v4.
+* **Where the gene is.** Ensembl's link was made between two genomes, so it is tested the
+  way pea's sequence matches are (see "Where the gene is", above), with these anchors: the
+  rows of the same release whose gene and GeneID are both on numbered chromosomes, by the
+  release's own GFF and KEGG's gene list. A row is asked with itself left out, because it is
+  one of the anchors and would otherwise be its own nearest, agreeing one. It drops 32 of
+  the 15,914 12X rows it can ask (13 with the GeneID on another chromosome, 19 on the same
+  one but away from where the neighbours put it) and 35 of the 8,146 v4 rows (22 and 13).
+  `VIT_05s0062g01430` and `VIT_05s0062g01440`, and their v4 genes `Vitvi05g01375` and
+  `Vitvi05g01376`, sit on chromosome 5 in both versions and link two GeneIDs (100854828,
+  100253795) on chromosome 7 of PN_T2T. `VIT_03s0017g01270` sits beside genes whose GeneIDs
+  are on chromosome 3 and links one on 7. A row the test cannot ask keeps the evidence
+  without `+collinear`, as maize's untested locus tags stay: the link is Ensembl's, and the
+  test only vetoes it.
+* **Nuclear genes linked to an organelle's.** 8 more 12X rows are dropped: the 12X gene is on
+  a numbered chromosome of the nuclear genome, and the GeneID is a gene of the plastid (`CP`
+  in KEGG's list) or the mitochondrion (`MT`). `VIT_13s0019g02630`, on chromosome 13, links
+  psbA (4025118); the others link atp6, atp8, rps4, rpl14, rpl22, cemA and ycf1. Wherever such
+  a model's sequence came from (a nuclear copy of the organelle gene, or organelle sequence
+  the assembly placed in a chromosome), it is not where that gene is, so the row goes the way
+  a link to another chromosome does. No 12X gene model sits on a plastid or mitochondrial
+  sequence, so a 12X file has no other id for these 8 genes, 6 of them on a KEGG pathway: on
+  `vvi` they map from the PN_T2T form only. The 14 links from `Un` and `_random` stay: their place is unknown,
+  and some `Un` stretches hold several organelle genes in a row (`VIT_00s0246g00060` to
+  `VIT_00s0246g00240` link 4 mitochondrial and plastid genes), which looks like organelle
+  sequence the assembly could not place. No v4 row links an organelle gene.
+
+| Position test, grape | 12X, release 52 | v4, release 60 |
+|---|---:|---:|
+| Rows asked that pass, themselves left out | 99.80 % of 15,914 | 99.57 % of 8,146 |
+| The same, given a random KEGG gene as partner | 0.48 % | 0.41 % |
+| The same, given a random KEGG gene on the true partner's chromosome | 11.1 % | 10.5 % |
+| Rows dropped | 32 | 35 |
+| With 0.5 Mb instead of 1 | 44 | 40 |
+| With 2 Mb or 5 Mb | 25 or 19 | 32 or 27 |
+| With 3, 6 or 10 anchors asked | 47, 47 or 67 | 41, 45 or 69 |
+
+What the test cannot see: grape's chromosomes are short (20 to 37 Mb on PN_T2T), so a wrong
+GeneID on the right chromosome passes about one time in nine, against about one in eighty for
+maize; the test is strong against a link to another chromosome and weak within one. And it
+cannot tell a wrong link from a stretch that moved between the assemblies: 10 of the 32 12X
+rows and 12 of the 35 v4 rows it drops have, as their nearest neighbour, another dropped row
+that agrees with them, such as `VIT_13s0101g00090` and `VIT_13s0101g00100`, 2 Mb from where
+their neighbours put them, and the chromosome 5 pair above. Some of those may be right. They
+are dropped because the rule asks for neighbours that agree.
+
+The rows reach 20,520 of KEGG's 26,425 grape genes, 5,068 of its 6,273 pathway genes: NCBI's
+tags reach 17,400 (4,569 on a pathway), the 12X ids 16,902 (4,405) and the v4 ids 8,161
+(2,221). 16,017 of these genes are reached by more than one alias, mostly one of each form;
+within one release, 50 KEGG genes are reached by two 12X ids and 10 by two v4 ids. They cover
+16,953 of the 29,927 protein-coding 12X genes and 8,171 of the 35,134 v4 genes: Ensembl links
+only 8,299 v4 genes to any GeneID.
+
+Every row targets a GeneID's `ncbi_geneid` document, whose group holds that GeneID's KEGG
+gene and no other, so an alias answers exactly its GeneID. The GeneID written as a name can
+answer more: for 161 of them, the same spelling is also an `entrezgene` document in a PN_T2T
+Ensembl gene's group that holds two or more KEGG genes (`100242323` answers 100242323 and
+100252567, through `Vitis07g02106`).
+
+Not in the table, because no source used here pairs them with a GeneID: 12X.v2 ids
+(`VIT_201s0011g00010`), Genoscope's (`GSVIVT00032725001`; NCBI's tag `VIT_00032725001`
+carries the same digits, but nothing here says they are one gene), UniProt's gene names
+(`VitviT2T_000244`, `Vv19s0014g04930`, `VITISV_008354`), and transcript ids.
+
 ### What refuses a row
 
 An id filed under a bridge table (`ensembl_gene`) is walked through by the mapper's second
@@ -319,21 +413,27 @@ and nothing else.
 Nothing refuses several aliases reaching one KEGG gene: 64 maize and 61 pea KEGG genes are
 reached by more than one alias, and those aliases merge there the way two Ensembl ids already
 do (without the tables, 404 maize and 140 pea KEGG genes are reached by more than one Ensembl
-gene).
+gene). Grape's forms are meant to: a GeneID's NCBI tag, its 12X id and its v4 id all reach it.
+
+On a copy of paintomics.org's `vvi` database (2026-11-08), every one of the 42,523 grape rows
+is accepted by the build (`processIdentifierAliases` on the deployed `mapping/` files) and by
+the additive script that adds a table to an installed species, and none is refused. Every name
+the database held before answers the mapper as it did.
 
 ## Sources
 
 | Source | Used for | Licence and attribution |
 |---|---|---|
 | Kreplak, Jonathan. Dataset from "A new genome assembly of the pea cultivar Cameor provides resources for functional genomics and genetics". Recherche Data Gouv, V1, 2025-04-01. [doi:10.57745/5MDE99](https://doi.org/10.57745/5MDE99): `v1_genes_to_v2.xlsx`, `CAMEOR_V2_ANNOTATION_1_prot.fasta`, `CAMEOR_V2_ANNOTATION_1.gff3`. Article: Kreplak J. et al., Sci Data 2026, [doi:10.1038/s41597-026-07347-4](https://doi.org/10.1038/s41597-026-07347-4) | pea, both routes and the collinearity test | [Etalab Open Licence 2.0](https://spdx.org/licenses/etalab-2.0.html). **Attribution is required**: reuse must name the source and its date, as this row does. Rows were derived from the files, which are not redistributed here |
-| NCBI Gene, `GENE_INFO/Plants/All_Plants.gene_info.gz`, taxa 4577 and 4558 | maize and sorghum locus tags, and maize chromosomes for the position check where KEGG gives a GeneID no place | [NCBI policy](https://www.ncbi.nlm.nih.gov/home/about/policies/): NCBI places no restrictions on use or distribution of its molecular data; contributors may hold their own rights |
+| NCBI Gene, `GENE_INFO/Plants/All_Plants.gene_info.gz`, taxa 4577, 4558 and 29760 | maize, sorghum and grape locus tags, and maize chromosomes for the position check where KEGG gives a GeneID no place | [NCBI policy](https://www.ncbi.nlm.nih.gov/home/about/policies/): NCBI places no restrictions on use or distribution of its molecular data; contributors may hold their own rights |
+| Ensembl Plants, release 52: [`Vitis_vinifera.12X.52.entrez.tsv.gz`](https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-52/tsv/vitis_vinifera/Vitis_vinifera.12X.52.entrez.tsv.gz) and [`Vitis_vinifera.12X.52.gff3.gz`](https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-52/gff3/vitis_vinifera/Vitis_vinifera.12X.52.gff3.gz); release 60: [`Vitis_vinifera.PN40024.v4.60.entrez.tsv.gz`](https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-60/tsv/vitis_vinifera/Vitis_vinifera.PN40024.v4.60.entrez.tsv.gz) and [`Vitis_vinifera.PN40024.v4.60.gff3.gz`](https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-60/gff3/vitis_vinifera/Vitis_vinifera.PN40024.v4.60.gff3.gz) | grape, the 12X and v4 rows (the links) and their position test (the gene models) | Ensembl Plants' disclaimer: "Ensembl imposes no restrictions on access to, or use of, the data provided and the software used to analyse and present it" ([plants.ensembl.org/info/about/legal/disclaimer.html](https://plants.ensembl.org/info/about/legal/disclaimer.html), read 2026-11-08). Ensembl asks to be cited with its latest overview and the release used: Yates A. D. et al., "Ensembl 2026", Nucleic Acids Res 2025, [doi:10.1093/nar/gkaf1239](https://doi.org/10.1093/nar/gkaf1239), releases 52 and 60. The gene models are used to choose rows and not redistributed |
 | NCBI RefSeq, `GCF_024323335.1` (CAAS_Psat_ZW6_1.0), proteins and `feature_table` | pea, the sequence route and the collinearity test | As above |
 | MaizeGDB, [`Pan-genes/B73_gene_xref`](https://download.maizegdb.org/Pan-genes/B73_gene_xref/): `B73v4_to_B73v5.tsv`, `B73v5_to_B73v4.tsv` | maize, the 604 `maizegdb_1to1` rows, the anchors of the maize position checks, and the v5 gene the protein rule asks for | **Reuse allowed with credit; the sources disagree on the licence, so the rows follow the strictest, CC BY 4.0.** MaizeGDB is a USDA Agricultural Research Service project. USDA's catalogue record for it gives "U.S. Public Domain" ([Ag Data Commons, MaizeGDB](https://agdatacommons.nal.usda.gov/articles/dataset/MaizeGDB/24660768), read 2026-11-07); the data.gov copy of that record, as AmeriGEOSS shows it, gives CC0 ([data.amerigeoss.org/dataset/maizegdb](https://data.amerigeoss.org/dataset/maizegdb)); and microPublication's data-sharing policy says "all data curated by MaizeGDB are used with permission of the generating researchers and licensed under the Creative Commons Attribution 4.0 International license (CC-BY [...]), unless otherwise specified" ([micropublication.org/data-sharing-policy](https://www.micropublication.org/data-sharing-policy)). MaizeGDB's own 2006 status report says "Data housed at MaizeGDB are in the public domain, hence they are freely available for use without a license" ([documents.maizegdb.org](https://documents.maizegdb.org/working_group/12ReportAugust2006.pdf), page 16). www.maizegdb.org answers with a Cloudflare browser check (HTTP 403 to curl and to headless Chromium on 2026-11-07), and the directory states no licence; the Internet Archive's copies of January 2026 can be read: [its page for contributors](https://web.archive.org/web/20260107183036/https://www.maizegdb.org/contribute_data) takes only data "licensed as public data", and [its citation page](https://web.archive.org/web/20260109182555/https://www.maizegdb.org/cite) asks for the 2021 paper below. Every one of these allows reuse; CC BY asks for credit and a link to the licence, given here: MaizeGDB, RRID:SCR_006600, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); Woodhouse M. R. et al., BMC Plant Biol 2021, [doi:10.1186/s12870-021-03173-5](https://doi.org/10.1186/s12870-021-03173-5), the citation MaizeGDB asks for; and Andorf C. M. et al., Nucleic Acids Res 2016, [doi:10.1093/nar/gkv1007](https://doi.org/10.1093/nar/gkv1007), the one USDA's record asks for |
 | MaizeGDB, gene models: [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.gff3.gz), [`Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz) | maize, the position checks | As above. Used to choose rows and not redistributed |
 | MaizeGDB, v4 proteins: [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.protein.fa.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.protein.fa.gz) | maize, the protein rule | As above. Used to choose rows and not redistributed |
 | NCBI RefSeq, `GCF_902167145.1` (Zm-B73-REFERENCE-NAM-5.0), proteins and `feature_table` | maize, the protein rule: the proteins of KEGG's GeneIDs | As NCBI Gene above. Used to choose rows and not redistributed |
 | MaizeGDB, [`Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.full_gene_data.txt.gz`](https://download.maizegdb.org/Zm-B73-REFERENCE-GRAMENE-4.0/Zm-B73-REFERENCE-GRAMENE-4.0_Zm00001d.2.full_gene_data.txt.gz) | the counts of v4 gene models and of those left out above, only: 44,146 models, where `B73v4_to_B73v5.tsv` lists 38,356. The script does not read it | As above. Nothing from it is in the tables |
-| KEGG and Ensembl, as the species' installed `mapping/` files, among them `kegg2genesymbol.list`, which is KEGG's gene list (`rest.kegg.jp/list/<code>`) with its positions | which targets exist and reach KEGG, and the maize GeneIDs' places for both position checks | Used to choose rows and not redistributed: the tables hold GeneIDs, Ensembl ids and the aliases above, and no KEGG data |
+| KEGG and Ensembl, as the species' installed `mapping/` files, among them `kegg2genesymbol.list`, which is KEGG's gene list (`rest.kegg.jp/list/<code>`) with its positions | which targets exist and reach KEGG, and the maize and grape GeneIDs' places for the position checks (grape's on RefSeq `GCF_030704535.1`, PN_T2T, the assembly KEGG's `vvi` genome entry names) | Used to choose rows and not redistributed: the tables hold GeneIDs, Ensembl ids and the aliases above, and no KEGG data |
 
 ## Regenerating
 
@@ -349,6 +449,10 @@ on a numbered chromosome: each GFF under 95 % of the ids in MaizeGDB's table (me
 99.2 % and 100 %), KEGG's list or gene_info under 85 % of KEGG's genes (94.4 % each). For
 pea, anywhere: the Cameor v2 GFF under 95 % of the v2 genes either route names, ZW6's
 feature table under 95 % of the GeneIDs the sequence route names (measured 100 % each).
+For grape, on a numbered chromosome: each Ensembl GFF under 85 % of the genes its release
+links to a GeneID (measured 92.4 % for 12X, whose `Un` holds 2,628 genes, and 99.3 % for
+v4), KEGG's list under 85 % of KEGG's genes (99.1 %); an `entrez.tsv.gz` that parses to
+nothing stops it the same way, as 0 of 0 ids.
 Without that, a file that downloads and parses to nothing would turn a check off, or for pea
 drop every sequence match. A source of rows that parses short,
 such as the locus-tag column, a MaizeGDB table missing lines or a maize protein file, does not
@@ -356,14 +460,16 @@ stop it: the run ends well with a smaller table, and only the MD5 and row-count 
 `test_identifier_aliases` catch that, once the table is committed.
 
 Run against the deployed `mapping/` files, with DIAMOND v2.2.8 and the sources downloaded
-afresh on 2026-11-06, the three GFF files and the three maize protein files on 2026-11-07, it
-gives these tables, byte for byte from one run to the next:
+afresh on 2026-11-06, the three GFF files and the three maize protein files on 2026-11-07, and
+grape's sources (gene_info and the four Ensembl Plants files) on 2026-11-08, it gives these
+tables, byte for byte from one run to the next:
 
 | Table | Rows | Bytes | MD5 |
 |---|---:|---:|---|
 | `zma.tsv.gz` | 27,769 | 167,226 | `d61bffc4e46eaf07a8cede9bc78c709b` |
 | `psat.tsv.gz` | 21,979 | 140,768 | `bcd3ed7272608db40d537125618dda87` |
 | `sbi.tsv.gz` | 3,192 | 20,854 | `902915412cb3bfc070c9c7f126aff035` |
+| `vvi.tsv.gz` | 42,523 | 265,655 | `99f3a73bcb556190faee564b0bc1c0ba` |
 
 Expect differences on a later date: NCBI rewrites gene_info daily, and KEGG and Ensembl
 move with each release.

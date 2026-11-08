@@ -33,6 +33,12 @@ What is pinned here
 * A maize id a position check skipped is kept only where one KEGG gene with its protein
   sits where the v5 genome has it (Zm00001d012944, Zm00001d004346), and a family of
   such genes gives nothing.
+* Grape (vvi, PN_T2T): 12X and PN40024.v4 gene ids through Ensembl Plants' own link to a
+  GeneID, kept only where the other links of the same version around the id put that
+  GeneID where KEGG has it, the row itself left out (VIT_05s0062g01430, chromosome 5 in
+  both versions, links a GeneID on 7), and never from a nuclear chromosome to a plastid
+  or mitochondrial gene (VIT_13s0019g02630 to psbA); and NCBI's VIT_ locus tags. The real
+  build of vvi on small files of each source, and what it stops on.
 * The organism hint recognises Cameor v2 and everything it recognised before.
 
 Needs no network and no database.
@@ -70,16 +76,20 @@ REGISTRY = os.path.join(SCRIPTS, "common_resources", "ensembl_genebuilds.json")
 DEFAULT_BUILD = os.path.join(SCRIPTS, "default", "build_database.py")
 
 COLUMNS = ["alias", "alias_dbname", "target_dbname", "target_display_id", "evidence"]
-SHIPPED_ROWS = {"zma": 27769, "psat": 21979, "sbi": 3192}
+SHIPPED_ROWS = {"zma": 27769, "psat": 21979, "sbi": 3192, "vvi": 42523}
 ALIAS_SHAPE = {"zma": r"Zm00001d\d{6}", "psat": r"Psat\.cameor\.v2\.\d+(?:s\d+)?g\d+",
-               "sbi": r"SORBI_3(?:\d{3}G|K)\d{6}"}
+               "sbi": r"SORBI_3(?:\d{3}G|K)\d{6}",
+               # NCBI's locus tags, 12X's gene ids (one NCBI tag has that form too), PN40024.v4's.
+               "vvi": r"VIT_\d{11}|VIT_\d{2}s\d{4}g\d{5}|Vitvi\d{2}g\d{5}"}
 #: Per table, each evidence label and the table its rows target. A published pea
 #: row names the v1a gene the authors paired it with, a sequence match the GeneID.
 EVIDENCE = {"zma": {"ncbi_locus_tag": "ncbi_geneid", "maizegdb_1to1": "ensembl_gene",
                     "protein+maizegdb_v5": "ncbi_geneid", "protein+neighbour": "ncbi_geneid"},
             "psat": {"published_table_rbh+coord": "ensembl_gene", "published_table_rbh+coord+refseq_rbh": "ensembl_gene",
                      "refseq_rbh+collinear": "ncbi_geneid"},
-            "sbi": {"ncbi_locus_tag": "ncbi_geneid"}}
+            "sbi": {"ncbi_locus_tag": "ncbi_geneid"},
+            "vvi": {"ncbi_locus_tag": "ncbi_geneid", "ensembl52_12x": "ncbi_geneid", "ensembl52_12x+collinear": "ncbi_geneid",
+                    "ensembl60_v4": "ncbi_geneid", "ensembl60_v4+collinear": "ncbi_geneid"}}
 
 
 def loadModule(path, name):
@@ -570,7 +580,7 @@ class BuildScriptTest(unittest.TestCase):
 
 class ShippedTablesTest(unittest.TestCase):
 
-    def test_exactly_the_three_tables_ship_and_their_species_use_the_default_build(self):
+    def test_exactly_the_four_tables_ship_and_their_species_use_the_default_build(self):
         tables = sorted(name[:-len(".tsv.gz")] for name in os.listdir(ALIASES) if name.endswith(".tsv.gz"))
         self.assertEqual(sorted(SHIPPED_ROWS), tables)
         with open(REGISTRY, encoding="utf-8") as handle:
@@ -664,11 +674,43 @@ class ShippedTablesTest(unittest.TestCase):
         # v4 puts it on chromosome 4 and the GeneID is on 9, 106 kb from the v5 gene MaizeGDB pairs it with.
         self.assertEqual("109939174", rows["Zm00001d053878"][3])
 
+    def test_grape_rows_whose_place_disagrees_stay_out(self):
+        """What the position test removed from vvi's table, and what it kept or could not ask."""
+        rows = {row[0]: row for row in readShipped("vvi")[1:]}
+        # Chromosome 5 in 12X and in v4 alike, while Ensembl's GeneIDs (100854828, 100253795) are on 7 in PN_T2T.
+        for wrong in ("VIT_05s0062g01430", "VIT_05s0062g01440", "Vitvi05g01375", "Vitvi05g01376",
+                      # Another chromosome (7 for 3), and the same chromosome but far from its neighbours' place.
+                      "VIT_03s0017g01270", "VIT_07s0141g01060", "Vitvi01g04267"):
+            self.assertNotIn(wrong, rows)
+        # Their neighbours on 12X and v4, which put their own GeneIDs where KEGG has them.
+        self.assertEqual("ensembl52_12x+collinear", rows["VIT_05s0062g01420"][4])
+        self.assertEqual("ensembl60_v4+collinear", rows["Vitvi05g02128"][4])
+        # NCBI's own tag in 12X's form, the same GeneID Ensembl gives: one row, on NCBI's evidence.
+        self.assertEqual(["VIT_16s0100g01030", "gene_alias", "ncbi_geneid", "100217471", "ncbi_locus_tag"],
+                         rows["VIT_16s0100g01030"])
+        # NCBI's plastid and mitochondrial locus tags are not ids of another genome version.
+        self.assertFalse([alias for alias in rows if alias.startswith("Vivi")])
+        # 12X gene models on a numbered nuclear chromosome that Ensembl links to a plastid or mitochondrial gene:
+        # psbA (4025118), atp6 (7498515) and atp8 (7498613) among them.
+        for nuclear in ("VIT_01s0146g00390", "VIT_08s0056g00590", "VIT_09s0054g00520", "VIT_13s0019g02630",
+                        "VIT_14s0030g00680", "VIT_14s0036g01270", "VIT_17s0000g02610", "VIT_19s0014g02520"):
+            self.assertNotIn(nuclear, rows)
+        # On Un or a _random sequence the place is unknown, so the link stays, untested.
+        self.assertEqual(["VIT_00s0246g00060", "gene_alias", "ncbi_geneid", "7498641", "ensembl52_12x"],
+                         rows["VIT_00s0246g00060"])
+        self.assertEqual(["VIT_16s0039g00380", "gene_alias", "ncbi_geneid", "4025089", "ensembl52_12x"],
+                         rows["VIT_16s0039g00380"])
+
     def test_the_rows_users_asked_for_are_there(self):
         wanted = {
             "psat": [["Psat.cameor.v2.0s1040g10400", "gene_alias", "ncbi_geneid", "127107715", "refseq_rbh+collinear"]],
             "zma": [["Zm00001d038291", "gene_alias", "ncbi_geneid", "541612", "ncbi_locus_tag"]],
             "sbi": [["SORBI_3001G262200", "ensembl_gene", "ncbi_geneid", "110433423", "ncbi_locus_tag"]],
+            # The three grape forms #225 found mapping nothing on vvi. VIT_00s0125g00090 is on 12X's Un,
+            # where the position test cannot ask, so its evidence carries no +collinear.
+            "vvi": [["VIT_00s0125g00090", "gene_alias", "ncbi_geneid", "100259764", "ensembl52_12x"],
+                    ["Vitvi18g00828", "gene_alias", "ncbi_geneid", "100257358", "ensembl60_v4+collinear"],
+                    ["VIT_00032725001", "gene_alias", "ncbi_geneid", "100232837", "ncbi_locus_tag"]],
         }
         for code, rows in wanted.items():
             shipped = readShipped(code)
@@ -696,24 +738,37 @@ class ShippedTablesTest(unittest.TestCase):
                        "https://agdatacommons.nal.usda.gov/articles/dataset/MaizeGDB/24660768",
                        # The sources disagree on MaizeGDB's licence; the strictest, CC BY, asks for credit and the link.
                        "CC0", "https://creativecommons.org/licenses/by/4.0/", "10.1186/s12870-021-03173-5",
-                       "Zm00001d.2.protein.fa.gz", "GCF_902167145.1"):
+                       "Zm00001d.2.protein.fa.gz", "GCF_902167145.1",
+                       # Grape: both Ensembl Plants dumps and gene models, Ensembl's terms and the citation it asks for.
+                       "Vitis_vinifera.12X.52.entrez.tsv.gz", "Vitis_vinifera.12X.52.gff3.gz",
+                       "Vitis_vinifera.PN40024.v4.60.entrez.tsv.gz", "Vitis_vinifera.PN40024.v4.60.gff3.gz",
+                       "Ensembl imposes no restrictions on access to, or use of, the data provided",
+                       "https://plants.ensembl.org/info/about/legal/disclaimer.html", "10.1093/nar/gkaf1239",
+                       "taxa 4577, 4558 and 29760", "GCF_030704535.1"):
             self.assertIn(needed, readme)
 
     def test_the_tables_apply_to_a_build_that_has_their_targets(self):
         """The real file, through the real reader, in the real function: one row's worth of species."""
-        builder = loadModule(COMMON_BUILDER, "common_build_database_real_table")
-        builder.SPECIE = "psat"
-        keggTable = builder.insertDatabase(builder.DBNAME_Entry("kegg_id", "KEGG", "Identifier"))
-        ncbiTable = builder.insertDatabase(builder.DBNAME_Entry("ncbi_geneid", "NCBI", "Identifier"))
-        for item in (builder.insertXREF(builder.XREF_Entry("127107715", keggTable, "t")),
-                     builder.insertXREF(builder.XREF_Entry("127107715", ncbiTable, "t"))):
-            builder.insertTR_XREF(item, "GROUP")
+        for code, geneId, alias in (("psat", "127107715", "Psat.cameor.v2.0s1040g10400"),
+                                    ("vvi", "100232837", "VIT_00032725001")):
+            with self.subTest(code):
+                builder = loadModule(COMMON_BUILDER, "common_build_database_real_table_" + code)
+                builder.SPECIE = code
+                keggTable = builder.insertDatabase(builder.DBNAME_Entry("kegg_id", "KEGG", "Identifier"))
+                ncbiTable = builder.insertDatabase(builder.DBNAME_Entry("ncbi_geneid", "NCBI", "Identifier"))
+                for item in (builder.insertXREF(builder.XREF_Entry(geneId, keggTable, "t")),
+                             builder.insertXREF(builder.XREF_Entry(geneId, ncbiTable, "t"))):
+                    builder.insertTR_XREF(item, "GROUP")
+                # A grape GeneID is named by its NCBI tag and often by a 12X and a v4 id too.
+                naming = sorted(row[0] for row in readShipped(code)[1:] if row[3] == geneId)
+                self.assertIn(alias, naming)
 
-        self.assertEqual(1, builder.processIdentifierAliases())
+                self.assertEqual(len(naming), builder.processIdentifierAliases())
 
-        alias = builder.findXREF("Psat.cameor.v2.0s1040g10400", builder.ALL_DBS["gene_alias"].getID())
-        self.assertEqual({"127107715"}, builder.keggGenesReachedBy(alias.getID()))
-        self.assertEqual(SHIPPED_ROWS["psat"] - 1, len(builder.FAILED_LINES["IDENTIFIER-ALIASES"]))
+                for name in naming:
+                    entry = builder.findXREF(name, builder.ALL_DBS["gene_alias"].getID())
+                    self.assertEqual({geneId}, builder.keggGenesReachedBy(entry.getID()), name)
+                self.assertEqual(SHIPPED_ROWS[code] - len(naming), len(builder.FAILED_LINES["IDENTIFIER-ALIASES"]))
 
 
 class _StubSpecies(object):
@@ -1446,6 +1501,186 @@ class RegeneratingScriptTest(unittest.TestCase):
                              '</sheetData></worksheet>' % main)
             archive.writestr("xl/worksheets/sheet1.xml", '<worksheet xmlns="%s"><sheetData/></worksheet>' % main)
         self.assertEqual({"wanted": [["Psat1.1", "", "7"]]}, self.script.readWorkbook(path, ("wanted",)))
+
+    # --- Grape -------------------------------------------------------------------
+
+    def test_the_ensembl_entrez_reader_keeps_genes_and_geneids_only(self):
+        """One row per transcript; EntrezGene_trans_name rows carry transcript names in the xref column."""
+        lines = ["gene_stable_id\ttranscript_stable_id\tprotein_stable_id\txref\tdb_name\tinfo_type\tsource_identity\n",
+                 "Vitvi18g00267\tVitvi18g00267_t001\tVitvi18g00267_P001\t100257421\tEntrezGene\tDEPENDENT\t-\t-\t-\n",
+                 "Vitvi18g00267\tVitvi18g00267_t002\tVitvi18g00267_P002\t100257421\tEntrezGene\tDEPENDENT\t-\t-\t-\n",
+                 "Vitvi18g00784\tVitvi18g00784_t001\tVitvi18g00784_P001\tGRIP55-204\tEntrezGene_trans_name\tMISC\t-\t-\t-\n",
+                 "VIT_04s0008g05020\tVIT_04s0008g05020.t01\tVIT_04s0008g05020.t01\t100247365\tEntrezGene\tDEPENDENT\t-\t-\t-\n",
+                 "VIT_04s0008g05020\tVIT_04s0008g05020.t01\tVIT_04s0008g05020.t01\t100250818\tEntrezGene\tDEPENDENT\t-\t-\t-\n"]
+        self.assertEqual({"Vitvi18g00267": {"100257421"}, "VIT_04s0008g05020": {"100247365", "100250818"}},
+                         self.script.readEnsemblEntrez(lines))
+
+    def test_collinearity_can_leave_the_row_itself_out(self):
+        """Grape's anchors are the rows of the same source, so a row is one of its own anchors.
+
+        Asked with itself, a row on another chromosome than every other anchor near it
+        still has 1 of 4 agreeing; left out, 0 of 4. And only that one anchor is passed over:
+        another at the same place with another partner is still asked.
+        """
+        mb = 1000000
+        wrong = (("1", 3500000, 3500100), ("7", 18 * mb, 18 * mb + 100))
+        anchors = [(("1", index * mb, index * mb + 100), ("1", index * mb, index * mb + 100)) for index in range(1, 7)]
+        collinearity = self.script.Collinearity(anchors + [wrong])
+        self.assertEqual((1, 4), collinearity.agreeing(*wrong))
+        self.assertEqual((0, 4), collinearity.agreeing(*wrong, leaveOut=True))
+        self.assertFalse(collinearity.supports(*wrong, leaveOut=True))
+        right = anchors[2]
+        self.assertTrue(collinearity.supports(*right, leaveOut=True), "its neighbours on both sides still agree")
+        self.assertEqual(4, len(collinearity.nearest(right[0], right[1])), "the next anchor takes its place")
+        self.assertNotIn((self.script.middle(right[0]), right[1]), collinearity.nearest(right[0], right[1]))
+        # A twin's partner can sort after the row's own or before it, so it is met after the row or first.
+        for partner in (("9", 1, 100), ("1", 1, 100)):
+            twin = (right[0], partner)
+            both = self.script.Collinearity(anchors + [twin])
+            nearest = both.nearest(right[0], right[1])
+            self.assertIn((self.script.middle(twin[0]), twin[1]), nearest, partner)
+            self.assertNotIn((self.script.middle(right[0]), right[1]), nearest, partner)
+        # Another row with the very same places (two ids of one gene model) is still asked: one is left out.
+        same = self.script.Collinearity(anchors + [right])
+        self.assertEqual(1, same.nearest(right[0], right[1]).count((self.script.middle(right[0]), right[1])))
+        self.assertEqual(collinearity.nearest(("1", 1, 2)), collinearity.nearest(("1", 1, 2), None), "no partner, no change")
+
+    def test_grape_rows_follow_each_source_and_drop_what_they_disagree_on(self):
+        mb = 1000000
+        genes = {"101", "102", "103", "104", "105", "700", "701", "800", "801", "900"}
+        species = _StubSpecies(kegg=genes - {"900"}, tables={"ncbi_geneid": genes}, reach={})
+        kegg = {gene: ("1", index * mb, index * mb + 1000) for index, gene in enumerate(["101", "102", "103", "104", "105"], 1)}
+        kegg.update({"700": ("7", 18 * mb, 18 * mb + 1000), "701": ("7", 18100000, 18101000), "800": ("CP", 10, 900),
+                     "801": ("MT", 10, 900)})
+        ids = ["VIT_01s0001g0001%d" % index for index in range(1, 6)]
+        old = {gene: ("1", index * mb + 300000, index * mb + 301000) for index, gene in enumerate(ids, 1)}
+        # Two neighbours whose GeneIDs sit side by side on 7, as VIT_05s0062g01430 and 01440 do: each agrees
+        # with the other, so each would be half of its own four were it not left out. Both dropped.
+        old.update({"VIT_01s0001g00098": ("1", 3600000, 3601000), "VIT_01s0001g00099": ("1", 3500000, 3501000),
+                    "VIT_00s0001g00010": ("Un", 5000, 6000),         # 12X's Un: not asked
+                    "VIT_16s0001g00010": ("16_random", 5000, 6000),  # nor a _random sequence
+                    # A nuclear gene model linked to a plastid or mitochondrial gene, as VIT_13s0019g02630 to psbA.
+                    "VIT_01s0001g00096": ("1", 6 * mb, 6 * mb + 10), "VIT_01s0001g00097": ("1", 7 * mb, 7 * mb + 10),
+                    "VIT_01s0001g00080": ("1", 2 * mb, 2 * mb + 10),  # two KEGG genes: none
+                    "VIT_01s0001g00090": ("1", 4 * mb, 4 * mb + 10)})  # one KEGG gene and one outside KEGG
+        links = {gene: {"10%d" % index} for index, gene in enumerate(ids, 1)}
+        links.update({"VIT_01s0001g00098": {"701"}, "VIT_01s0001g00099": {"700"}, "VIT_00s0001g00010": {"800"},
+                      "VIT_16s0001g00010": {"801"}, "VIT_01s0001g00096": {"800"}, "VIT_01s0001g00097": {"801"},
+                      "VIT_01s0001g00080": {"101", "102"}, "VIT_01s0001g00090": {"104", "900"}})
+        tags = {"VIT_00000001001": {"105"},       # NCBI's own tag: a row, not asked
+                "ViviCp001": {"800"},             # a plastid gene's tag: not another genome version's id
+                "VIT_00000002001": {"555"},       # a GeneID KEGG does not list
+                "VIT_01s0001g00012": {"102"},     # the same GeneID Ensembl gives: one row, NCBI's
+                "VIT_01s0001g00013": {"104"}}     # another one than Ensembl gives: none
+        places = self.script.GrapePlaces({"ensembl52_12x": old}, kegg)
+
+        rows, misplaced, conflicts = self.script.grapeRows(species, tags, {"ensembl52_12x": links}, places)
+
+        self.assertEqual([("VIT_00000001001", "gene_alias", "ncbi_geneid", "105", "ncbi_locus_tag"),
+                          ("VIT_00s0001g00010", "gene_alias", "ncbi_geneid", "800", "ensembl52_12x"),
+                          ("VIT_01s0001g00011", "gene_alias", "ncbi_geneid", "101", "ensembl52_12x+collinear"),
+                          ("VIT_01s0001g00012", "gene_alias", "ncbi_geneid", "102", "ncbi_locus_tag"),
+                          ("VIT_01s0001g00014", "gene_alias", "ncbi_geneid", "104", "ensembl52_12x+collinear"),
+                          ("VIT_01s0001g00015", "gene_alias", "ncbi_geneid", "105", "ensembl52_12x+collinear"),
+                          ("VIT_01s0001g00090", "gene_alias", "ncbi_geneid", "104", "ensembl52_12x+collinear"),
+                          ("VIT_16s0001g00010", "gene_alias", "ncbi_geneid", "801", "ensembl52_12x")], rows)
+        self.assertEqual(["VIT_01s0001g00096", "VIT_01s0001g00097", "VIT_01s0001g00098", "VIT_01s0001g00099"], misplaced)
+        self.assertEqual(["VIT_01s0001g00013"], conflicts)
+
+    #: The grape ids writeGrapeSources' files give: version, gene, its place there, its GeneIDs.
+    GRAPE_LINKS = [("12X", "VIT_01s0001g00011", "1", 1300000, "101"), ("12X", "VIT_01s0001g00012", "1", 2300000, "102"),
+                   ("12X", "VIT_01s0001g00013", "1", 3300000, "103"), ("12X", "VIT_01s0001g00014", "1", 4300000, "104"),
+                   ("12X", "VIT_01s0001g00015", "1", 5300000, "105"), ("12X", "VIT_01s0001g00099", "1", 3500000, "700"),
+                   ("12X", "VIT_00s0001g00010", "Un", 5000, "800"), ("12X", "VIT_01s0001g00097", "1", 6300000, "800"),
+                   ("v4", "Vitvi01g00001", "1", 1100000, "101"), ("v4", "Vitvi01g00002", "1", 2100000, "102"),
+                   ("v4", "Vitvi01g00003", "1", 3100000, "103"), ("v4", "Vitvi01g00004", "1", 4100000, "104")]
+
+    def writeGrapeSources(self):
+        """Every file buildGrape reads, in the shapes the sources give them. Returns the paths a test spoils."""
+        mapping = os.path.join(self.workDir, "vvi", "mapping")
+        os.makedirs(mapping, exist_ok=True)
+        kegg = {"101": ("1", 1), "102": ("1", 2), "103": ("1", 3), "104": ("1", 4), "105": ("1", 5), "700": ("7", 18),
+                "800": ("CP", 0)}
+
+        def write(path, lines):
+            opener = gzip.open if path.endswith(".gz") else open
+            with opener(path, "wt", encoding="utf-8") as handle:
+                handle.write("".join(line + "\n" for line in lines))
+
+        write(os.path.join(mapping, "ncbi-geneid2kegg.list"), ["ncbi-geneid:%s\tvvi:%s" % (gene, gene) for gene in kegg])
+        write(os.path.join(mapping, "kegg2genesymbol.list"),
+              ["vvi:%s\tCDS\t%s:%d..%d\tg%s; a gene" % (gene, chromosome, at * 1000000 + 1, at * 1000000 + 1000, gene)
+               for gene, (chromosome, at) in kegg.items()])
+        write(os.path.join(mapping, "uniprot2kegg.list"), ["up:A0A000\tvvi:101"])
+        write(os.path.join(mapping, "ensembl_mapping.list"), ["Vitis01g00010\t101\tVitis01g00010.t01.CDS\tVitis01g00010.t01"])
+        write(os.path.join(mapping, "ensembl_uniprot.list"), ["Vitis01g00010\tA0A000\tVitis01g00010.t01.CDS\tVitis01g00010.t01"])
+        write(os.path.join(self.workDir, "vvi", "gene2pathway.list"), ["vvi:101\tpath:vvi00010"])
+
+        cache = os.path.join(self.workDir, "cache")
+        os.makedirs(cache, exist_ok=True)
+        write(os.path.join(cache, "tax29760.gene_info.gz"),
+              ["29760\t105\tLOC105\tVIT_00000001001\t-\t-\t1\t-\tdesc\tprotein-coding",
+               "29760\t800\tatpE\tViviCp001\t-\t-\t-\t-\tdesc\tprotein-coding"])
+        paths = {}
+        for version, (evidence, entrez, gff) in zip(("12X", "v4"), self.script.GRAPE_VERSIONS):
+            links = [link for link in self.GRAPE_LINKS if link[0] == version]
+            paths[version + "Entrez"] = os.path.join(cache, entrez.rsplit("/", 1)[1])
+            paths[version + "Gff"] = os.path.join(cache, gff.rsplit("/", 1)[1])
+            write(paths[version + "Entrez"], ["gene_stable_id\ttranscript_stable_id\tprotein_stable_id\txref\tdb_name\tinfo_type"] +
+                  ["%s\t%s.t01\t%s.t01\t%s\tEntrezGene\tDEPENDENT\t-\t-\t-" % (gene, gene, gene, geneId)
+                   for _, gene, _, _, geneId in links])
+            write(paths[version + "Gff"], ["##gff-version 3"] +
+                  ["%s\tiggp\tgene\t%d\t%d\t.\t+\t.\tID=gene:%s;biotype=protein_coding" % (chromosome, start, start + 1000, gene)
+                   for _, gene, chromosome, start, _ in links])
+        paths["keggList"] = os.path.join(mapping, "kegg2genesymbol.list")
+        return paths
+
+    def runGrape(self):
+        """The real `tables --species vvi`, on those files, with a download an error."""
+        args = self.tablesArguments()
+        args.species = ["vvi"]
+        with mock.patch.object(self.script, "check_call", side_effect=AssertionError("nothing is to be downloaded")):
+            self.script.runTables(args)
+        with gzip.open(os.path.join(args.out, "vvi.tsv.gz"), "rt", encoding="utf-8") as handle:
+            return [line.rstrip("\n").split("\t") for line in handle][1:]
+
+    def test_the_grape_build_joins_its_sources(self):
+        """NCBI's tag, a 12X row the test passes, one it drops, one it cannot ask, a nuclear one linked to a
+        plastid gene (dropped), and v4's rows."""
+        self.writeGrapeSources()
+        self.assertEqual([["VIT_00000001001", "gene_alias", "ncbi_geneid", "105", "ncbi_locus_tag"],
+                          ["VIT_00s0001g00010", "gene_alias", "ncbi_geneid", "800", "ensembl52_12x"]] +
+                         [["VIT_01s0001g0001%d" % index, "gene_alias", "ncbi_geneid", "10%d" % index, "ensembl52_12x+collinear"]
+                          for index in range(1, 6)] +
+                         [["Vitvi01g0000%d" % index, "gene_alias", "ncbi_geneid", "10%d" % index, "ensembl60_v4+collinear"]
+                          for index in range(1, 5)],
+                         self.runGrape())
+
+    def test_the_grape_build_stops_on_a_source_that_places_too_little(self):
+        """Without the floor, a GFF that parses to nothing, or names its chromosomes another way, turns the test off."""
+        def noGeneRows(lines):
+            return [line for line in lines if line.startswith("#")]
+
+        def otherNames(lines):
+            # chr01 would read as 01, a number; a linkage group would not.
+            return [re.sub(r"^1\t", "LG01\t", line) for line in lines]
+
+        def noPositionColumns(lines):
+            return ["%s\t%s" % (line.split("\t")[0], line.split("\t")[-1]) for line in lines]
+
+        for source, spoil, expected in (("12XGff", noGeneRows, "vvi: the ensembl52_12x GFF puts 0 of 8 ids"),
+                                        ("v4Gff", otherNames, "vvi: the ensembl60_v4 GFF puts 0 of 4 ids"),
+                                        ("keggList", noPositionColumns, "vvi: KEGG's gene list puts 0 of 7 ids"),
+                                        ("v4Entrez", lambda lines: ["<html>maintenance</html>\n"],
+                                         "vvi: the ensembl60_v4 GFF puts 0 of 0 ids")):
+            with self.subTest(source=source):
+                shutil.rmtree(os.path.join(self.workDir, "out"), ignore_errors=True)
+                paths = self.writeGrapeSources()
+                self.rewrite(paths[source], spoil)
+                with self.assertRaises(SystemExit) as stopped:
+                    self.runGrape()
+                self.assertIn(expected, str(stopped.exception))
+                self.assertEqual([], os.listdir(os.path.join(self.workDir, "out")), "no table")
 
 
 class _Lookup(object):

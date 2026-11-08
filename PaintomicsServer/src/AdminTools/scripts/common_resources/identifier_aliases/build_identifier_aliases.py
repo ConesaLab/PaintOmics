@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the identifier alias tables beside this file: zma, psat and sbi.
+"""Regenerate the identifier alias tables beside this file: zma, psat, sbi and vvi.
 
 README.md in this directory says what the tables are for, where each row comes
 from and under which licence. Species builds read the tables and never run this.
@@ -23,11 +23,12 @@ DATA/<code>/gene2pathway.list, for the pathway counts it reports, so copy that
 beside mapping/ when running it on another machine.
 
 It stops, writing no table for that species, on a source it cannot fetch or read, a
-source the processors skipped, a missing KEGG list, a maize or pea position source under
-its floor (MIN_GFF_PLACED, MIN_LIST_PLACED), or no rows at all. It does not stop on every
-short table: a source of rows that parses short, such as the locus-tag column or a
-MaizeGDB table missing lines, ends the run well with a smaller table. Only the MD5 and
-SHIPPED_ROWS pins in test_identifier_aliases catch that, once the table is committed.
+source the processors skipped, a missing KEGG list, a maize, pea or grape position source
+under its floor (MIN_GFF_PLACED, MIN_LIST_PLACED, MIN_GRAPE_PLACED), or no rows at all.
+It does not stop on every short table: a source of rows that parses short, such as the
+locus-tag column or a MaizeGDB table missing lines, ends the run well with a smaller
+table. Only the MD5 and SHIPPED_ROWS pins in test_identifier_aliases catch that, once the
+table is committed.
 
 Expect small differences on a later date. NCBI rewrites gene_info daily and KEGG
 and Ensembl move with each release, which is the point of being able to re-run it.
@@ -76,7 +77,27 @@ PEA_GFF = "CAMEOR_V2_ANNOTATION_1.gff3"
 
 MAIZE_TAXON = "4577"
 SORGHUM_TAXON = "4558"
+GRAPE_TAXON = "29760"
 MAIZE_LOCUS_TAG_PREFIX = "ZEAMMB73_"
+#: The grape locus tags NCBI files its GeneIDs under: VIT_00032725001, and one VIT_16s0100g01030.
+#: The other tags of taxon 29760 (ViviCp027, ViviM_p001) are plastid and mitochondrial genes'.
+GRAPE_LOCUS_TAG_PREFIX = "VIT_"
+
+ENSEMBL_PLANTS_URL = "https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/"
+#: The two grape genome versions before the one vvi installs (PN_T2T, Ensembl Plants 61 on),
+#: each in the last Ensembl Plants release on it: (evidence, entrez dump, gene models), the
+#: paths under ENSEMBL_PLANTS_URL. 12X ran to release 52 (releases 50 and 52 link the same
+#: 18,525 genes to the same GeneIDs), PN40024.v4 from 53 to 60.
+GRAPE_VERSIONS = (
+    ("ensembl52_12x", "release-52/tsv/vitis_vinifera/Vitis_vinifera.12X.52.entrez.tsv.gz",
+     "release-52/gff3/vitis_vinifera/Vitis_vinifera.12X.52.gff3.gz"),
+    ("ensembl60_v4", "release-60/tsv/vitis_vinifera/Vitis_vinifera.PN40024.v4.60.entrez.tsv.gz",
+     "release-60/gff3/vitis_vinifera/Vitis_vinifera.PN40024.v4.60.gff3.gz"),
+)
+#: Added to a grape version's evidence when the position test ran on the row and passed.
+COLLINEAR = "+collinear"
+#: KEGG's names, in vvi's kegg2genesymbol.list, for the plastid and mitochondrial genomes.
+GRAPE_ORGANELLES = ("CP", "MT")
 
 #: A sequence match has to clear these both ways before it can name a gene: ZW6
 #: is another cultivar, so an exact match is not expected, but a weaker one is a
@@ -87,7 +108,7 @@ RBH_MIN_COVERAGE = 80.0
 #: that a published best-hit pair must also have.
 MIN_GENOME_OVERLAP = 0.5
 
-#: The position test both species use (Collinearity): an id asks the NEIGHBOURS pairs
+#: The position test maize, pea and grape use (Collinearity): an id asks the NEIGHBOURS pairs
 #: nearest it on its own genome, among pairs already trusted, where its partner should be
 #: on the other genome, and a pair agrees when it sits no further from the partner there
 #: than it sits from the id here, plus SLACK bases. A maize v4 id also passes when its
@@ -96,7 +117,10 @@ MIN_GENOME_OVERLAP = 0.5
 #: pairs pass it with themselves left out, 0.2 % and 0.1 % when given a random gene of the
 #: other genome as partner. Maize loses the same 4 rows with SLACK at 0.5, 2 or 5 Mb, or 3
 #: or 6 neighbours, and pea's 221 move by at most 30. 10 neighbours let random partners
-#: through as rarely, but also fail genes beside a gap between the assemblies.
+#: through as rarely, but also fail genes beside a gap between the assemblies. Grape's rows,
+#: each asked with itself left out: 99.8 % of 12X's and 99.6 % of v4's pass, 0.5 % and 0.4 %
+#: given a random partner, and the 32 and 35 dropped become 19 to 47 and 27 to 45 with SLACK
+#: at 0.5 to 5 Mb or 3 or 6 neighbours.
 NEIGHBOURS = 4
 SLACK = 1000000
 #: Two proteins are the same when one sequence holds the other whole and the shorter is at
@@ -122,6 +146,10 @@ REQUIRED_MAPPING_FILES = ("uniprot2kegg.list", "ncbi-geneid2kegg.list", "kegg2ge
 #: would turn its check off or lose the MaizeGDB rows and still end the run well.
 MIN_GFF_PLACED = 0.95
 MIN_LIST_PLACED = 0.85
+#: The same for a grape position source, on a numbered chromosome. On the 2026-11 files:
+#: the 12X GFF puts 92.4 % of the genes Ensembl links to a GeneID there (the rest are on its
+#: Un and _random sequences), the v4 GFF 99.3 %, KEGG's list 99.1 % of KEGG's genes.
+MIN_GRAPE_PLACED = 0.85
 
 RBH_FILE = "psat_v2_refseq_rbh.tsv"
 RBH_HEADER = ("v2_gene", "geneid", "pident", "aln_len", "qlen", "slen", "qcov", "scov", "evalue", "bitscore",
@@ -257,6 +285,21 @@ def readGeneLists(lines):
         if len(fields) >= 2:
             table[fields[0]] = [gene for gene in fields[1].split(",") if gene]
     return table
+
+
+def readEnsemblEntrez(lines):
+    """{gene stable id: set of GeneIDs} from an Ensembl `<Species>.<assembly>.<release>.entrez.tsv.gz`.
+
+    Rows read gene, transcript, protein, xref, db_name, ...: one per transcript, so a gene
+    repeats. Only db_name EntrezGene counts: the dump also lists EntrezGene_trans_name,
+    whose xref column holds transcript names such as GRIP55-204.
+    """
+    genes = collections.defaultdict(set)
+    for line in lines:
+        fields = line.rstrip("\n").split("\t")
+        if len(fields) >= 5 and fields[4] == "EntrezGene" and fields[3].isdigit():
+            genes[fields[0]].add(fields[3])
+    return dict(genes)
 
 
 def readWorkbook(path, wanted):
@@ -395,6 +438,9 @@ class Collinearity(object):
     two assemblies orient differently still agrees. An id with no anchor on its sequence
     has no support. With one neighbour it asks only whether the nearest anchor agrees, which
     a stretch of one or two genes that moved together can pass and the majority of 4 cannot.
+    With leaveOut, a row that is one of the anchors is asked without itself (grape, whose
+    anchors are the rows of the same source): otherwise it would be its own nearest anchor,
+    and agree.
     """
 
     def __init__(self, anchors, neighbours=NEIGHBOURS):
@@ -405,33 +451,42 @@ class Collinearity(object):
         self.middles = {sequence: [entry[0] for entry in entries] for sequence, entries in self.anchors.items()}
         self.neighbours = neighbours
 
-    def nearest(self, place):
-        """The `neighbours` anchors nearest a place on its sequence, as (middle, other place); on a tie the lower one."""
+    def nearest(self, place, without=None):
+        """The `neighbours` anchors nearest a place on its sequence, as (middle, other place); on a tie the lower one.
+
+        `without`, a place on the other genome, passes over one anchor at this place with
+        that partner, and takes the next instead.
+        """
         entries = self.anchors.get(place[0], [])
         middles = self.middles.get(place[0], [])
         point = middle(place)
+        skip = (point, without) if without is not None else None
         right = bisect.bisect_left(middles, point)
         left = right - 1
         chosen = []
         while len(chosen) < self.neighbours and (left >= 0 or right < len(entries)):
             if right >= len(entries) or (left >= 0 and point - middles[left] <= middles[right] - point):
-                chosen.append(entries[left])
+                entry = entries[left]
                 left -= 1
             else:
-                chosen.append(entries[right])
+                entry = entries[right]
                 right += 1
+            if entry == skip:
+                skip = None
+            else:
+                chosen.append(entry)
         return chosen
 
-    def agreeing(self, place, partner):
+    def agreeing(self, place, partner, leaveOut=False):
         """(anchors that put the partner where it is, anchors asked)."""
         point, target = middle(place), middle(partner)
-        nearest = self.nearest(place)
+        nearest = self.nearest(place, partner if leaveOut else None)
         agree = sum(1 for anchor, other in nearest
                     if other[0] == partner[0] and abs(middle(other) - target) <= abs(anchor - point) + SLACK)
         return agree, len(nearest)
 
-    def supports(self, place, partner):
-        agree, asked = self.agreeing(place, partner)
+    def supports(self, place, partner, leaveOut=False):
+        agree, asked = self.agreeing(place, partner, leaveOut)
         return agree > 0 and 2 * agree >= asked
 
 
@@ -643,6 +698,78 @@ def sorghumRows(species, locusTags):
             if len(known) == 1:
                 rows.append((gene, "ensembl_gene", "ncbi_geneid", known[0], "ncbi_locus_tag"))
     return rows
+
+
+#: Where the grape rules read positions from: versions, {evidence: {gene: (chromosome,
+#: start, end)}} from each GRAPE_VERSIONS GFF; kegg, from readKeggPlaces, KEGG's place for
+#: each GeneID on the genome it lists them on.
+GrapePlaces = collections.namedtuple("GrapePlaces", "versions kegg")
+
+
+def numbered(place):
+    """Whether a (sequence, start, end) place is on a numbered chromosome, not Un, a _random sequence, CP or MT."""
+    return place is not None and place[0].isdigit()
+
+
+def grapeRows(species, locusTags, versions, places):
+    """Gene ids of older grape genome versions: returns (rows, ids the position test drops, ids sources disagree on).
+
+    `locusTags`, {tag: GeneIDs} from gene_info, gives NCBI's VIT_ locus tags; `versions`,
+    {evidence: {gene: GeneIDs}}, Ensembl Plants' link of each older version's genes. Each
+    route has to name exactly one GeneID that KEGG lists, as maize's locus tags do.
+
+    NCBI's tag is the gene's own record, and nothing places the tag on its genome, so it
+    is not tested. Ensembl's link is a cross-reference between two genomes, so where the
+    id and its GeneID are both on numbered chromosomes, the other links of the same
+    version around the id have to put the GeneID where KEGG has it (Collinearity, with the
+    row itself left out): VIT_05s0062g01430 and Vitvi05g01375, on chromosome 5 in both
+    versions, link a GeneID on chromosome 7. Such a row is marked COLLINEAR. An id on a
+    numbered chromosome whose GeneID KEGG puts on the plastid or the mitochondrion
+    (GRAPE_ORGANELLES) is a nuclear gene model, not where that gene is, and is dropped the
+    same way: VIT_13s0019g02630, on chromosome 13, links psbA. One the test
+    cannot place (an id on 12X's Un or a _random sequence) stays without the mark, as
+    maize's untested locus tags do. An id two routes give different GeneIDs gives none.
+    """
+    kegg = species.displayIds("kegg_id")
+
+    def known(geneIds):
+        return sorted(gene for gene in geneIds if gene in kegg and species.has("ncbi_geneid", gene))
+
+    named = collections.defaultdict(dict)
+    for tag, geneIds in locusTags.items():
+        found = known(geneIds)
+        if tag.startswith(GRAPE_LOCUS_TAG_PREFIX) and len(found) == 1:
+            named[tag][found[0]] = "ncbi_locus_tag"
+    misplaced = []
+    for evidence in sorted(versions):
+        own = places.versions[evidence]
+        pairs = {}
+        for gene, geneIds in versions[evidence].items():
+            found = known(geneIds)
+            if len(found) == 1:
+                pairs[gene] = found[0]
+        tested = {gene: geneId for gene, geneId in pairs.items()
+                  if numbered(own.get(gene)) and numbered(places.kegg.get(geneId))}
+        collinearity = Collinearity([(own[gene], places.kegg[geneId]) for gene, geneId in tested.items()])
+        for gene, geneId in sorted(pairs.items()):
+            if gene in tested:
+                if collinearity.supports(own[gene], places.kegg[geneId], leaveOut=True):
+                    named[gene].setdefault(geneId, evidence + COLLINEAR)
+                else:
+                    misplaced.append(gene)
+            elif numbered(own.get(gene)) and places.kegg.get(geneId, ("",))[0] in GRAPE_ORGANELLES:
+                misplaced.append(gene)
+            else:
+                named[gene].setdefault(geneId, evidence)
+    rows = []
+    conflicts = []
+    for alias in sorted(named):
+        if len(named[alias]) == 1:
+            (geneId, evidence), = named[alias].items()
+            rows.append((alias, GENE_ALIAS, "ncbi_geneid", geneId, evidence))
+        else:
+            conflicts.append(alias)
+    return rows, misplaced, conflicts
 
 
 # --- Output -----------------------------------------------------------------
@@ -916,7 +1043,33 @@ def buildSorghum(args):
     return species, sorghumRows(species, locusTags)
 
 
-BUILDS = {"zma": buildMaize, "psat": buildPea, "sbi": buildSorghum}
+def buildGrape(args):
+    species = Species("vvi", args.kegg_data)
+    with gzip.open(geneInfoForTaxon(args.cache, GRAPE_TAXON), "rt", errors="replace") as handle:
+        locusTags = readLocusTags(handle)
+    versions = {}
+    genes = {}
+    for evidence, entrez, gff in GRAPE_VERSIONS:
+        with gzip.open(fetch(ENSEMBL_PLANTS_URL + entrez, os.path.join(args.cache, entrez.rsplit("/", 1)[1])), "rt",
+                       encoding="utf-8") as handle:
+            versions[evidence] = readEnsemblEntrez(handle)
+        with gzip.open(fetch(ENSEMBL_PLANTS_URL + gff, os.path.join(args.cache, gff.rsplit("/", 1)[1])), "rt",
+                       encoding="utf-8") as handle:
+            genes[evidence] = readGffGenes(handle)
+        requirePlaced("the %s GFF" % evidence, {gene: place[0] for gene, place in genes[evidence].items()},
+                      set(versions[evidence]), MIN_GRAPE_PLACED, code="vvi")
+    places = GrapePlaces(genes, species.keggPlaces())
+    requirePlaced("KEGG's gene list", {gene: place[0] for gene, place in places.kegg.items()},
+                  species.displayIds("kegg_id"), MIN_GRAPE_PLACED, code="vvi")
+    rows, misplaced, conflicts = grapeRows(species, locusTags, versions, places)
+    sys.stderr.write("vvi: Ensembl link whose neighbours do not put the GeneID there, or a nuclear gene linked to a "
+                     "plastid or mitochondrial one, %d skipped: %s\n" % (len(misplaced), " ".join(misplaced)))
+    sys.stderr.write("vvi: ids two sources give different GeneIDs, %d skipped: %s\n"
+                     % (len(conflicts), " ".join(conflicts)))
+    return species, rows
+
+
+BUILDS = {"zma": buildMaize, "psat": buildPea, "sbi": buildSorghum, "vvi": buildGrape}
 
 
 def runTables(args):
