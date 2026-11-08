@@ -189,6 +189,16 @@ PAINTOMICS_LOGO_PATH    = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/p
 PAINTOMICS_LOGO_URL     = f"{PAINTOMICS_BASE_URL}{PAINTOMICS_LOGO_PATH}"
 PAINTOMICS_LOGIN_URL    = os.getenv("PAINTOMICS_LOGIN_URL", f"{PAINTOMICS_BASE_URL}/")
 PAINTOMICS_DOCS_URL     = os.getenv("PAINTOMICS_DOCS_URL", "https://conesalab.github.io/PaintOmics/")
+# Where this server runs, as the welcome dialog says it: the words that follow
+# "PaintOmics AI runs on", with any link written as [words](https://address).
+# The default is paintomics.org's. Every other server must set its own, or set
+# it empty to say nothing about where it runs, for example
+#     PAINTOMICS_HOSTED_BY="the Universitat de Valencia (I2SysBio)"
+# A serverconf.py that does not define this at all also says nothing. See
+# src/common/HostingSentence.py.
+PAINTOMICS_HOSTED_BY    = os.getenv(
+    "PAINTOMICS_HOSTED_BY",
+    "[Supercomputador Drago](https://aic.csic.es/supercomputador-drago/) (CSIC)")
 # `or`, not os.getenv's default, because deploy/compose.yaml passes this as
 # ${PAINTOMICS_EMAIL_DOMAIN:-}: absent from .env, the container still gets the
 # variable SET to "". os.getenv returns that empty string rather than the

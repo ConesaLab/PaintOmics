@@ -489,8 +489,13 @@ function MainView() {
 								if (response.success === false) {
 									return;
 								}
+								// "PaintOmics AI runs on ..." is the server's own
+								// setting, already escaped there (HostingSentence.py);
+								// written here it named Drago on every server. A
+								// server without the setting sends none.
+								var hosting = response.hostingSentence ? response.hostingSentence + " " : "";
 								showInfoMessage("Welcome to PaintOmics AI!", {
-									message: "PaintOmics AI runs on <a href=\"https://aic.csic.es/supercomputador-drago/\" target=\"_blank\" rel=\"noopener\">Supercomputador Drago</a> (CSIC). For any inquiries, please contact us at <a href=\"mailto:paintomicsai@gmail.com\">paintomicsai@gmail.com</a>",
+									message: hosting + "For any inquiries, please contact us at <a href=\"mailto:paintomicsai@gmail.com\">paintomicsai@gmail.com</a>",
 									showButton: true
 								})
 							},

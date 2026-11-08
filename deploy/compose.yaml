@@ -106,6 +106,12 @@ services:
       # not render an SVG in an <img>).
       PAINTOMICS_LOGO_PATH: ${PAINTOMICS_LOGO_PATH:-/resources/images/paintomics-mark-email.png}
 
+      # "PaintOmics AI runs on ..." in the welcome dialog; see env.example. The
+      # default is paintomics.org's and the same one the template carries.
+      # `-`, not `:-`: set empty in .env, it reaches the container empty and
+      # the dialog says nothing about where the server runs.
+      PAINTOMICS_HOSTED_BY: "${PAINTOMICS_HOSTED_BY-[Supercomputador Drago](https://aic.csic.es/supercomputador-drago/) (CSIC)}"
+
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@example.org}
       SMTP_HOST: ${SMTP_HOST:-smtp.sendgrid.net}
       SMTP_PORT: ${SMTP_PORT:-587}
