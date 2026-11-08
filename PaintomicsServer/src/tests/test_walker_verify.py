@@ -1132,6 +1132,26 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.assertEqual(self.problems("Ccc is not relevant after 0.25 mM H2O2 for 0.25 h."), [])
         self.assertEqual(len(self.problems("Ccc is not relevant, with Log2FC of 0.25.")), 1)
 
+    def test_a_name_whose_own_value_follows_takes_no_later_value(self):
+        """Round heat10 (vRmKBo4E60, network, t107): "...(Cd74 +1.67, Ctss
+        +1.19, the H2 MHC-II genes +0.78 to +1.75, Ciita +1.31)" was refused as
+        giving Ctss its heat 0.78; +0.78 is the H2 genes' value, and Ctss's
+        own +1.19 stands between. A later value continuing the name's own
+        list is still its: "Ctss shows FC +1.19 and +0.78"."""
+        text = ("Tgfb1’s Gene expression shows FC +2.19, up, in the same direction as the other relevant "
+                "neighbours of Nfyc (Cd74 +1.67, Ctss +1.19, the H2 MHC-II genes +0.78 to +1.75, Ciita +1.31), "
+                "all against the Sirt1 down perturbation.")
+        ov = ov_mod.Overlay()
+        for name, value in (("Ctss", 1.19), ("Cd74", 1.67), ("Ciita", 1.31), ("Tgfb1", 2.19)):
+            ov.layers[name] = [{"omic": "Gene expression", "member": name, "relevant": True,
+                                "text": "FC %+.2f" % value, "values": [value]}]
+        ov.labels = {"Gene expression": ["FC"]}
+        catalog = [(n, n) for n in ("Tgfb1", "Nfyc", "Cd74", "Ctss", "Ciita", "Sirt1")]
+        heats = {"0.78": ["Ctss"]}
+        self.assertEqual(verify.heats_given_as_values(text, catalog, heats, ov), [])
+        given = verify.heats_given_as_values("Ctss shows FC +1.19 and +0.78", catalog, heats, ov)
+        self.assertEqual([(v, n) for v, _at, n in given], [("+0.78", "Ctss")])
+
     def test_the_hint_names_the_read_node_nearest_the_value(self):
         found = self.problems("Bbb falls while Aaa reaches +3.10; Ccc is not relevant.")
         self.assertEqual(len(found), 1, found)

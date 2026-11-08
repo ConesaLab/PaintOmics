@@ -806,6 +806,19 @@ class HeatIsNotAValueTest(unittest.TestCase):
         self.assertIn("The reading gives Ccc +1.50", answer)
         self.assertNotIn("reading and the reading", answer)
 
+    def test_a_name_whose_own_value_follows_takes_no_later_value(self):
+        """Round heat10, vRmKBo4E60 t107: "Ctss +1.19, the H2 MHC-II genes
+        +0.78" refused as giving Ctss its heat. Ccc plays Ctss (heat 1.50),
+        Aaa holds +1.50."""
+        reason = "the other relevant neighbours (Bbb −1.20, Ccc +0.05, the H2 MHC-II genes +1.50 to +2.20, Aaa +0.10)"
+        w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+        answer = w.step("Ccc", "Ccc Gene expression 6h −0.10, not relevant", reason)
+        self.assertTrue(answer.startswith("e1"), answer)
+        w, _opening = self.walker({"g:3": 1.50, "g:1": 0.77})
+        answer = w.step("Ccc", "Ccc Gene expression shows 0h +0.05 and +1.50", "on")       # its own list
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("gives Ccc +1.50", answer)
+
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()
         answer = w.note("Ccc +2.43 (relevant) leads this neighbourhood")

@@ -1290,7 +1290,12 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
     a list of names, "Ranbp9 and Pkm both rise (+0.52, +0.04)" (name_group):
     the values may go to the names in order, and the nearest name is not the
     owner. A name standing alone after another, "From Bbb, Ccc ... +1.50",
-    is no list. A value ``also`` holds (a cited paper's) is left alone.
+    is no list. Nor does a name whose own value already follows it take a
+    later value of another subject: "(Cd74 +1.67, Ctss +1.19, the H2 MHC-II
+    genes +0.78 to +1.75, ...)" was refused as giving Ctss its heat 0.78
+    (vRmKBo4E60, round heat10); a value continuing its list ("Ctss +1.19 and
+    +0.78", list_gap) is still its. A value ``also`` holds (a cited paper's)
+    is left alone.
 
     ``values`` (data_values) and ``mentions`` (_mentions over ``catalog``):
     for a caller that has them."""
@@ -1314,6 +1319,9 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
             continue
         if any(m[2] != node_id for m in name_group(text, before)):
             continue                                   # a name group: "Ranbp9 and Pkm (+0.52, ...)"
+        own = [(v, v_at) for v, v_at in values if nearest[1] <= v_at and v_at + len(v) <= at]
+        if own and not list_gap(text[own[-1][1] + len(own[-1][0]):at], labels):
+            continue                                   # its own value came first: "Ctss +1.19, the H2 genes +0.78"
         if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values, labels):
             continue
         out.append((value, at, node_id))
