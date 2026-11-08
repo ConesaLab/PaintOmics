@@ -8,8 +8,10 @@ shares and forks one worker per share (_matchPathways), plus one per share of
 Reactome classes. Each worker tests its share and hands the matched pathways to
 the parent through a Manager dict. Nothing checked that every share came back.
 A worker the system killed for memory, or one that stopped on an error, took its
-share with it: the job finished as a success, with fewer pathways and no word
-about it, and the missing ones looked as if they had not been significant.
+share with it: the job finished as a success, with fewer pathways, a smaller
+count of matched pathways and no word about it. A missing pathway looked as if
+none of the user's genes or metabolites were in it, since Step 2 lists every
+pathway that holds at least one.
 
 Step 1's identifier mapper has had this check since PR #222 ("Identifier mapping
 lost N of M worker processes"). Step 2 now has its own: each worker hands its
@@ -169,7 +171,10 @@ class _OrganismInCache(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, InputFileError)
         self.assertIn("Pathway enrichment lost %s worker processes" % workers, message)
         self.assertIn("the results for %s" % results, message)
-        self.assertIn("Please try again", message)
+        # The internal-error dialog adds right after it "This happened on the
+        # server, so retrying in the browser will not help."; advice to try
+        # again here would say the opposite.
+        self.assertNotIn("try again", message.lower())
 
 
 class LostPathwayWorkerTest(_OrganismInCache):

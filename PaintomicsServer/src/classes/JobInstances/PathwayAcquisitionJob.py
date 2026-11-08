@@ -329,10 +329,11 @@ def _matchPathways(jobInstance, pathwaysList, genesInAllPathways, compoundsInAll
         lookups = _inputFeatureLookups(inputGenes, inputCompounds)
     inputGenesDict, inputCompoundsDict, has_multi_cond = lookups
 
-    # Collected locally and handed to the parent in ONE update at the end.
-    # `matchedPathways` is a Manager dict proxy in the forked path: every
-    # per-pathway assignment on it was a pickle of the whole Pathway plus a
-    # socket round trip to the manager process, ~900 of them per job.
+    # Collected locally and handed to the parent in ONE assignment at the end,
+    # `matchedShares[resultSlot] = localMatched`. `matchedShares` is a Manager
+    # dict proxy in the forked path: every per-pathway assignment on it would
+    # be a pickle of the whole Pathway plus a socket round trip to the manager
+    # process, ~900 of them per job.
     localMatched = {}
 
     for pathwayID in pathwaysList:
@@ -370,7 +371,9 @@ def _sharesNotDelivered(shares, delivered):
     A worker lost this way is one the system killed (out of memory) or one
     that stopped on an error, and it takes its whole share with it. Nothing
     else said so: the job used to finish as a success with those pathways
-    missing from its list, as if none of them had been significant.
+    missing from its list, as if none of the user's genes or metabolites were
+    in them (testPathwaySignificance lists every pathway that holds at least
+    one), and with a smaller count of matched pathways.
 
     The count is taken from what arrived, never from ``exitcode`` or
     ``is_alive()``: when two jobs run at once another job's thread can
@@ -387,12 +390,16 @@ def _lostWorkersMessage(lostWorkers, totalWorkers, untested):
     [(62, 364, "pathways")], kinds with nothing lost left out. Plain
     Exception at the caller, so the browser shows it as an internal error
     with Report error: it is our side that failed, never the user's file.
+
+    It gives no advice of its own. That dialog (ajaxErrorHandler in Util.js)
+    adds "This happened on the server, so retrying in the browser will not
+    help. If the error persists, please contact the administrator.", and a
+    "Please try again" here read as the opposite of the line right after it.
     """
     what = " and ".join("%d of %d %s" % (lost, total, noun) for lost, total, noun in untested)
     return ("Pathway enrichment lost %d of %d worker processes, and with them the results for %s. "
             "The job was stopped rather than show a list with those missing. A worker is lost "
-            "when the server runs short of memory or the worker stops on an error. Please try "
-            "again, and upload smaller files if it persists."
+            "when the server runs short of memory or the worker stops on an error."
             % (lostWorkers, totalWorkers, what))
 
 
