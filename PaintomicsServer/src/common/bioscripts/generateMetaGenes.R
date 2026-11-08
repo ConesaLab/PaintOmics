@@ -107,6 +107,30 @@ if(is.null(args$database)) {
 
 args$kegg_dir <- paste0(args$kegg_dir, "current/", args$specie, "/gene2pathway",args$database, ".list", sep="")
 
+# PICTURE FILES -----------------------------------------------------------------------------------------------------
+# The cluster thumbnails and the elbow plot are named after the omic, e.g.
+# "RNA 100%_cluster_1.png", and the Step 3 page asks for exactly that name.
+# png() and ggsave() do not take a file name as it is: they read it as a
+# pattern, where "%d" (or "%03d") stands for the page number and any other "%"
+# is refused. So an omic named "RNA 100%" stopped the script with
+# "invalid 'filename'" (Step 2 failed with an internal error), and one named
+# "x%dy" had its thumbnails saved as "x1y_cluster_1.png", which the page never
+# finds. Escaping "%" as "%%" is the rule for png(), but ggsave() draws with
+# whichever device the server has (ragg's when it is installed), so each
+# picture is drawn into a file R names itself, in R's own temporary folder,
+# and then copied to its real name in data_dir (the working folder from STEP 3
+# on); file.copy() takes a name as it is. R's temporary folder belongs to this
+# R process, so two omics that Step 2 runs at the same time cannot take each
+# other's file.
+# Base R only (R 4.1).
+newPicture <- function() tempfile(fileext = ".png")
+keepPicture <- function(drawn, name) {
+  if (!isTRUE(file.copy(drawn, name, overwrite = TRUE))) {
+    stop("could not save the picture ", name)
+  }
+  invisible(unlink(drawn))
+}
+
 
 # LOAD DEPENDENCIES   --------------------------------------------------------------------------------------------
 cat("STEP 2. Load dependencies, ")
@@ -324,10 +348,16 @@ metagenes <- metagenes[order(rownames(metagenes), method = "radix"), , drop = FA
 # CLUSTERIZE ----------------------------------------------------------------------------------------------------
 data <- metagenes
 
-library(cluster)
-library(amap)
-library(mclust) #new
-library(factoextra) #new
+# Quietly: mclust prints its version and a citation line when it loads, and
+# factoextra "Welcome! Want to learn more? See two factoextra-related books at
+# ...". All of it went into the script's output, and when the script failed,
+# Step 2 showed that output to the user under the real error.
+suppressPackageStartupMessages({
+  library(cluster)
+  library(amap)
+  library(mclust)
+  library(factoextra)
+})
 dataScaled <- t(scale(t(data), center = T, scale = F)) #no do scaling with all subset
 
 # Matrix the clustering actually runs on: each metagene centred across
@@ -424,7 +454,9 @@ if(is.null(args$kclusters) || args$kclusters == "dynamic") {
         labs(title = "Optimal number of clusters")
       args$kclusters <- getBestIndexBy2SlopeLesser1stQuartilSlope(p)
       p <- p + geom_vline(xintercept = args$kclusters, linetype = 2)
-      ggsave(plot = p, filename=paste0(args$output_prefix,"_elbow.png"), width = 15, height = 6, dpi = 200, units = "cm")
+      drawn <- newPicture()
+      ggsave(plot = p, filename = drawn, width = 15, height = 6, dpi = 200, units = "cm")
+      keepPicture(drawn, paste0(args$output_prefix, "_elbow.png"))
 
     }else{
       # Compute clusters using Mclust (ML)
@@ -540,8 +572,10 @@ for (i in 1:args$kclusters){
   # branch and plotted values[1,] -- one number -- instead of the single
   # pathway's profile.
   values <- as.matrix(dataScaled[pathway_ids, , drop = FALSE])
-  #CREATE THE PNG
-  png(paste(args$output_prefix, "_cluster_", i, args$database, ".png", sep=""), height = 150, width = 150)
+  #CREATE THE PNG (see PICTURE FILES above for why it is drawn under another name)
+  thumbnail <- paste(args$output_prefix, "_cluster_", i, args$database, ".png", sep="")
+  drawn <- newPicture()
+  png(drawn, height = 150, width = 150)
   par(mai = rep(0, 4), mar = rep(0.8, 4))
 
   # An empty cluster makes range() return c(Inf, -Inf), and plot() then aborts
@@ -554,6 +588,7 @@ for (i in 1:args$kclusters){
     title(main = "0 metagenes")
     box()
     dev.off()
+    keepPicture(drawn, thumbnail)
     next
   }
   minMax <- range(values)
@@ -588,8 +623,9 @@ for (i in 1:args$kclusters){
   abline(h =0)
   box()
   }
-  
+
   dev.off()
+  keepPicture(drawn, thumbnail)
 }
 
 #Add cluster info to table

@@ -311,3 +311,7 @@ test_step3_counts_what_the_table_lists	0.4
 # test_walker_network_tags_every_map, which builds the same walker network from
 # KGML in a temporary directory: on the VM the new suite took 0.3 s.
 test_custom_species_walk_and_map_rule	1.2
+# Added with fix/omic-name-with-percent (2026-11-08), measured on GitHub run
+# 42521430399 (shard 1/2), where it ran the real R script. Without it 27 suites
+# were unrecorded, and test_shard_split_is_balanced allows fewer than 27.
+test_omic_name_with_percent	13.4
