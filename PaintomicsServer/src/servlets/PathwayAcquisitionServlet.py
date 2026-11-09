@@ -562,15 +562,22 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
     @returns Response
     """
     jobInstance = None
-
-    # The Step 3 cluster slider (pathwayAcquisitionMetagenes_PART2) rewrites
-    # the same metagenes, cluster pictures and pathway documents, queued under
-    # an id of its own, so the queue's one-step-per-job rule does not keep the
-    # two apart: a slider request sent just before "Go back" and a new Step 2
-    # ran together. Released in the `finally` below. See JobLocks.
-    JobLocks.acquire(jobID)
+    holdsJob = False
 
     try :
+        # The Step 3 cluster slider (pathwayAcquisitionMetagenes_PART2) rewrites
+        # the same metagenes, cluster pictures and pathway documents, queued under
+        # an id of its own, so the queue's one-step-per-job rule does not keep the
+        # two apart: a slider request sent just before "Go back" and a new Step 2
+        # ran together. Released in the `finally` below. See JobLocks.
+        #
+        # Inside the `try`: when the job stays busy for JobLocks.WAIT_LIMIT,
+        # acquire raises JobBusyError, holding nothing, and this answers with
+        # its message like any other failure, rather than raise out of the
+        # queue function, which would fail the queue entry without this answer.
+        JobLocks.acquire(jobID, "running Step 2")
+        holdsJob = True
+
         # Weights measured over 58 logged step-2 runs. compundsClassification and
         # hubAnalysis sit inside `if selectedCompounds:` below, so with no
         # metabolites selected that 40.2% never runs — the phase is dropped from
@@ -764,7 +771,10 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
         finally:
             # Whatever happened above: a lock left held would stop every later
             # slider request and Step 2 of this job until the server restarts.
-            JobLocks.release(jobID)
+            # Only a lock this request took: after a JobBusyError it holds
+            # none, and the other request still does.
+            if holdsJob:
+                JobLocks.release(jobID)
         return RESPONSE
 
 #************************************************************************
@@ -1734,11 +1744,15 @@ def pathwayAcquisitionMetagenes_PART2(ROOT_DIRECTORY, userID, savedJobInstance, 
 
     Now each request
       * waits for any other request rewriting this job (JobLocks.heldFor;
-        Step 2 takes the same lock) and runs alone on it;
+        Step 2 takes the same lock) and runs alone on it. It waits at most
+        JobLocks.WAIT_LIMIT, holding one of the queue's workers meanwhile;
+        then it answers that the job is still busy (JobBusyError) and does
+        nothing;
       * takes the job as it is once it has the lock (loadJobInstance), so it
         starts from what the request before it stored;
       * runs the R script in a folder of its own (_sliderWorkDir) and removes
-        that folder and no other.
+        that folder and no other. The script runs within a time limit
+        (_runMetagenesScripts), so a request that holds the job ends.
     """
     #VARIABLE DECLARATION
     jobID = savedJobInstance.getJobID()
@@ -1746,7 +1760,7 @@ def pathwayAcquisitionMetagenes_PART2(ROOT_DIRECTORY, userID, savedJobInstance, 
     workDir = None
 
     try :
-        with JobLocks.heldFor(jobID):
+        with JobLocks.heldFor(jobID, "making new clusters"):
             # The instance PART1 loaded can be older than what the request
             # before this one stored, if the job left the cache in between.
             jobInstance = JobInformationManager().loadJobInstance(jobID)

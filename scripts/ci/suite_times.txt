@@ -346,3 +346,13 @@ test_combined_fdr_corrects_its_column	2.0
 # importing test_cluster_slider_keeps_other_pictures, which asks Rscript for its
 # packages.
 test_cluster_slider_requests_one_at_a_time	14.0
+# Added with fix/timeouts-and-lock-waits (2026-11-09), not yet measured on
+# GitHub. In one full run on the VM (2 CPUs, 2 suites at a time) the first took
+# 15.4 s against test_cluster_slider_requests_one_at_a_time's 17.8 s, whose
+# import of test_cluster_slider_keeps_other_pictures (Rscript asked for its
+# packages) it shares, and whose seconds-long waits it has too: each test waits
+# a 1 second limit. The second took 11.6 s against
+# test_concurrent_jobs_keep_finished_workers's 8.1 s, recorded here at 5.0 s:
+# it forks the same mappers' workers, each stopped at a 1 second limit.
+test_a_hung_cluster_script_and_a_busy_job	12.0
+test_a_time_limit_says_what_helps	7.2

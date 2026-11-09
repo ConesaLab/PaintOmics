@@ -1185,6 +1185,54 @@ def lostMappingWorkersMessage(lostWorkers, totalWorkers):
             % (lostWorkers, totalWorkers))
 
 
+def timeLimitText(seconds):
+    """A time limit as a message says it: "15 minutes", "1 minute", "90 seconds"."""
+    if seconds >= 60 and seconds % 60 == 0:
+        minutes = int(seconds // 60)
+        return "%d minute%s" % (minutes, "" if minutes == 1 else "s")
+    return "%g second%s" % (seconds, "" if seconds == 1 else "s")
+
+
+def timeLimitMessage(what, seconds):
+    """What the user is told when a step's workers ran past MAX_WAIT_THREADS
+    and were stopped: Step 1's identifier and compound mapping here, Step 2's
+    pathway enrichment (PathwayAcquisitionJob.generatePathwaysList).
+
+    A plain Exception at the caller, so the browser shows it as an internal
+    error with Report error, followed by "This happened on the server, so
+    retrying in the browser will not help. If the error persists, please
+    contact the administrator." It used to end "Try again later or upload
+    smaller files if it persists", which said the opposite of that line, and
+    it did not say how long the limit is or why a job reaches it.
+
+    What it says is what is known when the limit is reached:
+      * very large files take longest. The work is split over MAX_THREADS
+        workers by number of features, and a job is stopped only when one of
+        its workers has not finished its share;
+      * a busy server slows a job down, but the queue runs at most N_WORKERS
+        (4) jobs at once, so on its own it does not take a job from seconds to
+        15 minutes: during a class on paintomics.org (22 Oct 2026) the same
+        23,696-feature zebrafish file mapped in 7 to 8 s alone and in 10 to
+        26 s with four jobs mapping at once. It pushes over the limit a job
+        that is already large;
+      * it can be our fault. The one Step 1 job stopped this way in the
+        server's logs (15 Sep to 9 Nov 2026) was in that class: 3 of its 6
+        workers never finished, while three more jobs mapped the same file in
+        6 to 8 s each during its 15 minutes. Hence "If your files are not
+        large, please report this error", which the dialog's Report error
+        button is for.
+    So it gives the two things the user can do that help (smaller files, fewer
+    omics in one job; report it), and no advice to run the job again: that
+    would help with a fault of ours, which is ours to find, and with a busy
+    server only for files that are large anyway.
+    """
+    return ("%s took longer than its limit of %s, so it was stopped. This happens with very "
+            "large files, more so while the server is busy with other jobs, and it can also be "
+            "a fault on the server. Smaller files, or fewer omics in one job, take less time. "
+            "If your files are not large, please report this error."
+            % (what, timeLimitText(seconds)))
+
+
 def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment, mapGeneIDs=True):
     """
     This function match the provided list of features
@@ -1265,7 +1313,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
             logging.info("THREAD TERMINATED IN mapFeatureNamesToKeggIDs")
 
         if stillRunning:
-            raise Exception('Your data took too long to process and it was killed. Try it again later or upload smaller files if it persists.')
+            raise Exception(timeLimitMessage("Identifier mapping", MAX_WAIT_THREADS))
 
 
     except Exception as ex:
@@ -1706,7 +1754,7 @@ def mapFeatureNamesToCompoundsIDs(jobID, featureList):
             logging.info("THREAD TERMINATED IN mapFeatureNamesToCompoundsIDs")
 
         if stillRunning:
-            raise Exception('Your data took too long to process and it was killed. Try it again later or upload smaller files if it persists.')
+            raise Exception(timeLimitMessage("Compound name mapping", MAX_WAIT_THREADS))
 
     except Exception as ex:
         manager.shutdown()

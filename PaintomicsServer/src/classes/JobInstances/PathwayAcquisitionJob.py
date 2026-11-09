@@ -23,6 +23,8 @@ import math
 import os
 import numpy as np
 import re
+import signal
+import time
 from html import escape
 
 from os import path as os_path, makedirs as os_makedirs
@@ -44,7 +46,8 @@ from src.common.DesignFile import parse_design, derive_groupings
 from src.common.FormPlaceholders import designWithoutPlaceholder
 
 from src.common.KeggInformationManager import KeggInformationManager
-from src.common.FeatureNamesToKeggIDsMapper import _joinAllWithinDeadline, _stillRunning
+from src.common.FeatureNamesToKeggIDsMapper import (_joinAllWithinDeadline, _stillRunning,
+                                                    timeLimitMessage, timeLimitText)
 from src.common import JobProgress
 
 from src.classes.Job import Job
@@ -258,6 +261,56 @@ def organismHint(identifiers, organism):
     return describeHint(detectOrganism(identifiers, selected=organism))
 
 
+def metagenesTimeLimitMessage(unfinished, seconds):
+    """What the user is told when the R scripts of one generateMetagenesList
+    call did not finish within their limit. `unfinished` is the (omic,
+    database) pairs whose script was stopped or never started.
+
+    A plain Exception at the caller, so the browser shows an internal error
+    with Report error: R took nowhere near this long on any job in
+    paintomics.org's logs from 15 Sep to 9 Nov 2026, where Step 2's whole
+    metagenes phase, every omic and database of a job, took 4 s at the median
+    and 32 s at most over 215 runs. So no advice about the files, and none to
+    run it again (the dialog adds "retrying in the browser will not help").
+    "Nothing was saved" holds for both callers: the Step 3 slider stores the
+    pathways, and Step 2 the job, only after this, and the pictures are moved
+    into the job's folder only after this too.
+    """
+    databasesOf = {}
+    for omicName, database in unfinished:
+        databasesOf.setdefault(omicName, []).append(str(database))
+    shown = ["'%s' (%s)" % (omicName, ", ".join(databases)) for omicName, databases in databasesOf.items()]
+    named = shown[0] if len(shown) == 1 else ", ".join(shown[:-1]) + " and " + shown[-1]
+    return ("Computing the clusters did not finish within its limit of %s for omic%s %s, so it "
+            "was stopped. Nothing was saved. For a whole job it usually takes under a minute, so "
+            "something on the server most likely held it up. Please report this error."
+            % (timeLimitText(seconds), "" if len(shown) == 1 else "s", named))
+
+
+def _stopProcessGroup(process):
+    """Kill a script started in a session of its own, and every process it
+    started, then collect it.
+
+    SIGKILL, which no signal mask holds back. A process keeps the mask of the
+    thread that started it, through exec, and uWSGI's threads block every
+    signal (see _refreshStandardStreamsInForkChild in
+    FeatureNamesToKeggIDsMapper), so a SIGTERM would wait, pending, in an R
+    started from a queue worker. The group, not the process: Rscript runs R,
+    which can start processes of its own, and one left behind would keep the
+    output pipe open and the wait for it going."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass   # it ended on its own meanwhile
+    try:
+        process.communicate(timeout=10)
+    except Exception:   # a process outside the group still holds the pipe
+        process.kill()
+        if process.stdout is not None:
+            process.stdout.close()
+        process.wait()
+
+
 def _runMetagenesScripts(omicNames, databases, commands):
     """
     Run one generateMetaGenes.R per (omic, database) -- `commands[(omic, db)]`
@@ -267,20 +320,47 @@ def _runMetagenesScripts(omicNames, databases, commands):
     observed each run. A launch failure (e.g. no Rscript) is stored as
     (None, OSError) and re-raised where the sequential loop would have met it,
     so the caller's error handling is unchanged.
+
+    Every script of the call shares one time limit, MAX_WAIT_THREADS (900 s),
+    the limit of Step 1's mapping and Step 2's enrichment. A script still
+    running when it passes is killed with every process it started
+    (_stopProcessGroup), one not started yet is not started, and the call
+    raises once the others are over, before the caller changes anything. A
+    script had no limit: one that hung held its queue worker, and the job's
+    lock, which a Step 2 or another slider move of the job then waited for on
+    another worker, until the server was restarted.
     """
     from concurrent.futures import ThreadPoolExecutor
-    from subprocess import Popen, PIPE
+    from subprocess import Popen, PIPE, TimeoutExpired
+
+    timeLimit = MAX_WAIT_THREADS
+    deadline = time.monotonic() + timeLimit
+    outOfTime = object()
 
     def runOmic(omicName):
         omicResults = {}
         for dbname in databases:
             argv = commands[(omicName, dbname)][0]
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                omicResults[(omicName, dbname)] = (None, outOfTime)
+                continue
             try:
-                process = Popen(argv, stdout=PIPE, stderr=STDOUT)
-                output, _ = process.communicate()
-                omicResults[(omicName, dbname)] = (process.returncode, output)
+                # A session of its own, so that the whole group can be killed.
+                process = Popen(argv, stdout=PIPE, stderr=STDOUT, start_new_session=True)
             except OSError as ex:
                 omicResults[(omicName, dbname)] = (None, ex)
+                continue
+            try:
+                output, _ = process.communicate(timeout=remaining)
+            except TimeoutExpired:
+                _stopProcessGroup(process)
+                logging.error("METAGENES - generateMetaGenes.R for omic '%s' (%s) still ran after %s s, "
+                              "the limit for the call; killed with its process group",
+                              omicName, dbname, timeLimit)
+                omicResults[(omicName, dbname)] = (None, outOfTime)
+                continue
+            omicResults[(omicName, dbname)] = (process.returncode, output)
         return omicResults
 
     results = {}
@@ -288,10 +368,15 @@ def _runMetagenesScripts(omicNames, databases, commands):
     if workers <= 1:
         for omicName in omicNames:
             results.update(runOmic(omicName))
-        return results
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        for omicResults in pool.map(runOmic, omicNames):
-            results.update(omicResults)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for omicResults in pool.map(runOmic, omicNames):
+                results.update(omicResults)
+
+    unfinished = [(omicName, dbname) for omicName in omicNames for dbname in databases
+                  if results.get((omicName, dbname), (None, None))[1] is outOfTime]
+    if unfinished:
+        raise RuntimeError(metagenesTimeLimitMessage(unfinished, timeLimit))
     return results
 
 
@@ -2036,8 +2121,9 @@ class PathwayAcquisitionJob(Job):
 
         if stillRunning:
             manager.shutdown()
-            raise Exception(
-                'Your data took too long to process and it was killed. Try again later or upload smaller files if it persists.')
+            # Worded as Step 1's (timeLimitMessage says why): the dialog adds
+            # "retrying in the browser will not help" right after it.
+            raise Exception(timeLimitMessage("Pathway enrichment", MAX_WAIT_THREADS))
 
         _markStage("enrichment_threads")
 
