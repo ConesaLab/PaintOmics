@@ -32,11 +32,12 @@ tail (a third of them, as here). A per-feature list never said that.
 
 Verified end to end, same example, before and after: ERROR lines 6480 -> 0.
 
-Worth stating plainly: the shipped `logging.cfg` sets the root logger to DEBUG
-and `launch_server.py` copies that same file into a deployment, so the
-per-feature lines are still written to disk. This change fixes the severity, not
-the volume. Raising the deployed log level is a separate decision and not one to
-make silently inside a debugging pass.
+The per-feature line first moved to debug. But the shipped `logging.cfg` sets
+the root logger to DEBUG and `launch_server.py` copies that same file into a
+deployment, so it was still written to disk, one line a feature on every Step 2:
+371,985 of the 516,447 lines in paintomics.org's last three application.log
+files (to 9 Nov 2026). It is gone; the summary, which now names the job, is the
+one line left.
 
 Usage:
     cd PaintomicsServer
@@ -167,18 +168,33 @@ class UnmappedFeatureLoggingTest(unittest.TestCase):
         self.assertEqual(summaries, [],
                          "a job where everything mapped should say nothing")
 
-    def test_the_per_feature_detail_is_still_available_at_debug(self):
-        """Downgraded, not deleted -- it is how a named feature gets chased."""
-        job = self._jobWithUnmappedGenes(2)
+    def test_one_line_whatever_the_number_of_features(self):
+        """No line a feature, at any level: with the root logger at DEBUG
+        (logging.cfg) a debug line is still written, and this one was most of
+        the log."""
+        job = self._jobWithUnmappedGenes(200)
 
         with _CapturedLogs() as captured:
             self._calculate(job)
 
-        detail = captured.messages("not present in any pathway")
-        self.assertEqual(len(detail), 2)
-        self.assertTrue(all(record.levelno == logging.DEBUG
-                            for record in detail),
-                        "the per-feature line must sit at debug")
+        self.assertEqual(captured.messages("not present in any pathway"), [])
+        self.assertLessEqual(len(captured.records), 3,
+                             "%d lines for one call: %s" % (
+                                 len(captured.records),
+                                 [record.getMessage()[:80] for record in captured.records[:5]]))
+
+    def test_the_summary_names_the_job_and_some_features(self):
+        """What an operator needs from the one line left: which job, how many
+        of how many, and a few of the identifiers to look up."""
+        job = self._jobWithUnmappedGenes(7)
+
+        with _CapturedLogs() as captured:
+            self._calculate(job)
+
+        summary = captured.messages("matched no pathway in any database")[0].getMessage()
+        self.assertIn("LOGTEST", summary)
+        self.assertIn("7 of 7", summary)
+        self.assertIn("gene0", summary)
 
     def test_the_counts_are_unchanged_by_the_logging_change(self):
         """The point of the edit was the log, not the arithmetic."""

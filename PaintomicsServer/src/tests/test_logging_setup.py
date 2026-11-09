@@ -116,6 +116,8 @@ class ConfigureLoggingTest(unittest.TestCase):
         for name in ("apscheduler.scheduler",       # "Looking for jobs to run"
                      "apscheduler.executors.default",
                      "httpcore.http11", "httpcore.connection",
+                     # httpx2's copy (openai 3): "connect_tcp.started host=..."
+                     "httpcore2.http11", "httpcore2.connection",
                      "openai._base_client",         # "HTTP Response: POST 200"
                      "openai.agents",               # "Running agent Writer (turn 3)"
                      "openai.agents.tracing",       # "Tracing is disabled. Not creating span"
