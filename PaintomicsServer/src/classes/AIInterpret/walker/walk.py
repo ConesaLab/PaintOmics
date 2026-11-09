@@ -388,21 +388,24 @@ class Walker:
         # value -> the texts quoting it; ``quoted``: its first place, for the snippet
         found, given, quoted = OrderedDict(), OrderedDict(), {}
         labels = verify.measure_labels(self.overlay)
+        # each text's names, found once: a list item's key (verify.list_gap)
+        # and a value's owner (verify.heats_given_as_values)
+        catalog = verify.name_catalog(self, named)
+        mentions = {name: verify._mentions(text, catalog) if values[name] else [] for name, text in texts.items()}
         for name, text in texts.items():
-            for value, at in verify.invented_values(text, numbers, heats, labels=labels, values=values[name]):
+            for value, at in verify.invented_values(text, numbers, heats, labels=labels, values=values[name],
+                                                    mentions=mentions[name]):
                 found.setdefault(value, []).append(name)
                 quoted.setdefault(value, verify.snippet(text, at, at + len(value)))
         # Then, over every text, a value another node holds given to the node
         # whose heat it is (Pkm, heat2) -- never one already reported above,
         # in any spelling, so a reading and a reason cannot say both.
         unheld = {verify._norm(value) for value in found}
-        catalog = verify.name_catalog(self, named)
         for name, text in texts.items():
             if not values[name]:
                 continue
-            mentions = verify._mentions(text, catalog)
             for value, at, node_id in verify.heats_given_as_values(text, catalog, heats, self.overlay,
-                                                                   values=values[name], mentions=mentions):
+                                                                   values=values[name], mentions=mentions[name]):
                 if verify._norm(value) in unheld:
                     continue
                 names = given.setdefault((value, node_id), [])

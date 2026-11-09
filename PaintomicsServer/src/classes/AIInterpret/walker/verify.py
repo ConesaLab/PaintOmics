@@ -58,9 +58,11 @@ def quoted_values(text):
 
 
 def _may_be_heat(token):
-    """Whether a number can be a heat: unsigned, or a zero. The walker prints
+    """Whether a number can be a heat: unsigned, or a zero. The walker printed
     a heat of zero as "-0.00" (−log10 of p = 1), 4,751 times in the records
-    of rounds heat6 and heat7, and walkers copy it: "ppid (heat -0.00, r=1)"."""
+    of rounds heat6 and heat7, and walkers copied it: "ppid (heat -0.00,
+    r=1)". heat.compute_heat now gives an unsigned 0.00; a zero after a heat
+    word is still read as the heat."""
     return token[:1] not in "+-−" or not token.lstrip("+-−").strip("0.")
 
 
@@ -543,11 +545,12 @@ def _invented_problems(stmt, walker, papers):
         for value in quoted_values(blob):
             size = _norm(value).lstrip("+−")      # a paper's figure, with either sign
             stated.update((size, "+" + size, "−" + size))
+    # The names it gives: a list item's key (list_gap) and a value's owner.
+    mentions = _mentions(text, name_catalog(walker, named))
     found = invented_values(text, _record_numbers(walker, read), heats, stated,
-                            measure_labels(walker.overlay), values)
+                            measure_labels(walker.overlay), values, mentions)
     # A value some read node holds, given to a node whose printed heat it is
     # (heats_given_as_values): any node the walk printed a heat for.
-    mentions = _mentions(text, name_catalog(walker, named))
     unheld = {at for _value, at in found}
     given = {at: (value, node_id) for value, at, node_id in heats_given_as_values(
         text, None, heats, walker.overlay, stated, values, mentions) if at not in unheld}
@@ -1079,7 +1082,7 @@ def heat_owners(value, heats):
     return heats.get(_norm(value).lstrip("+−"), [])
 
 
-def invented_values(text, numbers, heats, also=(), labels=None, values=None):
+def invented_values(text, numbers, heats, also=(), labels=None, values=None, mentions=None):
     """(value, position) for every value ``text`` quotes as data (data_values)
     that is in neither ``numbers``, the layers' value tokens, nor ``also``,
     and that reads as a measurement: signed, as a layer prints every reading,
@@ -1105,7 +1108,7 @@ def invented_values(text, numbers, heats, also=(), labels=None, values=None):
             continue
         if _norm(value)[:1] in ("+", "−"):
             out.append((value, at))
-        elif heat_owners(value, heats) and heat_misread(text, at, at + len(value), values, labels):
+        elif heat_owners(value, heats) and heat_misread(text, at, at + len(value), values, labels, mentions):
             out.append((value, at))
     return out
 
@@ -1190,18 +1193,25 @@ def measure_labels(overlay):
 DOSE_OR_TIME_AFTER_RE = re.compile(r"^\s*(?:[µunpm]M|kDa|h|hrs?|hpf|hpi|dpf|dpi|min|d)\b", re.I)
 
 
-def list_gap(text, labels=None):
+def list_gap(text, labels=None, names=()):
     """Whether ``text``, what stands between two values, joins them as one
     list: nothing in it but LIST_GAP_WORDS_RE once its time points
     (TIME_POINT_RE) and the layers' own labels (``labels``, measure_labels)
-    are taken out."""
-    text = TIME_POINT_RE.sub(" ", str(text or ""))
+    are taken out, and at most one node name, the next item's key
+    (``names``, (start, end) within ``text``): "Vegfc +1.94, Vegfd 1.93" is
+    one list (vRmKBo4E60, round heat11, where 1.93 was Vegfd's heat)."""
+    text = str(text or "")
+    if len(names) > 1:
+        return False
+    for start, end in names:
+        text = text[:start] + " " * (end - start) + text[end:]
+    text = TIME_POINT_RE.sub(" ", text)
     if labels is not None:
         text = labels.sub(" ", text)
     return bool(LIST_GAP_WORDS_RE.match(text))
 
 
-def measured(text, start, end, values, labels=None):
+def measured(text, start, end, values, labels=None, mentions=None):
     """Whether the number at text[start:end] is written as a measurement: a
     unit or a relevance flag right after it (MEASURE_AFTER_RE,
     RELEVANCE_AFTER_RE), or a verb of change, a value label
@@ -1226,17 +1236,26 @@ def measured(text, start, end, values, labels=None):
     earlier = [(v, at) for v, at in values if clause <= at and at + len(v) <= start]
     since = max([clause] + [at + len(v) for v, at in earlier])
     span = text[since:start]
-    if MEASURE_BEFORE_RE.search(span) or (labels is not None and labels.search(span)):
+    # The words after the value before, up to a comma, are that value's:
+    # "Jag1 (+0.62) up, while ... Ror1/2 at 2.59" (Bgm0v4EU01, round heat11).
+    comma = span.find(",") if earlier else -1
+    own = span[comma + 1:] if comma != -1 else span
+    if MEASURE_BEFORE_RE.search(own) or (labels is not None and labels.search(own)):
         return True
     if earlier:
         value, at = earlier[-1]
-        if list_gap(span, labels) and (
-                value[:1] in "+-−" or measured(text, at, at + len(value), values, labels)):
+        names = [(m[0] - since, m[1] - since) for m in mentions or () if since <= m[0] and m[1] <= start]
+        # A list continues the kind of its value before: a measurement, never
+        # a heat ("the hottest two-step nodes (Ephx1 3.79, As3mt 3.68, ...)",
+        # vRmKBo4E60, round heat13, t120).
+        if list_gap(span, labels, names) and (
+                value[:1] in "+-−" or (measured(text, at, at + len(value), values, labels, mentions)
+                                       and not heat_phrased(text, at, at + len(value), labels))):
             return True
     return False
 
 
-def heat_misread(text, start, end, values, labels=None):
+def heat_misread(text, start, end, values, labels=None, mentions=None):
     """Whether an unsigned number the size of a heat is quoted as the
     node's value: written as a measurement (measured) and not as a heat
     (heat_phrased). Anything else is a reference to the heat. Round heat6
@@ -1245,17 +1264,19 @@ def heat_misread(text, start, end, values, labels=None):
     cluster", "(... at 2.56; ... at 2.19)", "same 2.19-heat proteins" were
     refused too. Every true misread of that walk had a measurement word:
     "a relevant Log2FC of 0.58", "Log2FC of 0.83", "Log2FC of 0.99"."""
-    return measured(text, start, end, values, labels) and not heat_phrased(text, start, end)
+    return measured(text, start, end, values, labels, mentions) and not heat_phrased(text, start, end, labels)
 
 
-def heat_phrased(text, start, end):
+def heat_phrased(text, start, end, labels=None):
     """Whether the unsigned number at text[start:end] is written as a heat
-    without the word before it: followed by its count or by "heat", or
-    after "hot", "hotter" or "hottest" or after an earlier "heat <number>"
-    in its clause, with
-    nothing that writes it as a measurement (a unit after it, a verb of
-    change or a value label between). A signed number never is: "+2.43" is
-    data."""
+    without the word right before it: followed by its count or by "heat",
+    or after "hot", "hotter" or "hottest", after an earlier "heat <number>"
+    or after the word "heat" anywhere in its clause, with nothing that
+    writes it as a measurement (a unit after it, a verb of change or a
+    value label between, and after the word "heat" none of the layers' own
+    words, ``labels``). A signed number never is: "+2.43" is data. Round
+    heat13 (7O521E0Y0y, t7) refused "Gene expression: CAPN2 ... carries the
+    highest heat in the whole graph (3.70)"."""
     if HEAT_COUNT_AFTER_RE.match(text[end:]) or HEAT_AFTER_RE.match(text[end:]):
         return True
     if MEASURE_AFTER_RE.match(text[end:]):
@@ -1263,6 +1284,10 @@ def heat_phrased(text, start, end):
     whole = CLAUSE_END_RE.split(text[:start])[-1]
     listed = list(HEAT_NUMBER_RE.finditer(whole))
     if listed and not MEASURE_BEFORE_RE.search(whole[listed[-1].end():]):
+        return True
+    named = list(re.finditer(HEAT_WORD, whole, re.I))
+    after = whole[named[-1].end():] if named else ""
+    if named and not MEASURE_BEFORE_RE.search(after) and not (labels is not None and labels.search(after)):
         return True
     clause = CLAUSE_END_RE.split(text[max(0, start - HOT_WINDOW):start])[-1]
     hot = list(HOT_RE.finditer(clause))
@@ -1322,7 +1347,7 @@ def heats_given_as_values(text, catalog, heats, overlay, also=(), values=None, m
         own = [(v, v_at) for v, v_at in values if nearest[1] <= v_at and v_at + len(v) <= at]
         if own and not list_gap(text[own[-1][1] + len(own[-1][0]):at], labels):
             continue                                   # its own value came first: "Ctss +1.19, the H2 genes +0.78"
-        if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values, labels):
+        if token[:1] not in ("+", "−") and not heat_misread(text, at, at + len(value), values, labels, mentions):
             continue
         out.append((value, at, node_id))
     return out

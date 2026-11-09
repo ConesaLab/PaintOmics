@@ -50,7 +50,9 @@ def compute_heat(network, measured, relevant):
     live = (n > 0) & (n_total > 0)
     if live.any():
         p[live] = hypergeom.sf(x[live] - 1, n_total[live], k_total[live], n[live])
-    heat = np.where(n > 0, -np.log10(np.maximum(p, 1e-300)), 0.0)
+    # A heat is unsigned: -log10(1) is -0.0, which printed "heat -0.00" (4,751
+    # times in rounds heat6 and heat7) and was copied as a signed value.
+    heat = np.maximum(np.where(n > 0, -np.log10(np.maximum(p, 1e-300)), 0.0), 0.0) + 0.0
     return {v: {"n": int(n[i]), "x": int(x[i]), "p": float(p[i]), "heat": float(heat[i]),
                 "degree": int(degree[i])} for i, v in enumerate(ids)}
 

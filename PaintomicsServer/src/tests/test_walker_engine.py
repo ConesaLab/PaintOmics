@@ -819,6 +819,29 @@ class HeatIsNotAValueTest(unittest.TestCase):
         self.assertTrue(answer.startswith("REFUSED"), answer)
         self.assertIn("gives Ccc +1.50", answer)
 
+    def test_a_list_keyed_by_names_continues_the_measurement(self):
+        """Round heat11 (vRmKBo4E60): "(Vegfc +1.94, Vegfd 1.93, ...)", heats
+        quoted as values after each node's own name, passed the guard."""
+        w, _opening = self.walker()
+        answer = w.note("Bbb's neighbourhood (Bbb \u22121.20, Ccc 2.43, Aaa +2.20) moves together")
+        self.assertTrue(answer.startswith("REFUSED"), answer)
+        self.assertIn("2.43 is the heat of Ccc", answer)
+
+    def test_a_heat_of_p_one_is_printed_unsigned(self):
+        """A node whose neighbours hold no relevant one has p = 1, and
+        -log10(1) is -0.0: printed "heat -0.00" 4,751 times in rounds heat6
+        and heat7, and a walker copying it bare, "C00064 (\u22120.00)", was
+        refused (round heat11, 1WytoKdgT4 sot00630 t75)."""
+        class Line(object):
+            nodes = {"a": {}, "b": {}, "c": {}}
+
+            def neighbours(self, node_id):
+                return {"a": ["b"], "b": ["a", "c"], "c": ["b"]}[node_id]
+        heat = heat_mod.compute_heat(Line(), {"a", "b", "c"}, {"a": False, "b": False, "c": True})
+        self.assertEqual(heat["c"]["n"], 1)
+        self.assertEqual("%.2f" % heat["c"]["heat"], "0.00")
+        self.assertEqual(math.copysign(1.0, heat["c"]["heat"]), 1.0)
+
     def test_note_stop_and_jump_are_held_to_the_layers_too(self):
         w, _opening = self.walker()
         answer = w.note("Ccc +2.43 (relevant) leads this neighbourhood")
