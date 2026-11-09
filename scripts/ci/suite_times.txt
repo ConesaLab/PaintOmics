@@ -340,3 +340,9 @@ test_mirna_tool_page_shows_its_settings	0.1
 # organism it repeats once (that suite runs it three times) and then calls node
 # five times: on the VM the new suite's 14 tests took 1.5 s.
 test_combined_fdr_corrects_its_column	2.0
+# Added with fix/slider-requests-and-log-volume (2026-11-09), not yet measured
+# on GitHub: on the VM it took 16 s, 11.3 s of them in its tests, four of which
+# wait 2 s each for a second request the branch does not let in; the rest is
+# importing test_cluster_slider_keeps_other_pictures, which asks Rscript for its
+# packages.
+test_cluster_slider_requests_one_at_a_time	14.0

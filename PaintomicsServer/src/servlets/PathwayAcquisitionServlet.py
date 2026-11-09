@@ -22,6 +22,9 @@ import logging.config
 
 import cairosvg
 from html import escape
+from os import makedirs as os_makedirs, path as os_path
+from shutil import rmtree as shutil_rmtree
+from tempfile import mkdtemp
 from time import time
 
 from collections import defaultdict
@@ -30,6 +33,7 @@ from src.common.ServerErrorManager import handleException, InputFileError, JobUn
 from src.common.UserSessionManager import UserSessionManager
 from src.common.JobInformationManager import JobInformationManager
 from src.common import JobProgress
+from src.common import JobLocks
 from src.common import ExampleDatasets
 from src.common import DatabaseAvailability
 from src.common.Statistics import adjustPvalues, calculateStoufferCombinedPvalue
@@ -559,6 +563,13 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
     """
     jobInstance = None
 
+    # The Step 3 cluster slider (pathwayAcquisitionMetagenes_PART2) rewrites
+    # the same metagenes, cluster pictures and pathway documents, queued under
+    # an id of its own, so the queue's one-step-per-job rule does not keep the
+    # two apart: a slider request sent just before "Go back" and a new Step 2
+    # ran together. Released in the `finally` below. See JobLocks.
+    JobLocks.acquire(jobID)
+
     try :
         # Weights measured over 58 logged step-2 runs. compundsClassification and
         # hubAnalysis sit inside `if selectedCompounds:` below, so with no
@@ -744,11 +755,16 @@ def pathwayAcquisitionStep2_PART2(jobID, userID, selectedCompounds, clusterNumbe
     except Exception as ex:
         handleException(RESPONSE, ex, __file__ , "pathwayAcquisitionStep2_PART2", userID=userID)
     finally:
-        JobProgress.finish(jobID)
-        # None when the job was removed while this waited on the queue. Raising
-        # here would lose the answer above and mark the queue entry FAILED.
-        if jobInstance is not None:
-            jobInstance.cleanDirectories()
+        try:
+            JobProgress.finish(jobID)
+            # None when the job was removed while this waited on the queue. Raising
+            # here would lose the answer above and mark the queue entry FAILED.
+            if jobInstance is not None:
+                jobInstance.cleanDirectories()
+        finally:
+            # Whatever happened above: a lock left held would stop every later
+            # slider request and Step 2 of this job until the server restarts.
+            JobLocks.release(jobID)
         return RESPONSE
 
 #************************************************************************
@@ -1689,24 +1705,68 @@ def pathwayAcquisitionMetagenes_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, JOB_ID,
         finally:
             return RESPONSE
 
+def _sliderWorkDir(jobInstance):
+    """A new folder for one slider request, beside the job's temporary folder.
+
+    Beside it, not in it: Step 2 removes the job's temporary folder when it
+    ends (cleanDirectories), and this folder must not depend on that. The
+    request removes it when it ends. One left behind by a crash is named
+    "<jobID>_clusters_<random>", not a job's id (job ids hold no "_"), so in
+    the anonymous and guest folders the sweep of expired files
+    (clean_databases.planExpiredFileSweep) removes it once it is old enough.
+    """
+    parent = os_path.dirname(jobInstance.getTemporalDir().rstrip("/"))
+    os_makedirs(parent, exist_ok=True)
+    return mkdtemp(prefix=jobInstance.getJobID() + "_clusters_", dir=parent)
+
+
 def pathwayAcquisitionMetagenes_PART2(ROOT_DIRECTORY, userID, savedJobInstance, omicName, clusterNumber, database, RESPONSE):
+    """The Step 3 cluster slider: rerun one omic's metagenes over one database,
+    store the job's pathways, and answer with them.
+
+    Each request is queued under an id of its own, so two on one job (two
+    moves of the slider, for one omic or two) could run at the same time on
+    the queue's workers. They worked in the job's one temporary folder, and the
+    first to finish removed it under the other's R script, which then failed
+    and lost its result. Both changed the one shared job object and each
+    stored it, so a request could store, and answer with, the other's half-done
+    state, or overwrite what the other stored.
+
+    Now each request
+      * waits for any other request rewriting this job (JobLocks.heldFor;
+        Step 2 takes the same lock) and runs alone on it;
+      * takes the job as it is once it has the lock (loadJobInstance), so it
+        starts from what the request before it stored;
+      * runs the R script in a folder of its own (_sliderWorkDir) and removes
+        that folder and no other.
+    """
     #VARIABLE DECLARATION
-    jobID  = ""
+    jobID = savedJobInstance.getJobID()
     userID = ""
+    workDir = None
 
     try :
-        #************************************************************************
-        # Step 3. Save the visual Options in the MongoDB
-        #************************************************************************
-        logging.info("UPDATE METAGENES - STEP 2 FOR JOB " + jobID + "..." )
-        savedJobInstance.generateMetagenesList(ROOT_DIRECTORY, {omicName: clusterNumber}, [omicName], [database])
-        logging.info("UPDATE METAGENES - STEP 2 FOR JOB " + jobID + "...DONE")
-        JobInformationManager().storePathways(savedJobInstance)
+        with JobLocks.heldFor(jobID):
+            # The instance PART1 loaded can be older than what the request
+            # before this one stored, if the job left the cache in between.
+            jobInstance = JobInformationManager().loadJobInstance(jobID)
+            if jobInstance is None:
+                raise JobUnavailableError(removedJobMessage(jobID))
 
-        matchedPathwaysJSONList = []
-        for matchedPathway in savedJobInstance.getMatchedPathways().values():
-            logging.info("match_pathway:"+str(matchedPathway))
-            matchedPathwaysJSONList.append(matchedPathway.toBSON())
+            workDir = _sliderWorkDir(jobInstance)
+            jobInstance.generateMetagenesList(ROOT_DIRECTORY, {omicName: clusterNumber}, [omicName], [database],
+                                              workDir=workDir)
+            JobInformationManager().storePathways(jobInstance)
+
+            # Built inside the lock, so the answer is the state just stored,
+            # not one the next request is halfway through changing.
+            matchedPathwaysJSONList = [matchedPathway.toBSON()
+                                       for matchedPathway in jobInstance.getMatchedPathways().values()]
+
+        # One line per request. This used to log every pathway, then the whole
+        # answer as one line: each pathway's metagenes and their values.
+        logging.info("UPDATE METAGENES - JOB %s: omic '%s', database %s, %s clusters; %d pathways stored",
+                     jobID, omicName, database, clusterNumber, len(matchedPathwaysJSONList))
 
         RESPONSE.setContent({
             "success": True,
@@ -1714,12 +1774,12 @@ def pathwayAcquisitionMetagenes_PART2(ROOT_DIRECTORY, userID, savedJobInstance, 
             # "timestamp": newTimestamp,
             "pathwaysInfo": matchedPathwaysJSONList
         })
-        logging.info("matchedPathwaysJSONList:"+str(matchedPathwaysJSONList))
 
     except Exception as ex:
         handleException(RESPONSE, ex, __file__ , "pathwayAcquisitionMetagenes_PART2", userID=userID)
     finally:
-        savedJobInstance.cleanDirectories()
+        if workDir is not None:
+            shutil_rmtree(workDir, ignore_errors=True)
 
         return RESPONSE
 

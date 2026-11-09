@@ -2238,17 +2238,25 @@ class PathwayAcquisitionJob(Job):
                 # single run of the six-omic example. That buries the real
                 # errors: grepping the log for ERROR to find out why a job
                 # failed returns thousands of lines about healthy features.
-                # Kept at debug for the one case it helps with, diagnosing a
-                # mapping problem for a named feature.
+                #
+                # Nor at debug, one line a feature: the root logger is at
+                # DEBUG (logging.cfg), so those lines were still written, and
+                # they were most of the log: 371,985 of the 516,447 lines in
+                # paintomics.org's last three application.log files (to 9 Nov
+                # 2026). The summary below carries the count and the job;
+                # whether one named feature is in a pathway is answered by the
+                # organism's pathway documents (the `kegg` collection of
+                # <organism>-paintomics, which totalGenes is built from), not
+                # by this log.
                 unmappedFeatureIDs.append(feature.getID())
-                logging.debug("STEP2 - Feature not present in any pathway " + feature.getID())
 
         if unmappedFeatureIDs:
             # One line an operator can actually act on: a proportion tells you
             # whether the identifiers are mismatched, which a per-feature list
             # never did.
-            logging.info("STEP2 - %d of %d features matched no pathway in any "
+            logging.info("STEP2 - JOB %s: %d of %d features matched no pathway in any "
                          "database (e.g. %s)" % (
+                             self.getJobID(),
                              len(unmappedFeatureIDs),
                              totalInputFeatures,
                              ", ".join(unmappedFeatureIDs[:5])))
@@ -2650,13 +2658,21 @@ class PathwayAcquisitionJob(Job):
 
     # GENERATE METAGENES LIST FUNCTIONS -----------------------------------------------------------------------------------------
     def generateMetagenesList(self, ROOT_DIRECTORY: object, clusterNumber: object, omicList: object = None,
-                              database: object = None) -> object:
+                              database: object = None, workDir: object = None) -> object:
         """
         This function obtains the metagenes for each pathway in KEGG based on the input values.
+
+        `workDir` is the folder the R script reads its input from and writes
+        its tables and pictures into; the job's temporary folder when not
+        given (Step 2). The Step 3 slider passes a folder of its own for each
+        request (pathwayAcquisitionMetagenes_PART2), so no request works in,
+        or removes, the folder another one is using.
 
         @param {type}
         @returns
         """
+        if workDir is None:
+            workDir = self.getTemporalDir()
         # STEP 1. EXTRACT THE MAPPING FILES THE R SCRIPT READS
         # Only the `<omic>_matched.txt` members: they are the R script's only
         # input, and re-inflating every omic's matched AND unmatched files (the
@@ -2676,7 +2692,7 @@ class PathwayAcquisitionJob(Job):
             wanted = {inputOmic.get("omicName") + "_matched.txt" for inputOmic in filtered_omics}
             for member in mappingZip.namelist():
                 if member in wanted:
-                    mappingZip.extract(member, path=self.getTemporalDir())
+                    mappingZip.extract(member, path=workDir)
 
         # An omic that matched nothing has an empty <omic>_matched.txt, and
 
@@ -2692,7 +2708,7 @@ class PathwayAcquisitionJob(Job):
 
         for inputOmic in filtered_omics:
 
-            matchedFile = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_matched.txt"
+            matchedFile = workDir + "/" + inputOmic.get("omicName") + "_matched.txt"
 
             if hasDataRows(matchedFile):
 
@@ -2731,7 +2747,7 @@ class PathwayAcquisitionJob(Job):
         commands = {}
         for inputOmic in filtered_omics:
             for dbname in filtered_databases:
-                inputFile = self.getTemporalDir() + "/" + inputOmic.get("omicName") + '_matched.txt'
+                inputFile = workDir + "/" + inputOmic.get("omicName") + '_matched.txt'
                 kClusters = str(dict(clusterNumber).get(inputOmic.get("omicName"), "dynamic"))
                 commands[(inputOmic.get("omicName"), dbname)] = ([
                     "Rscript",
@@ -2739,7 +2755,7 @@ class PathwayAcquisitionJob(Job):
                     '--specie=' + self.getOrganism(),
                     '--input_file=' + inputFile,
                     '--output_prefix=' + inputOmic.get("omicName"),
-                    '--data_dir=' + self.getTemporalDir(),
+                    '--data_dir=' + workDir,
                     '--kegg_dir=' + KEGG_DATA_DIR,
                     '--sources_dir=' + ROOT_DIRECTORY + 'common/bioscripts/',
                     '--kclusters=' + kClusters if kClusters.isdigit() else '',
@@ -2804,7 +2820,7 @@ class PathwayAcquisitionJob(Job):
                             pathway.resetMetagenes(inputOmic.get("omicName"))
                     regenerated.add((inputOmic.get("omicName"), dbname))
 
-                    metagenesFileName: object = self.getTemporalDir() + "/" + inputOmic.get("omicName") + "_metagenes" + \
+                    metagenesFileName: object = workDir + "/" + inputOmic.get("omicName") + "_metagenes" + \
                                                 ("_" + str(dbname).lower() + ".tab" if dbname != "KEGG" else ".tab")
 
                     if os_path.exists(metagenesFileName):
@@ -2849,7 +2865,7 @@ class PathwayAcquisitionJob(Job):
             elbowsOf = set()
         else:
             elbowsOf = {omicName for omicName, _ in regenerated}
-        replaceMetagenePictures(self.getOutputDir(), self.getTemporalDir(),
+        replaceMetagenePictures(self.getOutputDir(), workDir,
                                 regenerated, elbowsOf)
         return self
 
