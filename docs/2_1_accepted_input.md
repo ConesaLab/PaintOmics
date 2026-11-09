@@ -516,9 +516,15 @@ It takes:
 * the **miRNA quantification file**, in the ordinary [values file](#gene-based-omics) shape;
 * the **miRNA-to-target table**, [regulator then target](#association-and-design-files-for-regulatory-omics),
   optionally with a score;
-* optionally, a **list of relevant miRNAs**;
-* optionally, a **gene expression matrix**, used to score each predicted target
-  by correlation and to mark as relevant the pairs that pass a cutoff.
+* one of these two, to decide which pairs are relevant:
+    * a **relevant associations file**, listing the pairs you already know to be
+      relevant, which are marked so;
+    * a **gene expression matrix**, after ticking *Automatically select relevant
+      associations using correlation*, used to score each predicted target by
+      correlation and to mark as relevant the pairs that pass a cutoff. The same box
+      turns on **Report**, **Score method**, **Selection method** and **Filter
+      cutoff**, described below;
+* optionally, a **list of relevant miRNAs**.
 
 There is no restriction on the identifiers, and no translation happens here: the
 only requirement is that the same convention is used on both sides. If your

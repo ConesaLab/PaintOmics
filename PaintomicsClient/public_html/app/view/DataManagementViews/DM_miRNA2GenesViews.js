@@ -29,6 +29,18 @@ function DM_miRNA2GenesJobView() {
 	this.name = "DM_miRNA2GenesJobView";
 	this.nFiles = 4;
 	this.exampleMode = false;
+	/* The card this page shows, the same one a Step 1 Pairwise miRNA card is. No
+	   "My features are already mapped to Gene IDs" box (allowToogle): mapping to
+	   genes is what this tool does. The correlation box stays
+	   (allowCorrelationToogle): it turns on the gene expression file, Report, score
+	   method, selection method and cutoff, which this page's help describes. Both
+	   boxes were hidden from the first commit (54ff9dc3), so those settings sat
+	   greyed out and could not be turned on. It starts unticked, as on Step 1, so a
+	   run whose box is left alone sends what it always sent. No "Use a file from
+	   other omic" for the gene expression file (allowOtherOmicFile): this page has
+	   no other card, and its plain form submit never sends a file picked that way. */
+	var panelOptions = {removable: false, allowToogle: false, allowCorrelationToogle: true,
+		allowOtherOmicFile: false};
 	/*********************************************************************
 	* GETTERS AND SETTERS
 	***********************************************************************/
@@ -39,7 +51,15 @@ function DM_miRNA2GenesJobView() {
 	* OTHER FUNCTIONS
 	***********************************************************************/
 	this.resetViewHandler = function () {
-		this.getComponent().queryById("omicSubmittingForm").getForm().reset();
+		var form = this.getComponent().queryById("omicSubmittingForm");
+		form.getForm().reset();
+		/* The correlation box is plain HTML, which the form's reset does not reach,
+		   so a ticked box stayed ticked with its settings on. Unticked through its
+		   own change handler, which greys the settings out again and flips the two
+		   rows it decides between back to "relevant associations file required".
+		   Not in example mode: there it is ticked and locked (setExampleMode). */
+		$(form.getEl().dom).find("input[id$=_corrOptions]:checked:not(:disabled)")
+			.prop("checked", false).trigger("change");
 	};
 
 	this.submitFormHandler = function () {
@@ -49,7 +69,7 @@ function DM_miRNA2GenesJobView() {
 	this.setExampleModeHandler = function() {
 		var panel, fileField, omicSubmittingPanels;
 		var omicForm = this.getComponent().queryById("omicSubmittingForm");
-		var mirnaPanel = new MiRNAOmicSubmittingPanel(0, {removable: false, allowToogle: false});
+		var mirnaPanel = new MiRNAOmicSubmittingPanel(0, panelOptions);
 
 		this.exampleMode = true;
 		mirnaPanel.setExampleMode();
@@ -114,14 +134,20 @@ function DM_miRNA2GenesJobView() {
 						'     <li>A <strong>tabulated</strong> file containing the quantification values for all the miRNAs (Figure 1.A).</li>' +
 						'     <li>A <strong>tabulated</strong> file containing the list of <i>miRNA &rarr; target gene</i> associations (Figure 1.C).</li>' +
 						'   </ul>' +
-						'   <p>Two optional files can be added for more accurate results.</p>' +
+						/* It said "Two optional files can be added": the relevant miRNAs and
+						   the gene expression. The form below needs one of a relevant
+						   associations file, which this help never named, or the gene
+						   expression with the correlation box ticked (isValid in
+						   MiRNAOmicSubmittingPanel), and that box was hidden on this page. */
+						'   <p>To decide which <i>miRNA &rarr; target</i> pairs are relevant, it also needs one of these:</p>' +
 						'   <ul>' +
-						'     <li>A list of relevant miRNAs, usually the differentially expressed miRNAs (Figure 1.B).</li>' +
+						'     <li>A list of the pairs you already know to be relevant (<i>Relevant associations file</i>). The pairs it lists are marked relevant, and the correlation settings are not used.</li>' +
 						/* It said this file "will be used for filtering the matched targets":
 						   the cutoff marks pairs as relevant and drops none (see STEP 5.2 in
 						   MiRNA2GeneJob.py). */
-						'     <li>A mRNA-Seq quantification file, used to score each miRNA &rarr; target pair by the correlation between gene expression and miRNA expression, and to mark as relevant the pairs that pass the cutoff.<br>Its gene names must match those in the miRNA &rarr; target file (Figure 1.D).</li>' +
+						'     <li>A mRNA-Seq quantification file (<i>Gene expression dataset</i>), after ticking <i>Automatically select relevant associations using correlation</i>. It is used to score each miRNA &rarr; target pair by the correlation between gene expression and miRNA expression, and to mark as relevant the pairs that pass the cutoff.<br>Its gene names must match those in the miRNA &rarr; target file (Figure 1.D).</li>' +
 						'   </ul>' +
+						'   <p>A list of relevant miRNAs, usually the differentially expressed miRNAs, can be added too (Figure 1.B).</p>' +
 						'   <p>Identifiers are not restricted: any miRNA and gene naming works, as long as the quantification and miRNA &rarr; target files use the same convention (for example, if the quantification file uses "mmu-miR-XXX", the miRNA &rarr; target file must use the same names).</p>' +
 						'   <img alt="Figure 1: A, miRNA quantification; B, relevant miRNAs; C, miRNA-to-target associations; D, gene expression" src="resources/images/paintomics_input_figure5b.png" style="max-width: 800px;margin: auto;display: block;">' +
 						// Scoped to this converter's own datasets, which is what the
@@ -129,19 +155,20 @@ function DM_miRNA2GenesJobView() {
 						// zip that no longer matched either.
 						'	<div style="text-align: center;height: 35px;margin-top: 20px;"><a class="button btn-default btn-right" target="_blank" style="float: none;" href="' + SERVER_URL_EXAMPLE_DATASETS_DOWNLOAD + '?pipeline=mirna2genes"><i class="fa fa-download" aria-hidden="true"></i> Download example data</a></div>' +
 						'   <h3>About multiple target genes</h3>' +
-						'   <p>Usually, for each miRNA there are numerous known target genes. However, the presence of a miRNA does not mean that a certain target gene is being regulated for that miRNA. Hence, it is necessary to discriminate those genes that may be affected by the action of a miRNA from the complete list of potential target genes for that miRNA. Assuming that all files explained above are provided, miRNA2Genes includes the following selection strategies.</p>' +
+						'   <p>Usually, for each miRNA there are numerous known target genes. However, the presence of a miRNA does not mean that a certain target gene is being regulated for that miRNA. Hence, it is necessary to discriminate those genes that may be affected by the action of a miRNA from the complete list of potential target genes for that miRNA. With <i>Automatically select relevant associations using correlation</i> ticked, these settings of the form decide which pairs are marked relevant.</p>' +
 						'   <ul>' +
 						/* It said "reporting only the target genes for the relevant miRNAs
 						   (e.g. the DE miRNAs), ignoring the rest". The rest were never
 						   left out: every pair is in every results file under both
 						   choices, and only which pairs can be marked relevant changes
-						   (see STEP 5.2 in MiRNA2GeneJob.py). */
-						'     <li>If the list of relevant miRNAs is provided, you can choose whether the pairs of every miRNA can be marked as relevant, or only the pairs of the relevant miRNAs (e.g. the DE miRNAs). The other miRNAs are not dropped: their pairs stay in the results with their values, and are never marked relevant.</li>' +
+						   (see STEP 5.2 in MiRNA2GeneJob.py). Named by the form's labels,
+						   which this page now shows (see panelOptions). */
+						'     <li><b>Report</b>: if the list of relevant miRNAs is provided, you can choose whether the pairs of every miRNA can be marked as relevant (<i>All features</i>, the default), or only the pairs of the relevant miRNAs, e.g. the DE miRNAs (<i>Only relevant features</i>). The other miRNAs are not dropped: their pairs stay in the results with their values, and are never marked relevant.</li>' +
 						/* It said the cutoff "determines the selection of the genes that are
 						   finally reported", and the picture's text "targets kept or dropped":
 						   like Report, the cutoff only marks pairs, and the picture's Report
 						   column reads True or False. */
-						'     <li>If the transcriptomics quantification file is provided, each miRNA &rarr; target pair is scored by the correlation between the miRNA\'s values and its target gene\'s. A miRNA usually represses its target, so a negative correlation is expected, and the cutoff on the correlation decides which pairs are marked as relevant. The other pairs are not dropped: they stay in the results with their scores.</li>' +
+						'     <li><b>Score method</b>, <b>Selection method</b> and <b>Filter cutoff</b>: each miRNA &rarr; target pair is scored by the correlation between the miRNA\'s values and its target gene\'s, by Kendall (the default), Spearman or Pearson. A miRNA usually represses its target, so a negative correlation is expected, and the cutoff on the correlation decides which pairs are marked as relevant. The other pairs are not dropped: they stay in the results with their scores. By default a pair is marked when its correlation is below -0.5; the selection method can instead ask for one above the cutoff (positive), or one whose size is above it, whatever its sign (absolute).</li>' +
 						'   </ul>' +
 						'   <img alt="Worked example: the Kendall correlation between a miRNA and each of two targets against a cutoff of -0.6, and whether each pair is marked relevant (True) or not (False)" src="resources/images/paintomics_input_figure5c.png" style=" width: 750px; margin: 20px auto; display: block; ">'+
 						'</div>'
@@ -162,7 +189,7 @@ function DM_miRNA2GenesJobView() {
 						defaults: {labelAlign: "right", labelWidth: 220},
 						items: [
 							{xtype: "box", flex: 1, html: '<h2>Data uploading</h2><h3>1. Choose the files to upload </h3>'},
-							new MiRNAOmicSubmittingPanel(0, {removable: false, allowToogle: false}).getComponent(),
+							new MiRNAOmicSubmittingPanel(0, panelOptions).getComponent(),
 							{xtype: "box", html: '<div style="height:150px"></div>'},
 						]
 					}

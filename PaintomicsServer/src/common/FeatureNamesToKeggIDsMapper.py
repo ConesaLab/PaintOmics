@@ -1165,6 +1165,26 @@ def mapFeatureIdentifiers(jobID, organism, databases, featureList,  matchedFeatu
     finally:
         client.close()
 
+
+def lostMappingWorkersMessage(lostWorkers, totalWorkers):
+    """What the user is told when identifier mapping workers were lost.
+
+    A plain Exception at the caller, so the browser shows it as an internal error
+    with Report error: our side failed, never the user's file. Like Step 2's
+    _lostWorkersMessage (#230), it gives no advice of its own: that dialog
+    (ajaxErrorHandler in Util.js) adds "This happened on the server, so retrying in
+    the browser will not help." right after it, and the "Please try again" this
+    message used to end with read as the opposite. A worker stops on an error when
+    it cannot reach the database, among others: see
+    DatabaseFailureIsNotAnUnmatchedNameTest.
+    """
+    return ("Identifier mapping lost %d of %d worker processes, and with them the "
+            "identifiers they were mapping. The job was stopped rather than go on "
+            "without them. A worker is lost when the server runs short of memory or "
+            "the worker stops on an error, for example when it cannot reach the database."
+            % (lostWorkers, totalWorkers))
+
+
 def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment, mapGeneIDs=True):
     """
     This function match the provided list of features
@@ -1265,11 +1285,7 @@ def mapFeatureNamesToKeggIDs(jobID, organism, databases, featureList, enrichment
     lostWorkers = len(threadsList) - len(foundFeatures)
     if lostWorkers:
         manager.shutdown()
-        raise Exception(
-            "Identifier mapping lost %d of %d worker processes: the server ran "
-            "short of memory or a worker could not reach the database. Please try "
-            "again, and upload smaller files if it persists."
-            % (lostWorkers, len(threadsList)))
+        raise Exception(lostMappingWorkersMessage(lostWorkers, len(threadsList)))
 
     #COMBINE DICTIONARIES
     sumFoundFeatures = dict.fromkeys(foundFeatures[0].keys())
