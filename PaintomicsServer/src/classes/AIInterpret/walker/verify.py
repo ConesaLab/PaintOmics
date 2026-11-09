@@ -1245,8 +1245,12 @@ def measured(text, start, end, values, labels=None, mentions=None):
     if earlier:
         value, at = earlier[-1]
         names = [(m[0] - since, m[1] - since) for m in mentions or () if since <= m[0] and m[1] <= start]
+        # A list continues the kind of its value before: a measurement, never
+        # a heat ("the hottest two-step nodes (Ephx1 3.79, As3mt 3.68, ...)",
+        # vRmKBo4E60, round heat13, t120).
         if list_gap(span, labels, names) and (
-                value[:1] in "+-−" or measured(text, at, at + len(value), values, labels, mentions)):
+                value[:1] in "+-−" or (measured(text, at, at + len(value), values, labels, mentions)
+                                       and not heat_phrased(text, at, at + len(value), labels))):
             return True
     return False
 
@@ -1260,17 +1264,19 @@ def heat_misread(text, start, end, values, labels=None, mentions=None):
     cluster", "(... at 2.56; ... at 2.19)", "same 2.19-heat proteins" were
     refused too. Every true misread of that walk had a measurement word:
     "a relevant Log2FC of 0.58", "Log2FC of 0.83", "Log2FC of 0.99"."""
-    return measured(text, start, end, values, labels, mentions) and not heat_phrased(text, start, end)
+    return measured(text, start, end, values, labels, mentions) and not heat_phrased(text, start, end, labels)
 
 
-def heat_phrased(text, start, end):
+def heat_phrased(text, start, end, labels=None):
     """Whether the unsigned number at text[start:end] is written as a heat
-    without the word before it: followed by its count or by "heat", or
-    after "hot", "hotter" or "hottest" or after an earlier "heat <number>"
-    in its clause, with
-    nothing that writes it as a measurement (a unit after it, a verb of
-    change or a value label between). A signed number never is: "+2.43" is
-    data."""
+    without the word right before it: followed by its count or by "heat",
+    or after "hot", "hotter" or "hottest", after an earlier "heat <number>"
+    or after the word "heat" anywhere in its clause, with nothing that
+    writes it as a measurement (a unit after it, a verb of change or a
+    value label between, and after the word "heat" none of the layers' own
+    words, ``labels``). A signed number never is: "+2.43" is data. Round
+    heat13 (7O521E0Y0y, t7) refused "Gene expression: CAPN2 ... carries the
+    highest heat in the whole graph (3.70)"."""
     if HEAT_COUNT_AFTER_RE.match(text[end:]) or HEAT_AFTER_RE.match(text[end:]):
         return True
     if MEASURE_AFTER_RE.match(text[end:]):
@@ -1278,6 +1284,10 @@ def heat_phrased(text, start, end):
     whole = CLAUSE_END_RE.split(text[:start])[-1]
     listed = list(HEAT_NUMBER_RE.finditer(whole))
     if listed and not MEASURE_BEFORE_RE.search(whole[listed[-1].end():]):
+        return True
+    named = list(re.finditer(HEAT_WORD, whole, re.I))
+    after = whole[named[-1].end():] if named else ""
+    if named and not MEASURE_BEFORE_RE.search(after) and not (labels is not None and labels.search(after)):
         return True
     clause = CLAUSE_END_RE.split(text[max(0, start - HOT_WINDOW):start])[-1]
     hot = list(HOT_RE.finditer(clause))

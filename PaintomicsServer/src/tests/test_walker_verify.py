@@ -1193,6 +1193,36 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         self.assertEqual([v for v, _at in verify.invented_values(
             "Bbb falls to \u22121.20, while Ccc rises to 2.43", {"\u22121.20"}, {"2.43": ["Ccc"]})], ["2.43"])
 
+    def test_a_heat_list_stays_a_heat_list(self):
+        """Round heat13 (vRmKBo4E60, network, t120), refused: "...the scan shows
+        the hottest two-step nodes (Ephx1 3.79, As3mt 3.68, Aldh3b1 3.59,
+        Cyp2f2 3.21, Gsr 3.20)". 3.79 is a heat ("hottest"), so the items
+        after it are heats too: a list continues a measurement only from a
+        value not written as a heat."""
+        reason = ("Gstm3 is the hottest relevant neighbour of Gpx7 (heat 2.26) and the hub through which the scan "
+                  "shows the hottest two-step nodes (Ephx1 3.79, As3mt 3.68, Aldh3b1 3.59, Cyp2f2 3.21, Gsr 3.20) "
+                  "are reached; it is the gateway toward the glutathione-metabolism core.")
+        names = ("Gstm3", "Gpx7", "Ephx1", "As3mt", "Aldh3b1", "Cyp2f2", "Gsr")
+        heats = {"2.26": ["Gstm3"], "3.79": ["Ephx1"], "3.68": ["As3mt"], "3.59": ["Aldh3b1"], "3.21": ["Cyp2f2"],
+                 "3.20": ["Gsr"]}
+        self.assertEqual(verify.invented_values(reason, set(), heats,
+                                                mentions=verify._mentions(reason, [(n, n) for n in names])), [])
+
+    def test_a_heat_word_before_the_number_makes_it_a_heat(self):
+        """Round heat13 (7O521E0Y0y, network, t7), refused: "Gene expression:
+        CAPN2 is unmeasured (r=\u2014) but carries the highest heat in the whole
+        graph (3.70)". The omic name opened the clause; the heat word, with no
+        measurement word after it, names the number."""
+        ov = ov_mod.Overlay()
+        ov.labels = {"Gene expression": ["logFC"]}
+        labels = verify.measure_labels(ov)
+        reading = ("Gene expression: CAPN2 is unmeasured (r=\u2014) but carries the highest heat in the whole graph "
+                   "(3.70), the calpain catalytic subunit.")
+        self.assertEqual(verify.invented_values(reading, set(), {"3.70": ["CAPN2"]}, labels=labels), [])
+        for text in ("Ccc has a high heat but its Log2FC is 2.43", "Ccc has a high heat; Gene expression 2.43"):
+            self.assertEqual([v for v, _at in verify.invented_values(text, set(), {"2.43": ["Ccc"]}, labels=labels)],
+                             ["2.43"], text)
+
     def test_the_hint_names_the_read_node_nearest_the_value(self):
         found = self.problems("Bbb falls while Aaa reaches +3.10; Ccc is not relevant.")
         self.assertEqual(len(found), 1, found)
