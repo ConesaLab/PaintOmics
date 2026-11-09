@@ -13,7 +13,8 @@ stayed on the page greyed out, with no way to turn them on, while the page's hel
 described them. Only "Load example" ticked the box, by script.
 
 The card now takes allowCorrelationToogle on its own; unset, it follows allowToogle,
-so Step 1 cards are unchanged. The tool page passes it true. The box starts
+so Step 1 cards are unchanged. The tool page passes it true, and passes
+allowOtherOmicFile false (see 3 below). The box starts
 unticked, as on Step 1, so a run whose box is left alone sends what it always sent
 (its settings are disabled and not submitted, and a relevant associations file is
 required). The page's help now names the box, the relevant associations file and
@@ -26,7 +27,11 @@ What this file asserts
    upload and the example form; Step 1 cards show both, as before;
 2. the tool page's card has the same settings, with the same defaults, as a Step 1
    card, and they start disabled;
-3. the help names the box by its label, the relevant associations file, and Report,
+3. the tool page's gene expression row has no "Use a file from other omic", which
+   Step 1 cards keep. It picks a file chosen on another card, which only Step 1's
+   submit copies into the request; the tool page submits its form as it is, so the
+   server read the card's own miRNA values file instead and refused the run;
+4. the help names the box by its label, the relevant associations file, and Report,
    Score method, Selection method and Filter cutoff, and no longer calls the gene
    expression file one of "Two optional files".
 
@@ -52,6 +57,7 @@ STEP1_VIEWS = os.path.join(CLIENT, "view", "PathwayAcquisitionViews", "PA_Step1V
 TOOL_PAGE = os.path.join(CLIENT, "view", "DataManagementViews", "DM_miRNA2GenesViews.js")
 
 BOX_LABEL = "Automatically select relevant associations using correlation"
+OTHER_OMIC = "Use a file from other omic"
 
 
 def _read(path):
@@ -118,6 +124,7 @@ function describe(card) {
         correlationBoxHtml: box ? box.html : null,
         mappedBoxHidden: byId("toogleMapRegions") ? !!byId("toogleMapRegions").hidden : null,
         settingsDisabled: !!(byId("itemsContainerCorrOptions") || {}).disabled,
+        geneExpressionMenu: ((byId("rnaseqauxFileSelector") || {}).extraButtons || []).map((b) => b.text),
         defaults: {report: value("reportMethodField"), score: value("scoreMethodField"),
                    selection: value("selectionMethodField"), cutoff: value("cutoffField")},
         names: items.filter((item) => typeof item.name === "string" && /_(report|score_method|selection_method|cutoff)$/.test(item.name))
@@ -158,6 +165,7 @@ const out = {
     // An explicit false still hides it, and unset follows allowToogle as before.
     toggledOff: describe(new RealPanel(3, {allowCorrelationToogle: false}).getComponent()),
     followsAllowToogle: describe(new RealPanel(4, {allowToogle: false}).getComponent()),
+    otherOmicFileOff: describe(new RealPanel(5, {allowOtherOmicFile: false}).getComponent()),
 };
 console.log(JSON.stringify(out));
 """
@@ -213,6 +221,18 @@ class TheToolPageShowsTheBoxTest(unittest.TestCase):
                           "cutoff": -0.5})
         self.assertEqual(self.out["tool"]["names"],
                          ["omic0_report", "omic0_score_method", "omic0_selection_method", "omic0_cutoff"])
+
+    def test_the_tool_page_has_no_file_from_other_omic(self):
+        """Its plain form submit never sends a file picked from another card: the
+        server read the card's own miRNA values file instead and refused the run."""
+        for card in ("tool", "example", "otherOmicFileOff"):
+            with self.subTest(card=card):
+                self.assertEqual(self.out[card]["geneExpressionMenu"], [])
+
+    def test_step1_cards_keep_the_file_from_other_omic(self):
+        for card in ("step1", "step1Pairwise", "followsAllowToogle"):
+            with self.subTest(card=card):
+                self.assertEqual(self.out[card]["geneExpressionMenu"], [OTHER_OMIC])
 
     def test_the_settings_start_disabled_so_an_untouched_run_sends_what_it_did(self):
         """Disabled fields are not submitted: with the box left unticked the tool

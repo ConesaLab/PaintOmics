@@ -36,8 +36,11 @@ function DM_miRNA2GenesJobView() {
 	   method, selection method and cutoff, which this page's help describes. Both
 	   boxes were hidden from the first commit (54ff9dc3), so those settings sat
 	   greyed out and could not be turned on. It starts unticked, as on Step 1, so a
-	   run whose box is left alone sends what it always sent. */
-	var panelOptions = {removable: false, allowToogle: false, allowCorrelationToogle: true};
+	   run whose box is left alone sends what it always sent. No "Use a file from
+	   other omic" for the gene expression file (allowOtherOmicFile): this page has
+	   no other card, and its plain form submit never sends a file picked that way. */
+	var panelOptions = {removable: false, allowToogle: false, allowCorrelationToogle: true,
+		allowOtherOmicFile: false};
 	/*********************************************************************
 	* GETTERS AND SETTERS
 	***********************************************************************/

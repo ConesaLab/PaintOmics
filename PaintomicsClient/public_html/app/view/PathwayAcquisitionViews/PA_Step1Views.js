@@ -3688,6 +3688,13 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 	this.allowCorrelationToogle = (options.allowCorrelationToogle !== undefined)
 		? options.allowCorrelationToogle !== false
 		: this.allowToogle;
+	/* "Use a file from other omic" in the gene expression row's menu. It picks a
+	   file chosen on another Step 1 card, which Step 1's submit (JobController's
+	   sendRequest) copies into the request. The From miRNA to Genes tool page has
+	   no other card and submits its form as it is, so a file picked there was never
+	   sent: the server read this card's own miRNA values file in its place and
+	   refused the run over a file the user had not chosen. That page turns it off. */
+	this.allowOtherOmicFile = options.allowOtherOmicFile !== false;
 	this.removable = options.removable !== false;
 
 	this.class = "miRNAbasedFileBox";
@@ -4176,7 +4183,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 							requiredTag: "optional",
 							fieldLabel: 'Gene expression dataset',
 							namePrefix: this.namePrefix + '_rnaseqaux',
-							extraButtons: [{
+							// See allowOtherOmicFile.
+							extraButtons: !this.allowOtherOmicFile ? [] : [{
 								text: 'Use a file from other omic',
 								handler: function() {
 									var me = this;
