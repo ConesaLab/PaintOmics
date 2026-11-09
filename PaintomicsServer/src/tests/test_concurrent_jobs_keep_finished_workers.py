@@ -352,7 +352,10 @@ class DatabaseFailureIsNotAnUnmatchedNameTest(unittest.TestCase):
                                   return_value=({"KEGG": "target"}, {"KEGG": "target"})):
             with self.assertRaises(Exception) as caught:
                 mapper.mapFeatureNamesToKeggIDs("concurrent-test", "hsa", ["KEGG"], genes, False)
-        self.assertIn("could not reach the database", str(caught.exception))
+        # Every worker stopped on the error, and the job says why one is lost.
+        self.assertIn("Identifier mapping lost", str(caught.exception))
+        self.assertIn("the worker stops on an error, for example when it cannot reach the database",
+                      str(caught.exception))
 
 
 def _geneWorkerThatInsistsOnTheAddress(*args, **kwargs):

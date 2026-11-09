@@ -3679,6 +3679,15 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 	this.featureEnrichment = "genes";
 
 	this.allowToogle = options.allowToogle !== false;
+	/* The correlation box ("Automatically select relevant associations using
+	   correlation") on its own. It followed allowToogle, so the From miRNA to Genes
+	   tool page, which turns off "My features are already mapped to Gene IDs", lost
+	   it too: its gene expression file, Report, score method, selection method and
+	   cutoff sat greyed out with no way to turn them on, while the page's help
+	   described them. Unset, it still follows allowToogle. */
+	this.allowCorrelationToogle = (options.allowCorrelationToogle !== undefined)
+		? options.allowCorrelationToogle !== false
+		: this.allowToogle;
 	this.removable = options.removable !== false;
 
 	this.class = "miRNAbasedFileBox";
@@ -4136,7 +4145,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				{
 					xtype: "box",
 					itemId: "toogleCorrOptions",
-					hidden: !this.allowToogle,
+					hidden: !this.allowCorrelationToogle,
 					html: '<div class="checkbox po-omic-check po-omic-check-inset"><input type="checkbox" id="' + this.namePrefix + '_corrOptions"><label for="' + this.namePrefix + '_corrOptions">Automatically select relevant associations using correlation.</label></div>'		
 				},
 				/* CORRELATION OPTIONS */

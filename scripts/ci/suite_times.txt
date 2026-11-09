@@ -327,3 +327,11 @@ test_adjusted_pvalues_stay_put	5.0
 # at 13.4 s. Without it 27 suites were unrecorded, and
 # test_shard_split_is_balanced allows fewer than 27.
 test_cluster_slider_keeps_other_pictures	7.6
+# Added with fix/mirna-tool-shows-its-settings (2026-11-09). The first is
+# charged like test_concurrent_jobs_keep_finished_workers, which forks the same
+# mapper's workers: on the VM the two took 4.6 and 7.0 s, and that one is
+# recorded here at 5.0 s. The second like
+# test_step1_file_rows_say_required_or_optional, which reads the same card:
+# both took 0.6 s on the VM.
+test_a_lost_mapping_worker_gives_no_retry_advice	3.3
+test_mirna_tool_page_shows_its_settings	0.1
