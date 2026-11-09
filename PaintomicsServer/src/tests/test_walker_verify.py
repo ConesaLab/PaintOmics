@@ -1152,6 +1152,47 @@ class StatementQuotesOnlyRecordedValuesTest(unittest.TestCase):
         given = verify.heats_given_as_values("Ctss shows FC +1.19 and +0.78", catalog, heats, ov)
         self.assertEqual([(v, n) for v, _at, n in given], [("+0.78", "Ctss")])
 
+    def test_a_list_keyed_by_names_is_one_measured_list(self):
+        """Round heat11 (vRmKBo4E60, network): a note wrote "...around the VEGFR
+        ligands (Vegfc +1.94, Vegfd 1.93, Vegfb 1.77, Vegfa 1.45 all up, r=0)";
+        1.93, 1.77 and 1.45 are those nodes' heats. Each value follows its own
+        name, and a name ended the list (f61454f1). One name may key each
+        item; the D48 reason, many words and names between, still ends it."""
+        text = ("Pgf +2.58 with its transcription-factor neighbours Epas1 +2.17 and Ets1 +2.14 up, while Hif1a is "
+                "down (\u22121.66) \u2014 a hypoxia/angiogenic transcription programme around the VEGFR ligands "
+                "(Vegfc +1.94, Vegfd 1.93, Vegfb 1.77, Vegfa 1.45 all up, r=0).")
+        catalog = [(n, n) for n in ("Pgf", "Epas1", "Ets1", "Hif1a", "Vegfc", "Vegfd", "Vegfb", "Vegfa")]
+        heats = {"1.93": ["Vegfd"], "1.77": ["Vegfb"], "1.45": ["Vegfa"], "0.32": ["Epas1"], "0.08": ["Ets1"]}
+        numbers = {"+2.58", "+2.17", "+2.14", "\u22121.66", "+1.94"}
+        ov = ov_mod.Overlay()
+        ov.labels = {"Gene expression": ["FC"]}
+        found = verify.invented_values(text, numbers, heats, labels=verify.measure_labels(ov),
+                                       mentions=verify._mentions(text, catalog))
+        self.assertEqual([v for v, _at in found], ["1.93", "1.77", "1.45"])
+        reason = ("The walk read the neighbourhood: the seed C00160 (\u22120.12) is cold; the hot signal is the "
+                  "glycine-cleavage/serine-hydroxymethyl hub around M1A0B7 (relevant, \u22120.90) with its r=0 "
+                  "companions M0ZSL5/M1AP15/M1CL70/M1CL86/gdcsP (0.41) and GCVT/LPD2/SHMT.")
+        names = [(n, n) for n in ("C00160", "M1A0B7", "M0ZSL5", "M1AP15", "M1CL70", "M1CL86", "gdcsP")]
+        self.assertEqual(verify.invented_values(reason, {"\u22120.12", "\u22120.90"}, {"0.41": ["M0ZSL5"]},
+                                                mentions=verify._mentions(reason, names)), [])
+
+    def test_a_word_after_the_value_before_is_that_values(self):
+        """Round heat11 (Bgm0v4EU01, network, t83), the stop's reading,
+        refused: "...Jag1 (+0.62) up, while the Fzd1 neighbourhood is ringed
+        by hotter Wnt regulators (Frzb, Sfrp1/2/4/5, Rnf43, Znrf3, Ror1/2 at
+        2.59\u20132.71)". The "up" is Jag1's, before the comma; 2.59 and 2.71
+        are heats. A measurement word still counts after the comma: "Bbb falls
+        to \u22121.20, while Ccc rises to 2.43"."""
+        text = ("The chain reads as a Wnt/Tcf axis uniformly elevated in Control: Tcf7l1 (+0.54) and Ctbp1 (+0.33) "
+                "up, Ctbp2 flat (\u22120.02), Lef1 unmeasured, Fzd1 (+0.66) and Fzd9 (+0.78) up, Jag1 (+0.62) up, "
+                "while the Fzd1 neighbourhood is ringed by hotter Wnt regulators (Frzb, Sfrp1/2/4/5, Rnf43, Znrf3, "
+                "Ror1/2 at 2.59\u20132.71).")
+        numbers = {"+0.54", "+0.33", "\u22120.02", "+0.66", "+0.78", "+0.62"}
+        heats = {"2.59": ["Sfrp1"], "2.71": ["Ror2"]}
+        self.assertEqual(verify.invented_values(text, numbers, heats), [])
+        self.assertEqual([v for v, _at in verify.invented_values(
+            "Bbb falls to \u22121.20, while Ccc rises to 2.43", {"\u22121.20"}, {"2.43": ["Ccc"]})], ["2.43"])
+
     def test_the_hint_names_the_read_node_nearest_the_value(self):
         found = self.problems("Bbb falls while Aaa reaches +3.10; Ccc is not relevant.")
         self.assertEqual(len(found), 1, found)
