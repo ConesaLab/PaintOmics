@@ -72,9 +72,9 @@ from src.common.KeggInformationManager import KeggInformationManager
 # sees none of the patches below.
 multiprocessing.set_start_method("fork", force=True)
 
-# The time limit's message (timeLimitMessage): "Identifier mapping took longer
-# than its limit of ..." It said "took too long" until the message was
-# reworded (test_a_time_limit_says_what_helps).
+# The time limit's message (omicTimeLimitMessage): "Identifier mapping for one
+# omic took longer than its limit of ..." It said "took too long" until the
+# message was reworded (test_a_time_limit_says_what_helps).
 TOO_LONG = "took longer than its limit"
 
 

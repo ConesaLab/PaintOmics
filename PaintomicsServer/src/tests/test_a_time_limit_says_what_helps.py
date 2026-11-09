@@ -18,19 +18,32 @@ lost-worker messages.
 
 Each now says it took longer than its limit (named: 15 minutes), the causes
 (very large files, more so on a busy server, and a fault on the server), what
-helps (smaller files, fewer omics in one job, and reporting it when the files
-are not large), and no advice to run it again. Why those causes and not a
-retry: timeLimitMessage in FeatureNamesToKeggIDsMapper, with the figures from
-paintomics.org's logs.
+helps, and to report it when the files are not large, with no advice to run it
+again. Why those causes and not a retry: timeLimitMessage in
+FeatureNamesToKeggIDsMapper, with the figures from paintomics.org's logs.
 
-The tests run the real mappers with forked workers and the real Step 2
-enrichment on a small organism held in the cache; only the worker is a stand-in
-that never finishes, and the limit is 1 second. The answer goes through the
-real Step 1 queue function and handleException, and under node through the
-real ajaxErrorHandler, to the text the dialog shows.
+What helps is not the same in the two steps. Step 2's enrichment tests every
+omic of the job in one go, within one limit, so smaller files or fewer omics
+help. Step 1 maps one omic at a time (processFilesContent calls
+parseGeneBasedFiles or parseCompoundBasedFile for each in turn), and each
+mapping has a limit of its own: a job with fewer omics reaches the limit again
+on the same file. So Step 1's message names the omic, says its limit is its
+own, and gives a smaller file for that omic as what helps
+(omicTimeLimitMessage). The first wording of this change gave Step 1 "fewer
+omics in one job" too, and did not say which omic it was.
 
-On master 7 of the 9 tests fail. The two that pass are the controls: a mapping
-that finishes in time, and the answer being an internal error with Report.
+The tests run the real mappers with forked workers, the real Step 1 file
+processing of a job with three omics, and the real Step 2 enrichment on a small
+organism held in the cache; only the worker is a stand-in that never finishes
+(or takes 2.5 seconds), and the limit is 1 second (4 seconds). The answer goes
+through the real Step 1 queue function and handleException, and under node
+through the real ajaxErrorHandler, to the text the dialog shows.
+
+On master 10 of the 14 tests fail. The four that pass are the controls: a
+mapping that finishes in time, Step 1 of two omics that each finish within
+their own limit but not within one between them (the fact Step 1's wording
+rests on), Step 1 of a job whose omics all finish, and the answer being an
+internal error with Report.
 
 Usage:
     cd PaintomicsServer
@@ -40,6 +53,7 @@ import multiprocessing
 import os
 import shutil
 import sys
+import tempfile
 import time
 import unittest
 from unittest import mock
@@ -58,13 +72,31 @@ multiprocessing.set_start_method("fork", force=True)
 NAMES = ["feature%02d" % i for i in range(20)]
 
 # Written out here, not built with the code under test.
-REST = (" This happens with very large files, more so while the server is busy with "
-        "other jobs, and it can also be a fault on the server. Smaller files, or fewer "
-        "omics in one job, take less time. If your files are not large, please report "
-        "this error.")
-GENES = "Identifier mapping took longer than its limit of 1 second, so it was stopped." + REST
-COMPOUNDS = "Compound name mapping took longer than its limit of 1 second, so it was stopped." + REST
-ENRICHMENT = "Pathway enrichment took longer than its limit of 1 second, so it was stopped." + REST
+# Step 1: one omic at a time, each with a limit of its own.
+STEP1_REST = (" This happens with a very large file, more so while the server is busy with "
+              "other jobs, and it can also be a fault on the server. Each omic is mapped on "
+              "its own, with a limit of its own, so what helps is a smaller file for this "
+              "omic. If that file is not large, please report this error.")
+# Step 2: every omic of the job in one go, within one limit.
+STEP2_REST = (" This happens with very large files, more so while the server is busy with "
+              "other jobs, and it can also be a fault on the server. Smaller files, or fewer "
+              "omics in one job, take less time. If your files are not large, please report "
+              "this error.")
+
+
+def genesStopped(omicName, limit="1 second"):
+    return ("Identifier mapping for omic '%s' took longer than its limit of %s, so it was "
+            "stopped." % (omicName, limit)) + STEP1_REST
+
+
+def compoundsStopped(omicName, limit="1 second"):
+    return ("Compound name mapping for omic '%s' took longer than its limit of %s, so it was "
+            "stopped." % (omicName, limit)) + STEP1_REST
+
+
+GENES = genesStopped("Gene expression")
+COMPOUNDS = compoundsStopped("Metabolomics")
+ENRICHMENT = "Pathway enrichment took longer than its limit of 1 second, so it was stopped." + STEP2_REST
 
 DIALOG_LINE = "This happened on the server, so retrying in the browser will not help."
 
@@ -82,20 +114,27 @@ def _quickGeneWorker(jobID, organism, databases, featureList, matchedFeatures, n
     foundFeatures.append({"entrezgene": []})
 
 
-def _mapGenes(worker, limit=1):
+def _named(omicName):
+    """The mapper's omicName argument, left out when there is none, so the
+    controls call the mappers as master's callers did."""
+    return {} if omicName is None else {"omicName": omicName}
+
+
+def _mapGenes(worker, limit=1, omicName=None):
     with mock.patch.object(mapper, "mapFeatureIdentifiers", worker), \
             mock.patch.object(mapper, "resolveDatabaseIds", return_value={}), \
             mock.patch.object(mapper, "MAX_THREADS", 3), \
             mock.patch.object(mapper, "MAX_WAIT_THREADS", limit):
-        return mapper.mapFeatureNamesToKeggIDs("time-limit-test", "hsa", ["KEGG"], list(NAMES), False)
+        return mapper.mapFeatureNamesToKeggIDs("time-limit-test", "hsa", ["KEGG"], list(NAMES), False,
+                                               **_named(omicName))
 
 
-def _mapCompounds(worker, limit=1):
+def _mapCompounds(worker, limit=1, omicName=None):
     with mock.patch.object(mapper, "mapCompoundsIdentifiers", worker), \
             mock.patch.object(mapper, "getCompoundNameTable", return_value=None), \
             mock.patch.object(mapper, "MAX_THREADS", 3), \
             mock.patch.object(mapper, "MAX_WAIT_THREADS", limit):
-        return mapper.mapFeatureNamesToCompoundsIDs("time-limit-test", list(NAMES))
+        return mapper.mapFeatureNamesToCompoundsIDs("time-limit-test", list(NAMES), **_named(omicName))
 
 
 def _failure(run):
@@ -126,15 +165,108 @@ class _Wording(object):
 
 class Step1Test(_Wording, unittest.TestCase):
 
+    def assertNamesTheOmic(self, failure, expected):
+        self.assertSaysWhatHelps(failure, expected)
+        # Fewer omics would not help: each omic has a limit of its own.
+        self.assertNotIn("fewer omics", str(failure[0]))
+
     def test_identifier_mapping(self):
-        self.assertSaysWhatHelps(_failure(lambda: _mapGenes(_stuck)), GENES)
+        self.assertNamesTheOmic(_failure(lambda: _mapGenes(_stuck, omicName="Gene expression")), GENES)
 
     def test_compound_name_mapping(self):
-        self.assertSaysWhatHelps(_failure(lambda: _mapCompounds(_stuck)), COMPOUNDS)
+        self.assertNamesTheOmic(_failure(lambda: _mapCompounds(_stuck, omicName="Metabolomics")),
+                                COMPOUNDS)
+
+    def test_a_caller_that_names_no_omic(self):
+        message = getattr(mapper, "omicTimeLimitMessage", None)
+        self.assertIsNotNone(message, "no omicTimeLimitMessage on this tree")
+        self.assertEqual(message("Identifier mapping", None, 900),
+                         "Identifier mapping for one omic took longer than its limit of 15 minutes, "
+                         "so it was stopped." + STEP1_REST)
 
     def test_a_mapping_that_finishes_in_time_is_not_stopped(self):
         found, matched, notMatched = _mapGenes(_quickGeneWorker, limit=30)
         self.assertEqual((found, matched, notMatched), ({"entrezgene": 0}, [], NAMES))
+
+
+def _slowGeneWorker(*args, **kwargs):
+    """_quickGeneWorker after 2.5 seconds."""
+    time.sleep(2.5)
+    _quickGeneWorker(*args, **kwargs)
+
+
+def _stuckOnProteomics(jobID, organism, databases, featureList, *rest, **kwargs):
+    """Never finishes a share of the Proteomics file (names "prot.."); maps the
+    other omics' shares as _quickGeneWorker does."""
+    if any(feature.getName().startswith("prot") for feature in featureList):
+        _stuck()
+    _quickGeneWorker(jobID, organism, databases, featureList, *rest, **kwargs)
+
+
+class Step1OfAJobTest(_Wording, unittest.TestCase):
+    """Step 1's real file processing (processFilesContent) of a job with two
+    gene based omics and one compound based omic, each a file of its own."""
+
+    OMICS = (("Gene expression", "gene", True), ("Proteomics", "prot", True),
+             ("Metabolomics", "metab", False))
+
+    def setUp(self):
+        from src.classes.JobInstances.PathwayAcquisitionJob import PathwayAcquisitionJob
+        root = tempfile.mkdtemp() + "/"
+        self.addCleanup(shutil.rmtree, root, True)
+        self.job = PathwayAcquisitionJob(jobID="timeLimitOmics", userID=None, CLIENT_TMP_DIR=root)
+        self.job.setOrganism("hsa")
+        self.job.setDatabases(["KEGG"])
+        for folder in (self.job.getInputDir(), self.job.getOutputDir()):
+            os.makedirs(folder, exist_ok=True)
+        self.files = {}
+        for omicName, prefix, geneBased in self.OMICS:
+            fileName = prefix + ".tab"
+            rows = ["%s%02d\t%d\t%d" % (prefix, i, i, i + 1) for i in range(12)]
+            with open(os.path.join(self.job.getInputDir(), fileName), "w") as handle:
+                handle.write("\n".join(["#id\tCond1\tCond2"] + rows) + "\n")
+            self.files[omicName] = {"omicName": omicName, "inputDataFile": fileName,
+                                    "relevantFeaturesFile": "", "associationsFile": "",
+                                    "relevantAssociationsFile": "", "configOptions": None,
+                                    "enrichment": "genes" if geneBased else "features"}
+
+    def _process(self, omics, geneWorker=_quickGeneWorker, compoundWorker=None, limit=1):
+        for omicName in omics:
+            geneBased = dict((name, gene) for name, _, gene in self.OMICS)[omicName]
+            if geneBased:
+                self.job.addGeneBasedInputOmic(dict(self.files[omicName]))
+            else:
+                self.job.addCompoundBasedInputOmic(dict(self.files[omicName]))
+        with mock.patch.object(mapper, "mapFeatureIdentifiers", geneWorker), \
+                mock.patch.object(mapper, "mapCompoundsIdentifiers", compoundWorker or _stuck), \
+                mock.patch.object(mapper, "resolveDatabaseIds", return_value={}), \
+                mock.patch.object(mapper, "getCompoundNameTable", return_value=None), \
+                mock.patch.object(mapper, "MAX_THREADS", 3), \
+                mock.patch.object(mapper, "MAX_WAIT_THREADS", limit):
+            return self.job.processFilesContent()
+
+    def test_the_message_names_the_omic_that_reached_the_limit(self):
+        failure = _failure(lambda: self._process(["Gene expression", "Proteomics"],
+                                                 geneWorker=_stuckOnProteomics))
+        self.assertSaysWhatHelps(failure, genesStopped("Proteomics"))
+
+    def test_a_compound_based_omic_is_named_too(self):
+        failure = _failure(lambda: self._process(["Gene expression", "Metabolomics"]))
+        self.assertSaysWhatHelps(failure, compoundsStopped("Metabolomics"))
+
+    def test_each_omic_has_a_limit_of_its_own(self):
+        """Why Step 1's message does not say fewer omics help: two omics that
+        take 2.5 seconds each both finish within a limit of 4 seconds, which
+        the two of them together are over."""
+        began = time.monotonic()
+        self._process(["Gene expression", "Proteomics"], geneWorker=_slowGeneWorker, limit=4)
+        self.assertGreater(time.monotonic() - began, 5)
+        self.assertEqual([omic["omicSummary"][0] for omic in self.job.getGeneBasedInputOmics()],
+                         [{"entrezgene": 0}, {"entrezgene": 0}])
+
+    def test_a_job_whose_omics_finish_is_not_stopped(self):
+        self._process(["Gene expression", "Proteomics"])
+        self.assertEqual(len(self.job.getGeneBasedInputOmics()), 2)
 
 
 class Step2Test(_Wording, _OrganismInCache):
@@ -177,7 +309,7 @@ def _step1Answer():
 
     job = mock.MagicMock()
     job.getJobID.return_value = "timeLimitJob"
-    job.processFilesContent.side_effect = lambda: _mapGenes(_stuck)
+    job.processFilesContent.side_effect = lambda: _mapGenes(_stuck, omicName="Gene expression")
     manager = mock.MagicMock()
     with mock.patch.object(servlet, "JobInformationManager", manager), \
             mock.patch.object(servlet, "JobProgress"):
@@ -202,7 +334,7 @@ class TheDialogSaysOneThingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from src.tests.test_an_invalid_session_is_told_by_its_own_answer import _answerTo, runDialogs
-        compounds, _ = _failure(lambda: _mapCompounds(_stuck))
+        compounds, _ = _failure(lambda: _mapCompounds(_stuck, omicName="Metabolomics"))
         cls.results = runDialogs({"step1": _step1Answer(), "compounds": _answerTo(compounds)})
 
     def test_it_is_an_internal_error_with_report(self):
