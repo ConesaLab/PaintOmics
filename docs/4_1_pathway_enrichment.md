@@ -218,13 +218,28 @@ adjusted column beside each omic column and beside the combined column.
 * **FDR BY** — Benjamini–Yekutieli. Valid under arbitrary dependence, and
   always the more conservative of the two.
 
-The correction is applied per omic, and separately per combined method. When
-the job is first computed, each family covers every matched pathway the table
-lists, of every database at once. KEGG's global map, Metabolic pathways
-(01100), is not in it, because the table does not list it; hiding only that
-map on the classification filter therefore changes no FDR value. Jobs computed
-before the November 2026 update counted the map as one more test, and keep the
-values they were stored with until a filter recomputes them.
+The correction is applied per omic, and separately per combined method. Each
+adjusted column is the correction of the raw column beside it: the omic's
+column (its **Global** value where the job has
+[one test per condition](#one-test-per-condition)) and the combined column.
+When the job is first computed, each family covers every matched
+pathway the table lists, of every database at once. KEGG's global map,
+Metabolic pathways (01100), is not in it, because the table does not list it;
+hiding only that map on the classification filter therefore changes no FDR
+value. Jobs computed before the November 2026 update counted the map as one
+more test, and keep the values they were stored with until a filter
+recomputes them.
+
+A job whose relevant features file has one column per condition, computed
+before this rule was adopted in November 2026, shows something else in its
+adjusted combined column: the correction of the *first condition's* combined
+p-value, not of the combined column beside it, which can be a very different
+number. The job keeps that value. While a filter is applied the column shows
+the correction of the combined column over the rows left, and removing the
+filter brings the stored value back. Run the job again to get the correction
+of the combined column. A job whose relevant features file is a single list
+has one test per omic, so its stored value already is the correction of the
+combined column, however many conditions it has.
 
 !!! warning "An FDR value is not a property of a pathway"
     It depends on how many tests are in the family. Hide a category on the
@@ -252,7 +267,7 @@ values they were stored with until a filter recomputes them.
 | One column per omic | That omic's p-value (its **Global** value where the job has per-condition relevance). Expandable to per-condition sub-columns. |
 | *omic* **(FDR BH)** / **(FDR BY)** | The adjusted value for that omic, shown when **Show FDR** is set. |
 | **Combined pValue (Fisher)** or **(Stouffer)** | The selected combination across your omics. Present on one-omic jobs as well, where it repeats that omic's p-value. |
-| **Combined pValue (…) [FDR …]** | The adjusted combined value. The method is in round brackets, the correction in square brackets. On a **multi-condition** job this is not the correction of the raw column beside it: the raw column shows the combination of each omic's *Global* p-value, while the adjusted column corrects the per-condition combined values. Compare it with the per-condition sub-columns, not with the raw combined figure. A category filter recomputes it from the raw combined column, so on these jobs it changes meaning when you filter. |
+| **Combined pValue (…) [FDR …]** | The adjusted combined value: the correction of the raw combined column beside it, also where the job has one test per condition. The method is in round brackets, the correction in square brackets. A job with one relevant column per condition computed before November 2026 shows the correction of its first condition's combined p-value here instead (see [FDR correction](#fdr-correction)). |
 | **Reactome Class pValue (…)** | Only on jobs including Reactome — see below. |
 | **External links** | Two actions: open this pathway in its own source database, and search PubMed for its name. OmniPath is the exception — its pathway ids are minted by the PaintOmics installer, so the link opens that pathway's source resource instead. |
 

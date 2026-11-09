@@ -54,6 +54,10 @@ class Pathway(Model):
         self.adjustedSignificanceValues = {}
         self.combinedSignificancePvalues = {}
         self.adjustedCombinedSignificanceValues = {}
+        # adjustedTotalGlobalPvalues is deliberately NOT declared here, like
+        # totalGenes above: it is set only where Step 2 corrects the pathways
+        # (adjustPathwayPvalues), and absent is how a pathway stored before it
+        # existed, or a Reactome class, which is not corrected, says so.
         self.masterRegulators = defaultdict(list)
         #GRAPHICAL INFORMATION
         self.graphicalOptions = None
@@ -154,6 +158,16 @@ class Pathway(Model):
         self.totalGlobalPvalues = pValues
     def getTotalGlobalPvalues(self):
         return self.totalGlobalPvalues
+
+    # Method -> {"FDR BH": value, "FDR BY": value}: the correction of the
+    # combined p-value the Step 3 table shows (totalGlobalPvalues), which is
+    # what its adjusted combined column shows. {} on a pathway stored before
+    # November 2026; the table then shows the stored per-condition value
+    # (paStep3CombinedCells in PA_Step3Views.js).
+    def setAdjustedTotalGlobalPvalues(self, adjustedPvalues):
+        self.adjustedTotalGlobalPvalues = adjustedPvalues
+    def getAdjustedTotalGlobalPvalues(self):
+        return getattr(self, "adjustedTotalGlobalPvalues", {})
 
     def setOmicAdjustedSignificanceValues(self, omic, adjustedSignificanceValues):
         self.adjustedSignificanceValues[omic] = adjustedSignificanceValues

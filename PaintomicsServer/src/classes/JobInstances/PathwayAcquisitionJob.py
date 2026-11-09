@@ -495,16 +495,45 @@ def isGlobalMap(pathwayID, organism):
     return bool(organism) and pathwayID == organism + "01100"
 
 
+def shownCombinedPvalue(pathway, method):
+    """The p-value the Step 3 table's raw combined column shows for
+    ``method`` (Fisher, Stouffer), or None when it shows none.
+
+    The combination of each omic's Global p-value (totalGlobalPvalues), else,
+    on a pathway stored before that existed, the first condition's combined
+    p-value. The same rule as paStep3CombinedCells in PA_Step3Views.js, and
+    so the value a category filter sends back to /pa_adjust_pvalues. On a job
+    with one test per omic (one condition, or a relevant features file that
+    is a single list) the two are the same number.
+    """
+    total = (pathway.getTotalGlobalPvalues() or {}).get(method)
+    if total is not None:
+        return total
+    values = pathway.getCombinedSignificancePvalues().get(method)
+    if isinstance(values, list):
+        return values[0] if values else None
+    return values
+
+
 def _adjustFamily(pathways):
     """Corrects the p-values of ``pathways`` ({pathwayID: Pathway}) as one
-    family per omic and one per combined method and condition, and stores the
-    adjusted values on each pathway. Raw p-values are read, never written.
+    family per omic, one per combined method as the table shows it, and one
+    per combined method and condition, and stores the adjusted values on each
+    pathway. Raw p-values are read, never written.
 
     The omic family takes the omic's global p-value where the job has one,
     else its first condition's: the value the table's omic column shows.
+
+    The table's adjusted combined column (adjustedTotalGlobalPvalues) is the
+    correction of the raw combined column beside it (shownCombinedPvalue).
+    The per-condition corrections (adjustedCombinedSignificanceValues, a
+    list on a job with one relevant column per condition) stay for the
+    network, which reads each condition's combined p-value and draws a
+    pathway on its smallest.
     """
     pvalues_list = defaultdict(dict)
     combined_pvalues_list = defaultdict(dict)
+    shown_combined_list = defaultdict(dict)
 
     for pathway_id, pathway in pathways.items():
         for omic, pvalue in pathway.getSignificanceValues().items():
@@ -524,11 +553,18 @@ def _adjustFamily(pathways):
             for c in range(nCond):
                 combined_pvalues_list[method + "_c" + str(c)][pathway_id] = combined_pvalue[c]
 
+            shown = shownCombinedPvalue(pathway, method)
+            if shown is not None:
+                shown_combined_list[method][pathway_id] = shown
+
     adjusted_pvalues = {omic: adjustPvalues(omicPvalues) for omic, omicPvalues in pvalues_list.items()}
 
     adjusted_combined_pvalues = {}
     for method_cond, methodPvalues in combined_pvalues_list.items():
         adjusted_combined_pvalues[method_cond] = adjustPvalues(methodPvalues)
+
+    adjusted_shown_combined = {method: adjustPvalues(methodPvalues)
+                               for method, methodPvalues in shown_combined_list.items()}
 
     # Set the adjusted p-value on a pathway basis
     for pathway_id, pathway in pathways.items():
@@ -538,12 +574,20 @@ def _adjustFamily(pathways):
                                                       {adjust_method: pvalues[pathway_id] for adjust_method, pvalues
                                                        in adjusted_pvalues[omic].items()})
 
+        # The table's adjusted combined column: the correction of the raw
+        # combined column, the value a category filter corrects as well.
+        pathway.setAdjustedTotalGlobalPvalues({
+            method: {adjust_method: pvalues[pathway_id] for adjust_method, pvalues in byMethod.items()}
+            for method, byMethod in adjusted_shown_combined.items()
+            if pathway_id in shown_combined_list[method]})
+
         # Update combined adjusted p-values per condition.
         # Storage shape: pathway.adjustedCombinedSignificanceValues[method][adjMethod]
         #   - scalar (single-condition jobs) — preserved for back-compat with old jobs.
         #   - list[float] (multi-condition jobs) — one entry per condition, ordered by
-        #     condition index. Frontend (PA_Step3Views.js, the table's row builder)
-        #     accepts both shapes and emits per-condition keys when a list is detected.
+        #     condition index. The network reads the smallest of them; the table
+        #     shows adjustedTotalGlobalPvalues above, and this only on a job
+        #     stored without it (paStep3CombinedCells in PA_Step3Views.js).
         for method, combined_pvalue in pathway.getCombinedSignificancePvalues().items():
             if not isinstance(combined_pvalue, list):
                 combined_pvalue = [combined_pvalue]
@@ -587,13 +631,16 @@ def adjustPathwayPvalues(matchedPathways, organism):
     every database in one family, here and in that route
     (_adjustAcrossDatabases in PathwayAcquisitionServlet.py).
 
-    One column is outside that rule: the adjusted combined column of a job
-    with more than one condition. The value stored here corrects each
-    condition's combined p-value and the table shows the first condition's,
-    while the raw combined column beside it, which is what a filter sends
-    back, combines each omic's Global p-value (4_1_pathway_enrichment.md,
-    "Reading the table"). A filter therefore changes what that column
-    corrects.
+    The adjusted combined column follows the same rule: it is the correction
+    of the raw combined column beside it (shownCombinedPvalue), which is what
+    a filter sends back. On a job whose relevant features file has one column
+    per condition that raw column combines each omic's Global p-value, and
+    the table used to show the correction of the first condition's combined
+    p-value instead, so the column changed meaning on the first filter
+    (example dataset 03: by up to 1.0, and 56 FDR BH values crossed 0.05).
+    Jobs stored before then keep that value, and show the correction of the
+    raw column only while a filter is applied. The per-condition corrections
+    are still stored, for the network.
 
     The map is still given adjusted values, corrected as a family of its own
     (for one test, BH and BY both equal the raw p-value), so that every pathway

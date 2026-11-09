@@ -41,11 +41,10 @@ The rules pinned here:
     pathway has the same keys;
   * raw p-values do not move.
 
-Not pinned, because it is not true: the adjusted combined column of a job with
-more than one condition. Step 2 stores each condition's correction and the
-table shows the first condition's, while a filter sends the raw combined
-column, which combines each omic's Global p-value (4_1_pathway_enrichment.md,
-"Reading the table"). These jobs use one condition.
+These jobs use one condition. The same rules on a job with one relevant
+column per condition, where the adjusted combined column is the correction of the raw combined
+column (the combination of each omic's Global p-value) and not of any one
+condition's, are pinned in test_combined_fdr_corrects_its_column.
 
 Step 2 runs for real here, workers included, on a small organism held in the
 KeggInformationManager's cache, so no MongoDB is needed (the same set-up as

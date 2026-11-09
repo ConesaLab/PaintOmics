@@ -41,8 +41,14 @@ function Pathway(ID) {
     this.adjustedSignificanceValues = null;
     //SIGNIFICANCE COMBINED VALUE
     this.combinedSignificancePvalues = null;
-    //SIGNIFICANCE ADJUSTED COMBINED VALUE
+    //SIGNIFICANCE ADJUSTED COMBINED VALUE, one per condition on a job with one
+    //relevant column per condition (the network reads the smallest)
     this.adjustedCombinedSignificanceValues = null;
+    //THE CORRECTION OF THE COMBINED VALUE THE TABLE SHOWS (totalGlobalPvalues),
+    //method -> {"FDR BH": value, "FDR BY": value}: what the table's adjusted
+    //combined column shows. Absent on jobs stored before November 2026 (see
+    //paStep3CombinedCells).
+    this.adjustedTotalGlobalPvalues = {};
     //GLOBAL OMIC P-VALUES (PaintOmics 4)
     this.globalOmicPvalues = {};
     //GRAPHICAL INFORMATION
@@ -167,6 +173,9 @@ function Pathway(ID) {
     this.getTotalGlobalPvalues = function () {
         return this.totalGlobalPvalues || {};
     };
+    this.getAdjustedTotalGlobalPvalues = function () {
+        return this.adjustedTotalGlobalPvalues || {};
+    };
 	this.getAllSignificanceValues = function() {
 		var arrayPvalues = this.getSignificanceValues();
 		
@@ -256,6 +265,9 @@ function Pathway(ID) {
         }
         if (jsonObject.totalGlobalPvalues !== undefined) {
             this.totalGlobalPvalues = jsonObject.totalGlobalPvalues;
+        }
+        if (jsonObject.adjustedTotalGlobalPvalues !== undefined) {
+            this.adjustedTotalGlobalPvalues = jsonObject.adjustedTotalGlobalPvalues;
         }
         if (jsonObject.graphicalOptions != null) {
             this.graphicalOptions = new PathwayGraphicalData().loadFromJSON(jsonObject.graphicalOptions);

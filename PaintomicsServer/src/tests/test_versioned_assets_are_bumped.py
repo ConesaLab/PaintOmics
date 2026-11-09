@@ -330,8 +330,10 @@ PUBLISHED = {
     # visit still gets them and the Welcome.
     # v=0.12 does not boot over a script index.html's loader could not fetch,
     # and asks IndexedDB nothing on a bare address.
+    # v=0.13 moves PA_JOB_CACHE_SCHEMA to 4, so a cached job written by a client
+    # that dropped adjustedTotalGlobalPvalues is fetched again from the server.
     "app.js": (
-        "0.12", "2c91eab4981bcecfd7ff71042b83e0760e0ab93865b3bb4dd5624c3fa4318ef7"),
+        "0.13", "4de33296d140ec3d2b83bf5e7f66993f623a9b221fda2d6a7e418df5fcb6c75b"),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

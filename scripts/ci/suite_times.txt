@@ -335,3 +335,8 @@ test_cluster_slider_keeps_other_pictures	7.6
 # both took 0.6 s on the VM.
 test_a_lost_mapping_worker_gives_no_retry_advice	3.3
 test_mirna_tool_page_shows_its_settings	0.1
+# Added with fix/combined-fdr-column-is-its-correction (2026-11-09), charged
+# below test_adjusted_pvalues_stay_put, whose Step 2 run on the same cached
+# organism it repeats once (that suite runs it three times) and then calls node
+# five times: on the VM the new suite's 14 tests took 1.5 s.
+test_combined_fdr_corrects_its_column	2.0

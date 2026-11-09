@@ -14,7 +14,7 @@
       "sha256": "6376b2d12dc488fa2f320951a58f87a6de91261cdcda924338ded2a6d9094e15"
     },
     "step2": {
-      "bytes": 2656345,
+      "bytes": 2681880,
       "headline": {
         "adjustPvalue": 1,
         "classInfo": 0,
@@ -59,7 +59,7 @@
         ],
         "totalRelevantFeaturesInCategory": 1
       },
-      "sha256": "9aa502a748b3ec0c70c02fa7a5c8469df63c98f721d51276739ca2e22d1d0124"
+      "sha256": "2f201f7c8dc2a19f7042494a779732d76a8e84de05c355384b17d830b056e3ef"
     },
     "step3": {
       "bytes": 5172685,
