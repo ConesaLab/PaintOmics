@@ -1741,6 +1741,10 @@ def _adjustAcrossDatabases(pvaluesByDatabase):
     Keyed by (database, pathwayID) inside, so two databases can never share an
     entry. Every database asked about is in the answer, with both methods,
     even when none of its pathways was sent.
+
+    The values are what the table shows, and Step 2 corrects the same ones:
+    an omic's Global p-value, and the raw combined column, the combination of
+    each omic's Global p-value (shownCombinedPvalue).
     """
     corrected = adjustPvalues({(database, pathwayID): pvalue
                                for database, pathways in pvaluesByDatabase.items()
@@ -1810,6 +1814,11 @@ def pathwayAcquisitionAdjustPvalues(request, response):
             # No new stouffer weights, just recalculate the provided p-values:
             # one family per omic and per combined method, every database in
             # it (_adjustAcrossDatabases). pvaluesByOmic[omic][db][pathway].
+            # A combined method's values are the table's raw combined column
+            # (paStep3CombinedCells), so on a job with one relevant column per
+            # condition too the answer is the correction of that column, which
+            # is what Step 2 stores for it (shownCombinedPvalue in
+            # PathwayAcquisitionJob.py): with nothing hidden, the stored values.
             pvaluesByOmic = defaultdict(lambda: defaultdict(dict))
 
             for db_name, db_pvalues in pvalues.items():

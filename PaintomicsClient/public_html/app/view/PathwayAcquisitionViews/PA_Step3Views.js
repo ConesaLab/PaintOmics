@@ -58,6 +58,70 @@ var paStep3IsGlobalMap = function (pathwayID, organism) {
 	return !!organism && pathwayID === organism + "01100";
 };
 
+/**
+* The combined p-value cells of one enrichment table row, by field name:
+* combinedSignificancePvalue<method> and
+* adjustedCombinedSignificancePvalue<method><FDR method>, for a Pathway model.
+*
+* The raw cell is the combination of each omic's Global p-value
+* (totalGlobalPvalues), else, on a job stored before that existed, the first
+* condition's combined p-value. A category filter sends that cell back to
+* /pa_adjust_pvalues (getPvaluesFromStore), which corrects it over the rows
+* left.
+*
+* The adjusted cell is the correction of that raw cell over the rows the table
+* lists, as Step 2 stores it (adjustedTotalGlobalPvalues; shownCombinedPvalue
+* and _adjustFamily in PathwayAcquisitionJob.py), so filtering nothing changes
+* nothing and a filter does not change what the column corrects. A job stored
+* before November 2026 has no such value and shows the one it was stored
+* with: the correction of the first condition's combined p-value, which on a
+* job with one relevant column per condition is a different number, except
+* while a filter is applied (updatePvaluesFromStore). The per-condition
+* corrections stay under <field>_c<n>.
+*/
+var paStep3CombinedCells = function (pathwayModel) {
+	var cells = {};
+	var combined = pathwayModel.getCombinedSignificanceValues() || {};
+	var totalGlobal = pathwayModel.getTotalGlobalPvalues() || {};
+	var byCondition = pathwayModel.getAdjustedCombinedSignificanceValues() || {};
+	var adjustedTotal = pathwayModel.getAdjustedTotalGlobalPvalues() || {};
+	var m, k;
+
+	for (m in combined) {
+		var val = totalGlobal[m];
+		if (val === undefined || val === null) {
+			val = combined[m];
+			if (Array.isArray(val)) {
+				val = val[0];
+			}
+		}
+		cells["combinedSignificancePvalue" + m] = val;
+	}
+
+	for (m in byCondition) {
+		for (k in byCondition[m]) {
+			var adjVal = byCondition[m][k];
+			if (Array.isArray(adjVal)) {
+				cells["adjustedCombinedSignificancePvalue" + m + k] = adjVal.length > 0 ? adjVal[0] : null;
+				for (var c = 0; c < adjVal.length; c++) {
+					cells["adjustedCombinedSignificancePvalue" + m + k + "_c" + c] = adjVal[c];
+				}
+			} else {
+				cells["adjustedCombinedSignificancePvalue" + m + k] = adjVal;
+			}
+		}
+	}
+
+	for (m in adjustedTotal) {
+		for (k in adjustedTotal[m]) {
+			if (adjustedTotal[m][k] !== undefined && adjustedTotal[m][k] !== null) {
+				cells["adjustedCombinedSignificancePvalue" + m + k] = adjustedTotal[m][k];
+			}
+		}
+	}
+	return cells;
+};
+
 function PA_Step3JobView() {
 	/**
 	* About this view: this view (PA_Step3JobView) is used to visualize an instance for a Pathway acquisition
@@ -5124,36 +5188,10 @@ function PA_Step3PathwayTableView() {
 			}
 
 			combinedSignificanceValues = pathwayModel.getCombinedSignificanceValues();
-			var totalGlobalPvalues = pathwayModel.getTotalGlobalPvalues() || {};
-			for (var m in combinedSignificanceValues) {
-				var val = totalGlobalPvalues[m];
-				if (val === undefined || val === null) {
-					val = combinedSignificanceValues[m];
-					if (Array.isArray(val)) {
-						val = val[0];
-					}
-				}
-				pathwayData["combinedSignificancePvalue" + m] = val;
-			}
+			// The combined p-value cells, raw and adjusted; the adjusted one is the
+			// correction of the raw one beside it (paStep3CombinedCells).
+			Object.assign(pathwayData, paStep3CombinedCells(pathwayModel));
 
-			adjustedCombinedSignificanceValues = pathwayModel.getAdjustedCombinedSignificanceValues();
-			for (var m in adjustedCombinedSignificanceValues) {
-				for (var k in adjustedCombinedSignificanceValues[m]) {
-					var adjVal = adjustedCombinedSignificanceValues[m][k];
-					// Multi-condition jobs send a list (one adjusted p-value per condition);
-					// expose each as adjustedCombinedSignificancePvalue<m><k>_c<n>, and also
-					// keep the legacy scalar key (= condition 0) for back-compat with existing
-					// table column definitions.
-					if (Array.isArray(adjVal)) {
-						pathwayData["adjustedCombinedSignificancePvalue" + m + k] = adjVal.length > 0 ? adjVal[0] : null;
-						for (var c = 0; c < adjVal.length; c++) {
-							pathwayData["adjustedCombinedSignificancePvalue" + m + k + "_c" + c] = adjVal[c];
-						}
-					} else {
-						pathwayData["adjustedCombinedSignificancePvalue" + m + k] = adjVal;
-					}
-				}
-			}
 			// ADD Reactome class enrichment
 			if (this.model.databases.includes("Reactome")) {
 				let foundKey = false

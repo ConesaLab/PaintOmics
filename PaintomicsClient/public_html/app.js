@@ -53,8 +53,13 @@ if (debugging === true)
  *      the network's "min features in pathway" filter. Without them the filter
  *      falls back to the installed gene-only count, which is what made a
  *      metabolomics-only job draw an empty network.
+ *   4: every pathway of a newly computed job carries
+ *      adjustedTotalGlobalPvalues, the correction of the combined p-value the
+ *      Step 3 table shows. A client before it dropped the field when it cached
+ *      the job, so a copy stamped 3 of a job computed after it would show the
+ *      first condition's correction in the adjusted combined column.
  */
-var PA_JOB_CACHE_SCHEMA = 3;
+var PA_JOB_CACHE_SCHEMA = 4;
 
 function openPaintomicsDB() {
     var db = new Dexie("paintomics");

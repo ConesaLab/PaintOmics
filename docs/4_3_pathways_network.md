@@ -231,6 +231,12 @@ Adjusted values are stricter, so expect fewer nodes.
 
 Where the selected p-value has one value per condition, the network compares
 the smallest of them — a pathway significant in any one condition is drawn.
+The combined p-value has one per condition on a job whose relevant features
+file has one column per condition, so there the network does not read the
+table's combined columns.
+The table shows the combination of each omic's Global p-value and its
+correction; the network reads each condition's combined p-value, raw or
+corrected (each condition corrected on its own), and keeps the smallest.
 
 ## The toolbar
 
