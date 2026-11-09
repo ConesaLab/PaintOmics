@@ -1074,6 +1074,20 @@ function ajaxErrorHandler(responseObj) {
         return;
     }
 
+    // Another request was still changing the job (JobBusyError in
+    // ServerErrorManager.py): a Step 3 slider move, or Step 2, waited its
+    // limit for the one before it and did nothing. Nothing failed, and the
+    // message ends "Please try again in a moment.", which the internal error's
+    // "retrying in the browser will not help" would contradict, under a
+    // Report button for something that is not a fault.
+    if (err.extra && err.extra.job_busy === true) {
+        showWarningMessage("This job is busy", {
+            message: serverTextAsHtml(halves.readable),
+            showButton: true
+        });
+        return;
+    }
+
     // The server refused the uploaded files and said why (InputFileError in
     // ServerErrorManager.py). Titled "Internal error", with "retrying will not
     // help" and a Report button, both reports of 2026-09-23 and 2026-09-26 were

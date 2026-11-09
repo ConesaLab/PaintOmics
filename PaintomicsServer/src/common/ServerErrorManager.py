@@ -91,7 +91,9 @@ def handleException(responseInstance, exceptionInstance, filename, function, res
         # (see InputFileError); ajaxErrorHandler words the two differently.
         "input_error": isinstance(exceptionInstance, InputFileError),
         # And a job that is no longer there from either (see JobUnavailableError).
-        "job_unavailable": isinstance(exceptionInstance, JobUnavailableError)}})
+        "job_unavailable": isinstance(exceptionInstance, JobUnavailableError),
+        # And a job another request is still changing (see JobBusyError).
+        "job_busy": isinstance(exceptionInstance, JobBusyError)}})
 
 class CredentialException(Exception):
     pass
@@ -118,5 +120,18 @@ class JobUnavailableError(UserWarning):
     "This job is not available". ajaxErrorHandler now shows this one the same way.
 
     A UserWarning still, so code and tests that expect one keep working.
+    """
+    pass
+
+class JobBusyError(Exception):
+    """Another request is still changing the job, and this one waited its
+    limit for it without starting (JobLocks.acquire). The message says so.
+
+    Nothing failed: the request was not run and changed nothing, and the
+    same request goes through once the other one has finished (a slider move
+    takes seconds). ajaxErrorHandler shows it as a
+    warning, "This job is busy", with no Report button and without the
+    internal error's "retrying in the browser will not help", which would say
+    the opposite of the message.
     """
     pass

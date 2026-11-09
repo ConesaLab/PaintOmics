@@ -660,7 +660,9 @@ class Job(Model):
                 #*************************************************************************
                 # STEP 3. MAP TH FEATURE NAMES TO KEGG IDs
                 #*************************************************************************
-                foundFeatures, parsedFeatures, notMatchedFeatures = mapFeatureNamesToKeggIDs(self.getJobID(), self.getOrganism(), self.getDatabases(), parsedFeatures, enrichment)
+                # omicName: a mapping that reaches its time limit names the
+                # omic, which has a limit of its own (omicTimeLimitMessage).
+                foundFeatures, parsedFeatures, notMatchedFeatures = mapFeatureNamesToKeggIDs(self.getJobID(), self.getOrganism(), self.getDatabases(), parsedFeatures, enrichment, omicName=omicName)
                 totalMappedFeatures = len(parsedFeatures)
 
                 temporalFileName = self.getTemporalDir() +  "/" + omicName
@@ -834,7 +836,7 @@ class Job(Model):
 
             # FOR EACH PARSED COMPOUND, GET THE NAMES FOR KEGG,
             # THEN FOR EACH COMPOUND IN KEGG, ADD CHECKBOXES
-            foundFeatures, parsedFeatures, notMatchedFeatures = mapFeatureNamesToCompoundsIDs(self.getJobID(), inputCompounds)
+            foundFeatures, parsedFeatures, notMatchedFeatures = mapFeatureNamesToCompoundsIDs(self.getJobID(), inputCompounds, omicName=omicName)
             
             temporalFileName = self.getTemporalDir() +  "/" + omicName
             with open(temporalFileName + '_matched.txt', 'w') as matchedFile:

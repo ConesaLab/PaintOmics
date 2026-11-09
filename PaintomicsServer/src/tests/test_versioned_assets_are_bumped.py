@@ -154,8 +154,11 @@ PUBLISHED = {
     # v=3.8 gives extJSErrorHandler the "Please check your input files" wording of
     # ajaxErrorHandler for an answer marked input_error: a form submit that the
     # server refuses for a file name or omic name is the user's to fix.
+    # v=3.9 shows an answer marked job_busy (a Step 3 slider move or Step 2
+    # that waited its limit for another change to the job) as the warning
+    # "This job is busy", with no Report button.
     "app/view/common/Util.js": (
-        "3.8", "c36a6fa135c8c875703f9afd6856b35bd5a1d8ca059f463177b00f257c467758"),
+        "3.9", "7d0ca25eed31a65bca6e162ac9e4b1aa9d00444e014cf11b3586c6a365f66fb3"),
     # v=1.1 lists the model organisms first and renders at most 200 rows
     # (PR #156): a cached v=1.0 would still work, but would show a wall of
     # 12,000 rows in species.json order.
