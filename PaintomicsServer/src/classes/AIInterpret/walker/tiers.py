@@ -188,7 +188,7 @@ def _genes_in(text, names):
     from src.classes.AIInterpret.walker import verify
     out = set()
     for node_id, name in names:
-        if re.search(verify._names_re(name), text, re.I):
+        if verify._name_pattern(name).search(text):
             out.add(node_id)
     return out
 

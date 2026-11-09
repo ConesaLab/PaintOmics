@@ -90,14 +90,14 @@ async def note(ctx: RunContextWrapper[WalkContext], text: str) -> str:
 
 @function_tool(name_override="stop", failure_error_function=_fail("stop"))
 async def stop(ctx: RunContextWrapper[WalkContext], reading: str, reason: str) -> str:
-    """End the walk with a final reading and the reason. The only way to finish; always legal."""
+    """End the walk with a final reading and the reason. The only way to finish; refused only when it quotes a value no layer holds."""
     return ctx.context.walker.stop(reading, reason)
 
 
 PLANNER_TOOLS = [scan, plan]
 SEGMENT_TOOLS = [scan, step, jump, note, stop]
 
-_READING_RULES = """Every node carries layers: the user's values as text with their own column labels, and a flag saying whether the user marked that layer relevant. Heat is how surprising a node's neighbourhood's relevant count is given its size. You never compute on values; you read them against the design card.
+_READING_RULES = """Every node carries layers: the user's values as text with their own column labels, and a flag saying whether the user marked that layer relevant. Heat is how surprising a node's neighbourhood's relevant count is given its size. The number after "heat" beside a node's name is that score, never one of the user's values: quote a node's values only from a layers block, and a neighbour shown by name, r and heat alone has no values in front of you yet. You never compute on values; you read them against the design card.
 
 Describe what you find as a biologist would: name the genes and proteins, or their biological role ("Itpr1, Itpr2 and Itpr3", "the IP3 receptors"). Never call a set of genes a cluster; readings, reasons and notes reach the Writers and the reader."""
 
@@ -118,7 +118,7 @@ SEGMENT_INSTRUCTIONS = """You walk ONE seed's neighbourhood in an Agentic Graph 
 3. Use scan(scope="here", radius=2) when the neighbours are few or you want to see what is hot two steps out.
 4. note what the Writer should not miss. Use your steps; stop when the neighbourhood is read and what is left repeats what you have.
 
-Rules code enforces: only a listed neighbour; an edge closes per direction; the reading must name a layer of the node; budgets are counters, a refusal costs nothing."""
+Rules code enforces: only a listed neighbour; an edge closes per direction; the reading must name a layer of the node; a reading, reason or note may quote only values a layers block printed; budgets are counters, a refusal costs nothing."""
 
 
 def anchor_line(walker):
