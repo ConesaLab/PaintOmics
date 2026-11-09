@@ -19,7 +19,13 @@ import logging.config
 #                wakeup of the cleaning cron, which wakes once a day (30).
 #   httpcore     every step of every HTTP call to the AI gateway (5,659), with
 #                the response headers.
-#   openai       the OpenAI client (openai._base_client, 1,782) and the Agents
+#   httpcore2    the same lines from the copy that httpx2 uses, which openai 3
+#                calls through (requirements.txt). Its loggers are named
+#                "httpcore2.http11", "httpcore2.connection" and so on, which
+#                are not children of "httpcore", so they stayed at DEBUG: 4,782
+#                lines in 6 hours on paintomics.org (9 Nov), from
+#                "_trace.py : atrace", such as "connect_tcp.started host=...".
+#   openai      the OpenAI client (openai._base_client, 1,782) and the Agents
 #                SDK under openai.agents: a line per span, turn, tool call and
 #                model call (5,207). PaintOmics logs its own LLM failures and
 #                retries at WARNING (llm_client.py).
@@ -28,8 +34,8 @@ import logging.config
 #   asyncio      "Using selector: EpollSelector" (2).
 # WARNING and above still get through from all of them.
 NOISY_THIRD_PARTY_LOGGERS = ("pymongo", "urllib3", "requests", "matplotlib",
-                             "apscheduler", "httpcore", "openai", "tzlocal",
-                             "PIL", "asyncio")
+                             "apscheduler", "httpcore", "httpcore2", "openai",
+                             "tzlocal", "PIL", "asyncio")
 
 
 def configureLogging(configPath):
