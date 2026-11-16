@@ -28,9 +28,9 @@ mkdocs==1.6.1
 # advocacy, it exits 0, and it says nothing about this configuration -- mkdocs
 # itself stays at 1.6.1 here. Not a build problem; do not pin back to silence
 # it.
-mkdocs-material==9.7.7
+mkdocs-material==9.8.1
 # The five `pymdownx.*` extensions mkdocs.yml configures live here. It
 # arrives as a mkdocs-material dependency, but unpinned it floats, and a
 # markdown extension changing its parse is exactly the kind of drift that
 # would silently alter the rendered guide. Pin it with the rest.
-pymdown-extensions==12.3
+pymdown-extensions==13.1
